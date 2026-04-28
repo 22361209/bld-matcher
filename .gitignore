@@ -19,6 +19,8 @@ uploads/
 outputs/
 data/*.sqlite3
 data/*.sqlite3-*
+data/catalog.xlsx
+data/stamping_materials.xlsx
 data/*-backup-*.sqlite3
 data/*-backup-*.xlsx
 data/manual_map.json

@@ -47,13 +47,13 @@ http://127.0.0.1:5055/
 - `app/material_sheet.py`：生产料单生成
 - `templates/`：页面模板
 - `static/`：样式和产品图片
-- `data/`：基础 Excel 和本地 SQLite 数据
+- `data/`：运行数据目录，业务 Excel 和 SQLite 数据不提交 Git
 - `uploads/`：运行时上传文件，不提交 Git
 - `outputs/`：运行时导出文件，不提交 Git
 
 ## 数据库
 
-默认数据库是 `data/products.sqlite3`。这个文件是业务数据，不进入 Git。NAS 上的数据库要按 NAS 备份策略保护，更新代码时不要用本机数据库覆盖 NAS 数据库。
+默认数据库是 `data/products.sqlite3`。这个文件是业务数据，不进入 Git。产品目录 `data/catalog.xlsx` 和材料明细 `data/stamping_materials.xlsx` 也按运行数据处理，不进入 Git。NAS 上的 `data/` 目录要按 NAS 备份策略保护，更新代码时不要用本机数据覆盖 NAS 数据。
 
 数据库结构变化集中放在 `app/migrations.py`。新增字段或表时，添加一个新的 migration id 和对应函数，让本机和 NAS 在启动连接数据库时自动补齐结构。
 
