@@ -12,6 +12,7 @@ venv/
 # Local environment
 .env
 .env.*
+!.env.example
 
 # Runtime data
 uploads/

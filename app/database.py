@@ -7,6 +7,7 @@ from collections import defaultdict
 
 from werkzeug.security import generate_password_hash
 
+from .migrations import run_migrations
 from .matcher import ProductCatalog, compact_text, normalize_code, split_codes
 
 
@@ -91,25 +92,8 @@ def connect(db_path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
-    _ensure_audit_actor_column(conn)
-    _ensure_product_extra_columns(conn)
+    run_migrations(conn)
     return conn
-
-
-def _ensure_audit_actor_column(conn: sqlite3.Connection) -> None:
-    columns = [row["name"] for row in conn.execute("PRAGMA table_info(audit_logs)").fetchall()]
-    if "actor" not in columns:
-        conn.execute("ALTER TABLE audit_logs ADD COLUMN actor TEXT DEFAULT ''")
-        conn.commit()
-
-
-def _ensure_product_extra_columns(conn: sqlite3.Connection) -> None:
-    columns = [row["name"] for row in conn.execute("PRAGMA table_info(products)").fetchall()]
-    if "price_cny" not in columns:
-        conn.execute("ALTER TABLE products ADD COLUMN price_cny REAL")
-    if "image_path" not in columns:
-        conn.execute("ALTER TABLE products ADD COLUMN image_path TEXT DEFAULT ''")
-    conn.commit()
 
 
 def now_text() -> str:
