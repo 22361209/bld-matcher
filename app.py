@@ -100,6 +100,15 @@ def can(permission: str) -> bool:
     return permission in ROLE_PERMISSIONS.get(user["role"], set())
 
 
+def password_matches(stored_hash: str, password: str) -> bool:
+    try:
+        return check_password_hash(stored_hash, password)
+    except AttributeError as exc:
+        if str(stored_hash or "").startswith("scrypt:") and "scrypt" in str(exc):
+            return False
+        raise
+
+
 app.jinja_env.globals["can"] = can
 app.jinja_env.globals["ROLE_LABELS"] = ROLE_LABELS
 
@@ -241,7 +250,7 @@ def do_login():
     password = request.form.get("password", "")
     with connect(DB_PATH) as conn:
         user = get_user_by_username(conn, username)
-    if not user or not user["active"] or not check_password_hash(user["password_hash"], password):
+    if not user or not user["active"] or not password_matches(user["password_hash"], password):
         flash("登录名或密码不正确。", "error")
         return redirect(url_for("login"))
     session["user_id"] = user["id"]

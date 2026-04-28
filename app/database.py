@@ -10,6 +10,13 @@ from werkzeug.security import generate_password_hash
 from .matcher import ProductCatalog, compact_text, normalize_code, split_codes
 
 
+PASSWORD_HASH_METHOD = "pbkdf2:sha256"
+
+
+def hash_password(password: str) -> str:
+    return generate_password_hash(password, method=PASSWORD_HASH_METHOD)
+
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS products (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -664,8 +671,15 @@ def list_log_actors(conn: sqlite3.Connection) -> list[str]:
 
 
 def ensure_default_admin(conn: sqlite3.Connection, username: str = "007", password: str = "4r3e2w1q") -> None:
-    existing = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+    existing = conn.execute("SELECT id, password_hash FROM users WHERE username = ?", (username,)).fetchone()
     if existing:
+        if str(existing["password_hash"] or "").startswith("scrypt:"):
+            conn.execute(
+                "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
+                (hash_password(password), now_text(), existing["id"]),
+            )
+            log_event(conn, "迁移管理员密码", "user", username, "切换为兼容的密码哈希算法", actor="system")
+            conn.commit()
         return
     timestamp = now_text()
     conn.execute(
@@ -673,7 +687,7 @@ def ensure_default_admin(conn: sqlite3.Connection, username: str = "007", passwo
         INSERT INTO users (username, display_name, password_hash, role, active, created_at, updated_at)
         VALUES (?, ?, ?, 'admin', 1, ?, ?)
         """,
-        (username, "管理员", generate_password_hash(password), timestamp, timestamp),
+        (username, "管理员", hash_password(password), timestamp, timestamp),
     )
     log_event(conn, "初始化管理员", "user", username, "创建默认管理员账号", actor="system")
     conn.commit()
@@ -718,7 +732,7 @@ def save_user(conn: sqlite3.Connection, data: dict, actor: str = "") -> None:
         }
         password_sql = ""
         if password:
-            params["password_hash"] = generate_password_hash(password)
+            params["password_hash"] = hash_password(password)
             password_sql = ", password_hash=:password_hash"
         conn.execute(
             f"""
@@ -745,7 +759,7 @@ def save_user(conn: sqlite3.Connection, data: dict, actor: str = "") -> None:
             INSERT INTO users (username, display_name, password_hash, role, active, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (username, display_name, generate_password_hash(password), role, active, timestamp, timestamp),
+            (username, display_name, hash_password(password), role, active, timestamp, timestamp),
         )
         log_event(conn, "新增账号", "user", username, f"角色: {role}", actor=actor)
     conn.commit()
