@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>账号管理</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  </head>
+  <body>
+    <main class="shell wide">
+      {% set active_page = "users" %}
+      {% include "_nav.html" %}
+
+      <header class="page-header">
+        <div class="page-title">
+          <h1>账号管理</h1>
+          <p>管理员可以新增账号、修改登录名、角色、启用状态，并重置密码。</p>
+        </div>
+      </header>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <section class="messages">
+            {% for category, message in messages %}
+              <div class="message {{ category }}">{{ message }}</div>
+            {% endfor %}
+          </section>
+        {% endif %}
+      {% endwith %}
+
+      <section class="grid">
+        <article class="panel">
+          <h2>{{ "编辑账号" if editing else "新增账号" }}</h2>
+          <form action="{{ url_for('save_user_route') }}" method="post" class="form vertical">
+            <input type="hidden" name="id" value="{{ editing.id if editing else '' }}">
+            <label>
+              登录名
+              <input name="username" value="{{ editing.username if editing else '' }}" required>
+            </label>
+            <label>
+              显示名
+              <input name="display_name" value="{{ editing.display_name if editing else '' }}">
+            </label>
+            <label>
+              角色
+              <select name="role">
+                {% for role, label in ROLE_LABELS.items() %}
+                  <option value="{{ role }}" {% if editing and editing.role == role %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label>
+              {{ "新密码（留空则不修改）" if editing else "初始密码" }}
+              <input name="password" type="password" {% if not editing %}required{% endif %}>
+            </label>
+            <label class="check">
+              <input type="checkbox" name="active" value="1" {% if not editing or editing.active %}checked{% endif %}>
+              启用
+            </label>
+            <button type="submit">保存账号</button>
+          </form>
+        </article>
+
+        <article class="panel">
+          <h2>角色权限</h2>
+          <table>
+            <thead><tr><th>角色</th><th>说明</th></tr></thead>
+            <tbody>
+              <tr><td>管理员</td><td>账号管理、目录导入、产品维护、映射维护、生成匹配、生成生产料单、材料数据维护、查看操作日志</td></tr>
+              <tr><td>编辑员</td><td>产品维护、映射维护、生成匹配、生成生产料单、查看操作日志</td></tr>
+              <tr><td>普通用户</td><td>查看目录、生成匹配结果、生成生产料单</td></tr>
+              <tr><td>只读用户</td><td>仅查看产品目录</td></tr>
+            </tbody>
+          </table>
+        </article>
+      </section>
+
+      <section class="panel table-panel">
+        <table>
+          <thead>
+            <tr>
+              <th>登录名</th>
+              <th>显示名</th>
+              <th>角色</th>
+              <th>状态</th>
+              <th>更新时间</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for user in users %}
+              <tr class="{% if not user.active %}muted-row{% endif %}">
+                <td><strong>{{ user.username }}</strong></td>
+                <td>{{ user.display_name }}</td>
+                <td>{{ ROLE_LABELS.get(user.role, user.role) }}</td>
+                <td><span class="status-pill {{ 'on' if user.active else 'off' }}">{{ "启用" if user.active else "停用" }}</span></td>
+                <td>{{ user.updated_at }}</td>
+                <td><a href="{{ url_for('edit_user', user_id=user.id) }}">编辑</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,27 @@
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Local environment
+.env
+.env.*
+
+# Runtime data
+uploads/
+outputs/
+data/*.sqlite3
+data/*.sqlite3-*
+data/*-backup-*.sqlite3
+data/*-backup-*.xlsx
+data/manual_map.json
+
+# Local source/input workbooks kept outside the app baseline
+产品目录/
+询价/

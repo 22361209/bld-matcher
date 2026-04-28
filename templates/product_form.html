@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ "编辑产品" if product else "新增产品" }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  </head>
+  <body>
+    <main class="shell">
+      {% set active_page = "products" %}
+      {% include "_nav.html" %}
+
+      <header class="page-header">
+        <div class="page-title">
+          <h1>{{ "编辑产品" if product else "新增产品" }}</h1>
+          <p>一个 BLD NO. 可以维护多个 OE、多个品牌和多个车型；每行一个 OE 会更清楚。</p>
+        </div>
+        <div class="primary-actions">
+          <a class="button ghost-link" href="{{ url_for('products') }}">返回目录</a>
+        </div>
+      </header>
+
+      <section class="panel">
+        <form action="{{ url_for('save_product') }}" method="post" class="product-form">
+          <label>
+            BLD NO.
+            <input name="bld_no" value="{{ product.bld_no if product else '' }}" {% if product %}readonly{% endif %} required>
+          </label>
+          <label>
+            品牌 / SERIES
+            <textarea name="series" rows="3" placeholder="例如 HONDA / MAZDA">{{ product.series if product else '' }}</textarea>
+          </label>
+          <label class="full">
+            产品名称 / ITEM
+            <input name="item" value="{{ product.item if product else '' }}" placeholder="Front Left Lower Control Arm">
+          </label>
+          <label>
+            OE NO.1
+            <textarea name="oe_no_1" rows="9" placeholder="每行一个 OE">{{ product.oe_no_1 if product else '' }}</textarea>
+          </label>
+          <label>
+            OE NO.2
+            <textarea name="oe_no_2" rows="9" placeholder="补充 OE，每行一个">{{ product.oe_no_2 if product else '' }}</textarea>
+          </label>
+          <label class="full">
+            车型 / Models
+            <textarea name="models" rows="5" placeholder="可写多个车型">{{ product.models if product else '' }}</textarea>
+          </label>
+          <label>
+            含税单价（人民币）
+            <input name="price_cny" type="number" step="0.01" min="0" value="{{ '%.2f'|format(product.price_cny) if product and product.price_cny is not none else '' }}" placeholder="例如 68.50">
+          </label>
+          <label>
+            产品图片路径
+            <input name="image_path" value="{{ product.image_path if product else '' }}" placeholder="例如 product_images/K8354LA.jpg">
+          </label>
+          <label class="check">
+            <input type="checkbox" name="active" value="1" {% if not product or product.active %}checked{% endif %}>
+            启用
+          </label>
+          <div class="form-actions">
+            <button type="submit">保存产品</button>
+          </div>
+        </form>
+      </section>
+    </main>
+  </body>
+</html>

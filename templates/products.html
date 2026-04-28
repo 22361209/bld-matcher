@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>产品目录</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  </head>
+  <body>
+    <main class="shell wide">
+      {% set active_page = "products" %}
+      {% include "_nav.html" %}
+
+      <header class="page-header">
+        <div class="page-title">
+          <h1>产品目录</h1>
+          <p>共 {{ stats.products }} 个产品，启用 {{ stats.active }} 个，停用 {{ stats.inactive }} 个。</p>
+        </div>
+      </header>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <section class="messages">
+            {% for category, message in messages %}
+              <div class="message {{ category }}">{{ message }}</div>
+            {% endfor %}
+          </section>
+        {% endif %}
+      {% endwith %}
+
+      {% set status_label = "包含停用" if status == "all" else ("只看停用" if status == "inactive" else "只看启用") %}
+      <section class="toolbar-panel">
+        <form class="search-toolbar" method="get" action="{{ url_for('products') }}">
+          <label>
+            按 BLD NO. 搜索
+            <input id="bld-search" name="bld" value="{{ bld_query }}" placeholder="例如 K6015">
+          </label>
+          <label>
+            按 OE 号搜索
+            <input id="oe-search" name="oe" value="{{ oe_query }}" placeholder="例如 55100-2S150">
+          </label>
+          <input type="hidden" id="status-input" name="status" value="{{ status }}">
+          <button type="submit">搜索</button>
+          <details class="toolbar-popover status-popover">
+            <summary>{{ status_label }}</summary>
+            <div class="status-menu" role="group" aria-label="产品状态筛选">
+              <button class="status-menu-option {% if status == 'active' %}selected{% endif %}" type="submit" data-status="active">只看启用</button>
+              <button class="status-menu-option {% if status == 'all' %}selected{% endif %}" type="submit" data-status="all">包含停用</button>
+              <button class="status-menu-option {% if status == 'inactive' %}selected{% endif %}" type="submit" data-status="inactive">只看停用</button>
+            </div>
+          </details>
+        </form>
+        <div class="secondary-actions">
+          {% if can("edit_products") %}<button class="compact" type="button" data-open-product-modal>新增产品</button>{% endif %}
+          {% if can("edit_products") %}
+            <details class="toolbar-popover">
+              <summary>维护单价</summary>
+              <form action="{{ url_for('price_import_preview') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form price-import-form">
+                <input type="file" name="price_file" accept=".xls,.xlsx" required>
+                <button type="submit">上传预览</button>
+                <span class="note">表头示例：BLD NO. / Unit Price。</span>
+              </form>
+            </details>
+          {% endif %}
+          {% if can("import_catalog") %}
+            <details class="toolbar-popover">
+              <summary>导入目录</summary>
+              <form action="{{ url_for('upload_catalog') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form catalog-import-form">
+                <input type="hidden" name="next" value="products">
+                <input type="file" name="catalog" accept=".xlsx" required>
+                <button type="submit">确认导入</button>
+                <span class="note">按 BLD 号合并更新已有资料并加入新增产品。</span>
+              </form>
+            </details>
+          {% endif %}
+          <details class="toolbar-popover">
+            <summary>导出目录</summary>
+            <form action="{{ url_for('export_products') }}" method="post" class="toolbar-popover-form catalog-export-form">
+              <input type="hidden" name="status" value="{{ status }}">
+              <label>
+                导出格式
+                <select name="export_format">
+                  <option value="bld">按 BLD 号升序格式</option>
+                  <option value="brand">按汽车品牌格式</option>
+                </select>
+              </label>
+              <button type="submit">导出 Excel</button>
+            </form>
+          </details>
+        </div>
+      </section>
+
+      <section class="panel table-panel">
+        <div class="table-hint">除车型列可拖动调节外，其余列宽固定。产品图片为缩略图，点击可打开原图。</div>
+        <table class="resizable-table" id="products-table">
+          <colgroup>
+            <col data-col="bld" style="width: 90px">
+            <col data-col="series" style="width: 82px">
+            <col data-col="item" style="width: 112px">
+            <col data-col="oe1" style="width: 128px">
+            <col data-col="oe2" style="width: 104px">
+            <col data-col="models" style="width: 102px">
+            <col data-col="image" style="width: 74px">
+            <col data-col="price" style="width: 72px">
+            <col data-col="actions" style="width: 58px">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>BLD 号</th>
+              <th>品牌</th>
+              <th>产品名称</th>
+              <th>OE 号</th>
+              <th>品牌号码</th>
+              <th class="resizable-heading">车型<span class="resize-handle"></span></th>
+              <th>产品图片</th>
+              <th>含税单价</th>
+              <th class="sticky-actions">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for product in products %}
+              <tr class="{% if not product.active %}muted-row{% endif %}">
+                <td><strong>{{ product.bld_no }}</strong></td>
+                <td class="preline">{{ product.series }}</td>
+                <td>{{ product.item }}</td>
+                <td class="preline">{{ product.oe_no_1 }}</td>
+                <td class="preline">{{ product.oe_no_2 }}</td>
+                <td class="preline">{{ product.models }}</td>
+                <td>
+                  {% set image_url = product_image_url(product) %}
+                  {% if image_url %}
+                    <a class="image-link" href="{{ image_url }}" target="_blank" rel="noopener" title="打开 {{ product.bld_no }} 原图">
+                      <img class="product-thumb" src="{{ image_url }}" alt="{{ product.bld_no }} 产品图片">
+                    </a>
+                  {% else %}
+                    <span class="note">无图</span>
+                  {% endif %}
+                </td>
+                <td class="price-cell">{% if product.price_cny is not none %}¥{{ "%.2f"|format(product.price_cny) }}{% endif %}</td>
+                <td class="row-actions sticky-actions">
+                  {% if can("edit_products") %}
+                    <a href="{{ url_for('edit_product', product_id=product.id) }}">编辑</a>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+    </main>
+    {% if can("edit_products") %}
+      <div class="product-modal" id="product-modal" aria-hidden="true">
+        <div class="product-modal-backdrop" data-close-product-modal></div>
+        <div class="product-modal-panel" role="dialog" aria-modal="true" aria-label="新增产品">
+          <button class="image-modal-close" type="button" data-close-product-modal aria-label="关闭新增产品">×</button>
+          <div class="modal-heading">
+            <h2>新增产品</h2>
+            <p class="note">一个 BLD NO. 可以维护多个 OE、多个品牌和多个车型；每行一个 OE 会更清楚。</p>
+          </div>
+          <form action="{{ url_for('save_product') }}" method="post" class="product-form modal-product-form">
+            <label>
+              BLD NO.
+              <input name="bld_no" required>
+            </label>
+            <label>
+              品牌 / SERIES
+              <textarea name="series" rows="2" placeholder="例如 HONDA / MAZDA"></textarea>
+            </label>
+            <label class="full">
+              产品名称 / ITEM
+              <input name="item" placeholder="Front Left Lower Control Arm">
+            </label>
+            <label>
+              OE NO.1
+              <textarea name="oe_no_1" rows="5" placeholder="每行一个 OE"></textarea>
+            </label>
+            <label>
+              OE NO.2
+              <textarea name="oe_no_2" rows="5" placeholder="补充 OE，每行一个"></textarea>
+            </label>
+            <label class="full">
+              车型 / Models
+              <textarea name="models" rows="3" placeholder="可写多个车型"></textarea>
+            </label>
+            <label>
+              含税单价（人民币）
+              <input name="price_cny" type="number" step="0.01" min="0" placeholder="例如 68.50">
+            </label>
+            <label>
+              产品图片路径
+              <input name="image_path" placeholder="例如 product_images/K8354LA.jpg">
+            </label>
+            <label class="check">
+              <input type="checkbox" name="active" value="1" checked>
+              启用
+            </label>
+            <div class="form-actions modal-actions">
+              <button type="submit">保存产品</button>
+              <button class="ghost" type="button" data-close-product-modal>取消</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    {% endif %}
+    <div class="image-modal" id="image-modal" aria-hidden="true">
+      <div class="image-modal-backdrop" data-close-image-modal></div>
+      <div class="image-modal-panel" role="dialog" aria-modal="true" aria-label="产品图片预览">
+        <button class="image-modal-close" type="button" data-close-image-modal aria-label="关闭图片预览">×</button>
+        <img id="image-modal-img" src="" alt="">
+        <div class="image-modal-caption" id="image-modal-caption"></div>
+      </div>
+    </div>
+    <script>
+      const bldSearch = document.querySelector("#bld-search");
+      const oeSearch = document.querySelector("#oe-search");
+      bldSearch.addEventListener("input", () => {
+        if (bldSearch.value.trim()) oeSearch.value = "";
+      });
+      oeSearch.addEventListener("input", () => {
+        if (oeSearch.value.trim()) bldSearch.value = "";
+      });
+      const statusInput = document.querySelector("#status-input");
+      document.querySelectorAll(".status-menu-option").forEach((button) => {
+        button.addEventListener("click", () => {
+          statusInput.value = button.dataset.status;
+        });
+      });
+      const toolbarPopovers = Array.from(document.querySelectorAll("details.toolbar-popover"));
+      toolbarPopovers.forEach((popover) => {
+        popover.addEventListener("toggle", () => {
+          if (!popover.open) return;
+          toolbarPopovers.forEach((other) => {
+            if (other !== popover) other.open = false;
+          });
+        });
+      });
+      document.addEventListener("click", (event) => {
+        if (event.target.closest("details.toolbar-popover")) return;
+        toolbarPopovers.forEach((popover) => {
+          popover.open = false;
+        });
+      });
+
+      const table = document.querySelector("#products-table");
+      const cols = Array.from(table.querySelectorAll("col"));
+      const modelsCol = cols.find((col) => col.dataset.col === "models");
+      const storageKey = "bldProductTableModelsWidth";
+      const savedModelWidth = Number(localStorage.getItem(storageKey));
+      if (modelsCol && savedModelWidth) {
+        modelsCol.style.width = `${savedModelWidth}px`;
+      }
+
+      const modelsHeader = table.querySelector("th.resizable-heading");
+      const handle = modelsHeader?.querySelector(".resize-handle");
+      if (handle && modelsCol) {
+        handle.addEventListener("mousedown", (event) => {
+          event.preventDefault();
+          const startX = event.clientX;
+          const startWidth = modelsCol.getBoundingClientRect().width;
+
+          const onMove = (moveEvent) => {
+            const width = Math.min(420, Math.max(100, Math.round(startWidth + moveEvent.clientX - startX)));
+            modelsCol.style.width = `${width}px`;
+          };
+
+          const onUp = () => {
+            document.removeEventListener("mousemove", onMove);
+            document.removeEventListener("mouseup", onUp);
+            localStorage.setItem(storageKey, String(Math.round(modelsCol.getBoundingClientRect().width)));
+          };
+
+          document.addEventListener("mousemove", onMove);
+          document.addEventListener("mouseup", onUp);
+        });
+      }
+
+      const productModal = document.querySelector("#product-modal");
+      const productForm = productModal?.querySelector("form");
+      const openProductModal = () => {
+        productModal.classList.add("open");
+        productModal.setAttribute("aria-hidden", "false");
+        document.body.classList.add("modal-open");
+        productModal.querySelector("input[name='bld_no']")?.focus();
+      };
+      const closeProductModal = () => {
+        productModal.classList.remove("open");
+        productModal.setAttribute("aria-hidden", "true");
+        document.body.classList.remove("modal-open");
+        productForm?.reset();
+      };
+      document.querySelector("[data-open-product-modal]")?.addEventListener("click", openProductModal);
+      document.querySelectorAll("[data-close-product-modal]").forEach((element) => {
+        element.addEventListener("click", closeProductModal);
+      });
+
+      const imageModal = document.querySelector("#image-modal");
+      const imageModalImg = document.querySelector("#image-modal-img");
+      const imageModalCaption = document.querySelector("#image-modal-caption");
+      const openImageModal = (link) => {
+        imageModalImg.src = link.href;
+        imageModalImg.alt = link.querySelector("img")?.alt || "产品图片";
+        imageModalCaption.textContent = link.title.replace("打开 ", "").replace(" 原图", "");
+        imageModal.classList.add("open");
+        imageModal.setAttribute("aria-hidden", "false");
+        document.body.classList.add("modal-open");
+      };
+      const closeImageModal = () => {
+        imageModal.classList.remove("open");
+        imageModal.setAttribute("aria-hidden", "true");
+        document.body.classList.remove("modal-open");
+        imageModalImg.src = "";
+        imageModalImg.alt = "";
+        imageModalCaption.textContent = "";
+      };
+
+      document.querySelectorAll(".image-link").forEach((link) => {
+        link.addEventListener("click", (event) => {
+          event.preventDefault();
+          openImageModal(link);
+        });
+      });
+      document.querySelectorAll("[data-close-image-modal]").forEach((element) => {
+        element.addEventListener("click", closeImageModal);
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        toolbarPopovers.forEach((popover) => {
+          popover.open = false;
+        });
+        if (productModal?.classList.contains("open")) {
+          closeProductModal();
+          return;
+        }
+        if (imageModal.classList.contains("open")) {
+          closeImageModal();
+        }
+      });
+    </script>
+  </body>
+</html>

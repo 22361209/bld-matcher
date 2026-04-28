@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>批量维护单价</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  </head>
+  <body>
+    <main class="shell wide">
+      {% set active_page = "products" %}
+      {% include "_nav.html" %}
+
+      <header class="page-header">
+        <div class="page-title">
+          <h1>批量维护单价</h1>
+          <p>上传包含 BLD NO. 和 Unit Price/含税单价 的 Excel，确认预览后批量更新。</p>
+        </div>
+        <div class="primary-actions">
+          <a class="button ghost-link" href="{{ url_for('products') }}">返回产品目录</a>
+        </div>
+      </header>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <section class="messages">
+            {% for category, message in messages %}
+              <div class="message {{ category }}">{{ message }}</div>
+            {% endfor %}
+          </section>
+        {% endif %}
+      {% endwith %}
+
+      <section class="toolbar-panel">
+        <form action="{{ url_for('price_import_preview') }}" method="post" enctype="multipart/form-data" class="form">
+          <label>
+            单价 Excel 文件
+            <input type="file" name="price_file" accept=".xls,.xlsx" required>
+          </label>
+          <button type="submit">上传并预览</button>
+        </form>
+        <p class="note">表头示例：BLD NO. / Unit Price。价格会按人民币保留两位小数。</p>
+      </section>
+
+      {% if preview %}
+        <section class="panel">
+          <h2>导入预览</h2>
+          <dl class="stats">
+            <div><dt>总行数</dt><dd>{{ preview.counts.total }}</dd></div>
+            <div><dt>可更新</dt><dd>{{ preview.counts.matched }}</dd></div>
+            <div><dt>未找到</dt><dd>{{ preview.counts.missing }}</dd></div>
+            <div><dt>价格错误</dt><dd>{{ preview.counts.invalid_price }}</dd></div>
+          </dl>
+          <form action="{{ url_for('price_import_apply') }}" method="post">
+            <input type="hidden" name="payload" value="{{ payload }}">
+            <button type="submit">确认批量更新单价</button>
+          </form>
+        </section>
+
+        <section class="panel table-panel">
+          <table>
+            <thead>
+              <tr>
+                <th>Excel 行</th>
+                <th>BLD NO.</th>
+                <th>新单价</th>
+                <th>原单价</th>
+                <th>状态</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in preview.rows %}
+                <tr>
+                  <td>{{ row.row }}</td>
+                  <td><strong>{{ row.bld_no }}</strong></td>
+                  <td>{% if row.price is not none %}¥{{ "%.2f"|format(row.price) }}{% endif %}</td>
+                  <td>{% if row.old_price is not none %}¥{{ "%.2f"|format(row.old_price) }}{% endif %}</td>
+                  <td>
+                    {% if row.status == "matched" %}可更新{% elif row.status == "missing" %}未找到 BLD{% else %}价格错误{% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </section>
+      {% endif %}
+    </main>
+  </body>
+</html>

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>BLD 询价处理</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  </head>
+  <body>
+    <main class="shell wide">
+      {% set active_page = "match" %}
+      {% include "_nav.html" %}
+
+      <header class="page-header">
+        <div class="page-title">
+          <h1>BLD 询价处理</h1>
+          <p>上传客户询价表，自动在产品目录中新增匹配的 BLD NO.</p>
+        </div>
+      </header>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <section class="messages">
+            {% for category, message in messages %}
+              <div class="message {{ category }}">{{ message }}</div>
+            {% endfor %}
+          </section>
+        {% endif %}
+      {% endwith %}
+
+      <section class="dashboard-grid">
+        <article class="panel summary-panel">
+          <h2>产品目录</h2>
+          {% if catalog_summary %}
+            <dl class="stats">
+              <div><dt>启用产品</dt><dd>{{ product_stats.active }}</dd></div>
+              <div><dt>OE 索引</dt><dd>{{ catalog_summary.oe_keys }}</dd></div>
+              <div><dt>BLD 索引</dt><dd>{{ catalog_summary.bld_keys }}</dd></div>
+              <div><dt>停用产品</dt><dd>{{ product_stats.inactive }}</dd></div>
+            </dl>
+            <p class="note">当前目录：{{ catalog_path.name }}</p>
+          {% else %}
+            <p class="note">还没有可用目录，请到产品目录页导入 .xlsx 产品目录。</p>
+          {% endif %}
+        </article>
+
+        <article class="panel primary action-panel">
+          <h2>生成匹配结果</h2>
+          {% if can("generate_match") %}
+            <form action="{{ url_for('match_inquiry') }}" method="post" enctype="multipart/form-data" class="form">
+              <label>
+                客户询价源文件
+                <input type="file" name="inquiry" accept=".xls,.xlsx" required>
+              </label>
+              <button type="submit">开始匹配并导出</button>
+            </form>
+          {% else %}
+            <p class="note">当前账号没有生成匹配结果权限。</p>
+          {% endif %}
+          <p class="note">支持 .xls 和 .xlsx。输出文件会保持客户源表格式，并在右侧新增 <strong>BLD NO.</strong> 与匹配说明列。</p>
+        </article>
+      </section>
+
+      {% if latest_outputs %}
+        <section class="panel recent-results">
+          <div class="section-heading">
+            <h2>最近结果</h2>
+          </div>
+          <ul class="files">
+            {% for path in latest_outputs %}
+              <li><a href="{{ url_for('download', name=path.name) }}">{{ path.name }}</a></li>
+            {% endfor %}
+          </ul>
+        </section>
+      {% endif %}
+    </main>
+  </body>
+</html>

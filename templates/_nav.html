@@ -1,0 +1,39 @@
+<nav class="app-nav">
+  <div class="nav-links">
+    <a class="{% if active_page == 'match' %}active{% endif %}" href="{{ url_for('index') }}">询价处理</a>
+    <a class="{% if active_page == 'products' %}active{% endif %}" href="{{ url_for('products') }}">产品目录</a>
+    <a class="{% if active_page == 'materials' %}active{% endif %}" href="{{ url_for('materials') }}">生产料单</a>
+  </div>
+  <div class="nav-user">
+    {% if can("manage_users") or can("view_logs") %}
+      <details class="admin-menu" data-admin-menu>
+        <summary class="user-badge admin-menu-trigger {% if active_page in ['users', 'logs'] %}active{% endif %}">
+          {{ g.user.username }} · {{ ROLE_LABELS.get(g.user.role, g.user.role) }}
+        </summary>
+        <div class="admin-menu-panel">
+          {% if can("manage_users") %}
+            <a class="{% if active_page == 'users' %}active{% endif %}" href="{{ url_for('users') }}">账号管理</a>
+          {% endif %}
+          {% if can("view_logs") %}
+            <a class="{% if active_page == 'logs' %}active{% endif %}" href="{{ url_for('logs') }}">操作日志</a>
+          {% endif %}
+        </div>
+      </details>
+    {% else %}
+      <span class="user-badge">{{ g.user.username }} · {{ ROLE_LABELS.get(g.user.role, g.user.role) }}</span>
+    {% endif %}
+    <form action="{{ url_for('logout') }}" method="post"><button class="ghost compact" type="submit">退出</button></form>
+  </div>
+</nav>
+<script>
+  (() => {
+    const menu = document.querySelector("[data-admin-menu]");
+    if (!menu) return;
+    document.addEventListener("click", (event) => {
+      if (!menu.contains(event.target)) menu.removeAttribute("open");
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") menu.removeAttribute("open");
+    });
+  })();
+</script>

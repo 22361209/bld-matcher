@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>匹配结果</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  </head>
+  <body>
+    <main class="shell">
+      {% set active_page = "match" %}
+      {% include "_nav.html" %}
+
+      <header class="page-header">
+        <div class="page-title">
+          <h1>匹配结果</h1>
+          <p>共 {{ summary.total }} 行，命中 {{ summary.matched }} 行，未找到 {{ summary.unmatched }} 行。</p>
+          <p class="note">已生成文件：{{ output_path.name }}</p>
+        </div>
+        <div class="primary-actions">
+          <a class="button" href="{{ url_for('download', name=output_path.name) }}" download target="_blank" rel="noopener">下载 Excel</a>
+        </div>
+      </header>
+
+      <section class="panel">
+        <table>
+          <thead>
+            <tr>
+              <th>行号</th>
+              <th>OE号</th>
+              <th>物料名称</th>
+              <th>BLD NO.</th>
+              <th>分数</th>
+              <th>说明</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in summary.rows %}
+              <tr>
+                <td>{{ row.row }}</td>
+                <td>{{ row.oe }}</td>
+                <td>{{ row.name }}</td>
+                <td><strong>{{ row.bld_no }}</strong></td>
+                <td>{{ row.score }}</td>
+                <td>
+                  {{ row.reason }}
+                  {% if row.match_note %}
+                    <div class="match-note">{{ row.match_note }}</div>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+
+      <p><a href="{{ url_for('index') }}">返回首页</a></p>
+    </main>
+  </body>
+</html>

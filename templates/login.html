@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>登录</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  </head>
+  <body>
+    <main class="login-shell">
+      <section class="panel login-panel">
+        <div class="login-brand">
+          <h1>BLD 询价处理</h1>
+          <p class="note">产品目录与客户询价处理系统</p>
+        </div>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <section class="messages">
+              {% for category, message in messages %}
+                <div class="message {{ category }}">{{ message }}</div>
+              {% endfor %}
+            </section>
+          {% endif %}
+        {% endwith %}
+        <form action="{{ url_for('do_login') }}" method="post" class="form vertical">
+          <input type="hidden" name="next" value="{{ next }}">
+          <label>
+            登录名
+            <input name="username" autocomplete="username" required autofocus>
+          </label>
+          <label>
+            密码
+            <input name="password" type="password" autocomplete="current-password" required>
+          </label>
+          <button type="submit">登录</button>
+        </form>
+      </section>
+    </main>
+  </body>
+</html>

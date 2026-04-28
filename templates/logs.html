@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>操作日志</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  </head>
+  <body>
+    <main class="shell wide">
+      {% set active_page = "logs" %}
+      {% include "_nav.html" %}
+
+      <header class="page-header">
+        <div class="page-title">
+          <h1>操作日志</h1>
+          <p>记录目录导入、产品新增/编辑/停用、人工映射变更。</p>
+        </div>
+      </header>
+
+      <section class="toolbar-panel">
+        <form class="search-toolbar" method="get" action="{{ url_for('logs') }}">
+          <label>
+            搜索日志
+            <input name="q" value="{{ query }}" placeholder="输入 BLD 号、OE、操作类型">
+          </label>
+          <label>
+            操作者
+            <select name="actor">
+              <option value="">全部</option>
+              {% for item in actors %}
+                <option value="{{ item }}" {% if actor == item %}selected{% endif %}>{{ item }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <button type="submit">搜索</button>
+        </form>
+      </section>
+
+      <section class="panel table-panel">
+        <table class="resizable-table log-table">
+          <thead>
+            <tr>
+              <th>时间</th>
+              <th>操作</th>
+              <th>操作者</th>
+              <th>对象</th>
+              <th>编号</th>
+              <th>详情</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for log in logs %}
+              <tr>
+                <td>{{ log.created_at }}</td>
+                <td>{{ log.action }}</td>
+                <td>{{ log.actor }}</td>
+                <td>{{ log.target_type }}</td>
+                <td><strong>{{ log.target_key }}</strong></td>
+                <td class="preline">{{ log.detail }}</td>
+              </tr>
+            {% endfor %}
+            {% if not logs %}
+              <tr><td colspan="6">暂无日志。</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </section>
+    </main>
+  </body>
+</html>

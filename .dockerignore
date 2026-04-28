@@ -1,0 +1,11 @@
+.git
+.DS_Store
+__pycache__/
+*.pyc
+.venv/
+venv/
+uploads/*
+outputs/*
+data/products.sqlite3-journal
+data/products.sqlite3-wal
+data/products.sqlite3-shm
