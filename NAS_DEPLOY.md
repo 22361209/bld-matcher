@@ -1,5 +1,17 @@
 # 群晖 NAS Docker 部署说明
 
+## 0. 重要更新规则
+
+NAS 上的程序更新**只能通过 Git 仓库发布**：
+
+```text
+本机代码 -> git push nas main -> NAS 运行目录 git pull/reset -> docker-compose 重建
+```
+
+不要用 Finder、File Station、`scp`、`rsync`、压缩包或手动拖拽去覆盖 `/volume1/docker/bld-matcher` 的程序文件。直接覆盖会让 NAS 运行目录脱离 Git 管理，也容易误碰运行数据。
+
+如果本机 Git 仓库异常、无法正常 push，应先修复本机仓库，或从 NAS 仓库干净克隆到临时目录后提交推送；仍然不要直接覆盖 NAS 运行目录。
+
 ## 1. 准备目录
 
 在群晖 File Station 中创建目录：
@@ -8,7 +20,7 @@
 /docker/bld-matcher
 ```
 
-把本项目所有文件放进这个目录。
+首次部署时，从 NAS Git 仓库检出代码到这个目录。后续更新不要手动替换文件。
 
 确认这些目录存在：
 
@@ -77,10 +89,41 @@ http://192.168.1.20:5055
 
 以后更新程序时：
 
-1. 停止 Container Manager 中的 `bld-matcher`
-2. 替换项目代码
-3. 不要删除 `data` 目录
+1. 本机确认代码已经 commit，并测试通过
+2. 本机推送到 NAS Git 仓库
+3. NAS 运行目录从 Git 更新
 4. 重新构建并启动项目
+
+本机：
+
+```bash
+cd "/Users/linzhenyue/Documents/New project 5"
+git status -sb
+git push nas main
+```
+
+NAS：
+
+```bash
+ssh -i ~/.ssh/bld_matcher_deploy deploy@192.168.110.93
+cd /volume1/docker/bld-matcher
+git fetch origin main
+git reset --hard origin/main
+git status -sb
+sudo /usr/local/bin/docker-compose up -d --build
+sudo /usr/local/bin/docker-compose ps
+```
+
+确认 `git status -sb` 只显示 `## main`，表示 NAS 运行目录没有脱离 Git 管理。
+
+不要删除或覆盖：
+
+```text
+data/
+uploads/
+outputs/
+.env
+```
 
 ## 7. 安全建议
 
