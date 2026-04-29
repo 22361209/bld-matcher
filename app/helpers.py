@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 
 from flask import g, url_for
@@ -12,6 +13,24 @@ from .database import bootstrap_from_excel, connect, rows_for_catalog
 from .matcher import ProductCatalog, load_manual_map
 
 
+@lru_cache(maxsize=2048)
+def _default_product_image_relative(bld_no: str) -> str:
+    for suffix in ("jpg", "jpeg", "png", "webp"):
+        relative = f"product_images/{bld_no}.{suffix}"
+        if (BASE_DIR / "static" / relative).exists():
+            return relative
+    return ""
+
+
+@lru_cache(maxsize=2048)
+def _default_product_thumb_relative(bld_no: str) -> str:
+    for suffix in ("jpg", "jpeg", "png", "webp"):
+        relative = f"product_images/thumbs/{bld_no}.{suffix}"
+        if (BASE_DIR / "static" / relative).exists():
+            return relative
+    return ""
+
+
 def product_image_url(product) -> str:
     explicit = (product["image_path"] if "image_path" in product.keys() else "") or ""
     if explicit:
@@ -20,11 +39,18 @@ def product_image_url(product) -> str:
         return url_for("static", filename=explicit.lstrip("/"))
 
     bld_no = product["bld_no"] if "bld_no" in product.keys() else ""
-    for suffix in ("jpg", "jpeg", "png", "webp"):
-        relative = f"product_images/{bld_no}.{suffix}"
-        if (BASE_DIR / "static" / relative).exists():
-            return url_for("static", filename=relative)
-    return ""
+    relative = _default_product_image_relative(bld_no)
+    return url_for("static", filename=relative) if relative else ""
+
+
+def product_image_thumb_url(product) -> str:
+    explicit = (product["image_path"] if "image_path" in product.keys() else "") or ""
+    if explicit:
+        return product_image_url(product)
+
+    bld_no = product["bld_no"] if "bld_no" in product.keys() else ""
+    relative = _default_product_thumb_relative(bld_no) or _default_product_image_relative(bld_no)
+    return url_for("static", filename=relative) if relative else ""
 
 
 def bootstrap_catalog() -> None:
