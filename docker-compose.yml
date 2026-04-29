@@ -5,6 +5,8 @@ services:
     restart: unless-stopped
     ports:
       - "5055:8000"
+    env_file:
+      - .env
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
