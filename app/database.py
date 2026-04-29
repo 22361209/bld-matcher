@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -148,6 +149,95 @@ def _parse_required_float(value: object, label: str) -> float:
         return float(text)
     except ValueError as exc:
         raise ValueError(f"{label}必须是数字：{text}") from exc
+
+
+def _format_material_int(value: float) -> int | float:
+    return int(value) if float(value).is_integer() else value
+
+
+def _format_material_thickness(value: float) -> str:
+    text = f"{value:.2f}".rstrip("0")
+    if text.endswith("."):
+        return text + "0"
+    return text
+
+
+def _format_material_spec(thickness: float, width: float, length: float) -> str:
+    return f"{_format_material_thickness(thickness)}×{_format_material_int(width)}×{_format_material_int(length)}"
+
+
+def _parse_material_spec_text(value: object) -> tuple[float, float, float]:
+    text = compact_text(value)
+    if not text:
+        raise ValueError("规格尺寸不能为空。")
+    normalized = re.sub(r"[×xX*＊/／\\\-－—]+", " ", text)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    parts = normalized.split(" ") if normalized else []
+    if len(parts) != 3:
+        raise ValueError("规格尺寸请按“厚度 宽度 长度”填写，例如 2.5 357 1260。")
+    try:
+        return tuple(float(part) for part in parts)  # type: ignore[return-value]
+    except ValueError as exc:
+        raise ValueError(f"规格尺寸必须包含 3 个数字：{text}") from exc
+
+
+def _parse_material_spec_query(value: object) -> list[float]:
+    text = compact_text(value)
+    if not text:
+        return []
+    normalized = re.sub(r"[×xX*＊/／\\\-－—]+", " ", text)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    parts = normalized.split(" ") if normalized else []
+    if not 1 <= len(parts) <= 3:
+        return []
+    try:
+        return [float(part) for part in parts]
+    except ValueError:
+        return []
+
+
+def _material_spec_search(tokens: list[float]) -> tuple[str, list[object]]:
+    if not tokens:
+        return "", []
+    epsilon = 0.000001
+
+    def equal_expr(field: str) -> str:
+        return f"ABS({field} - ?) < ?"
+
+    if len(tokens) == 1:
+        value = tokens[0]
+        return (
+            f"({equal_expr('thickness')} OR {equal_expr('width')} OR {equal_expr('length')})",
+            [value, epsilon, value, epsilon, value, epsilon],
+        )
+    if len(tokens) == 2:
+        first, second = tokens
+        return (
+            "("
+            f"({equal_expr('thickness')} AND {equal_expr('width')}) OR "
+            f"({equal_expr('thickness')} AND {equal_expr('length')}) OR "
+            f"({equal_expr('width')} AND {equal_expr('length')})"
+            ")",
+            [
+                first,
+                epsilon,
+                second,
+                epsilon,
+                first,
+                epsilon,
+                second,
+                epsilon,
+                first,
+                epsilon,
+                second,
+                epsilon,
+            ],
+        )
+    first, second, third = tokens
+    return (
+        f"({equal_expr('thickness')} AND {equal_expr('width')} AND {equal_expr('length')})",
+        [first, epsilon, second, epsilon, third, epsilon],
+    )
 
 
 def log_event(conn: sqlite3.Connection, action: str, target_type: str, target_key: str, detail: str = "", actor: str = "") -> None:
@@ -406,25 +496,38 @@ def rows_for_catalog(conn: sqlite3.Connection) -> tuple[list[dict], dict[str, st
     return products, aliases
 
 
-def _material_values_from_data(data: dict, *, source: str = "web", source_row: int = 0) -> dict:
+def _material_values_from_data(
+    data: dict,
+    *,
+    source: str = "web",
+    source_row: int = 0,
+    require_detail_fields: bool = True,
+) -> dict:
     model = compact_text(data.get("model"))
     if not model:
-        raise ValueError("型号不能为空。")
+        raise ValueError("母件编码不能为空。")
+    code = compact_text(data.get("code"))
+    if require_detail_fields and not code:
+        raise ValueError("零件编码不能为空。")
+    part = compact_text(data.get("part"))
+    if require_detail_fields and not part:
+        raise ValueError("零件名称不能为空。")
     pieces = _parse_required_float(data.get("pieces"), "下料只数")
-    thickness = _parse_required_float(data.get("thickness"), "规格1")
-    width = _parse_required_float(data.get("width"), "规格2")
-    length = _parse_required_float(data.get("length"), "规格3")
+    if compact_text(data.get("spec_text")):
+        thickness, width, length = _parse_material_spec_text(data.get("spec_text"))
+    else:
+        thickness = _parse_required_float(data.get("thickness"), "规格1")
+        width = _parse_required_float(data.get("width"), "规格2")
+        length = _parse_required_float(data.get("length"), "规格3")
     if pieces <= 0:
         raise ValueError("下料只数必须大于 0。")
-    spec_text = compact_text(data.get("spec_text"))
-    if not spec_text:
-        spec_text = f"{thickness:g}×{width:g}×{length:g}"
+    spec_text = _format_material_spec(thickness, width, length)
     return {
         "model": model,
-        "code": compact_text(data.get("code")),
+        "code": code,
         "category": compact_text(data.get("category")),
         "car": compact_text(data.get("car")),
-        "part": compact_text(data.get("part")),
+        "part": part,
         "spec_text": spec_text,
         "pieces": pieces,
         "thickness": thickness,
@@ -438,8 +541,8 @@ def _material_values_from_data(data: dict, *, source: str = "web", source_row: i
 
 def _material_changes(before: sqlite3.Row | None, after: dict) -> list[str]:
     labels = {
-        "model": "型号",
-        "code": "编码",
+        "model": "母件编码",
+        "code": "零件编码",
         "category": "类别",
         "car": "车型",
         "part": "零件名称",
@@ -521,7 +624,7 @@ def import_materials_from_excel(conn: sqlite3.Connection, material_path: Path, r
             "category": values[2],
             "car": values[3],
             "part": values[4],
-            "spec_text": values[5],
+            "spec_text": "",
             "pieces": values[6],
             "thickness": values[8],
             "width": values[9],
@@ -532,7 +635,12 @@ def import_materials_from_excel(conn: sqlite3.Connection, material_path: Path, r
             continue
         if any(value in (None, "") for value in [data["pieces"], data["thickness"], data["width"], data["length"]]):
             continue
-        row = _material_values_from_data(data, source=material_path.name, source_row=row_number)
+        row = _material_values_from_data(
+            data,
+            source=material_path.name,
+            source_row=row_number,
+            require_detail_fields=False,
+        )
         row.update({"created_at": timestamp, "updated_at": timestamp})
         rows.append(row)
 
@@ -570,7 +678,11 @@ def list_material_items(
     only_inactive: bool = False,
     limit: int = 3000,
 ) -> list[sqlite3.Row]:
-    sql = "SELECT * FROM material_items"
+    sql = """
+        SELECT *,
+               (width * length * 7.85 * thickness / pieces / 1000000.0) AS unit_weight
+        FROM material_items
+    """
     params: list[object] = []
     clauses = []
     if only_inactive:
@@ -579,10 +691,18 @@ def list_material_items(
         clauses.append("active = 1")
     if query.strip():
         key = f"%{query.strip()}%"
-        clauses.append(
+        search_clauses = [
             "(model LIKE ? OR code LIKE ? OR category LIKE ? OR car LIKE ? OR part LIKE ? OR spec_text LIKE ?)"
+        ]
+        search_params: list[object] = [key, key, key, key, key, key]
+        spec_clause, spec_params = _material_spec_search(_parse_material_spec_query(query))
+        if spec_clause:
+            search_clauses.append(spec_clause)
+            search_params.extend(spec_params)
+        clauses.append(
+            "(" + " OR ".join(search_clauses) + ")"
         )
-        params.extend([key, key, key, key, key, key])
+        params.extend(search_params)
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)
     sql += " ORDER BY model, code, id LIMIT ?"

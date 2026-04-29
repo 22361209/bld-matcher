@@ -7,21 +7,9 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   </head>
   <body>
-    <main class="shell wide materials-linear">
+    <main class="shell wide materials-linear materials-clean-page">
       {% set active_page = "materials" %}
       {% include "_nav.html" %}
-
-      <header class="materials-hero">
-        <div>
-          <h1>生产料单</h1>
-          <p>上传生产计划，按启用材料明细生成采购和下料所需的料单。</p>
-        </div>
-        <div class="materials-file-meta">
-          <span>材料文件</span>
-          <strong>{{ material_path.name if material_path else "未上传" }}</strong>
-          <span>{{ material_file_stats.updated_at or "未记录更新时间" }}</span>
-        </div>
-      </header>
 
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
@@ -33,13 +21,17 @@
         {% endif %}
       {% endwith %}
 
-      <section class="materials-metrics" aria-label="材料数据统计">
-        <div><span>总明细</span><strong>{{ material_stats["items"] }}</strong></div>
-        <div><span>启用明细</span><strong>{{ material_stats.active }}</strong></div>
-        <div><span>停用明细</span><strong>{{ material_stats.inactive }}</strong></div>
-        <div><span>启用型号</span><strong>{{ material_stats.models }}</strong></div>
-        <div><span>当前视图</span><strong>{{ "全部" if status == "all" else ("停用" if status == "inactive" else "启用") }}</strong></div>
-      </section>
+      <header class="material-landing">
+        <h1>生产料单</h1>
+        <p>上传生产计划，按启用材料明细生成采购和下料所需的料单。</p>
+        <div class="inquiry-stat-strip material-stat-strip" aria-label="材料数据统计">
+          <span>总明细 <strong>{{ material_stats["items"] }}</strong></span>
+          <span>启用明细 <strong>{{ material_stats.active }}</strong></span>
+          <span>停用明细 <strong>{{ material_stats.inactive }}</strong></span>
+          <span>启用母件 <strong>{{ material_stats.models }}</strong></span>
+          <span>当前视图 <strong>{{ "全部" if status == "all" else ("停用" if status == "inactive" else "启用") }}</strong></span>
+        </div>
+      </header>
 
       {% if material_file_stats.invalid %}
         <section class="materials-alert">
@@ -47,74 +39,81 @@
         </section>
       {% endif %}
 
-      <section class="materials-flow">
+      <section class="material-command-center">
+        <div class="inquiry-directory-note material-file-note">
+          <span>材料文件：{{ material_path.name if material_path else "未上传" }}</span>
+          <span>{{ material_file_stats.updated_at or "未记录更新时间" }}</span>
+        </div>
         {% if can("generate_material_sheet") %}
-          <form action="{{ url_for('generate_materials') }}" method="post" enctype="multipart/form-data" class="materials-generate-form">
-            <label class="file-picker">
+          <form action="{{ url_for('generate_materials') }}" method="post" enctype="multipart/form-data" class="inquiry-command-row material-generate-row">
+            <div class="file-picker-field">
               <span>生产计划 Excel</span>
-              <input class="file-picker-input" type="file" name="plan" accept=".xlsx" required>
-              <span class="file-picker-control">
-                <span class="file-picker-button">选择文件</span>
-                <span class="file-picker-name">未选择任何文件</span>
-              </span>
-            </label>
+              <label class="file-picker">
+                <input class="file-picker-input" type="file" name="plan" accept=".xlsx" required>
+                <span class="file-picker-control">
+                  <span class="file-picker-button">选择文件</span>
+                  <span class="file-picker-name">未选择任何文件</span>
+                </span>
+              </label>
+            </div>
             <button class="linear-button primary" type="submit">生成并下载</button>
             <a class="linear-button subtle" href="{{ url_for('download_material_template') }}">下载模板</a>
           </form>
         {% else %}
           <p class="materials-muted">当前账号没有生成生产料单权限。</p>
         {% endif %}
-        <p>生产计划需包含型号和计划数/只；网页编辑、新增、停用后会影响下一次生成。</p>
+        <p class="materials-muted material-help-text">生产计划需包含型号和计划数/只；网页编辑、新增、停用后会影响下一次生成。</p>
       </section>
 
       {% set status_label = "包含停用" if status == "all" else ("只看停用" if status == "inactive" else "只看启用") %}
-      <section class="materials-command">
-        <form class="materials-search-form" method="get" action="{{ url_for('materials') }}">
-          <label>
-            <span>搜索</span>
-            <input name="q" value="{{ query }}" placeholder="型号或编码，例如 8234 / KA8234">
-          </label>
-          <input type="hidden" id="material-status-input" name="status" value="{{ status }}">
-          <button class="linear-button" type="submit">搜索</button>
-          <details class="toolbar-popover linear-popover status-popover">
-            <summary>{{ status_label }}</summary>
-            <div class="status-menu" role="group" aria-label="材料状态筛选">
-              <button class="status-menu-option {% if status == 'active' %}selected{% endif %}" type="submit" data-material-status="active">只看启用</button>
-              <button class="status-menu-option {% if status == 'all' %}selected{% endif %}" type="submit" data-material-status="all">包含停用</button>
-              <button class="status-menu-option {% if status == 'inactive' %}selected{% endif %}" type="submit" data-material-status="inactive">只看停用</button>
-            </div>
-          </details>
-        </form>
-        <div class="materials-actions">
-          {% if can("manage_materials") %}
-            <a class="linear-button primary" href="{{ url_for('new_material_item') }}">新增材料明细</a>
-            <details class="toolbar-popover linear-popover">
-              <summary>导入材料数据</summary>
-              <form action="{{ url_for('upload_material_data') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form material-import-form">
-                <label class="file-picker">
-                  <span>材料数据 Excel</span>
-                  <input class="file-picker-input" type="file" name="material_data" accept=".xlsx" required>
-                  <span class="file-picker-control">
-                    <span class="file-picker-button">选择文件</span>
-                    <span class="file-picker-name">未选择任何文件</span>
-                  </span>
-                </label>
-                <button class="linear-button primary" type="submit">确认导入</button>
-                <span class="note">会备份旧文件，并用新文件重建材料明细库。</span>
-              </form>
-            </details>
-          {% endif %}
-        </div>
-      </section>
-
-      <section class="materials-table-section">
+      <section class="materials-table-section" id="materials-results">
         <div class="materials-table-title">
           <div>
             <h2>材料明细</h2>
-            <p>按型号和编码排序。规格1/2/3 分别用于计算厚度、宽度、长度。</p>
+            <p>按母件编码和零件编码排序。规格尺寸会自动识别并统一显示。</p>
           </div>
-          <span>{{ material_items|length }} 条</span>
+          <div class="materials-table-title-actions">
+            <span>{{ material_items|length }} 条</span>
+            {% if can("manage_materials") %}
+              <button class="linear-button primary" type="button" data-open-material-modal>新增材料明细</button>
+              <details class="toolbar-popover linear-popover">
+                <summary>导入材料数据</summary>
+                <form action="{{ url_for('upload_material_data') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form material-import-form">
+                  <label class="file-picker">
+                    <span>材料数据 Excel</span>
+                    <input class="file-picker-input" type="file" name="material_data" accept=".xlsx" required>
+                    <span class="file-picker-control">
+                      <span class="file-picker-button">选择文件</span>
+                      <span class="file-picker-name">未选择任何文件</span>
+                    </span>
+                  </label>
+                  <button class="linear-button primary" type="submit">确认导入</button>
+                  <span class="note">会备份旧文件，并用新文件重建材料明细库。</span>
+                </form>
+              </details>
+            {% endif %}
+          </div>
         </div>
+
+        <div class="material-table-toolbar">
+          <form class="materials-search-form material-table-search" method="get" action="{{ url_for('materials') }}#materials-results">
+            <label>
+              <span>搜索材料明细</span>
+              <input name="q" value="{{ query }}" placeholder="母件编码、零件编码或规格，例如 8234 / 2.5 357 / 357*1260">
+            </label>
+            <input type="hidden" id="material-status-input" name="status" value="{{ status }}">
+            <button class="linear-button" type="submit">搜索</button>
+            <details class="toolbar-popover linear-popover status-popover">
+              <summary>{{ status_label }}</summary>
+              <div class="status-menu" role="group" aria-label="材料状态筛选">
+                <button class="status-menu-option {% if status == 'active' %}selected{% endif %}" type="submit" data-material-status="active">只看启用</button>
+                <button class="status-menu-option {% if status == 'all' %}selected{% endif %}" type="submit" data-material-status="all">包含停用</button>
+                <button class="status-menu-option {% if status == 'inactive' %}selected{% endif %}" type="submit" data-material-status="inactive">只看停用</button>
+              </div>
+            </details>
+          </form>
+        </div>
+
         <div class="materials-table-wrap">
           <table class="materials-grid-table">
             <colgroup>
@@ -123,26 +122,22 @@
               <col style="width: 78px">
               <col style="width: 104px">
               <col style="width: 88px">
-              <col style="width: 116px">
+              <col style="width: 150px">
               <col style="width: 64px">
-              <col style="width: 52px">
-              <col style="width: 52px">
-              <col style="width: 52px">
+              <col style="width: 76px">
               <col style="width: 50px">
               <col style="width: 64px">
             </colgroup>
             <thead>
               <tr>
-                <th>型号</th>
-                <th>编码</th>
+                <th>母件编码</th>
+                <th>零件编码</th>
                 <th>类别</th>
                 <th>车型</th>
                 <th>零件名称</th>
                 <th>规格尺寸</th>
                 <th>下料只数</th>
-                <th>规格1</th>
-                <th>规格2</th>
-                <th>规格3</th>
+                <th>单件重量kg</th>
                 <th>状态</th>
                 <th>操作</th>
               </tr>
@@ -157,9 +152,7 @@
                   <td>{{ item.part }}</td>
                   <td>{{ item.spec_text }}</td>
                   <td>{{ "%.0f"|format(item.pieces) if item.pieces == item.pieces|int else item.pieces }}</td>
-                  <td>{{ item.thickness }}</td>
-                  <td>{{ "%.0f"|format(item.width) }}</td>
-                  <td>{{ "%.0f"|format(item.length) }}</td>
+                  <td>{{ "%.2f"|format(item.unit_weight) }}</td>
                   <td>{% if item.active %}<span class="linear-status active">启用</span>{% else %}<span class="linear-status inactive">停用</span>{% endif %}</td>
                   <td class="row-actions">
                     {% if can("manage_materials") %}
@@ -174,7 +167,7 @@
                 </tr>
               {% endfor %}
               {% if not material_items %}
-                <tr><td colspan="12">没有找到材料明细。</td></tr>
+                <tr><td colspan="10">没有找到材料明细。</td></tr>
               {% endif %}
             </tbody>
           </table>
@@ -182,21 +175,79 @@
       </section>
 
       {% if latest_outputs %}
-        <section class="materials-recent">
-          <div class="materials-table-title">
-            <div>
-              <h2>最近料单</h2>
-              <p>最近生成的生产料单文件。</p>
-            </div>
+        <details class="materials-history-drawer">
+          <summary>
+            <span>最近料单</span>
+            <strong>{{ latest_outputs|length }} 个</strong>
+          </summary>
+          <div class="materials-history-panel">
+            <section class="materials-recent">
+              <div class="materials-table-title">
+                <div>
+                  <h2>最近料单</h2>
+                  <p>最近生成的生产料单文件。</p>
+                </div>
+              </div>
+              <ul class="files">
+                {% for path in latest_outputs %}
+                  <li><a href="{{ url_for('download', name=download_name(path)) }}">{{ path.name }}</a></li>
+                {% endfor %}
+              </ul>
+            </section>
           </div>
-          <ul class="files">
-            {% for path in latest_outputs %}
-              <li><a href="{{ url_for('download', name=download_name(path)) }}">{{ path.name }}</a></li>
-            {% endfor %}
-          </ul>
-        </section>
+        </details>
       {% endif %}
     </main>
+    {% if can("manage_materials") %}
+      <div class="product-modal" id="material-modal" aria-hidden="true">
+        <div class="product-modal-backdrop" data-close-material-modal></div>
+        <div class="product-modal-panel material-modal-panel" role="dialog" aria-modal="true" aria-label="新增材料明细">
+          <button class="image-modal-close" type="button" data-close-material-modal aria-label="关闭新增材料明细">×</button>
+          <div class="modal-heading">
+            <h2>新增材料明细</h2>
+            <p class="note">母件编码用于匹配生产计划；规格尺寸支持空格、*、-、/ 分隔。</p>
+          </div>
+          <form action="{{ url_for('save_material_item') }}" method="post" class="product-form modal-product-form material-modal-form" data-enter-navigation>
+            <label>
+              母件编码
+              <input name="model" required>
+            </label>
+            <label>
+              零件编码
+              <input name="code" placeholder="例如 KA8234" required>
+            </label>
+            <label>
+              零件名称
+              <input name="part" placeholder="例如 主板" required>
+            </label>
+            <label>
+              下料只数
+              <input name="pieces" type="number" step="0.01" min="0.01" required>
+            </label>
+            <label>
+              规格尺寸
+              <input name="spec_text" placeholder="例如 2.5 357 1260 / 2.5*357*1260" required>
+            </label>
+            <label>
+              类别
+              <input name="category" placeholder="例如 前下摆臂">
+            </label>
+            <label>
+              车型
+              <input name="car" placeholder="例如 雅尊">
+            </label>
+            <label class="check">
+              <input type="checkbox" name="active" value="1" checked>
+              启用
+            </label>
+            <div class="form-actions modal-actions">
+              <button type="submit">保存材料明细</button>
+              <button class="ghost" type="button" data-close-material-modal>取消</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    {% endif %}
     <script>
       const materialStatusInput = document.querySelector("#material-status-input");
       document.querySelectorAll("[data-material-status]").forEach((button) => {
@@ -219,6 +270,33 @@
           popover.open = false;
 	        });
 	      });
+      const materialModal = document.querySelector("#material-modal");
+      const materialForm = materialModal?.querySelector("form");
+      const openMaterialModal = () => {
+        materialModal.classList.add("open");
+        materialModal.setAttribute("aria-hidden", "false");
+        document.body.classList.add("modal-open");
+        materialModal.querySelector("input[name='model']")?.focus();
+      };
+      const closeMaterialModal = () => {
+        materialModal.classList.remove("open");
+        materialModal.setAttribute("aria-hidden", "true");
+        document.body.classList.remove("modal-open");
+        materialForm?.reset();
+      };
+      document.querySelector("[data-open-material-modal]")?.addEventListener("click", openMaterialModal);
+      document.querySelectorAll("[data-close-material-modal]").forEach((element) => {
+        element.addEventListener("click", closeMaterialModal);
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        toolbarPopovers.forEach((popover) => {
+          popover.open = false;
+        });
+        if (materialModal?.classList.contains("open")) {
+          closeMaterialModal();
+        }
+      });
 	    </script>
 	    <script src="{{ url_for('static', filename='app.js') }}"></script>
 	  </body>

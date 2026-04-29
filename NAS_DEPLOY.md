@@ -114,6 +114,8 @@ sudo /usr/local/bin/docker-compose up -d --build
 sudo /usr/local/bin/docker-compose ps
 ```
 
+上述 Docker 重启命令会要求输入 NAS sudo 密码。使用 Codex 操作时，必须打开可见 macOS Terminal 窗口让用户输入密码；不要在隐藏执行会话中运行会等待密码的 sudo 命令。
+
 确认 `git status -sb` 只显示 `## main`，表示 NAS 运行目录没有脱离 Git 管理。
 
 不要删除或覆盖：
@@ -124,6 +126,8 @@ uploads/
 outputs/
 .env
 ```
+
+当前 Compose 配置使用 `restart: unless-stopped`，Dockerfile 使用 Gunicorn 运行 `wsgi:app`。这和本机临时 Flask 开发进程不同；如果容器进程异常退出，Docker 会按重启策略自动拉起。
 
 ## 7. 安全建议
 

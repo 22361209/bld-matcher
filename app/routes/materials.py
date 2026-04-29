@@ -21,7 +21,12 @@ from app.database import (
 )
 from app.helpers import all_recent_outputs, clean_original_filename, user_file_label, user_output_dir, user_recent_outputs, user_upload_path
 from app.locks import ImportLockError, import_lock
-from app.material_sheet import create_plan_template, generate_material_sheet_from_materials, material_data_stats
+from app.material_sheet import (
+    create_plan_template,
+    generate_material_sheet_from_materials,
+    material_data_stats,
+    sync_material_specs_from_dimensions,
+)
 from app.security import actor_name, can, login_required, permission_required
 
 
@@ -129,14 +134,15 @@ def register(app) -> None:
                     backup = DATA_DIR / f"stamping_materials-backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}.xlsx"
                     shutil.copy2(MATERIAL_DATA_PATH, backup)
                 shutil.copy2(upload_path, MATERIAL_DATA_PATH)
+                normalized = sync_material_specs_from_dimensions(MATERIAL_DATA_PATH)
                 with connect(DB_PATH) as conn:
-                    imported = import_materials_from_excel(conn, upload_path, replace=True, actor=actor_name())
+                    imported = import_materials_from_excel(conn, MATERIAL_DATA_PATH, replace=True, actor=actor_name())
                     log_event(
                         conn,
                         "更新材料数据文件",
                         "material_data",
                         clean_original_filename(file.filename, fallback_suffix=".xlsx"),
-                        f"型号 {stats['model_count']} 个，明细 {stats['detail_count']} 行；导入数据库 {imported} 行",
+                        f"型号 {stats['model_count']} 个，明细 {stats['detail_count']} 行；规格尺寸重算 {normalized} 行；导入数据库 {imported} 行",
                         actor=actor_name(),
                     )
                     conn.commit()

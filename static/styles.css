@@ -1460,6 +1460,164 @@ textarea {
   background: rgba(255, 255, 255, 0.72);
 }
 
+.materials-clean-page {
+  --material-panel-width: 860px;
+  --material-action-width: 132px;
+  --material-template-width: 104px;
+  --material-command-gap: 10px;
+}
+
+.material-landing {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 34px 0 18px;
+  text-align: center;
+}
+
+.material-landing h1 {
+  margin: 0;
+  color: #1d2734;
+  font-size: clamp(36px, 6vw, 62px);
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.05;
+}
+
+.material-landing p {
+  margin: 0;
+  color: var(--linear-muted);
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.material-stat-strip {
+  max-width: 820px;
+}
+
+.material-command-center {
+  display: grid;
+  gap: 12px;
+  width: var(--material-panel-width);
+  max-width: 100%;
+  margin: 0 auto 18px;
+  padding: 6px 0 24px;
+  border-bottom: 1px solid var(--linear-line);
+}
+
+.material-file-note {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.material-generate-row {
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) var(--material-action-width) var(--material-template-width);
+  gap: var(--material-command-gap);
+}
+
+.material-generate-row .linear-button {
+  width: 100%;
+  min-height: 44px;
+}
+
+.material-help-text {
+  text-align: center;
+  font-size: 13px;
+}
+
+.material-table-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--linear-line);
+}
+
+.material-table-search {
+  flex: 0 1 560px;
+  justify-content: flex-end;
+}
+
+.material-table-search label {
+  flex: 1 1 300px;
+}
+
+.material-table-search input {
+  width: 100%;
+}
+
+.materials-history-drawer {
+  display: grid;
+  justify-items: stretch;
+  width: var(--material-panel-width);
+  max-width: 100%;
+  margin: 14px auto 0;
+}
+
+.materials-history-drawer > summary {
+  display: inline-flex;
+  justify-self: center;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--linear-muted);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.materials-history-drawer > summary::-webkit-details-marker {
+  display: none;
+}
+
+.materials-history-drawer > summary::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 120ms ease;
+}
+
+.materials-history-drawer[open] > summary::after {
+  transform: translateY(2px) rotate(225deg);
+}
+
+.materials-history-drawer > summary:hover,
+.materials-history-drawer > summary:focus-visible {
+  border-color: var(--linear-line);
+  background: #f7fafc;
+  color: var(--linear-text);
+}
+
+.materials-history-drawer > summary:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px var(--linear-focus);
+}
+
+.materials-history-drawer > summary strong {
+  color: var(--linear-text);
+  font-weight: 800;
+}
+
+.materials-history-panel {
+  width: 100%;
+  margin-top: 10px;
+  padding: 14px;
+  border: 1px solid var(--linear-line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
 .materials-alert {
   margin-top: 12px;
   padding: 8px 10px;
@@ -2188,13 +2346,19 @@ textarea {
     padding-top: 30px;
   }
 
+  .material-landing {
+    padding-top: 28px;
+  }
+
   .inquiry-command-row,
   .inquiry-upload-form,
+  .material-generate-row,
   .inquiry-history-search {
     grid-template-columns: 1fr;
   }
 
-  .inquiry-command-row .linear-button {
+  .inquiry-command-row .linear-button,
+  .material-generate-row .linear-button {
     width: 100%;
   }
 
@@ -2228,6 +2392,15 @@ textarea {
   .materials-table-title-actions {
     justify-content: flex-start;
     margin-top: 8px;
+  }
+
+  .material-table-toolbar {
+    display: block;
+  }
+
+  .material-table-search,
+  .material-table-search label {
+    width: 100%;
   }
 
   .file-picker-control,

@@ -86,6 +86,41 @@ def format_spec(thickness: float, width: float, length: float) -> str:
     return f"{format_thickness(thickness)}×{format_int(width)}×{format_int(length)}"
 
 
+def sync_material_specs_from_dimensions(path: Path) -> int:
+    values_wb = load_workbook(path, read_only=True, data_only=True)
+    edit_wb = load_workbook(path)
+    try:
+        if "材料数据" not in values_wb.sheetnames:
+            raise ValueError("材料数据文件里找不到工作表：材料数据")
+        values_ws = values_wb["材料数据"]
+        edit_ws = edit_wb["材料数据"]
+        changed = 0
+        for row_number, values in enumerate(values_ws.iter_rows(min_row=2, max_col=11, values_only=True), start=2):
+            model = normalize_model(values[0])
+            if not model:
+                continue
+            pieces = values[6]
+            thickness = values[8]
+            width = values[9]
+            length = values[10]
+            if any(value in (None, "") for value in [pieces, thickness, width, length]):
+                continue
+            try:
+                spec_text = format_spec(float(thickness), float(width), float(length))
+            except (TypeError, ValueError):
+                continue
+            cell = edit_ws.cell(row_number, 6)
+            if str(cell.value or "") != spec_text:
+                cell.value = spec_text
+                changed += 1
+        if changed:
+            edit_wb.save(path)
+        return changed
+    finally:
+        values_wb.close()
+        edit_wb.close()
+
+
 def create_plan_template(path: Path) -> None:
     wb = Workbook()
     ws = wb.active
@@ -180,7 +215,7 @@ def read_materials(path: Path) -> dict[str, list[dict[str, Any]]]:
                 "category": values[2],
                 "car": values[3],
                 "part": values[4],
-                "spec_text": values[5],
+                "spec_text": format_spec(float(thickness), float(width), float(length)),
                 "pieces": float(pieces),
                 "thickness": float(thickness),
                 "width": float(width),

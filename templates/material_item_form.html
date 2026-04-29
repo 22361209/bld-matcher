@@ -14,7 +14,7 @@
       <header class="materials-hero">
         <div>
           <h1>{{ "编辑材料明细" if item else "新增材料明细" }}</h1>
-          <p>型号用于匹配生产计划；规格1、规格2、规格3 分别按厚度、宽度、长度参与重量计算。</p>
+          <p>母件编码用于匹配生产计划；规格尺寸会自动识别厚度、宽度、长度。</p>
         </div>
         <div class="materials-actions">
           <a class="linear-button subtle" href="{{ url_for('materials', q=item.model if item else '') }}">返回生产料单</a>
@@ -32,15 +32,27 @@
       {% endwith %}
 
       <section class="workbench-form-section">
-        <form action="{{ url_for('save_material_item') }}" method="post" class="product-form">
+        <form action="{{ url_for('save_material_item') }}" method="post" class="product-form" data-enter-navigation>
           {% if item %}<input type="hidden" name="id" value="{{ item.id }}">{% endif %}
           <label>
-            型号
+            母件编码
             <input name="model" value="{{ item.model if item else '' }}" required>
           </label>
           <label>
-            编码
-            <input name="code" value="{{ item.code if item else '' }}" placeholder="例如 KA8234">
+            零件编码
+            <input name="code" value="{{ item.code if item else '' }}" placeholder="例如 KA8234" required>
+          </label>
+          <label>
+            零件名称
+            <input name="part" value="{{ item.part if item else '' }}" placeholder="例如 主板" required>
+          </label>
+          <label>
+            下料只数
+            <input name="pieces" type="number" step="0.01" min="0.01" value="{{ item.pieces if item else '' }}" required>
+          </label>
+          <label>
+            规格尺寸
+            <input name="spec_text" value="{{ item.spec_text if item else '' }}" placeholder="例如 2.5 357 1260 / 2.5*357*1260" required>
           </label>
           <label>
             类别
@@ -49,30 +61,6 @@
           <label>
             车型
             <input name="car" value="{{ item.car if item else '' }}" placeholder="例如 雅尊">
-          </label>
-          <label>
-            零件名称
-            <input name="part" value="{{ item.part if item else '' }}" placeholder="例如 主板">
-          </label>
-          <label>
-            规格尺寸
-            <input name="spec_text" value="{{ item.spec_text if item else '' }}" placeholder="例如 2.5×312×1260">
-          </label>
-          <label>
-            下料只数
-            <input name="pieces" type="number" step="0.01" min="0.01" value="{{ item.pieces if item else '' }}" required>
-          </label>
-          <label>
-            规格1（厚度）
-            <input name="thickness" type="number" step="0.01" min="0" value="{{ item.thickness if item else '' }}" required>
-          </label>
-          <label>
-            规格2（宽度）
-            <input name="width" type="number" step="1" min="0" value="{{ '%.0f'|format(item.width) if item else '' }}" required>
-          </label>
-          <label>
-            规格3（长度）
-            <input name="length" type="number" step="1" min="0" value="{{ '%.0f'|format(item.length) if item else '' }}" required>
           </label>
           <label class="check">
             <input type="checkbox" name="active" value="1" {% if not item or item.active %}checked{% endif %}>
@@ -85,5 +73,6 @@
         </form>
       </section>
     </main>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
   </body>
 </html>

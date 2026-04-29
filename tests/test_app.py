@@ -70,6 +70,15 @@ class WebAppTest(unittest.TestCase):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
 
+    def test_products_search_uses_results_anchor(self):
+        self.login()
+        response = self.client.get("/products")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('id="products-results"', html)
+        self.assertIn('action="/products#products-results"', html)
+
     def test_system_updates_page_reads_handoff_notes(self):
         self.login()
         response = self.client.get("/system-updates")
@@ -81,6 +90,164 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("项目交接说明.md", html)
         self.assertIn("ac3aa1a", html)
         self.assertIn("新增系统更新页面", html)
+
+    def test_new_material_item_uses_modal(self):
+        self.login()
+        response = self.client.get("/materials")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("data-open-material-modal", html)
+        self.assertIn('id="material-modal"', html)
+        self.assertIn('action="/materials/items/save"', html)
+        self.assertIn('id="materials-results"', html)
+        self.assertIn('action="/materials#materials-results"', html)
+        self.assertIn("data-enter-navigation", html)
+        self.assertIn('name="spec_text"', html)
+        self.assertIn("母件编码", html)
+        self.assertIn("零件编码", html)
+        self.assertRegex(html, r'<input name="code"[^>]*required')
+        self.assertRegex(html, r'<input name="part"[^>]*required')
+        self.assertIn("<th>母件编码</th>", html)
+        self.assertIn("<th>零件编码</th>", html)
+        self.assertIn("<th>单件重量kg</th>", html)
+        self.assertNotIn("<th>型号</th>", html)
+        self.assertNotIn("<th>编码</th>", html)
+        self.assertNotIn('name="thickness"', html)
+        self.assertNotIn('name="width"', html)
+        self.assertNotIn('name="length"', html)
+        self.assertNotIn('href="/materials/items/new"', html)
+        self.assertLess(html.index('name="part"'), html.index('name="pieces"'))
+        self.assertLess(html.index('name="spec_text"'), html.index('name="category"'))
+        self.assertLess(html.index('name="category"'), html.index('name="car"'))
+
+    def test_material_item_save_calculates_spec_text(self):
+        self.login()
+        examples = [
+            ("T-SPEC-WEB-SPACE", "2.5 357 1260", "2.5×357×1260"),
+            ("T-SPEC-WEB-STAR", "2.5*357*1260", "2.5×357×1260"),
+            ("T-SPEC-WEB-DASH", "2.5-357-1260", "2.5×357×1260"),
+            ("T-SPEC-WEB-SLASH", "2.5/357/1260", "2.5×357×1260"),
+        ]
+        for model, spec_text, expected in examples:
+            with self.subTest(spec_text=spec_text):
+                response = self.client.post(
+                    "/materials/items/save",
+                    data={
+                        "model": model,
+                        "code": "KA-TEST",
+                        "category": "测试类别",
+                        "car": "测试车型",
+                        "part": "测试零件",
+                        "pieces": "2",
+                        "spec_text": spec_text,
+                        "active": "1",
+                    },
+                    follow_redirects=False,
+                )
+                self.assertEqual(response.status_code, 302)
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            rows = conn.execute(
+                "SELECT model, spec_text, thickness, width, length FROM material_items WHERE model LIKE 'T-SPEC-WEB-%'"
+            ).fetchall()
+        saved = {row["model"]: row for row in rows}
+        for model, _, expected in examples:
+            self.assertIn(model, saved)
+            self.assertEqual(saved[model]["spec_text"], expected)
+            self.assertEqual(saved[model]["thickness"], 2.5)
+            self.assertEqual(saved[model]["width"], 357)
+            self.assertEqual(saved[model]["length"], 1260)
+
+        response = self.client.get("/materials?q=T-SPEC-WEB-SPACE")
+        html = response.get_data(as_text=True)
+        self.assertIn("单件重量kg", html)
+        self.assertIn("4.41", html)
+        for query in ["357", "2.5 357", "357/1260", "2.5-1260", "2.5*357*1260"]:
+            with self.subTest(query=query):
+                response = self.client.get("/materials", query_string={"q": query})
+                html = response.get_data(as_text=True)
+                self.assertIn("T-SPEC-WEB-SPACE", html)
+        response = self.client.get("/materials", query_string={"q": "2.5 999"})
+        html = response.get_data(as_text=True)
+        self.assertNotIn("T-SPEC-WEB-SPACE", html)
+
+    def test_material_item_requires_code_and_part(self):
+        self.login()
+        for field, data in [
+            (
+                "code",
+                {
+                    "model": "T-SPEC-REQUIRED-CODE",
+                    "part": "测试零件",
+                    "pieces": "2",
+                    "spec_text": "2.5 357 1260",
+                    "active": "1",
+                },
+            ),
+            (
+                "part",
+                {
+                    "model": "T-SPEC-REQUIRED-PART",
+                    "code": "KA-TEST",
+                    "pieces": "2",
+                    "spec_text": "2.5 357 1260",
+                    "active": "1",
+                },
+            ),
+        ]:
+            with self.subTest(field=field):
+                response = self.client.post("/materials/items/save", data=data, follow_redirects=False)
+                self.assertEqual(response.status_code, 302)
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            count = conn.execute(
+                "SELECT COUNT(*) FROM material_items WHERE model IN (?, ?)",
+                ("T-SPEC-REQUIRED-CODE", "T-SPEC-REQUIRED-PART"),
+            ).fetchone()[0]
+        self.assertEqual(count, 0)
+
+    def test_material_import_calculates_spec_text_from_dimensions(self):
+        from app.database import import_materials_from_excel
+        from openpyxl import Workbook
+
+        path = self.root / "stale-material-spec.xlsx"
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "材料数据"
+        sheet.append(["型号", "型号", "类别", "车型", "零件名称", "规格尺寸", "下料只数", "单重", "规格1", "规格2", "规格3"])
+        sheet.append(["T-SPEC-IMPORT", "KA-IMPORT", "测试类别", "测试车型", "测试零件", "旧规格", 3, "", 4, 92.5, 1260])
+        workbook.save(path)
+        workbook.close()
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            imported = import_materials_from_excel(conn, path, replace=False, actor="tester")
+            row = conn.execute("SELECT spec_text FROM material_items WHERE model = ?", ("T-SPEC-IMPORT",)).fetchone()
+
+        self.assertEqual(imported, 1)
+        self.assertIsNotNone(row)
+        self.assertEqual(row["spec_text"], "4.0×92.5×1260")
+
+    def test_material_source_sync_rewrites_spec_text_column(self):
+        from app.material_sheet import sync_material_specs_from_dimensions
+        from openpyxl import Workbook, load_workbook
+
+        path = self.root / "sync-material-spec.xlsx"
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "材料数据"
+        sheet.append(["型号", "型号", "类别", "车型", "零件名称", "规格尺寸", "下料只数", "单重", "规格1", "规格2", "规格3"])
+        sheet.append(["T-SPEC-SOURCE", "KA-SOURCE", "测试类别", "测试车型", "测试零件", "旧规格", 3, "", 2.5, 312, 1260])
+        workbook.save(path)
+        workbook.close()
+
+        changed = sync_material_specs_from_dimensions(path)
+        synced = load_workbook(path, read_only=True, data_only=True)
+        try:
+            self.assertEqual(changed, 1)
+            self.assertEqual(synced["材料数据"].cell(2, 6).value, "2.5×312×1260")
+        finally:
+            synced.close()
 
     def test_upload_limit_is_20mb(self):
         self.assertEqual(self.web.app.config["MAX_CONTENT_LENGTH"], 20 * 1024 * 1024)
@@ -160,6 +327,7 @@ class WebAppTest(unittest.TestCase):
                     "item": "CONTROL ARM",
                     "oe_no_1": "55270-2Z000",
                     "models": "Sportage",
+                    "image_path": "product_images/K6004LB.jpg",
                     "active": "1",
                 },
                 actor="tester",
@@ -173,6 +341,8 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("快速 OE 查询", html)
         self.assertIn("K6004LB", html)
         self.assertIn("OE 精准命中", html)
+        self.assertIn("data-quick-oe-image", html)
+        self.assertIn('id="quick-oe-image-modal"', html)
 
     def test_manual_column_result_defers_excel_until_download(self):
         from app.database import upsert_product

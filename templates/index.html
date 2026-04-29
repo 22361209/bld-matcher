@@ -73,7 +73,7 @@
                         {% set image_url = product_image_url(result.product) %}
                         {% set thumb_url = product_image_thumb_url(result.product) %}
                         {% if image_url %}
-                          <a class="quick-oe-image" href="{{ image_url }}" target="_blank" rel="noopener">
+                          <a class="quick-oe-image" href="{{ image_url }}" data-quick-oe-image data-caption="{{ result.product.bld_no }}">
                             <img src="{{ thumb_url or image_url }}" alt="{{ result.product.bld_no }} 产品图片" loading="lazy" decoding="async">
                           </a>
                         {% else %}
@@ -170,6 +170,14 @@
         </div>
       </details>
     </main>
+    <div class="image-modal" id="quick-oe-image-modal" aria-hidden="true">
+      <div class="image-modal-backdrop" data-close-quick-oe-image-modal></div>
+      <div class="image-modal-panel" role="dialog" aria-modal="true" aria-label="产品图片预览">
+        <button class="image-modal-close" type="button" data-close-quick-oe-image-modal aria-label="关闭图片预览">×</button>
+        <img id="quick-oe-image-modal-img" src="" alt="">
+        <div class="image-modal-caption" id="quick-oe-image-modal-caption"></div>
+      </div>
+    </div>
     <script src="{{ url_for('static', filename='app.js') }}"></script>
   </body>
 </html>

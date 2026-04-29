@@ -37,7 +37,7 @@
 
       {% set status_label = "包含停用" if status == "all" else ("只看停用" if status == "inactive" else "只看启用") %}
       <section class="materials-command">
-        <form class="materials-search-form" method="get" action="{{ url_for('products') }}">
+        <form class="materials-search-form" method="get" action="{{ url_for('products') }}#products-results">
           <label>
             <span>按 BLD NO. 搜索</span>
             <input id="bld-search" name="bld" value="{{ bld_query }}" placeholder="例如 K6015">
@@ -111,7 +111,7 @@
         </div>
       </section>
 
-      <section class="materials-table-section">
+      <section class="materials-table-section" id="products-results">
         <div class="materials-table-title">
           <div>
             <h2>产品明细</h2>
