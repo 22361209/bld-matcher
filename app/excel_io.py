@@ -131,14 +131,15 @@ def generate_xls_with_bld(
     output_path: Path,
     catalog: ProductCatalog,
     match_column: int | None = None,
+    write_output: bool = True,
 ) -> dict:
     book = xlrd.open_workbook(inquiry_path, formatting_info=True, ignore_workbook_corruption=True)
-    writable = copy_xls(book)
+    writable = copy_xls(book) if write_output else None
     summary = {"total": 0, "matched": 0, "unmatched": 0, "rows": []}
 
     for sheet_index in range(book.nsheets):
         source_sheet = book.sheet_by_index(sheet_index)
-        target_sheet = writable.get_sheet(sheet_index)
+        target_sheet = writable.get_sheet(sheet_index) if writable else None
         if source_sheet.nrows == 0:
             continue
 
@@ -148,8 +149,9 @@ def generate_xls_with_bld(
             header_row = 0
             columns = {"oe": match_column}
         output_col = source_sheet.ncols
-        target_sheet.write(header_row, output_col, "BLD NO.")
-        target_sheet.write(header_row, output_col + 1, "匹配说明")
+        if target_sheet:
+            target_sheet.write(header_row, output_col, "BLD NO.")
+            target_sheet.write(header_row, output_col + 1, "匹配说明")
 
         for row_index in range(header_row + 1, source_sheet.nrows):
             inquiry_name = source_sheet.cell_value(row_index, columns["name"]) if "name" in columns else ""
@@ -161,20 +163,25 @@ def generate_xls_with_bld(
             match = catalog.match(inquiry_name, inquiry_oe, inquiry_desc)
             summary["total"] += 1
             if match:
-                target_sheet.write(row_index, output_col, match.bld_no)
+                if target_sheet:
+                    target_sheet.write(row_index, output_col, match.bld_no)
                 summary["matched"] += 1
                 row_summary = _summary_row(row_index + 1, inquiry_oe, inquiry_name, match)
-                target_sheet.write(row_index, output_col + 1, row_summary["match_note"])
+                if target_sheet:
+                    target_sheet.write(row_index, output_col + 1, row_summary["match_note"])
                 summary["rows"].append(row_summary)
             else:
-                target_sheet.write(row_index, output_col, "")
+                if target_sheet:
+                    target_sheet.write(row_index, output_col, "")
                 summary["unmatched"] += 1
                 row_summary = _summary_row(row_index + 1, inquiry_oe, inquiry_name, None)
-                target_sheet.write(row_index, output_col + 1, row_summary["match_note"])
+                if target_sheet:
+                    target_sheet.write(row_index, output_col + 1, row_summary["match_note"])
                 summary["rows"].append(row_summary)
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    writable.save(str(output_path))
+    if writable:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        writable.save(str(output_path))
     return summary
 
 
@@ -183,6 +190,7 @@ def generate_xlsx_with_bld(
     output_path: Path,
     catalog: ProductCatalog,
     match_column: int | None = None,
+    write_output: bool = True,
 ) -> dict:
     workbook = load_workbook(inquiry_path)
     summary = {"total": 0, "matched": 0, "unmatched": 0, "rows": []}
@@ -197,8 +205,9 @@ def generate_xlsx_with_bld(
             header_row = 1
             columns = {"oe": match_column + 1}
         output_col = sheet.max_column + 1
-        sheet.cell(header_row, output_col).value = "BLD NO."
-        sheet.cell(header_row, output_col + 1).value = "匹配说明"
+        if write_output:
+            sheet.cell(header_row, output_col).value = "BLD NO."
+            sheet.cell(header_row, output_col + 1).value = "匹配说明"
 
         for row_index in range(header_row + 1, sheet.max_row + 1):
             inquiry_name = sheet.cell(row_index, columns["name"]).value if "name" in columns else ""
@@ -210,20 +219,25 @@ def generate_xlsx_with_bld(
             match = catalog.match(inquiry_name, inquiry_oe, inquiry_desc)
             summary["total"] += 1
             if match:
-                sheet.cell(row_index, output_col).value = match.bld_no
+                if write_output:
+                    sheet.cell(row_index, output_col).value = match.bld_no
                 summary["matched"] += 1
                 row_summary = _summary_row(row_index, inquiry_oe, inquiry_name, match)
-                sheet.cell(row_index, output_col + 1).value = row_summary["match_note"]
+                if write_output:
+                    sheet.cell(row_index, output_col + 1).value = row_summary["match_note"]
                 summary["rows"].append(row_summary)
             else:
-                sheet.cell(row_index, output_col).value = ""
+                if write_output:
+                    sheet.cell(row_index, output_col).value = ""
                 summary["unmatched"] += 1
                 row_summary = _summary_row(row_index, inquiry_oe, inquiry_name, None)
-                sheet.cell(row_index, output_col + 1).value = row_summary["match_note"]
+                if write_output:
+                    sheet.cell(row_index, output_col + 1).value = row_summary["match_note"]
                 summary["rows"].append(row_summary)
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    workbook.save(output_path)
+    if write_output:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        workbook.save(output_path)
     return summary
 
 
@@ -232,10 +246,11 @@ def generate_excel_with_bld(
     output_path: Path,
     catalog: ProductCatalog,
     match_column: int | None = None,
+    write_output: bool = True,
 ) -> dict:
     suffix = inquiry_path.suffix.lower()
     if suffix == ".xls":
-        return generate_xls_with_bld(inquiry_path, output_path.with_suffix(".xls"), catalog, match_column=match_column)
+        return generate_xls_with_bld(inquiry_path, output_path.with_suffix(".xls"), catalog, match_column=match_column, write_output=write_output)
     if suffix == ".xlsx":
-        return generate_xlsx_with_bld(inquiry_path, output_path.with_suffix(".xlsx"), catalog, match_column=match_column)
+        return generate_xlsx_with_bld(inquiry_path, output_path.with_suffix(".xlsx"), catalog, match_column=match_column, write_output=write_output)
     raise ValueError("客户询价文件仅支持 .xls 或 .xlsx。")

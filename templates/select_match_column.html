@@ -16,29 +16,7 @@
           <h1>选择匹配列</h1>
           <p>没有识别到 OE 或物料名称表头，请选择客户号码所在的列。</p>
         </div>
-        <div class="materials-actions">
-          <a class="linear-button subtle" href="{{ url_for('index') }}">返回首页</a>
-        </div>
       </header>
-
-      <section class="materials-command">
-        <form action="{{ url_for('match_inquiry_with_column') }}" method="post" class="materials-search-form">
-          <input type="hidden" name="upload_path" value="{{ upload_path }}">
-          <input type="hidden" name="original_filename" value="{{ original_filename }}">
-          <input type="hidden" name="output_name" value="{{ output_name }}">
-          <label>
-            <span>匹配列</span>
-            <select name="match_column">
-              {% for column in preview.columns %}
-                <option value="{{ column.index }}" {% if column.index == 0 %}selected{% endif %}>
-                  {{ column.label }} 列
-                </option>
-              {% endfor %}
-            </select>
-          </label>
-          <button class="linear-button primary" type="submit">确认并生成结果</button>
-        </form>
-      </section>
 
       <section class="materials-table-section">
         <div class="materials-table-title">
@@ -46,6 +24,24 @@
             <h2>文件预览：{{ preview.sheet }}</h2>
             <p>请选择客户号码所在列后继续生成。</p>
           </div>
+          <form action="{{ url_for('match_inquiry_with_column') }}" method="post" class="materials-search-form match-column-form">
+            <input type="hidden" name="upload_path" value="{{ upload_path }}">
+            <input type="hidden" name="original_filename" value="{{ original_filename }}">
+            <input type="hidden" name="output_name" value="{{ output_name }}">
+            <label>
+              <span>匹配列</span>
+              {% set selected_column = selected_column|default(0) %}
+              <select name="match_column">
+                {% for column in preview.columns %}
+                  <option value="{{ column.index }}" {% if column.index == selected_column %}selected{% endif %}>
+                    {{ column.label }} 列
+                  </option>
+                {% endfor %}
+              </select>
+            </label>
+            <button class="linear-button primary" type="submit">确认并查看结果</button>
+            <a class="linear-button subtle" href="{{ url_for('index') }}">返回上一步</a>
+          </form>
         </div>
         <div class="materials-table-wrap">
         <table class="materials-grid-table">

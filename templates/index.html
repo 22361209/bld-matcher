@@ -11,6 +11,16 @@
       {% set active_page = "match" %}
       {% include "_nav.html" %}
 
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <section class="messages materials-messages">
+            {% for category, message in messages %}
+              <div class="message {{ category }}">{{ message }}</div>
+            {% endfor %}
+          </section>
+        {% endif %}
+      {% endwith %}
+
       <header class="inquiry-landing">
         <h1><span>BLD</span> 询价处理</h1>
         <p>上传客户询价表，自动在产品目录中新增匹配的 BLD NO.</p>
@@ -24,16 +34,6 @@
         {% endif %}
       </header>
 
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          <section class="messages materials-messages">
-            {% for category, message in messages %}
-              <div class="message {{ category }}">{{ message }}</div>
-            {% endfor %}
-          </section>
-        {% endif %}
-      {% endwith %}
-
       <section class="inquiry-command-center">
         <div class="inquiry-directory-note">
           {% if catalog_summary %}
@@ -44,77 +44,131 @@
         </div>
         {% if can("generate_match") %}
           <form action="{{ url_for('match_inquiry') }}" method="post" enctype="multipart/form-data" class="inquiry-command-row inquiry-upload-form">
-            <label class="file-picker">
-              <span>客户询价源文件</span>
-              <input class="file-picker-input" type="file" name="inquiry" accept=".xls,.xlsx" required>
-              <span class="file-picker-control">
-                <span class="file-picker-button">选择文件</span>
-                <span class="file-picker-name">未选择任何文件</span>
-              </span>
-            </label>
-            <button class="linear-button primary" type="submit">开始匹配并导出</button>
+            <div class="file-picker-field">
+              <span>客户询价源文件 / OE 号码</span>
+              <div class="file-picker inquiry-file-oe-picker">
+                <input id="inquiry-file-input" class="file-picker-input" type="file" name="inquiry" accept=".xls,.xlsx">
+                <div class="file-picker-control">
+                  <label class="file-picker-button" for="inquiry-file-input">选择文件</label>
+                  <input class="file-picker-oe-input" name="quick_oe" value="{{ quick_oe }}" placeholder="未选择文件时，可直接输入 OE 号码查询">
+                </div>
+              </div>
+            </div>
+            <button class="linear-button primary" type="submit">开始匹配</button>
           </form>
+          {% if quick_oe %}
+            <section class="quick-oe-results" aria-label="快速 OE 查询结果">
+              <div class="quick-oe-heading">
+                <div>
+                  <h2>快速 OE 查询</h2>
+                  <p>{{ quick_results|length }} 条查询结果</p>
+                </div>
+              </div>
+              {% if quick_results %}
+                <div class="quick-oe-grid">
+                  {% for result in quick_results %}
+                    <article class="quick-oe-card {% if not result.product %}unmatched{% endif %}">
+                      <div class="quick-oe-code">{{ result.query }}</div>
+                      {% if result.product %}
+                        {% set image_url = product_image_url(result.product) %}
+                        {% set thumb_url = product_image_thumb_url(result.product) %}
+                        {% if image_url %}
+                          <a class="quick-oe-image" href="{{ image_url }}" target="_blank" rel="noopener">
+                            <img src="{{ thumb_url or image_url }}" alt="{{ result.product.bld_no }} 产品图片" loading="lazy" decoding="async">
+                          </a>
+                        {% else %}
+                          <span class="quick-oe-image-placeholder"></span>
+                        {% endif %}
+                        <div class="quick-oe-content">
+                          <div class="quick-oe-main">
+                            <strong>{{ result.product.bld_no }}</strong>
+                            <span>{{ result.reason }}</span>
+                          </div>
+                          <div class="quick-oe-meta">
+                            {% if result.product.series %}<span>{{ result.product.series }}</span>{% endif %}
+                            {% if result.product.item %}<span>{{ result.product.item }}</span>{% endif %}
+                            {% if result.product.price_cny is not none %}<span>¥{{ "%.2f"|format(result.product.price_cny) }}</span>{% endif %}
+                          </div>
+                          {% if result.product.models %}
+                            <p class="quick-oe-models">{{ result.product.models }}</p>
+                          {% endif %}
+                        </div>
+                      {% else %}
+                        <div class="quick-oe-main">
+                          <strong>未找到匹配</strong>
+                          <span>{{ result.reason }}</span>
+                        </div>
+                      {% endif %}
+                    </article>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <p class="materials-empty">没有可查询的 OE 号码。</p>
+              {% endif %}
+            </section>
+          {% endif %}
         {% else %}
           <p class="materials-muted">当前账号没有生成匹配结果权限。</p>
         {% endif %}
-        <details class="inquiry-history-drawer" {% if history_query %}open{% endif %}>
-          <summary>
-            <span>历史报价文件</span>
-            <strong>{{ history_files|length }} 条</strong>
-          </summary>
-          <div class="inquiry-history-panel">
-            <form class="inquiry-command-row inquiry-history-search" method="get" action="{{ url_for('index') }}">
-              <label>
-                <span>搜索历史报价文件</span>
-                <input name="history_q" value="{{ history_query }}" placeholder="客户名、日期、关键词或操作用户">
-              </label>
-              <button class="linear-button" type="submit">搜索</button>
-              {% if history_query %}
-                <a class="linear-button subtle" href="{{ url_for('index') }}">清除</a>
-              {% endif %}
-            </form>
-            <section class="materials-recent inquiry-history">
-              <div class="materials-table-title">
-                <div>
-                  <h2>历史报价文件</h2>
-                  <p>按文件名搜索已经处理过的询价结果，方便重新下载。</p>
-                </div>
-                <span>{{ history_files|length }} 条</span>
-              </div>
-              {% if history_files %}
-                <div class="materials-table-wrap inquiry-history-wrap">
-                  <table class="materials-grid-table inquiry-history-table">
-                    <thead>
-                      <tr>
-                        <th>文件名</th>
-                        <th>格式</th>
-                        <th>操作用户</th>
-                        <th>生成时间</th>
-                        <th>操作</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {% for file in history_files %}
-                        <tr>
-                          <td><a href="{{ url_for('download', name=download_name(file.path)) }}">{{ file.name }}</a></td>
-                          <td>{{ file.kind }}</td>
-                          <td>{{ file.operator }}</td>
-                          <td>{{ file.updated_at }}</td>
-                          <td><a href="{{ url_for('download', name=download_name(file.path)) }}">下载</a></td>
-                        </tr>
-                      {% endfor %}
-                    </tbody>
-                  </table>
-                </div>
-              {% else %}
-                <p class="materials-empty">
-                  {% if history_query %}没有找到匹配的报价文件。{% else %}还没有历史报价文件。{% endif %}
-                </p>
-              {% endif %}
-            </section>
-          </div>
-        </details>
       </section>
+
+      <details class="inquiry-history-drawer" {% if history_query %}open{% endif %}>
+        <summary>
+          <span>历史报价文件</span>
+          <strong>{{ history_files|length }} 条</strong>
+        </summary>
+        <div class="inquiry-history-panel">
+          <form class="inquiry-command-row inquiry-history-search" method="get" action="{{ url_for('index') }}">
+            <label>
+              <span>搜索历史报价文件</span>
+              <input name="history_q" value="{{ history_query }}" placeholder="客户名、日期、关键词或操作用户">
+            </label>
+            <button class="linear-button" type="submit">搜索</button>
+            {% if history_query %}
+              <a class="linear-button subtle" href="{{ url_for('index') }}">清除</a>
+            {% endif %}
+          </form>
+          <section class="materials-recent inquiry-history">
+            <div class="materials-table-title">
+              <div>
+                <h2>历史报价文件</h2>
+                <p>按文件名搜索已经处理过的询价结果，方便重新下载。</p>
+              </div>
+              <span>{{ history_files|length }} 条</span>
+            </div>
+            {% if history_files %}
+              <div class="materials-table-wrap inquiry-history-wrap">
+                <table class="materials-grid-table inquiry-history-table">
+                  <thead>
+                    <tr>
+                      <th>文件名</th>
+                      <th>格式</th>
+                      <th>操作用户</th>
+                      <th>生成时间</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for file in history_files %}
+                      <tr>
+                        <td><a href="{{ url_for('download', name=download_name(file.path)) }}">{{ file.name }}</a></td>
+                        <td>{{ file.kind }}</td>
+                        <td>{{ file.operator }}</td>
+                        <td>{{ file.updated_at }}</td>
+                        <td><a href="{{ url_for('download', name=download_name(file.path)) }}">下载</a></td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <p class="materials-empty">
+                {% if history_query %}没有找到匹配的报价文件。{% else %}还没有历史报价文件。{% endif %}
+              </p>
+            {% endif %}
+          </section>
+        </div>
+      </details>
     </main>
     <script src="{{ url_for('static', filename='app.js') }}"></script>
   </body>

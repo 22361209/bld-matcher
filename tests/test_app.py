@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -57,8 +58,10 @@ class WebAppTest(unittest.TestCase):
         self.assertTrue(response.headers["Location"].endswith("/"))
 
         response = self.client.get("/")
+        html = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
-        self.assertIn("BLD", response.get_data(as_text=True))
+        self.assertIn("BLD", html)
+        self.assertLess(html.index('class="messages'), html.index('class="inquiry-landing"'))
 
     def test_core_admin_pages_load(self):
         self.login()
@@ -144,6 +147,132 @@ class WebAppTest(unittest.TestCase):
         html = response.get_data(as_text=True)
         self.assertIn("other-user-result.xlsx", html)
         self.assertNotIn("old-root-result.xlsx", html)
+
+    def test_quick_oe_lookup_on_homepage(self):
+        from app.database import upsert_product
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K6004LB",
+                    "series": "HYUNDAI",
+                    "item": "CONTROL ARM",
+                    "oe_no_1": "55270-2Z000",
+                    "models": "Sportage",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        self.login()
+        response = self.client.get("/?quick_oe=55270-2Z000")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("快速 OE 查询", html)
+        self.assertIn("K6004LB", html)
+        self.assertIn("OE 精准命中", html)
+
+    def test_manual_column_result_defers_excel_until_download(self):
+        from app.database import upsert_product
+        from openpyxl import Workbook, load_workbook
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K6004LC",
+                    "series": "HYUNDAI",
+                    "item": "CONTROL ARM",
+                    "oe_no_1": "55270-2Z001",
+                    "models": "Sportage",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["客户号码", "数量"])
+        sheet.append(["55270-2Z001", 1])
+        buffer = io.BytesIO()
+        workbook.save(buffer)
+        buffer.seek(0)
+
+        self.login()
+        response = self.client.post(
+            "/match",
+            data={"inquiry": (buffer, "manual-column.xlsx")},
+            content_type="multipart/form-data",
+        )
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("选择匹配列", html)
+        self.assertIn("返回上一步", html)
+        self.assertNotIn("返回首页", html)
+        upload_match = re.search(r'name="upload_path" value="([^"]+)"', html)
+        output_match = re.search(r'name="output_name" value="([^"]+)"', html)
+        self.assertIsNotNone(upload_match)
+        self.assertIsNotNone(output_match)
+        upload_path = upload_match.group(1)
+        output_name = output_match.group(1)
+        output_path = self.root / "outputs" / "u1-007" / output_name
+
+        result = self.client.post(
+            "/match/column",
+            data={
+                "upload_path": upload_path,
+                "original_filename": "manual-column.xlsx",
+                "output_name": output_name,
+                "match_column": "0",
+            },
+        )
+        result_html = result.get_data(as_text=True)
+
+        self.assertEqual(result.status_code, 200)
+        self.assertIn("Excel 文件将在点击下载时生成", result_html)
+        self.assertIn("下载 Excel", result_html)
+        self.assertIn("返回上一步", result_html)
+        self.assertNotIn("返回首页", result_html)
+        self.assertIn("K6004LC", result_html)
+        self.assertFalse(output_path.exists())
+
+        back = self.client.post(
+            "/match/column/back",
+            data={
+                "upload_path": upload_path,
+                "original_filename": "manual-column.xlsx",
+                "output_name": output_name,
+                "match_column": "0",
+            },
+        )
+        back_html = back.get_data(as_text=True)
+        self.assertEqual(back.status_code, 200)
+        self.assertIn("选择匹配列", back_html)
+        self.assertIn("返回上一步", back_html)
+        self.assertNotIn("返回首页", back_html)
+        self.assertRegex(back_html, r'<option value="0"[^>]*selected')
+
+        download = self.client.post(
+            "/match/column/download",
+            data={
+                "upload_path": upload_path,
+                "original_filename": "manual-column.xlsx",
+                "output_name": output_name,
+                "match_column": "0",
+            },
+        )
+        self.assertEqual(download.status_code, 200)
+        download.close()
+        self.assertTrue(output_path.exists())
+
+        generated = load_workbook(output_path)
+        generated_sheet = generated.active
+        self.assertEqual(generated_sheet.cell(1, 3).value, "BLD NO.")
+        self.assertEqual(generated_sheet.cell(2, 3).value, "K6004LC")
+        generated.close()
 
     def test_uploaded_files_are_scoped_to_user(self):
         self.login()

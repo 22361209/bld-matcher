@@ -15,10 +15,11 @@
         <div>
           <h1>匹配结果</h1>
           <p>共 {{ summary.total }} 行，命中 {{ summary.matched }} 行，未找到 {{ summary.unmatched }} 行。</p>
-          <p class="note">已生成文件：{{ output_path.name }}</p>
-        </div>
-        <div class="materials-actions">
-          <a class="linear-button primary" href="{{ url_for('download', name=download_name(output_path)) }}" download target="_blank" rel="noopener">下载 Excel</a>
+          {% if output_pending %}
+            <p class="note">Excel 文件将在点击下载时生成：{{ output_path.name }}</p>
+          {% else %}
+            <p class="note">已生成文件：{{ output_path.name }}</p>
+          {% endif %}
         </div>
       </header>
 
@@ -28,7 +29,27 @@
             <h2>匹配明细</h2>
             <p>按源表行号显示匹配结果和说明。</p>
           </div>
-          <span>{{ summary.rows|length }} 条</span>
+          <div class="materials-table-title-actions">
+            <span>{{ summary.rows|length }} 条</span>
+            {% if output_pending %}
+              <form action="{{ url_for('download_match_column_result') }}" method="post" class="inline-form">
+                <input type="hidden" name="upload_path" value="{{ upload_path }}">
+                <input type="hidden" name="original_filename" value="{{ original_filename }}">
+                <input type="hidden" name="output_name" value="{{ output_name }}">
+                <input type="hidden" name="match_column" value="{{ match_column }}">
+                <button class="linear-button primary" type="submit">下载 Excel</button>
+              </form>
+              <form action="{{ url_for('back_to_match_column') }}" method="post" class="inline-form">
+                <input type="hidden" name="upload_path" value="{{ upload_path }}">
+                <input type="hidden" name="original_filename" value="{{ original_filename }}">
+                <input type="hidden" name="output_name" value="{{ output_name }}">
+                <input type="hidden" name="match_column" value="{{ match_column }}">
+                <button class="linear-button subtle" type="submit">返回上一步</button>
+              </form>
+            {% else %}
+              <a class="linear-button primary" href="{{ url_for('download', name=download_name(output_path)) }}" download target="_blank" rel="noopener">下载 Excel</a>
+            {% endif %}
+          </div>
         </div>
         <div class="materials-table-wrap">
         <table class="materials-grid-table">
@@ -62,8 +83,6 @@
         </table>
         </div>
       </section>
-
-      <p class="workbench-footer"><a class="linear-button subtle" href="{{ url_for('index') }}">返回首页</a></p>
     </main>
   </body>
 </html>
