@@ -7,7 +7,7 @@
   <div class="nav-user">
     {% if can("manage_users") or can("view_logs") %}
       <details class="admin-menu" data-admin-menu>
-        <summary class="user-badge admin-menu-trigger {% if active_page in ['users', 'logs'] %}active{% endif %}">
+        <summary class="user-badge admin-menu-trigger {% if active_page in ['users', 'logs', 'system_updates'] %}active{% endif %}">
           {{ g.user.username }} · {{ ROLE_LABELS.get(g.user.role, g.user.role) }}
         </summary>
         <div class="admin-menu-panel">
@@ -16,6 +16,7 @@
           {% endif %}
           {% if can("view_logs") %}
             <a class="{% if active_page == 'logs' %}active{% endif %}" href="{{ url_for('logs') }}">操作日志</a>
+            <a class="{% if active_page == 'system_updates' %}active{% endif %}" href="{{ url_for('system_updates') }}">系统更新</a>
           {% endif %}
         </div>
       </details>

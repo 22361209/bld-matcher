@@ -7,21 +7,21 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   </head>
   <body>
-    <main class="shell">
+    <main class="shell wide materials-linear">
       {% set active_page = "products" %}
       {% include "_nav.html" %}
 
-      <header class="page-header">
-        <div class="page-title">
+      <header class="materials-hero">
+        <div>
           <h1>{{ "编辑产品" if product else "新增产品" }}</h1>
           <p>一个 BLD NO. 可以维护多个 OE、多个品牌和多个车型；每行一个 OE 会更清楚。</p>
         </div>
-        <div class="primary-actions">
-          <a class="button ghost-link" href="{{ url_for('products') }}">返回目录</a>
+        <div class="materials-actions">
+          <a class="linear-button subtle" href="{{ url_for('products') }}">返回目录</a>
         </div>
       </header>
 
-      <section class="panel">
+      <section class="workbench-form-section">
         <form action="{{ url_for('save_product') }}" method="post" class="product-form">
           <label>
             BLD NO.
@@ -60,7 +60,7 @@
             启用
           </label>
           <div class="form-actions">
-            <button type="submit">保存产品</button>
+            <button class="linear-button primary" type="submit">保存产品</button>
           </div>
         </form>
       </section>

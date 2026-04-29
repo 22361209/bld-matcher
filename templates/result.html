@@ -7,23 +7,31 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   </head>
   <body>
-    <main class="shell">
+    <main class="shell wide materials-linear">
       {% set active_page = "match" %}
       {% include "_nav.html" %}
 
-      <header class="page-header">
-        <div class="page-title">
+      <header class="materials-hero">
+        <div>
           <h1>匹配结果</h1>
           <p>共 {{ summary.total }} 行，命中 {{ summary.matched }} 行，未找到 {{ summary.unmatched }} 行。</p>
           <p class="note">已生成文件：{{ output_path.name }}</p>
         </div>
-        <div class="primary-actions">
-          <a class="button" href="{{ url_for('download', name=output_path.name) }}" download target="_blank" rel="noopener">下载 Excel</a>
+        <div class="materials-actions">
+          <a class="linear-button primary" href="{{ url_for('download', name=download_name(output_path)) }}" download target="_blank" rel="noopener">下载 Excel</a>
         </div>
       </header>
 
-      <section class="panel">
-        <table>
+      <section class="materials-table-section">
+        <div class="materials-table-title">
+          <div>
+            <h2>匹配明细</h2>
+            <p>按源表行号显示匹配结果和说明。</p>
+          </div>
+          <span>{{ summary.rows|length }} 条</span>
+        </div>
+        <div class="materials-table-wrap">
+        <table class="materials-grid-table">
           <thead>
             <tr>
               <th>行号</th>
@@ -52,9 +60,10 @@
             {% endfor %}
           </tbody>
         </table>
+        </div>
       </section>
 
-      <p><a href="{{ url_for('index') }}">返回首页</a></p>
+      <p class="workbench-footer"><a class="linear-button subtle" href="{{ url_for('index') }}">返回首页</a></p>
     </main>
   </body>
 </html>

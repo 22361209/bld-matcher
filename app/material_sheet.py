@@ -468,8 +468,8 @@ def write_output(
     }
 
 
-def unique_output_path(output_dir: Path, title: str) -> Path:
-    filename = f"{safe_filename_part(title)}料单.xlsx"
+def unique_output_path(output_dir: Path, title: str, filename_prefix: str = "") -> Path:
+    filename = f"{filename_prefix}{safe_filename_part(title)}料单.xlsx"
     candidate = output_dir / filename
     if not candidate.exists():
         return candidate
@@ -494,9 +494,10 @@ def generate_material_sheet_from_materials(
     materials: dict[str, list[dict[str, Any]]],
     plan_path: Path,
     output_dir: Path,
+    filename_prefix: str = "",
 ) -> tuple[Path, dict[str, Any]]:
     title, plans = read_plan(plan_path)
-    return generate_material_sheet_from_rows(materials, title, plans, output_dir)
+    return generate_material_sheet_from_rows(materials, title, plans, output_dir, filename_prefix=filename_prefix)
 
 
 def generate_material_sheet_from_rows(
@@ -504,10 +505,11 @@ def generate_material_sheet_from_rows(
     title: str,
     plans: list[dict[str, Any]],
     output_dir: Path,
+    filename_prefix: str = "",
 ) -> tuple[Path, dict[str, Any]]:
     detail, missing = calculate(plans, materials)
     if not detail:
         raise ValueError("没有生成任何料单明细，请检查型号是否和材料数据 A 列一致。")
-    output_path = unique_output_path(output_dir, title)
+    output_path = unique_output_path(output_dir, title, filename_prefix=filename_prefix)
     summary = write_output(output_path, title, plans, detail, missing)
     return output_path, summary

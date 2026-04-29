@@ -7,25 +7,25 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   </head>
   <body>
-    <main class="shell wide">
+    <main class="shell wide materials-linear">
       {% set active_page = "logs" %}
       {% include "_nav.html" %}
 
-      <header class="page-header">
-        <div class="page-title">
+      <header class="materials-hero">
+        <div>
           <h1>操作日志</h1>
           <p>记录目录导入、产品新增/编辑/停用、人工映射变更。</p>
         </div>
       </header>
 
-      <section class="toolbar-panel">
-        <form class="search-toolbar" method="get" action="{{ url_for('logs') }}">
+      <section class="materials-command">
+        <form class="materials-search-form" method="get" action="{{ url_for('logs') }}">
           <label>
-            搜索日志
+            <span>搜索日志</span>
             <input name="q" value="{{ query }}" placeholder="输入 BLD 号、OE、操作类型">
           </label>
           <label>
-            操作者
+            <span>操作者</span>
             <select name="actor">
               <option value="">全部</option>
               {% for item in actors %}
@@ -33,12 +33,20 @@
               {% endfor %}
             </select>
           </label>
-          <button type="submit">搜索</button>
+          <button class="linear-button primary" type="submit">搜索</button>
         </form>
       </section>
 
-      <section class="panel table-panel">
-        <table class="resizable-table log-table">
+      <section class="materials-table-section">
+        <div class="materials-table-title">
+          <div>
+            <h2>日志明细</h2>
+            <p>按最新操作倒序显示。</p>
+          </div>
+          <span>{{ logs|length }} 条</span>
+        </div>
+        <div class="materials-table-wrap">
+        <table class="materials-grid-table log-table">
           <thead>
             <tr>
               <th>时间</th>
@@ -65,6 +73,7 @@
             {% endif %}
           </tbody>
         </table>
+        </div>
       </section>
     </main>
   </body>

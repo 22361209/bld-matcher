@@ -89,8 +89,18 @@ CREATE TABLE IF NOT EXISTS material_items (
 
 def connect(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=5.0)
     conn.row_factory = sqlite3.Row
+    # 多人并发匹配/导入时减少 "database is locked"。
+    # WAL 一次性设置,后续连接都受益;synchronous=NORMAL 在 WAL 下安全且更快;
+    # busy_timeout 让短暂冲突自动重试,而不是立刻抛 OperationalError。
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA busy_timeout=5000")
+    except sqlite3.DatabaseError:
+        # 某些网络挂载文件系统不支持 WAL,退回默认行为不影响功能。
+        pass
     conn.executescript(SCHEMA)
     run_migrations(conn)
     return conn
@@ -654,7 +664,17 @@ def list_log_actors(conn: sqlite3.Connection) -> list[str]:
     ]
 
 
-def ensure_default_admin(conn: sqlite3.Connection, username: str = "007", password: str = "4r3e2w1q") -> None:
+def ensure_default_admin(
+    conn: sqlite3.Connection,
+    username: str | None = None,
+    password: str | None = None,
+) -> None:
+    # 默认值从配置中读取,允许通过环境变量在首启前覆盖。
+    # 已经存在的管理员不会被这里改密。
+    from .config import DEFAULT_ADMIN_PASSWORD, DEFAULT_ADMIN_USERNAME
+
+    username = username or DEFAULT_ADMIN_USERNAME
+    password = password or DEFAULT_ADMIN_PASSWORD
     existing = conn.execute("SELECT id, password_hash FROM users WHERE username = ?", (username,)).fetchone()
     if existing:
         if str(existing["password_hash"] or "").startswith("scrypt:"):

@@ -7,12 +7,12 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   </head>
   <body>
-    <main class="shell wide">
+    <main class="shell wide materials-linear">
       {% set active_page = "users" %}
       {% include "_nav.html" %}
 
-      <header class="page-header">
-        <div class="page-title">
+      <header class="materials-hero">
+        <div>
           <h1>账号管理</h1>
           <p>管理员可以新增账号、修改登录名、角色、启用状态，并重置密码。</p>
         </div>
@@ -20,7 +20,7 @@
 
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-          <section class="messages">
+          <section class="messages materials-messages">
             {% for category, message in messages %}
               <div class="message {{ category }}">{{ message }}</div>
             {% endfor %}
@@ -28,21 +28,21 @@
         {% endif %}
       {% endwith %}
 
-      <section class="grid">
-        <article class="panel">
+      <section class="workbench-split">
+        <article class="workbench-section">
           <h2>{{ "编辑账号" if editing else "新增账号" }}</h2>
-          <form action="{{ url_for('save_user_route') }}" method="post" class="form vertical">
+          <form action="{{ url_for('save_user_route') }}" method="post" class="workbench-form">
             <input type="hidden" name="id" value="{{ editing.id if editing else '' }}">
             <label>
-              登录名
+              <span>登录名</span>
               <input name="username" value="{{ editing.username if editing else '' }}" required>
             </label>
             <label>
-              显示名
+              <span>显示名</span>
               <input name="display_name" value="{{ editing.display_name if editing else '' }}">
             </label>
             <label>
-              角色
+              <span>角色</span>
               <select name="role">
                 {% for role, label in ROLE_LABELS.items() %}
                   <option value="{{ role }}" {% if editing and editing.role == role %}selected{% endif %}>{{ label }}</option>
@@ -50,20 +50,20 @@
               </select>
             </label>
             <label>
-              {{ "新密码（留空则不修改）" if editing else "初始密码" }}
+              <span>{{ "新密码（留空则不修改）" if editing else "初始密码" }}</span>
               <input name="password" type="password" {% if not editing %}required{% endif %}>
             </label>
             <label class="check">
               <input type="checkbox" name="active" value="1" {% if not editing or editing.active %}checked{% endif %}>
               启用
             </label>
-            <button type="submit">保存账号</button>
+            <button class="linear-button primary" type="submit">保存账号</button>
           </form>
         </article>
 
-        <article class="panel">
+        <article class="workbench-section">
           <h2>角色权限</h2>
-          <table>
+          <table class="materials-grid-table">
             <thead><tr><th>角色</th><th>说明</th></tr></thead>
             <tbody>
               <tr><td>管理员</td><td>账号管理、目录导入、产品维护、映射维护、生成匹配、生成生产料单、材料数据维护、查看操作日志</td></tr>
@@ -75,8 +75,16 @@
         </article>
       </section>
 
-      <section class="panel table-panel">
-        <table>
+      <section class="materials-table-section">
+        <div class="materials-table-title">
+          <div>
+            <h2>账号列表</h2>
+            <p>管理系统登录账号和角色。</p>
+          </div>
+          <span>{{ users|length }} 个</span>
+        </div>
+        <div class="materials-table-wrap">
+        <table class="materials-grid-table">
           <thead>
             <tr>
               <th>登录名</th>
@@ -100,6 +108,7 @@
             {% endfor %}
           </tbody>
         </table>
+        </div>
       </section>
     </main>
   </body>

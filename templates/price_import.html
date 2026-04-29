@@ -7,23 +7,23 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   </head>
   <body>
-    <main class="shell wide">
+    <main class="shell wide materials-linear">
       {% set active_page = "products" %}
       {% include "_nav.html" %}
 
-      <header class="page-header">
-        <div class="page-title">
+      <header class="materials-hero">
+        <div>
           <h1>批量维护单价</h1>
           <p>上传包含 BLD NO. 和 Unit Price/含税单价 的 Excel，确认预览后批量更新。</p>
         </div>
-        <div class="primary-actions">
-          <a class="button ghost-link" href="{{ url_for('products') }}">返回产品目录</a>
+        <div class="materials-actions">
+          <a class="linear-button subtle" href="{{ url_for('products') }}">返回产品目录</a>
         </div>
       </header>
 
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-          <section class="messages">
+          <section class="messages materials-messages">
             {% for category, message in messages %}
               <div class="message {{ category }}">{{ message }}</div>
             {% endfor %}
@@ -31,34 +31,50 @@
         {% endif %}
       {% endwith %}
 
-      <section class="toolbar-panel">
-        <form action="{{ url_for('price_import_preview') }}" method="post" enctype="multipart/form-data" class="form">
-          <label>
-            单价 Excel 文件
-            <input type="file" name="price_file" accept=".xls,.xlsx" required>
+      <section class="materials-flow">
+        <form action="{{ url_for('price_import_preview') }}" method="post" enctype="multipart/form-data" class="materials-generate-form">
+          <label class="file-picker">
+            <span>单价 Excel 文件</span>
+            <input class="file-picker-input" type="file" name="price_file" accept=".xls,.xlsx" required>
+            <span class="file-picker-control">
+              <span class="file-picker-button">选择文件</span>
+              <span class="file-picker-name">未选择任何文件</span>
+            </span>
           </label>
-          <button type="submit">上传并预览</button>
+          <button class="linear-button primary" type="submit">上传并预览</button>
         </form>
         <p class="note">表头示例：BLD NO. / Unit Price。价格会按人民币保留两位小数。</p>
       </section>
 
       {% if preview %}
-        <section class="panel">
-          <h2>导入预览</h2>
-          <dl class="stats">
-            <div><dt>总行数</dt><dd>{{ preview.counts.total }}</dd></div>
-            <div><dt>可更新</dt><dd>{{ preview.counts.matched }}</dd></div>
-            <div><dt>未找到</dt><dd>{{ preview.counts.missing }}</dd></div>
-            <div><dt>价格错误</dt><dd>{{ preview.counts.invalid_price }}</dd></div>
-          </dl>
-          <form action="{{ url_for('price_import_apply') }}" method="post">
+        <section class="materials-metrics" aria-label="单价导入统计">
+          <div><span>总行数</span><strong>{{ preview.counts.total }}</strong></div>
+          <div><span>可更新</span><strong>{{ preview.counts.matched }}</strong></div>
+          <div><span>未找到</span><strong>{{ preview.counts.missing }}</strong></div>
+          <div><span>价格错误</span><strong>{{ preview.counts.invalid_price }}</strong></div>
+        </section>
+
+        <section class="materials-command">
+          <div>
+            <h2>导入预览</h2>
+            <p class="note">确认后会批量更新匹配到的产品单价。</p>
+          </div>
+          <form action="{{ url_for('price_import_apply') }}" method="post" class="materials-actions">
             <input type="hidden" name="payload" value="{{ payload }}">
-            <button type="submit">确认批量更新单价</button>
+            <button class="linear-button primary" type="submit">确认批量更新单价</button>
           </form>
         </section>
 
-        <section class="panel table-panel">
-          <table>
+        <section class="materials-table-section">
+          <div class="materials-table-title">
+            <div>
+              <h2>预览明细</h2>
+              <p>只会更新状态为可更新的行。</p>
+            </div>
+            <span>{{ preview.rows|length }} 条</span>
+          </div>
+          <div class="materials-table-wrap">
+          <table class="materials-grid-table">
             <thead>
               <tr>
                 <th>Excel 行</th>
@@ -82,8 +98,10 @@
               {% endfor %}
             </tbody>
           </table>
+          </div>
         </section>
       {% endif %}
     </main>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
   </body>
 </html>

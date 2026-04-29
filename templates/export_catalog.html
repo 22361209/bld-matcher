@@ -7,32 +7,32 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   </head>
   <body>
-    <main class="shell">
+    <main class="shell wide materials-linear">
       {% set active_page = "products" %}
       {% include "_nav.html" %}
 
-      <header class="page-header">
-        <div class="page-title">
+      <header class="materials-hero">
+        <div>
           <h1>导出产品目录</h1>
           <p>选择导出的排序和表格格式。</p>
         </div>
-        <div class="primary-actions">
-          <a class="button ghost-link" href="{{ url_for('products') }}">返回产品目录</a>
+        <div class="materials-actions">
+          <a class="linear-button subtle" href="{{ url_for('products') }}">返回产品目录</a>
         </div>
       </header>
 
-      <section class="panel">
-        <form action="{{ url_for('export_products') }}" method="post" class="form vertical">
+      <section class="workbench-form-section">
+        <form action="{{ url_for('export_products') }}" method="post" class="workbench-form">
           <input type="hidden" name="status" value="{{ status }}">
           <label>
-            导出格式
+            <span>导出格式</span>
             <select name="export_format">
               <option value="bld">按 BLD 号升序格式</option>
               <option value="brand">按汽车品牌格式</option>
             </select>
           </label>
           <p class="note">按汽车品牌格式会使用类似原始目录的列：NO.、SERIES、BLD NO.、ITEM、OE NO.、品牌号码、Models。</p>
-          <button type="submit">导出 Excel</button>
+          <button class="linear-button primary" type="submit">导出 Excel</button>
         </form>
       </section>
     </main>

@@ -7,7 +7,7 @@ from pathlib import Path
 from flask import flash, redirect, render_template, request, send_file, url_for
 
 from app.catalog_export import export_products_xlsx
-from app.config import CATALOG_PATH, DATA_DIR, DB_PATH, OUTPUT_DIR, UPLOAD_DIR
+from app.config import CATALOG_PATH, DATA_DIR, DB_PATH
 from app.database import (
     bootstrap_from_excel,
     connect,
@@ -19,7 +19,8 @@ from app.database import (
     product_stats,
     upsert_product,
 )
-from app.helpers import safe_upload_name
+from app.helpers import unique_prefixed_path, user_file_label, user_output_dir, user_upload_path
+from app.locks import ImportLockError, import_lock
 from app.price_import import decode_rows, encode_rows, parse_price_file
 from app.security import actor_name, login_required, permission_required
 
@@ -36,18 +37,27 @@ def register(app) -> None:
         if not file.filename.lower().endswith(".xlsx"):
             flash("产品目录请使用 .xlsx 文件。", "error")
             return redirect(redirect_target)
+        upload_path = user_upload_path(file.filename, prefix="catalog")
+        file.save(upload_path)
 
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
-        backup = DATA_DIR / f"catalog-backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}.xlsx"
-        if CATALOG_PATH.exists():
-            shutil.copy2(CATALOG_PATH, backup)
-        file.save(CATALOG_PATH)
         try:
-            with connect(DB_PATH) as conn:
-                import_catalog(conn, CATALOG_PATH, replace=False, actor=actor_name())
+            with import_lock(actor_name(), "产品目录导入"):
+                DATA_DIR.mkdir(parents=True, exist_ok=True)
+                backup = DATA_DIR / f"catalog-backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}.xlsx"
+                if CATALOG_PATH.exists():
+                    shutil.copy2(CATALOG_PATH, backup)
+                shutil.copy2(upload_path, CATALOG_PATH)
+                try:
+                    with connect(DB_PATH) as conn:
+                        import_catalog(conn, CATALOG_PATH, replace=False, actor=actor_name())
+                except Exception:
+                    if backup.exists():
+                        shutil.copy2(backup, CATALOG_PATH)
+                    raise
+        except ImportLockError as exc:
+            flash(str(exc), "error")
+            return redirect(redirect_target)
         except Exception as exc:
-            if backup.exists():
-                shutil.copy2(backup, CATALOG_PATH)
             flash(f"目录读取失败，已恢复旧目录：{exc}", "error")
             return redirect(redirect_target)
 
@@ -102,11 +112,10 @@ def register(app) -> None:
         if export_format not in {"bld", "brand"}:
             export_format = "bld"
         format_label = "brand" if export_format == "brand" else "bld"
-        output_path = OUTPUT_DIR / f"catalog-export-{format_label}-{datetime.now().strftime('%y%m%d')}.xlsx"
-        counter = 2
-        while output_path.exists():
-            output_path = OUTPUT_DIR / f"catalog-export-{format_label}-{datetime.now().strftime('%y%m%d')}_{counter}.xlsx"
-            counter += 1
+        output_path = unique_prefixed_path(
+            user_output_dir(),
+            f"catalog-export-{format_label}-{user_file_label()}-{datetime.now().strftime('%y%m%d')}.xlsx",
+        )
         with connect(DB_PATH) as conn:
             export_products_xlsx(conn, output_path, include_inactive=include_inactive, export_format=export_format)
             log_event(
@@ -138,8 +147,7 @@ def register(app) -> None:
             flash("单价导入文件支持 .xls 和 .xlsx。", "error")
             return redirect(url_for("price_import"))
 
-        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        upload_path = UPLOAD_DIR / f"price-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{safe_upload_name(file.filename)}"
+        upload_path = user_upload_path(file.filename, prefix="price")
         file.save(upload_path)
         try:
             with connect(DB_PATH) as conn:
@@ -158,20 +166,25 @@ def register(app) -> None:
             flash(f"导入数据无效：{exc}", "error")
             return redirect(url_for("price_import"))
 
-        updated = 0
-        skipped = 0
-        with connect(DB_PATH) as conn:
-            for row in rows:
-                if row.get("status") != "matched":
-                    skipped += 1
-                    continue
-                conn.execute(
-                    "UPDATE products SET price_cny = ?, updated_at = ? WHERE bld_no = ?",
-                    (row["price"], datetime.now().strftime("%Y-%m-%d %H:%M:%S"), row["bld_no"]),
-                )
-                updated += 1
-            log_event(conn, "批量维护单价", "product", "Unit Price", f"更新 {updated} 条，跳过 {skipped} 条", actor=actor_name())
-            conn.commit()
+        try:
+            with import_lock(actor_name(), "单价批量导入"):
+                updated = 0
+                skipped = 0
+                with connect(DB_PATH) as conn:
+                    for row in rows:
+                        if row.get("status") != "matched":
+                            skipped += 1
+                            continue
+                        conn.execute(
+                            "UPDATE products SET price_cny = ?, updated_at = ? WHERE bld_no = ?",
+                            (row["price"], datetime.now().strftime("%Y-%m-%d %H:%M:%S"), row["bld_no"]),
+                        )
+                        updated += 1
+                    log_event(conn, "批量维护单价", "product", "Unit Price", f"更新 {updated} 条，跳过 {skipped} 条", actor=actor_name())
+                    conn.commit()
+        except ImportLockError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("price_import"))
         flash(f"单价导入完成：更新 {updated} 条，跳过 {skipped} 条。", "success")
         return redirect(url_for("products"))
 

@@ -50,8 +50,10 @@ http://192.168.1.20:5055
 
 ```text
 登录名：007
-密码：4r3e2w1q
+密码：由 DEFAULT_ADMIN_PASSWORD 环境变量决定 (默认 change-me-on-first-login)
 ```
+
+**首次启动前**请在 `docker-compose.yml` 的 `environment` 中设置 `DEFAULT_ADMIN_PASSWORD` 和强随机的 `SECRET_KEY`,登录后立即在 `账号管理` 中再次修改密码。
 
 登录后可以在 `账号管理` 中新增其他用户、修改角色、重置密码。
 

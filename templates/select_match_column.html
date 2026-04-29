@@ -7,27 +7,27 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   </head>
   <body>
-    <main class="shell wide">
+    <main class="shell wide materials-linear">
       {% set active_page = "match" %}
       {% include "_nav.html" %}
 
-      <header class="page-header">
-        <div class="page-title">
+      <header class="materials-hero">
+        <div>
           <h1>选择匹配列</h1>
           <p>没有识别到 OE 或物料名称表头，请选择客户号码所在的列。</p>
         </div>
-        <div class="primary-actions">
-          <a class="button ghost-link" href="{{ url_for('index') }}">返回首页</a>
+        <div class="materials-actions">
+          <a class="linear-button subtle" href="{{ url_for('index') }}">返回首页</a>
         </div>
       </header>
 
-      <section class="toolbar-panel">
-        <form action="{{ url_for('match_inquiry_with_column') }}" method="post" class="form">
+      <section class="materials-command">
+        <form action="{{ url_for('match_inquiry_with_column') }}" method="post" class="materials-search-form">
           <input type="hidden" name="upload_path" value="{{ upload_path }}">
           <input type="hidden" name="original_filename" value="{{ original_filename }}">
           <input type="hidden" name="output_name" value="{{ output_name }}">
           <label>
-            匹配列
+            <span>匹配列</span>
             <select name="match_column">
               {% for column in preview.columns %}
                 <option value="{{ column.index }}" {% if column.index == 0 %}selected{% endif %}>
@@ -36,13 +36,19 @@
               {% endfor %}
             </select>
           </label>
-          <button type="submit">确认并生成结果</button>
+          <button class="linear-button primary" type="submit">确认并生成结果</button>
         </form>
       </section>
 
-      <section class="panel table-panel">
-        <h2>文件预览：{{ preview.sheet }}</h2>
-        <table>
+      <section class="materials-table-section">
+        <div class="materials-table-title">
+          <div>
+            <h2>文件预览：{{ preview.sheet }}</h2>
+            <p>请选择客户号码所在列后继续生成。</p>
+          </div>
+        </div>
+        <div class="materials-table-wrap">
+        <table class="materials-grid-table">
           <thead>
             <tr>
               {% for column in preview.columns %}
@@ -60,6 +66,7 @@
             {% endfor %}
           </tbody>
         </table>
+        </div>
       </section>
     </main>
   </body>

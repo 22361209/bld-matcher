@@ -6,7 +6,7 @@ from pathlib import Path
 
 from flask import flash, redirect, render_template, request, send_file, url_for
 
-from app.config import DATA_DIR, DB_PATH, MATERIAL_DATA_PATH, MATERIAL_TEMPLATE_PATH, OUTPUT_DIR, UPLOAD_DIR
+from app.config import DATA_DIR, DB_PATH, MATERIAL_DATA_PATH, MATERIAL_TEMPLATE_PATH
 from app.database import (
     bootstrap_materials_from_excel,
     connect,
@@ -19,9 +19,10 @@ from app.database import (
     rows_for_material_sheet,
     upsert_material_item,
 )
-from app.helpers import clean_original_filename, safe_upload_name
+from app.helpers import all_recent_outputs, clean_original_filename, user_file_label, user_output_dir, user_recent_outputs, user_upload_path
+from app.locks import ImportLockError, import_lock
 from app.material_sheet import create_plan_template, generate_material_sheet_from_materials, material_data_stats
-from app.security import actor_name, login_required, permission_required
+from app.security import actor_name, can, login_required, permission_required
 
 
 def register(app) -> None:
@@ -42,11 +43,7 @@ def register(app) -> None:
                 limit=3000,
             )
             stats = material_item_stats(conn)
-        latest_outputs = (
-            sorted(OUTPUT_DIR.glob("*料单*.xlsx"), key=lambda path: path.stat().st_mtime, reverse=True)[:8]
-            if OUTPUT_DIR.exists()
-            else []
-        )
+        latest_outputs = all_recent_outputs("*料单*.xlsx") if can("manage_users") else user_recent_outputs("*料单*.xlsx")
         return render_template(
             "materials.html",
             material_file_stats=material_data_stats(MATERIAL_DATA_PATH),
@@ -75,8 +72,7 @@ def register(app) -> None:
             flash("生产计划请使用 .xlsx 文件。", "error")
             return redirect(url_for("materials"))
 
-        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        upload_path = UPLOAD_DIR / f"material-plan-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{safe_upload_name(file.filename)}"
+        upload_path = user_upload_path(file.filename, prefix="material-plan")
         file.save(upload_path)
 
         try:
@@ -85,7 +81,12 @@ def register(app) -> None:
                 material_rows = rows_for_material_sheet(conn)
             if not material_rows:
                 raise ValueError("还没有可用的材料明细，请先上传或新增材料数据。")
-            output_path, summary = generate_material_sheet_from_materials(material_rows, upload_path, OUTPUT_DIR)
+            output_path, summary = generate_material_sheet_from_materials(
+                material_rows,
+                upload_path,
+                user_output_dir(),
+                filename_prefix=f"{user_file_label()}-",
+            )
             with connect(DB_PATH) as conn:
                 missing_text = f"，未匹配 {len(summary['missing'])} 个型号" if summary["missing"] else ""
                 log_event(
@@ -114,31 +115,34 @@ def register(app) -> None:
             flash("材料数据请使用 .xlsx 文件。", "error")
             return redirect(url_for("materials"))
 
-        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
         DATA_DIR.mkdir(parents=True, exist_ok=True)
-        upload_path = UPLOAD_DIR / f"material-data-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{safe_upload_name(file.filename)}"
+        upload_path = user_upload_path(file.filename, prefix="material-data")
         file.save(upload_path)
         stats = material_data_stats(upload_path)
         if stats.get("invalid"):
             flash(f"材料数据读取失败：{stats.get('error') or '文件里必须包含“材料数据”工作表。'}", "error")
             return redirect(url_for("materials"))
 
-        if MATERIAL_DATA_PATH.exists():
-            backup = DATA_DIR / f"stamping_materials-backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}.xlsx"
-            shutil.copy2(MATERIAL_DATA_PATH, backup)
-        shutil.copy2(upload_path, MATERIAL_DATA_PATH)
         try:
-            with connect(DB_PATH) as conn:
-                imported = import_materials_from_excel(conn, upload_path, replace=True, actor=actor_name())
-                log_event(
-                    conn,
-                    "更新材料数据文件",
-                    "material_data",
-                    clean_original_filename(file.filename, fallback_suffix=".xlsx"),
-                    f"型号 {stats['model_count']} 个，明细 {stats['detail_count']} 行；导入数据库 {imported} 行",
-                    actor=actor_name(),
-                )
-                conn.commit()
+            with import_lock(actor_name(), "材料数据导入"):
+                if MATERIAL_DATA_PATH.exists():
+                    backup = DATA_DIR / f"stamping_materials-backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}.xlsx"
+                    shutil.copy2(MATERIAL_DATA_PATH, backup)
+                shutil.copy2(upload_path, MATERIAL_DATA_PATH)
+                with connect(DB_PATH) as conn:
+                    imported = import_materials_from_excel(conn, upload_path, replace=True, actor=actor_name())
+                    log_event(
+                        conn,
+                        "更新材料数据文件",
+                        "material_data",
+                        clean_original_filename(file.filename, fallback_suffix=".xlsx"),
+                        f"型号 {stats['model_count']} 个，明细 {stats['detail_count']} 行；导入数据库 {imported} 行",
+                        actor=actor_name(),
+                    )
+                    conn.commit()
+        except ImportLockError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("materials"))
         except Exception as exc:
             flash(f"材料数据导入失败：{exc}", "error")
             return redirect(url_for("materials"))

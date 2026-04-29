@@ -3,20 +3,22 @@ from __future__ import annotations
 from flask import Flask, flash, g, redirect, request, session, url_for
 from werkzeug.exceptions import RequestEntityTooLarge
 
-from app.config import APP_DEBUG, APP_HOST, APP_PORT, DB_PATH, MAX_CONTENT_LENGTH, MAX_UPLOAD_MB, SECRET_KEY
+from app.config import APP_DEBUG, APP_HOST, APP_PORT, DB_PATH, MAX_CONTENT_LENGTH, MAX_UPLOAD_MB, SECRET_KEY, assert_production_secrets
 from app.database import connect, ensure_default_admin, get_user
-from app.helpers import product_image_url
+from app.helpers import download_name, product_image_url
 from app.routes import register_routes
 from app.security import ROLE_LABELS, can
 
 
 def create_app() -> Flask:
+    assert_production_secrets()
     web_app = Flask(__name__)
     web_app.secret_key = SECRET_KEY
     web_app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
     web_app.jinja_env.globals["can"] = can
     web_app.jinja_env.globals["ROLE_LABELS"] = ROLE_LABELS
     web_app.jinja_env.globals["product_image_url"] = product_image_url
+    web_app.jinja_env.globals["download_name"] = download_name
 
     @web_app.before_request
     def load_current_user():

@@ -4,10 +4,10 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-from flask import url_for
+from flask import g, url_for
 from werkzeug.utils import secure_filename
 
-from .config import BASE_DIR, CATALOG_PATH, DATA_DIR, DB_PATH, MANUAL_MAP_PATH, OUTPUT_DIR
+from .config import BASE_DIR, CATALOG_PATH, DATA_DIR, DB_PATH, MANUAL_MAP_PATH, OUTPUT_DIR, UPLOAD_DIR
 from .database import bootstrap_from_excel, connect, rows_for_catalog
 from .matcher import ProductCatalog, load_manual_map
 
@@ -58,6 +58,48 @@ def safe_upload_name(filename: str) -> str:
     return name
 
 
+def user_file_label() -> str:
+    user = getattr(g, "user", None)
+    if not user:
+        return "anonymous"
+    username = str(user["username"] if "username" in user.keys() else "").strip()
+    label = secure_filename(username)
+    if label:
+        return label
+    user_id = str(user["id"] if "id" in user.keys() else "").strip()
+    return f"user{user_id}" if user_id else "user"
+
+
+def user_dir_slug() -> str:
+    user = getattr(g, "user", None)
+    if not user:
+        return "anonymous"
+    user_id = str(user["id"] if "id" in user.keys() else "").strip() or "0"
+    return f"u{user_id}-{user_file_label()}"
+
+
+def user_upload_dir(*, create: bool = True) -> Path:
+    path = UPLOAD_DIR / user_dir_slug()
+    if create:
+        path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def user_output_dir(*, create: bool = True) -> Path:
+    path = OUTPUT_DIR / user_dir_slug()
+    if create:
+        path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def user_upload_path(filename: str, prefix: str = "") -> Path:
+    safe_name = safe_upload_name(filename)
+    label = user_file_label()
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    prefix_text = f"{prefix}-" if prefix else ""
+    return user_upload_dir() / f"{prefix_text}{timestamp}-{label}-{safe_name}"
+
+
 def clean_original_filename(filename: str, fallback_suffix: str = "") -> str:
     name = Path(filename or "").name.replace("/", "").replace("\\", "").strip()
     if not name:
@@ -67,10 +109,12 @@ def clean_original_filename(filename: str, fallback_suffix: str = "") -> str:
     return name
 
 
-def result_output_path(original_filename: str, fallback_suffix: str = "") -> Path:
+def result_output_path(original_filename: str, fallback_suffix: str = "", output_dir: Path | None = None) -> Path:
     source_name = clean_original_filename(original_filename, fallback_suffix=fallback_suffix)
-    prefix = f"re{datetime.now().strftime('%y%m%d')}"
-    candidate = OUTPUT_DIR / f"{prefix}{source_name}"
+    destination = output_dir or user_output_dir()
+    destination.mkdir(parents=True, exist_ok=True)
+    prefix = f"re{datetime.now().strftime('%y%m%d')}-{user_file_label()}-"
+    candidate = destination / f"{prefix}{source_name}"
     if not candidate.exists():
         return candidate
 
@@ -78,7 +122,44 @@ def result_output_path(original_filename: str, fallback_suffix: str = "") -> Pat
     suffix = Path(source_name).suffix
     counter = 2
     while True:
-        numbered = OUTPUT_DIR / f"{prefix}{stem}_{counter}{suffix}"
+        numbered = destination / f"{prefix}{stem}_{counter}{suffix}"
+        if not numbered.exists():
+            return numbered
+        counter += 1
+
+
+def user_recent_outputs(pattern: str = "*", limit: int = 8) -> list[Path]:
+    directory = user_output_dir(create=False)
+    if not directory.exists():
+        return []
+    return sorted((path for path in directory.glob(pattern) if path.is_file()), key=lambda path: path.stat().st_mtime, reverse=True)[:limit]
+
+
+def all_recent_outputs(pattern: str = "*", limit: int = 8) -> list[Path]:
+    if not OUTPUT_DIR.exists():
+        return []
+    files = [path for path in OUTPUT_DIR.rglob(pattern) if path.is_file()]
+    return sorted(files, key=lambda path: path.stat().st_mtime, reverse=True)[:limit]
+
+
+def download_name(path: Path) -> str:
+    resolved = path.resolve()
+    output_root = OUTPUT_DIR.resolve()
+    if output_root in resolved.parents:
+        return resolved.relative_to(output_root).as_posix()
+    return path.name
+
+
+def unique_prefixed_path(directory: Path, filename: str) -> Path:
+    directory.mkdir(parents=True, exist_ok=True)
+    candidate = directory / filename
+    if not candidate.exists():
+        return candidate
+    stem = candidate.stem
+    suffix = candidate.suffix
+    counter = 2
+    while True:
+        numbered = directory / f"{stem}_{counter}{suffix}"
         if not numbered.exists():
             return numbered
         counter += 1

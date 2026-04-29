@@ -7,20 +7,20 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   </head>
   <body>
-    <main class="shell wide">
+    <main class="shell wide materials-linear">
       {% set active_page = "products" %}
       {% include "_nav.html" %}
 
-      <header class="page-header">
-        <div class="page-title">
+      <header class="materials-hero">
+        <div>
           <h1>产品目录</h1>
-          <p>共 {{ stats.products }} 个产品，启用 {{ stats.active }} 个，停用 {{ stats.inactive }} 个。</p>
+          <p>维护产品、OE、价格和图片资料，支持按 BLD NO. 或 OE 号快速检索。</p>
         </div>
       </header>
 
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-          <section class="messages">
+          <section class="messages materials-messages">
             {% for category, message in messages %}
               <div class="message {{ category }}">{{ message }}</div>
             {% endfor %}
@@ -28,20 +28,27 @@
         {% endif %}
       {% endwith %}
 
+      <section class="materials-metrics" aria-label="产品目录统计">
+        <div><span>总产品</span><strong>{{ stats.products }}</strong></div>
+        <div><span>启用产品</span><strong>{{ stats.active }}</strong></div>
+        <div><span>停用产品</span><strong>{{ stats.inactive }}</strong></div>
+        <div><span>当前视图</span><strong>{{ "全部" if status == "all" else ("停用" if status == "inactive" else "启用") }}</strong></div>
+      </section>
+
       {% set status_label = "包含停用" if status == "all" else ("只看停用" if status == "inactive" else "只看启用") %}
-      <section class="toolbar-panel">
-        <form class="search-toolbar" method="get" action="{{ url_for('products') }}">
+      <section class="materials-command">
+        <form class="materials-search-form" method="get" action="{{ url_for('products') }}">
           <label>
-            按 BLD NO. 搜索
+            <span>按 BLD NO. 搜索</span>
             <input id="bld-search" name="bld" value="{{ bld_query }}" placeholder="例如 K6015">
           </label>
           <label>
-            按 OE 号搜索
+            <span>按 OE 号搜索</span>
             <input id="oe-search" name="oe" value="{{ oe_query }}" placeholder="例如 55100-2S150">
           </label>
           <input type="hidden" id="status-input" name="status" value="{{ status }}">
-          <button type="submit">搜索</button>
-          <details class="toolbar-popover status-popover">
+          <button class="linear-button primary" type="submit">搜索</button>
+          <details class="toolbar-popover linear-popover status-popover">
             <summary>{{ status_label }}</summary>
             <div class="status-menu" role="group" aria-label="产品状态筛选">
               <button class="status-menu-option {% if status == 'active' %}selected{% endif %}" type="submit" data-status="active">只看启用</button>
@@ -50,30 +57,44 @@
             </div>
           </details>
         </form>
-        <div class="secondary-actions">
-          {% if can("edit_products") %}<button class="compact" type="button" data-open-product-modal>新增产品</button>{% endif %}
+        <div class="secondary-actions materials-actions">
+          {% if can("edit_products") %}<button class="linear-button primary" type="button" data-open-product-modal>新增产品</button>{% endif %}
           {% if can("edit_products") %}
-            <details class="toolbar-popover">
+            <details class="toolbar-popover linear-popover">
               <summary>维护单价</summary>
               <form action="{{ url_for('price_import_preview') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form price-import-form">
-                <input type="file" name="price_file" accept=".xls,.xlsx" required>
-                <button type="submit">上传预览</button>
+                <label class="file-picker">
+                  <span>单价 Excel</span>
+                  <input class="file-picker-input" type="file" name="price_file" accept=".xls,.xlsx" required>
+                  <span class="file-picker-control">
+                    <span class="file-picker-button">选择文件</span>
+                    <span class="file-picker-name">未选择任何文件</span>
+                  </span>
+                </label>
+                <button class="linear-button primary" type="submit">上传预览</button>
                 <span class="note">表头示例：BLD NO. / Unit Price。</span>
               </form>
             </details>
           {% endif %}
           {% if can("import_catalog") %}
-            <details class="toolbar-popover">
+            <details class="toolbar-popover linear-popover">
               <summary>导入目录</summary>
               <form action="{{ url_for('upload_catalog') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form catalog-import-form">
                 <input type="hidden" name="next" value="products">
-                <input type="file" name="catalog" accept=".xlsx" required>
-                <button type="submit">确认导入</button>
+                <label class="file-picker">
+                  <span>产品目录 Excel</span>
+                  <input class="file-picker-input" type="file" name="catalog" accept=".xlsx" required>
+                  <span class="file-picker-control">
+                    <span class="file-picker-button">选择文件</span>
+                    <span class="file-picker-name">未选择任何文件</span>
+                  </span>
+                </label>
+                <button class="linear-button primary" type="submit">确认导入</button>
                 <span class="note">按 BLD 号合并更新已有资料并加入新增产品。</span>
               </form>
             </details>
           {% endif %}
-          <details class="toolbar-popover">
+          <details class="toolbar-popover linear-popover">
             <summary>导出目录</summary>
             <form action="{{ url_for('export_products') }}" method="post" class="toolbar-popover-form catalog-export-form">
               <input type="hidden" name="status" value="{{ status }}">
@@ -84,23 +105,30 @@
                   <option value="brand">按汽车品牌格式</option>
                 </select>
               </label>
-              <button type="submit">导出 Excel</button>
+              <button class="linear-button primary" type="submit">导出 Excel</button>
             </form>
           </details>
         </div>
       </section>
 
-      <section class="panel table-panel">
-        <div class="table-hint">除车型列可拖动调节外，其余列宽固定。产品图片为缩略图，点击可打开原图。</div>
-        <table class="resizable-table" id="products-table">
+      <section class="materials-table-section">
+        <div class="materials-table-title">
+          <div>
+            <h2>产品明细</h2>
+            <p>除车型列可拖动调节外，其余列宽固定。产品图片为缩略图，点击可打开原图。</p>
+          </div>
+          <span>{{ products|length }} 条</span>
+        </div>
+        <div class="materials-table-wrap">
+        <table class="resizable-table materials-grid-table" id="products-table">
           <colgroup>
             <col data-col="bld" style="width: 90px">
             <col data-col="series" style="width: 82px">
-            <col data-col="item" style="width: 112px">
-            <col data-col="oe1" style="width: 128px">
-            <col data-col="oe2" style="width: 104px">
-            <col data-col="models" style="width: 102px">
-            <col data-col="image" style="width: 74px">
+            <col data-col="item" style="width: 92px">
+            <col data-col="oe1" style="width: 116px">
+            <col data-col="oe2" style="width: 96px">
+            <col data-col="models" style="width: 170px">
+            <col data-col="image" style="width: 82px">
             <col data-col="price" style="width: 72px">
             <col data-col="actions" style="width: 58px">
           </colgroup>
@@ -123,8 +151,16 @@
                 <td><strong>{{ product.bld_no }}</strong></td>
                 <td class="preline">{{ product.series }}</td>
                 <td>{{ product.item }}</td>
-                <td class="preline">{{ product.oe_no_1 }}</td>
-                <td class="preline">{{ product.oe_no_2 }}</td>
+                <td class="product-code-list">
+                  {% for code in product.oe_no_1.splitlines() %}
+                    <span>{{ code }}</span>{% if not loop.last %}<br>{% endif %}
+                  {% endfor %}
+                </td>
+                <td class="product-code-list">
+                  {% for code in product.oe_no_2.splitlines() %}
+                    <span>{{ code }}</span>{% if not loop.last %}<br>{% endif %}
+                  {% endfor %}
+                </td>
                 <td class="preline">{{ product.models }}</td>
                 <td>
                   {% set image_url = product_image_url(product) %}
@@ -146,6 +182,7 @@
             {% endfor %}
           </tbody>
         </table>
+        </div>
       </section>
     </main>
     {% if can("edit_products") %}
@@ -333,8 +370,9 @@
         }
         if (imageModal.classList.contains("open")) {
           closeImageModal();
-        }
-      });
-    </script>
-  </body>
-</html>
+	        }
+	      });
+	    </script>
+	    <script src="{{ url_for('static', filename='app.js') }}"></script>
+	  </body>
+	</html>

@@ -7,23 +7,23 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   </head>
   <body>
-    <main class="shell">
+    <main class="shell wide materials-linear">
       {% set active_page = "materials" %}
       {% include "_nav.html" %}
 
-      <header class="page-header">
-        <div class="page-title">
+      <header class="materials-hero">
+        <div>
           <h1>{{ "编辑材料明细" if item else "新增材料明细" }}</h1>
           <p>型号用于匹配生产计划；规格1、规格2、规格3 分别按厚度、宽度、长度参与重量计算。</p>
         </div>
-        <div class="primary-actions">
-          <a class="button ghost-link" href="{{ url_for('materials', q=item.model if item else '') }}">返回生产料单</a>
+        <div class="materials-actions">
+          <a class="linear-button subtle" href="{{ url_for('materials', q=item.model if item else '') }}">返回生产料单</a>
         </div>
       </header>
 
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-          <section class="messages">
+          <section class="messages materials-messages">
             {% for category, message in messages %}
               <div class="message {{ category }}">{{ message }}</div>
             {% endfor %}
@@ -31,7 +31,7 @@
         {% endif %}
       {% endwith %}
 
-      <section class="panel">
+      <section class="workbench-form-section">
         <form action="{{ url_for('save_material_item') }}" method="post" class="product-form">
           {% if item %}<input type="hidden" name="id" value="{{ item.id }}">{% endif %}
           <label>
@@ -79,8 +79,8 @@
             启用
           </label>
           <div class="form-actions">
-            <button type="submit">保存材料明细</button>
-            <a class="button ghost-link" href="{{ url_for('materials', q=item.model if item else '') }}">取消</a>
+            <button class="linear-button primary" type="submit">保存材料明细</button>
+            <a class="linear-button subtle" href="{{ url_for('materials', q=item.model if item else '') }}">取消</a>
           </div>
         </form>
       </section>

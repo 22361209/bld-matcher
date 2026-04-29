@@ -50,9 +50,13 @@
       <section class="materials-flow">
         {% if can("generate_material_sheet") %}
           <form action="{{ url_for('generate_materials') }}" method="post" enctype="multipart/form-data" class="materials-generate-form">
-            <label>
+            <label class="file-picker">
               <span>生产计划 Excel</span>
-              <input type="file" name="plan" accept=".xlsx" required>
+              <input class="file-picker-input" type="file" name="plan" accept=".xlsx" required>
+              <span class="file-picker-control">
+                <span class="file-picker-button">选择文件</span>
+                <span class="file-picker-name">未选择任何文件</span>
+              </span>
             </label>
             <button class="linear-button primary" type="submit">生成并下载</button>
             <a class="linear-button subtle" href="{{ url_for('download_material_template') }}">下载模板</a>
@@ -87,7 +91,14 @@
             <details class="toolbar-popover linear-popover">
               <summary>导入材料数据</summary>
               <form action="{{ url_for('upload_material_data') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form material-import-form">
-                <input type="file" name="material_data" accept=".xlsx" required>
+                <label class="file-picker">
+                  <span>材料数据 Excel</span>
+                  <input class="file-picker-input" type="file" name="material_data" accept=".xlsx" required>
+                  <span class="file-picker-control">
+                    <span class="file-picker-button">选择文件</span>
+                    <span class="file-picker-name">未选择任何文件</span>
+                  </span>
+                </label>
                 <button class="linear-button primary" type="submit">确认导入</button>
                 <span class="note">会备份旧文件，并用新文件重建材料明细库。</span>
               </form>
@@ -180,7 +191,7 @@
           </div>
           <ul class="files">
             {% for path in latest_outputs %}
-              <li><a href="{{ url_for('download', name=path.name) }}">{{ path.name }}</a></li>
+              <li><a href="{{ url_for('download', name=download_name(path)) }}">{{ path.name }}</a></li>
             {% endfor %}
           </ul>
         </section>
@@ -206,8 +217,9 @@
         if (event.target.closest("details.toolbar-popover")) return;
         toolbarPopovers.forEach((popover) => {
           popover.open = false;
-        });
-      });
-    </script>
-  </body>
-</html>
+	        });
+	      });
+	    </script>
+	    <script src="{{ url_for('static', filename='app.js') }}"></script>
+	  </body>
+	</html>

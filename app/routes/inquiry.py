@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime
 from pathlib import Path
 
 from flask import flash, redirect, render_template, request, url_for
 
-from app.config import DB_PATH, OUTPUT_DIR, UPLOAD_DIR
+from app.config import DB_PATH
 from app.database import append_product_code, connect, delete_alias, log_event, save_alias
 from app.excel_io import generate_excel_with_bld, preview_inquiry_columns
-from app.helpers import clean_original_filename, column_display, load_catalog, result_output_path, safe_upload_name
+from app.helpers import clean_original_filename, column_display, load_catalog, result_output_path, user_output_dir, user_upload_dir, user_upload_path
 from app.matcher import normalize_code
 from app.security import actor_name, permission_required
 
@@ -31,9 +30,7 @@ def register(app) -> None:
             flash("客户源文件支持 .xls 和 .xlsx，并会保持格式新增列。", "error")
             return redirect(url_for("index"))
 
-        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        safe_name = safe_upload_name(file.filename)
-        upload_path = UPLOAD_DIR / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{safe_name}"
+        upload_path = user_upload_path(file.filename, prefix="inquiry")
         file.save(upload_path)
 
         output_path = result_output_path(file.filename, fallback_suffix=suffix)
@@ -74,7 +71,8 @@ def register(app) -> None:
             return redirect(url_for("index"))
 
         upload_path = Path(request.form.get("upload_path", "")).resolve()
-        if UPLOAD_DIR.resolve() not in upload_path.parents or not upload_path.exists():
+        user_upload_root = user_upload_dir(create=False).resolve()
+        if user_upload_root not in upload_path.parents or not upload_path.exists():
             flash("询价源文件不存在，请重新上传。", "error")
             return redirect(url_for("index"))
 
@@ -86,7 +84,7 @@ def register(app) -> None:
 
         original_filename = request.form.get("original_filename") or upload_path.name
         output_name = request.form.get("output_name")
-        output_path = OUTPUT_DIR / Path(output_name).name if output_name else result_output_path(original_filename, fallback_suffix=upload_path.suffix)
+        output_path = user_output_dir() / Path(output_name).name if output_name else result_output_path(original_filename, fallback_suffix=upload_path.suffix)
         try:
             summary = generate_excel_with_bld(upload_path, output_path, catalog, match_column=match_column)
             with connect(DB_PATH) as conn:
