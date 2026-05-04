@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>产品目录</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
   </head>
   <body>
     <main class="shell wide materials-linear">
@@ -117,12 +117,6 @@
       </section>
 
       <section class="materials-table-section" id="products-results">
-        <div class="materials-table-title">
-          <div>
-            <h2>产品明细</h2>
-            <p>除车型列可拖动调节外，其余列宽固定。有 PDF 图纸时点击 BLD 号可预览。</p>
-          </div>
-        </div>
         <div class="materials-table-wrap">
         <table class="resizable-table materials-grid-table" id="products-table">
           <colgroup>

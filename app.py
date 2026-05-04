@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from flask import Flask, flash, g, redirect, request, session, url_for
 from werkzeug.exceptions import RequestEntityTooLarge
 
@@ -21,6 +23,16 @@ def create_app() -> Flask:
     web_app.jinja_env.globals["product_image_thumb_url"] = product_image_thumb_url
     web_app.jinja_env.globals["product_image_urls"] = product_image_urls
     web_app.jinja_env.globals["download_name"] = download_name
+
+    static_root = Path(web_app.static_folder or "static")
+
+    def static_version(filename: str) -> int:
+        try:
+            return int((static_root / filename).stat().st_mtime)
+        except OSError:
+            return 0
+
+    web_app.jinja_env.globals["static_version"] = static_version
 
     @web_app.before_request
     def load_current_user():
