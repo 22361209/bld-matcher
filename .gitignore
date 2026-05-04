@@ -19,13 +19,17 @@ uploads/
 outputs/
 data/*.sqlite3
 data/*.sqlite3-*
+data/*.sqlite3.backup-*
 data/catalog.xlsx
 data/stamping_materials.xlsx
 data/*-backup-*.sqlite3
 data/*-backup-*.xlsx
 data/manual_map.json
+data/drawings/
+data/product_images/
 data/locks/
 
 # Local source/input workbooks kept outside the app baseline
 产品目录/
 询价/
+单价/

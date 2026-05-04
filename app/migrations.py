@@ -24,9 +24,29 @@ def _add_product_price_and_image(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE products ADD COLUMN image_path TEXT DEFAULT ''")
 
 
+def _add_product_drawings(conn: sqlite3.Connection) -> None:
+    product_columns = _columns(conn, "products")
+    if "drawing_path" not in product_columns:
+        conn.execute("ALTER TABLE products ADD COLUMN drawing_path TEXT DEFAULT ''")
+    if "drawing_original_name" not in product_columns:
+        conn.execute("ALTER TABLE products ADD COLUMN drawing_original_name TEXT DEFAULT ''")
+    if "drawing_updated_at" not in product_columns:
+        conn.execute("ALTER TABLE products ADD COLUMN drawing_updated_at TEXT DEFAULT ''")
+
+
+def _add_product_image_slots(conn: sqlite3.Connection) -> None:
+    product_columns = _columns(conn, "products")
+    for index in range(2, 6):
+        field = f"image_path_{index}"
+        if field not in product_columns:
+            conn.execute(f"ALTER TABLE products ADD COLUMN {field} TEXT DEFAULT ''")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
+    ("003_product_drawings", _add_product_drawings),
+    ("004_product_image_slots", _add_product_image_slots),
 )
 
 

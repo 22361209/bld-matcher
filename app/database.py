@@ -30,6 +30,13 @@ CREATE TABLE IF NOT EXISTS products (
   models TEXT DEFAULT '',
   price_cny REAL,
   image_path TEXT DEFAULT '',
+  image_path_2 TEXT DEFAULT '',
+  image_path_3 TEXT DEFAULT '',
+  image_path_4 TEXT DEFAULT '',
+  image_path_5 TEXT DEFAULT '',
+  drawing_path TEXT DEFAULT '',
+  drawing_original_name TEXT DEFAULT '',
+  drawing_updated_at TEXT DEFAULT '',
   active INTEGER NOT NULL DEFAULT 1,
   source TEXT DEFAULT '',
   created_at TEXT NOT NULL,
@@ -360,6 +367,8 @@ def list_products(
     limit: int = 3000,
     bld_query: str = "",
     oe_query: str = "",
+    series_query: str = "",
+    model_query: str = "",
 ) -> list[sqlite3.Row]:
     sql = "SELECT * FROM products"
     params: list[object] = []
@@ -371,8 +380,9 @@ def list_products(
     if query.strip() and not bld_query.strip() and not oe_query.strip():
         bld_query = query
     if bld_query.strip():
-        clauses.append("UPPER(bld_no) LIKE ?")
-        params.append(f"%{bld_query.strip().upper()}%")
+        product_key = f"%{bld_query.strip().upper()}%"
+        clauses.append("(UPPER(bld_no) LIKE ? OR UPPER(series) LIKE ? OR UPPER(models) LIKE ?)")
+        params.extend([product_key, product_key, product_key])
     if oe_query.strip():
         norm_key = f"%{normalize_code(oe_query)}%"
         clauses.append(
@@ -380,6 +390,12 @@ def list_products(
             "OR REPLACE(REPLACE(REPLACE(REPLACE(UPPER(oe_no_2), '-', ''), ' ', ''), CHAR(10), '|'), CHAR(13), '|') LIKE ?)"
         )
         params.extend([norm_key, norm_key])
+    if series_query.strip():
+        clauses.append("UPPER(series) LIKE ?")
+        params.append(f"%{series_query.strip().upper()}%")
+    if model_query.strip():
+        clauses.append("UPPER(models) LIKE ?")
+        params.append(f"%{model_query.strip().upper()}%")
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)
     sql += " ORDER BY bld_no LIMIT ?"
@@ -487,6 +503,10 @@ def rows_for_catalog(conn: sqlite3.Connection) -> tuple[list[dict], dict[str, st
                 "Models": row["models"],
                 "price_cny": row["price_cny"],
                 "image_path": row["image_path"],
+                "image_path_2": row["image_path_2"] if "image_path_2" in row.keys() else "",
+                "image_path_3": row["image_path_3"] if "image_path_3" in row.keys() else "",
+                "image_path_4": row["image_path_4"] if "image_path_4" in row.keys() else "",
+                "image_path_5": row["image_path_5"] if "image_path_5" in row.keys() else "",
             }
         )
     aliases = {

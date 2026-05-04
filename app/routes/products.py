@@ -19,9 +19,11 @@ from app.database import (
     product_stats,
     upsert_product,
 )
+from app.drawings import product_drawing_path, save_product_drawing
 from app.helpers import unique_prefixed_path, user_file_label, user_output_dir, user_upload_path
 from app.locks import ImportLockError, import_lock
 from app.price_import import decode_rows, encode_rows, parse_price_file
+from app.product_media import resolve_product_image_path, save_product_image
 from app.security import actor_name, login_required, permission_required
 
 
@@ -102,6 +104,20 @@ def register(app) -> None:
     def export_products_options():
         status = request.args.get("status", "all")
         return render_template("export_catalog.html", status=status)
+
+    @app.get("/products/drawings/batch")
+    @permission_required("edit_products")
+    def batch_drawings():
+        return render_template("drawing_batch_placeholder.html")
+
+    @app.get("/product-images/<path:name>")
+    @login_required
+    def product_image_data(name: str):
+        path = resolve_product_image_path(name)
+        if not path:
+            flash("产品图片不存在。", "error")
+            return redirect(url_for("products"))
+        return send_file(path)
 
     @app.post("/products/export")
     @login_required
@@ -220,11 +236,78 @@ def register(app) -> None:
         try:
             with connect(DB_PATH) as conn:
                 upsert_product(conn, data, source="web", actor=actor_name())
+                product = conn.execute("SELECT * FROM products WHERE bld_no = ?", (data["bld_no"].strip(),)).fetchone()
+                if product:
+                    for image_slot in range(1, 6):
+                        image_file = request.files.get(f"product_image_{image_slot}")
+                        if not image_file and image_slot == 1:
+                            image_file = request.files.get("product_image")
+                        if not image_file or not image_file.filename:
+                            continue
+                        save_product_image(conn, product, image_file, slot=image_slot)
+                        log_event(
+                            conn,
+                            "上传产品图片",
+                            "product",
+                            product["bld_no"],
+                            f"图片 {image_slot}: {image_file.filename or ''}",
+                            actor=actor_name(),
+                        )
+                        conn.commit()
+                        product = conn.execute("SELECT * FROM products WHERE id = ?", (product["id"],)).fetchone()
+                    drawing_file = request.files.get("drawing")
+                    if drawing_file and drawing_file.filename:
+                        save_product_drawing(conn, product, drawing_file)
+                        log_event(conn, "上传图纸", "product", product["bld_no"], drawing_file.filename or "", actor=actor_name())
+                        conn.commit()
         except Exception as exc:
             flash(f"保存失败：{exc}", "error")
             return redirect(url_for("products"))
         flash("产品已保存。", "success")
         return redirect(url_for("products", q=data["bld_no"]))
+
+    @app.post("/products/<int:product_id>/drawing")
+    @permission_required("edit_products")
+    def upload_product_drawing(product_id: int):
+        file = request.files.get("drawing")
+        if not file or not file.filename:
+            flash("请选择 PDF 图纸文件。", "error")
+            return redirect(url_for("products") + "#products-results")
+        try:
+            with connect(DB_PATH) as conn:
+                product = get_product(conn, product_id)
+                if not product:
+                    flash("产品不存在。", "error")
+                    return redirect(url_for("products") + "#products-results")
+                save_product_drawing(conn, product, file)
+                log_event(conn, "上传图纸", "product", product["bld_no"], file.filename or "", actor=actor_name())
+                conn.commit()
+        except Exception as exc:
+            flash(f"图纸上传失败：{exc}", "error")
+            return redirect(url_for("products") + "#products-results")
+
+        flash("图纸已保存。", "success")
+        return redirect(url_for("products", bld=product["bld_no"]) + "#products-results")
+
+    @app.get("/products/<int:product_id>/drawing")
+    @login_required
+    def product_drawing(product_id: int):
+        with connect(DB_PATH) as conn:
+            product = get_product(conn, product_id)
+        if not product:
+            flash("产品不存在。", "error")
+            return redirect(url_for("products"))
+        path = product_drawing_path(product)
+        if not path:
+            flash("这个产品还没有 PDF 图纸。", "error")
+            return redirect(url_for("products", bld=product["bld_no"]) + "#products-results")
+        download = request.args.get("download") == "1"
+        return send_file(
+            path,
+            mimetype="application/pdf",
+            as_attachment=download,
+            download_name=product["drawing_original_name"] or path.name,
+        )
 
     @app.post("/products/<int:product_id>/deactivate")
     @permission_required("edit_products")

@@ -51,10 +51,10 @@
                 <div class="file-picker-control">
                   <label class="file-picker-button" for="inquiry-file-input">选择文件</label>
                   <input class="file-picker-oe-input" name="quick_oe" value="{{ quick_oe }}" placeholder="未选择文件时，可直接输入 OE 或品牌号码查询">
+                  <button class="embedded-submit" type="submit">开始匹配</button>
                 </div>
               </div>
             </div>
-            <button class="linear-button primary" type="submit">开始匹配</button>
           </form>
           {% if quick_oe %}
             <section class="quick-oe-results" aria-label="快速号码查询结果">
@@ -119,11 +119,13 @@
         </summary>
         <div class="inquiry-history-panel">
           <form class="inquiry-command-row inquiry-history-search" method="get" action="{{ url_for('index') }}">
-            <label>
+            <label class="embedded-search-field">
               <span>搜索历史报价文件</span>
-              <input name="history_q" value="{{ history_query }}" placeholder="客户名、日期、关键词或操作用户">
+              <span class="embedded-input-control">
+                <input name="history_q" value="{{ history_query }}" placeholder="客户名、日期、关键词或操作用户">
+                <button class="embedded-submit" type="submit">搜索</button>
+              </span>
             </label>
-            <button class="linear-button" type="submit">搜索</button>
             {% if history_query %}
               <a class="linear-button subtle" href="{{ url_for('index') }}">清除</a>
             {% endif %}

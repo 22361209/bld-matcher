@@ -72,6 +72,10 @@ def _quick_oe_results(catalog: ProductCatalog | None, query: str) -> list[dict]:
                 "models": row.get("Models", ""),
                 "price_cny": row.get("price_cny"),
                 "image_path": row.get("image_path", ""),
+                "image_path_2": row.get("image_path_2", ""),
+                "image_path_3": row.get("image_path_3", ""),
+                "image_path_4": row.get("image_path_4", ""),
+                "image_path_5": row.get("image_path_5", ""),
             }
         results.append(
             {

@@ -8,9 +8,21 @@ from pathlib import Path
 from flask import g, url_for
 from werkzeug.utils import secure_filename
 
-from .config import BASE_DIR, CATALOG_PATH, DATA_DIR, DB_PATH, MANUAL_MAP_PATH, OUTPUT_DIR, UPLOAD_DIR
+from .config import (
+    BASE_DIR,
+    CATALOG_PATH,
+    DATA_DIR,
+    DB_PATH,
+    MANUAL_MAP_PATH,
+    OUTPUT_DIR,
+    PRODUCT_IMAGE_DATA_PREFIX,
+    UPLOAD_DIR,
+)
 from .database import bootstrap_from_excel, connect, rows_for_catalog
 from .matcher import ProductCatalog, load_manual_map
+
+
+PRODUCT_IMAGE_SLOT_FIELDS = ("image_path", "image_path_2", "image_path_3", "image_path_4", "image_path_5")
 
 
 @lru_cache(maxsize=2048)
@@ -31,26 +43,59 @@ def _default_product_thumb_relative(bld_no: str) -> str:
     return ""
 
 
-def product_image_url(product) -> str:
-    explicit = (product["image_path"] if "image_path" in product.keys() else "") or ""
+def _product_keys(product) -> set[str]:
+    return set(product.keys())
+
+
+def product_image_url(product, slot: int = 1) -> str:
+    fields = PRODUCT_IMAGE_SLOT_FIELDS
+    field = fields[slot - 1] if 1 <= slot <= len(fields) else fields[0]
+    keys = _product_keys(product)
+    explicit = (product[field] if field in keys else "") or ""
     if explicit:
+        if explicit.startswith(PRODUCT_IMAGE_DATA_PREFIX):
+            return url_for("product_image_data", name=explicit[len(PRODUCT_IMAGE_DATA_PREFIX) :])
         if explicit.startswith(("http://", "https://", "/static/")):
             return explicit
         return url_for("static", filename=explicit.lstrip("/"))
 
+    if slot != 1:
+        return ""
     bld_no = product["bld_no"] if "bld_no" in product.keys() else ""
     relative = _default_product_image_relative(bld_no)
     return url_for("static", filename=relative) if relative else ""
 
 
-def product_image_thumb_url(product) -> str:
-    explicit = (product["image_path"] if "image_path" in product.keys() else "") or ""
+def product_image_thumb_url(product, slot: int = 1) -> str:
+    fields = PRODUCT_IMAGE_SLOT_FIELDS
+    field = fields[slot - 1] if 1 <= slot <= len(fields) else fields[0]
+    keys = _product_keys(product)
+    explicit = (product[field] if field in keys else "") or ""
     if explicit:
-        return product_image_url(product)
+        return product_image_url(product, slot)
 
+    if slot != 1:
+        return ""
     bld_no = product["bld_no"] if "bld_no" in product.keys() else ""
     relative = _default_product_thumb_relative(bld_no) or _default_product_image_relative(bld_no)
     return url_for("static", filename=relative) if relative else ""
+
+
+def product_image_urls(product) -> list[dict[str, str]]:
+    images = []
+    for slot in range(1, len(PRODUCT_IMAGE_SLOT_FIELDS) + 1):
+        url = product_image_url(product, slot)
+        if not url:
+            continue
+        images.append(
+            {
+                "slot": str(slot),
+                "label": f"图片 {slot}",
+                "url": url,
+                "thumb": product_image_thumb_url(product, slot) or url,
+            }
+        )
+    return images
 
 
 def bootstrap_catalog() -> None:

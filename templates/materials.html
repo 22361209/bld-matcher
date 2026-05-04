@@ -43,6 +43,7 @@
         <div class="inquiry-directory-note material-file-note">
           <span>材料文件：{{ material_path.name if material_path else "未上传" }}</span>
           <span>{{ material_file_stats.updated_at or "未记录更新时间" }}</span>
+          <a href="{{ url_for('download_material_template') }}">下载生产计划模板</a>
         </div>
         {% if can("generate_material_sheet") %}
           <form action="{{ url_for('generate_materials') }}" method="post" enctype="multipart/form-data" class="inquiry-command-row material-generate-row">
@@ -53,11 +54,10 @@
                 <span class="file-picker-control">
                   <span class="file-picker-button">选择文件</span>
                   <span class="file-picker-name">未选择任何文件</span>
+                  <button class="embedded-submit" type="submit">生成并下载</button>
                 </span>
               </label>
             </div>
-            <button class="linear-button primary" type="submit">生成并下载</button>
-            <a class="linear-button subtle" href="{{ url_for('download_material_template') }}">下载模板</a>
           </form>
         {% else %}
           <p class="materials-muted">当前账号没有生成生产料单权限。</p>
@@ -85,9 +85,9 @@
                     <span class="file-picker-control">
                       <span class="file-picker-button">选择文件</span>
                       <span class="file-picker-name">未选择任何文件</span>
+                      <button class="embedded-submit" type="submit">确认导入</button>
                     </span>
                   </label>
-                  <button class="linear-button primary" type="submit">确认导入</button>
                   <span class="note">会备份旧文件，并用新文件重建材料明细库。</span>
                 </form>
               </details>

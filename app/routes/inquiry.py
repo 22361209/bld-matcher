@@ -1,13 +1,25 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 from flask import flash, redirect, render_template, request, send_file, url_for
 
 from app.config import DB_PATH
 from app.database import append_product_code, connect, delete_alias, log_event, save_alias
+from app.drawings import build_drawings_zip
 from app.excel_io import generate_excel_with_bld, preview_inquiry_columns
-from app.helpers import clean_original_filename, column_display, load_catalog, result_output_path, user_output_dir, user_upload_dir, user_upload_path
+from app.helpers import (
+    clean_original_filename,
+    column_display,
+    load_catalog,
+    result_output_path,
+    unique_prefixed_path,
+    user_file_label,
+    user_output_dir,
+    user_upload_dir,
+    user_upload_path,
+)
 from app.matcher import normalize_code
 from app.security import actor_name, permission_required
 
@@ -23,6 +35,16 @@ def _validated_user_upload_path() -> Path | None:
 def _selected_match_column() -> int | None:
     try:
         return int(request.form.get("match_column", "0"))
+    except ValueError:
+        return None
+
+
+def _optional_match_column() -> int | None:
+    value = request.form.get("match_column", "").strip()
+    if not value:
+        return None
+    try:
+        return int(value)
     except ValueError:
         return None
 
@@ -78,7 +100,15 @@ def register(app) -> None:
             flash(f"生成失败：{exc}", "error")
             return redirect(url_for("index"))
 
-        return render_template("result.html", summary=summary, output_path=output_path)
+        return render_template(
+            "result.html",
+            summary=summary,
+            output_path=output_path,
+            upload_path=upload_path,
+            original_filename=clean_original_filename(file.filename, fallback_suffix=suffix),
+            output_name=output_name,
+            match_column="",
+        )
 
     @app.post("/match/column")
     @permission_required("generate_match")
@@ -177,6 +207,48 @@ def register(app) -> None:
             return redirect(url_for("index"))
 
         return send_file(output_path, as_attachment=True)
+
+    @app.post("/match/drawings/download")
+    @permission_required("generate_match")
+    def download_match_drawings():
+        catalog = load_catalog()
+        if not catalog:
+            flash("请先上传产品目录。", "error")
+            return redirect(url_for("index"))
+
+        upload_path = _validated_user_upload_path()
+        if not upload_path:
+            flash("询价源文件不存在，请重新上传。", "error")
+            return redirect(url_for("index"))
+
+        match_column = _optional_match_column()
+        original_filename = request.form.get("original_filename") or upload_path.name
+        safe_original = clean_original_filename(original_filename, fallback_suffix=upload_path.suffix)
+        source_stem = Path(safe_original).stem or "inquiry"
+        zip_path = unique_prefixed_path(
+            user_output_dir(),
+            f"drawings-{datetime.now().strftime('%y%m%d')}-{user_file_label()}-{source_stem}.zip",
+        )
+        try:
+            summary = generate_excel_with_bld(
+                upload_path,
+                user_output_dir() / "__drawing-match-preview.xlsx",
+                catalog,
+                match_column=match_column,
+                write_output=False,
+            )
+            with connect(DB_PATH) as conn:
+                package = build_drawings_zip(conn, summary["rows"], zip_path)
+                detail = f"共 {summary['matched']} 行命中，打包 PDF {package['added']} 个，缺少 {package['missing']} 个"
+                if match_column is not None:
+                    detail = f"手动选择 {column_display(match_column)} 列；" + detail
+                log_event(conn, "生成图纸压缩包", "drawing_zip", zip_path.name, detail, actor=actor_name())
+                conn.commit()
+        except Exception as exc:
+            flash(f"图纸打包失败：{exc}", "error")
+            return redirect(url_for("index"))
+
+        return send_file(zip_path, as_attachment=True)
 
     @app.post("/manual-map")
     @permission_required("manage_aliases")

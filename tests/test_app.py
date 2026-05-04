@@ -6,6 +6,7 @@ import re
 import sys
 import tempfile
 import unittest
+import zipfile
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
@@ -62,6 +63,9 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("BLD", html)
         self.assertLess(html.index('class="messages'), html.index('class="inquiry-landing"'))
+        self.assertIn('class="embedded-submit" type="submit">开始匹配', html)
+        self.assertIn('class="embedded-input-control"', html)
+        self.assertIn('class="embedded-submit" type="submit">搜索', html)
 
     def test_core_admin_pages_load(self):
         self.login()
@@ -71,6 +75,34 @@ class WebAppTest(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
 
     def test_products_search_uses_results_anchor(self):
+        from app.database import upsert_product
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-FILTER-HYUNDAI",
+                    "series": "HYUNDAI",
+                    "item": "CONTROL ARM",
+                    "oe_no_1": "FILTER-001",
+                    "models": "Sportage",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-FILTER-HONDA",
+                    "series": "HONDA",
+                    "item": "CONTROL ARM",
+                    "oe_no_1": "FILTER-002",
+                    "models": "Civic",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
         self.login()
         response = self.client.get("/products")
         html = response.get_data(as_text=True)
@@ -78,6 +110,125 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('id="products-results"', html)
         self.assertIn('action="/products#products-results"', html)
+        self.assertIn("按 BLD / 品牌 / 车型搜索", html)
+        self.assertIn('<button class="linear-button primary" type="submit">搜索</button>', html)
+        self.assertIn('class="embedded-submit" type="submit">上传预览', html)
+        self.assertIn('class="embedded-submit" type="submit">确认导入', html)
+
+        for query in ["HYUNDAI", "Sportage"]:
+            with self.subTest(query=query):
+                response = self.client.get("/products", query_string={"bld": query})
+                html = response.get_data(as_text=True)
+                self.assertIn("K-FILTER-HYUNDAI", html)
+                self.assertNotIn("K-FILTER-HONDA", html)
+
+    def test_product_drawing_upload_preview_and_batch_entry(self):
+        from app.database import upsert_product
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-DRAW-001",
+                    "series": "TEST",
+                    "item": "DRAWING PART",
+                    "oe_no_1": "DRAW-001",
+                    "models": "Tester",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            product = conn.execute("SELECT * FROM products WHERE bld_no = ?", ("K-DRAW-001",)).fetchone()
+
+        self.login()
+        response = self.client.get("/products", query_string={"bld": "K-DRAW-001"})
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("PDF图纸", html)
+        self.assertIn("批量上传图纸", html)
+        self.assertNotIn('name="drawing"', html)
+        self.assertNotIn(f'href="/products/{product["id"]}/drawing"', html)
+
+        edit = self.client.get(f"/products/{product['id']}/edit")
+        edit_html = edit.get_data(as_text=True)
+        self.assertEqual(edit.status_code, 200)
+        for slot in range(1, 6):
+            self.assertIn(f'name="product_image_{slot}"', edit_html)
+        self.assertIn("file-picker-clear", edit_html)
+        self.assertIn('name="drawing"', edit_html)
+
+        upload = self.client.post(
+            "/products/save",
+            data={
+                "bld_no": "K-DRAW-001",
+                "series": "TEST",
+                "item": "DRAWING PART",
+                "oe_no_1": "DRAW-001",
+                "oe_no_2": "",
+                "models": "Tester",
+                "price_cny": "",
+                "active": "1",
+                "product_image_1": (io.BytesIO(b"\x89PNG\r\n\x1a\nproduct image 1"), "K-DRAW-001.png"),
+                "product_image_2": (io.BytesIO(b"\x89PNG\r\n\x1a\nproduct image 2"), "K-DRAW-001-2.png"),
+                "drawing": (io.BytesIO(b"%PDF-1.4\nfirst drawing\n%%EOF"), "K-DRAW-001.pdf"),
+            },
+            content_type="multipart/form-data",
+            follow_redirects=False,
+        )
+        self.assertEqual(upload.status_code, 302)
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            updated = conn.execute("SELECT * FROM products WHERE bld_no = ?", ("K-DRAW-001",)).fetchone()
+        drawing_path = self.root / "data" / updated["drawing_path"]
+        image_path = self.root / "data" / "product_images" / "K-DRAW-001.png"
+        image_path_2 = self.root / "data" / "product_images" / "K-DRAW-001-2.png"
+        self.assertTrue(drawing_path.exists())
+        self.assertTrue(image_path.exists())
+        self.assertTrue(image_path_2.exists())
+        self.assertEqual(updated["drawing_original_name"], "K-DRAW-001.pdf")
+        self.assertEqual(updated["image_path"], "data_product_images/K-DRAW-001.png")
+        self.assertEqual(updated["image_path_2"], "data_product_images/K-DRAW-001-2.png")
+
+        response = self.client.get("/products", query_string={"bld": "K-DRAW-001"})
+        html = response.get_data(as_text=True)
+        self.assertIn(f'href="/products/{product["id"]}/drawing"', html)
+        self.assertNotIn("替换图纸", html)
+        self.assertIn("/product-images/K-DRAW-001.png", html)
+        self.assertIn("/product-images/K-DRAW-001-2.png", html)
+
+        image = self.client.get("/product-images/K-DRAW-001.png")
+        self.assertEqual(image.status_code, 200)
+        self.assertTrue(image.get_data().startswith(b"\x89PNG"))
+        image.close()
+
+        preview = self.client.get(f"/products/{product['id']}/drawing")
+        self.assertEqual(preview.status_code, 200)
+        self.assertTrue(preview.get_data().startswith(b"%PDF-1.4"))
+        preview.close()
+
+        replace = self.client.post(
+            "/products/save",
+            data={
+                "bld_no": "K-DRAW-001",
+                "series": "TEST",
+                "item": "DRAWING PART",
+                "oe_no_1": "DRAW-001",
+                "oe_no_2": "",
+                "models": "Tester",
+                "price_cny": "",
+                "active": "1",
+                "drawing": (io.BytesIO(b"%PDF-1.4\nsecond drawing\n%%EOF"), "K-DRAW-001-v2.pdf"),
+            },
+            content_type="multipart/form-data",
+            follow_redirects=False,
+        )
+        self.assertEqual(replace.status_code, 302)
+        archive_dir = self.root / "data" / "drawings" / "archive" / "K-DRAW-001"
+        self.assertTrue(list(archive_dir.glob("*.pdf")))
+
+        batch = self.client.get("/products/drawings/batch")
+        self.assertEqual(batch.status_code, 200)
+        self.assertIn("暂未开放", batch.get_data(as_text=True))
 
     def test_system_updates_page_reads_handoff_notes(self):
         self.login()
@@ -104,6 +255,9 @@ class WebAppTest(unittest.TestCase):
         self.assertIn('action="/materials#materials-results"', html)
         self.assertIn("data-enter-navigation", html)
         self.assertIn('name="spec_text"', html)
+        self.assertIn('<button class="linear-button" type="submit">搜索</button>', html)
+        self.assertIn('class="embedded-submit" type="submit">生成并下载', html)
+        self.assertIn('class="embedded-submit" type="submit">确认导入', html)
         self.assertIn("母件编码", html)
         self.assertIn("零件编码", html)
         self.assertRegex(html, r'<input name="code"[^>]*required')
@@ -267,7 +421,10 @@ class WebAppTest(unittest.TestCase):
     def test_migrations_are_recorded(self):
         with self.web.connect(self.web.DB_PATH) as conn:
             rows = conn.execute("SELECT id FROM schema_migrations ORDER BY id").fetchall()
-        self.assertEqual([row["id"] for row in rows], ["001_audit_log_actor", "002_product_price_and_image"])
+        self.assertEqual(
+            [row["id"] for row in rows],
+            ["001_audit_log_actor", "002_product_price_and_image", "003_product_drawings", "004_product_image_slots"],
+        )
 
     def test_generated_files_are_scoped_to_user(self):
         self.login()
@@ -410,6 +567,16 @@ class WebAppTest(unittest.TestCase):
                 },
                 actor="tester",
             )
+            product = conn.execute("SELECT * FROM products WHERE bld_no = ?", ("K6004LC",)).fetchone()
+
+        self.login()
+        drawing_upload = self.client.post(
+            f"/products/{product['id']}/drawing",
+            data={"drawing": (io.BytesIO(b"%PDF-1.4\nK6004LC drawing\n%%EOF"), "K6004LC.pdf")},
+            content_type="multipart/form-data",
+            follow_redirects=False,
+        )
+        self.assertEqual(drawing_upload.status_code, 302)
 
         workbook = Workbook()
         sheet = workbook.active
@@ -419,7 +586,6 @@ class WebAppTest(unittest.TestCase):
         workbook.save(buffer)
         buffer.seek(0)
 
-        self.login()
         response = self.client.post(
             "/match",
             data={"inquiry": (buffer, "manual-column.xlsx")},
@@ -453,10 +619,24 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(result.status_code, 200)
         self.assertIn("Excel 文件将在点击下载时生成", result_html)
         self.assertIn("下载 Excel", result_html)
+        self.assertIn("下载图纸包", result_html)
         self.assertIn("返回上一步", result_html)
         self.assertNotIn("返回首页", result_html)
         self.assertIn("K6004LC", result_html)
         self.assertFalse(output_path.exists())
+
+        drawing_zip = self.client.post(
+            "/match/drawings/download",
+            data={
+                "upload_path": upload_path,
+                "original_filename": "manual-column.xlsx",
+                "match_column": "0",
+            },
+        )
+        self.assertEqual(drawing_zip.status_code, 200)
+        with zipfile.ZipFile(io.BytesIO(drawing_zip.get_data())) as archive:
+            self.assertIn("K6004LC_55270-2Z001.pdf", archive.namelist())
+        drawing_zip.close()
 
         back = self.client.post(
             "/match/column/back",

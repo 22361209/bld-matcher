@@ -22,7 +22,7 @@
       </header>
 
       <section class="workbench-form-section">
-        <form action="{{ url_for('save_product') }}" method="post" class="product-form">
+        <form action="{{ url_for('save_product') }}" method="post" enctype="multipart/form-data" class="product-form">
           <label>
             BLD NO.
             <input name="bld_no" value="{{ product.bld_no if product else '' }}" {% if product %}readonly{% endif %} required>
@@ -51,10 +51,57 @@
             含税单价（人民币）
             <input name="price_cny" type="number" step="0.01" min="0" value="{{ '%.2f'|format(product.price_cny) if product and product.price_cny is not none else '' }}" placeholder="例如 68.50">
           </label>
-          <label>
-            产品图片路径
-            <input name="image_path" value="{{ product.image_path if product else '' }}" placeholder="例如 product_images/K8354LA.jpg">
-          </label>
+          {% if product %}
+            <section class="product-media-edit full">
+              <div class="product-media-block product-media-images">
+                <h2>产品图片</h2>
+                <div class="product-image-slot-grid">
+                  {% for slot in range(1, 6) %}
+                    {% set slot_image_url = product_image_url(product, slot) %}
+                    <div class="product-image-slot">
+                      <div class="product-image-slot-head">
+                        <strong>图片 {{ slot }}</strong>
+                        {% if slot == 1 %}<span>主图</span>{% endif %}
+                      </div>
+                      {% if slot_image_url %}
+                        <a class="image-link product-media-preview" href="{{ slot_image_url }}" target="_blank" rel="noopener" title="打开 {{ product.bld_no }} 图片 {{ slot }}">
+                          <img class="product-thumb" src="{{ product_image_thumb_url(product, slot) or slot_image_url }}" alt="{{ product.bld_no }} 图片 {{ slot }}" loading="lazy" decoding="async">
+                        </a>
+                      {% else %}
+                        <p class="note product-slot-empty">当前为空</p>
+                      {% endif %}
+                      <label class="file-picker media-upload-field">
+                        <span>上传 / 替换</span>
+                        <input class="file-picker-input" type="file" name="product_image_{{ slot }}" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp">
+                        <span class="file-picker-control">
+                          <span class="file-picker-button">选择文件</span>
+                          <span class="file-picker-name">未选择任何文件</span>
+                          <button class="file-picker-clear" type="button" disabled>清除</button>
+                        </span>
+                      </label>
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+              <div class="product-media-block">
+                <h2>PDF 图纸</h2>
+                {% if product.drawing_path %}
+                  <p><a class="linear-button subtle" href="{{ url_for('product_drawing', product_id=product.id) }}" target="_blank" rel="noopener">预览当前图纸</a></p>
+                {% else %}
+                  <p class="note">当前没有 PDF 图纸。</p>
+                {% endif %}
+                <label class="file-picker media-upload-field">
+                  <span>上传 / 替换 PDF 图纸</span>
+                  <input class="file-picker-input" type="file" name="drawing" accept="application/pdf,.pdf">
+                  <span class="file-picker-control">
+                    <span class="file-picker-button">选择文件</span>
+                    <span class="file-picker-name">未选择任何文件</span>
+                    <button class="file-picker-clear" type="button" disabled>清除</button>
+                  </span>
+                </label>
+              </div>
+            </section>
+          {% endif %}
           <label class="check">
             <input type="checkbox" name="active" value="1" {% if not product or product.active %}checked{% endif %}>
             启用

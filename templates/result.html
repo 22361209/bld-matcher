@@ -39,6 +39,12 @@
                 <input type="hidden" name="match_column" value="{{ match_column }}">
                 <button class="linear-button primary" type="submit">下载 Excel</button>
               </form>
+              <form action="{{ url_for('download_match_drawings') }}" method="post" class="inline-form">
+                <input type="hidden" name="upload_path" value="{{ upload_path }}">
+                <input type="hidden" name="original_filename" value="{{ original_filename }}">
+                <input type="hidden" name="match_column" value="{{ match_column }}">
+                <button class="linear-button subtle" type="submit">下载图纸包</button>
+              </form>
               <form action="{{ url_for('back_to_match_column') }}" method="post" class="inline-form">
                 <input type="hidden" name="upload_path" value="{{ upload_path }}">
                 <input type="hidden" name="original_filename" value="{{ original_filename }}">
@@ -48,6 +54,14 @@
               </form>
             {% else %}
               <a class="linear-button primary" href="{{ url_for('download', name=download_name(output_path)) }}" download target="_blank" rel="noopener">下载 Excel</a>
+              {% if upload_path %}
+                <form action="{{ url_for('download_match_drawings') }}" method="post" class="inline-form">
+                  <input type="hidden" name="upload_path" value="{{ upload_path }}">
+                  <input type="hidden" name="original_filename" value="{{ original_filename }}">
+                  <input type="hidden" name="match_column" value="{{ match_column|default('') }}">
+                  <button class="linear-button subtle" type="submit">下载图纸包</button>
+                </form>
+              {% endif %}
             {% endif %}
           </div>
         </div>

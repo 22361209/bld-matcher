@@ -26,6 +26,8 @@ NAS 上的程序更新**只能通过 Git 仓库发布**：
 
 ```text
 /docker/bld-matcher/data
+/docker/bld-matcher/data/drawings
+/docker/bld-matcher/data/product_images
 /docker/bld-matcher/uploads
 /docker/bld-matcher/outputs
 ```
@@ -75,6 +77,8 @@ http://192.168.1.20:5055
 
 ```text
 /docker/bld-matcher/data/products.sqlite3
+/docker/bld-matcher/data/drawings
+/docker/bld-matcher/data/product_images
 ```
 
 建议定期备份整个目录：
@@ -83,7 +87,7 @@ http://192.168.1.20:5055
 /docker/bld-matcher/data
 ```
 
-`uploads` 是上传过的询价源文件，`outputs` 是生成的结果文件，也可以按需要备份。
+`data/drawings` 是产品 PDF 图纸源文件和替换归档，`data/product_images` 是网页编辑上传的产品图片，`uploads` 是上传过的询价源文件，`outputs` 是生成的结果文件，也可以按需要备份。
 
 ## 6. 升级程序
 

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>批量上传图纸</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  </head>
+  <body>
+    <main class="shell wide materials-linear">
+      {% set active_page = "products" %}
+      {% include "_nav.html" %}
+
+      <header class="materials-hero">
+        <div>
+          <h1>批量上传图纸</h1>
+          <p>入口已预留，当前版本先支持在产品目录中按单个 BLD NO. 上传或替换 PDF 图纸。</p>
+        </div>
+      </header>
+
+      <section class="workbench-form-section">
+        <div class="workbench-form drawing-placeholder-panel">
+          <h2>暂未开放</h2>
+          <p class="note">后续批量上传会按 PDF 文件名中的 BLD NO. 自动归档；同名图纸会进入替换流程并保留旧版本备份。</p>
+          <div class="form-actions">
+            <a class="linear-button primary" href="{{ url_for('products') }}">返回产品目录</a>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

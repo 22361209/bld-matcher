@@ -45,16 +45,17 @@ http://127.0.0.1:5055/
 - `app/database.py`：数据库访问和业务数据写入
 - `app/migrations.py`：数据库结构迁移
 - `app/excel_io.py`：询价 Excel 读写
+- `app/drawings.py`：PDF 图纸上传、替换归档和询价图纸包
 - `app/material_sheet.py`：生产料单生成
 - `templates/`：页面模板
 - `static/`：样式和产品图片
-- `data/`：运行数据目录，业务 Excel 和 SQLite 数据不提交 Git
+- `data/`：运行数据目录，业务 Excel、SQLite 数据、PDF 图纸和上传图片不提交 Git
 - `uploads/`：运行时上传文件，按用户目录隔离，不提交 Git
 - `outputs/`：运行时导出文件，按用户目录隔离，不提交 Git
 
 ## 数据库
 
-默认数据库是 `data/products.sqlite3`。这个文件是业务数据，不进入 Git。产品目录 `data/catalog.xlsx` 和材料明细 `data/stamping_materials.xlsx` 也按运行数据处理，不进入 Git。NAS 上的 `data/` 目录要按 NAS 备份策略保护，更新代码时不要用本机数据覆盖 NAS 数据。
+默认数据库是 `data/products.sqlite3`。这个文件是业务数据，不进入 Git。产品目录 `data/catalog.xlsx`、材料明细 `data/stamping_materials.xlsx`、PDF 图纸目录 `data/drawings/` 和上传产品图片目录 `data/product_images/` 也按运行数据处理，不进入 Git。每个产品最多可维护 5 张产品图片，网页编辑上传的图片文件保存在 `data/product_images/`。NAS 上的 `data/` 目录要按 NAS 备份策略保护，更新代码时不要用本机数据覆盖 NAS 数据。
 
 数据库结构变化集中放在 `app/migrations.py`。新增字段或表时，添加一个新的 migration id 和对应函数，让本机和 NAS 在启动连接数据库时自动补齐结构。
 
@@ -75,7 +76,7 @@ outputs/u用户ID-用户名/
 - 材料数据导入
 - 单价确认导入
 
-询价匹配和生产计划生成只处理当前用户的上传与输出，不使用全局导入锁。
+询价匹配和生产计划生成只处理当前用户的上传与输出，不使用全局导入锁。询价结果页生成的图纸压缩包保存在当前用户的 `outputs/u用户ID-用户名/` 下，原始 PDF 图纸保存在 `data/drawings/pdf/` 下，网页编辑上传的产品图片保存在 `data/product_images/` 下。
 
 ## 系统更新
 
@@ -87,4 +88,4 @@ outputs/u用户ID-用户名/
 .venv/bin/python -m unittest discover
 ```
 
-当前测试覆盖登录、核心页面访问、系统更新页面、20MB 上传限制、用户文件隔离、导入锁和迁移记录。
+当前测试覆盖登录、核心页面访问、系统更新页面、20MB 上传限制、用户文件隔离、导入锁、迁移记录、PDF 图纸上传和询价图纸包。

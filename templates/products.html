@@ -36,11 +36,11 @@
       </section>
 
       {% set status_label = "包含停用" if status == "all" else ("只看停用" if status == "inactive" else "只看启用") %}
-      <section class="materials-command">
+      <section class="materials-command products-sticky-command">
         <form class="materials-search-form" method="get" action="{{ url_for('products') }}#products-results">
           <label>
-            <span>按 BLD NO. 搜索</span>
-            <input id="bld-search" name="bld" value="{{ bld_query }}" placeholder="例如 K6015">
+            <span>按 BLD / 品牌 / 车型搜索</span>
+            <input id="bld-search" name="bld" value="{{ bld_query }}" placeholder="例如 K6015 / HYUNDAI / Sportage">
           </label>
           <label>
             <span>按 OE 号搜索</span>
@@ -58,7 +58,10 @@
           </details>
         </form>
         <div class="secondary-actions materials-actions">
-          {% if can("edit_products") %}<button class="linear-button primary" type="button" data-open-product-modal>新增产品</button>{% endif %}
+          {% if can("edit_products") %}
+            <button class="linear-button primary" type="button" data-open-product-modal>新增产品</button>
+            <a class="linear-button subtle" href="{{ url_for('batch_drawings') }}">批量上传图纸</a>
+          {% endif %}
           {% if can("edit_products") %}
             <details class="toolbar-popover linear-popover">
               <summary>维护单价</summary>
@@ -69,9 +72,9 @@
                   <span class="file-picker-control">
                     <span class="file-picker-button">选择文件</span>
                     <span class="file-picker-name">未选择任何文件</span>
+                    <button class="embedded-submit" type="submit">上传预览</button>
                   </span>
                 </label>
-                <button class="linear-button primary" type="submit">上传预览</button>
                 <span class="note">表头示例：BLD NO. / Unit Price。</span>
               </form>
             </details>
@@ -87,9 +90,9 @@
                   <span class="file-picker-control">
                     <span class="file-picker-button">选择文件</span>
                     <span class="file-picker-name">未选择任何文件</span>
+                    <button class="embedded-submit" type="submit">确认导入</button>
                   </span>
                 </label>
-                <button class="linear-button primary" type="submit">确认导入</button>
                 <span class="note">按 BLD 号合并更新已有资料并加入新增产品。</span>
               </form>
             </details>
@@ -115,14 +118,14 @@
         <div class="materials-table-title">
           <div>
             <h2>产品明细</h2>
-            <p>除车型列可拖动调节外，其余列宽固定。产品图片为缩略图，点击可打开原图。</p>
+            <p>除车型列可拖动调节外，其余列宽固定。有 PDF 图纸时点击 BLD 号可预览。</p>
           </div>
           <span>{{ products|length }} 条</span>
         </div>
         <div class="materials-table-wrap">
         <table class="resizable-table materials-grid-table" id="products-table">
           <colgroup>
-            <col data-col="bld" style="width: 90px">
+            <col data-col="bld" style="width: 104px">
             <col data-col="series" style="width: 82px">
             <col data-col="item" style="width: 92px">
             <col data-col="oe1" style="width: 116px">
@@ -148,7 +151,13 @@
           <tbody>
             {% for product in products %}
               <tr class="{% if not product.active %}muted-row{% endif %}">
-                <td><strong>{{ product.bld_no }}</strong></td>
+                <td class="bld-cell">
+                  {% if product.drawing_path %}
+                    <a class="bld-drawing-link" href="{{ url_for('product_drawing', product_id=product.id) }}" target="_blank" rel="noopener" title="预览 {{ product.bld_no }} PDF 图纸">{{ product.bld_no }}</a>
+                  {% else %}
+                    <strong>{{ product.bld_no }}</strong>
+                  {% endif %}
+                </td>
                 <td class="preline">{{ product.series }}</td>
                 <td>{{ product.item }}</td>
                 <td class="product-code-list">
@@ -163,11 +172,10 @@
                 </td>
                 <td class="preline">{{ product.models }}</td>
                 <td>
-                  {% set image_url = product_image_url(product) %}
-                  {% if image_url %}
-                    {% set thumb_url = product_image_thumb_url(product) %}
-                    <a class="image-link" href="{{ image_url }}" target="_blank" rel="noopener" title="打开 {{ product.bld_no }} 原图">
-                      <img class="product-thumb" src="{{ thumb_url or image_url }}" alt="{{ product.bld_no }} 产品图片" loading="lazy" decoding="async">
+                  {% set image_gallery = product_image_urls(product) %}
+                  {% if image_gallery %}
+                    <a class="image-link" href="{{ image_gallery[0].url }}" target="_blank" rel="noopener" title="打开 {{ product.bld_no }} 产品图片" data-gallery='{{ image_gallery|tojson }}' data-caption="{{ product.bld_no }}">
+                      <img class="product-thumb" src="{{ image_gallery[0].thumb or image_gallery[0].url }}" alt="{{ product.bld_no }} 产品图片" loading="lazy" decoding="async">
                     </a>
                   {% else %}
                     <span class="note">无图</span>
@@ -224,10 +232,6 @@
               含税单价（人民币）
               <input name="price_cny" type="number" step="0.01" min="0" placeholder="例如 68.50">
             </label>
-            <label>
-              产品图片路径
-              <input name="image_path" placeholder="例如 product_images/K8354LA.jpg">
-            </label>
             <label class="check">
               <input type="checkbox" name="active" value="1" checked>
               启用
@@ -244,8 +248,13 @@
       <div class="image-modal-backdrop" data-close-image-modal></div>
       <div class="image-modal-panel" role="dialog" aria-modal="true" aria-label="产品图片预览">
         <button class="image-modal-close" type="button" data-close-image-modal aria-label="关闭图片预览">×</button>
-        <img id="image-modal-img" src="" alt="">
+        <div class="image-modal-viewer">
+          <button class="image-modal-nav prev" type="button" data-image-modal-prev aria-label="上一张">‹</button>
+          <img id="image-modal-img" src="" alt="">
+          <button class="image-modal-nav next" type="button" data-image-modal-next aria-label="下一张">›</button>
+        </div>
         <div class="image-modal-caption" id="image-modal-caption"></div>
+        <div class="image-modal-thumbs" id="image-modal-thumbs"></div>
       </div>
     </div>
     <script>
@@ -280,6 +289,27 @@
       });
 
       const table = document.querySelector("#products-table");
+      const stickyCommand = document.querySelector(".products-sticky-command");
+      const updateProductsTableHeaderTop = () => {
+        if (!table || !stickyCommand) return;
+        const navOffset = Number.parseFloat(
+          getComputedStyle(document.documentElement).getPropertyValue("--revealed-nav-height")
+        ) || 0;
+        const commandRect = stickyCommand.getBoundingClientRect();
+        const tableRect = table.getBoundingClientRect();
+        const commandIsPinned = commandRect.top <= navOffset + 1;
+        const headerWouldTouchCommand = tableRect.top <= commandRect.bottom;
+        const headerTop = commandIsPinned && headerWouldTouchCommand ? Math.round(navOffset + commandRect.height) : 0;
+        table.style.setProperty("--products-table-header-top", `${headerTop}px`);
+      };
+      window.addEventListener("scroll", updateProductsTableHeaderTop, { passive: true });
+      window.addEventListener("resize", updateProductsTableHeaderTop);
+      window.addEventListener("app-nav-offset-change", updateProductsTableHeaderTop);
+      updateProductsTableHeaderTop();
+      requestAnimationFrame(updateProductsTableHeaderTop);
+      window.addEventListener("load", updateProductsTableHeaderTop);
+      window.addEventListener("pageshow", updateProductsTableHeaderTop);
+
       const cols = Array.from(table.querySelectorAll("col"));
       const modelsCol = cols.find((col) => col.dataset.col === "models");
       const storageKey = "bldProductTableModelsWidth";
@@ -334,10 +364,51 @@
       const imageModal = document.querySelector("#image-modal");
       const imageModalImg = document.querySelector("#image-modal-img");
       const imageModalCaption = document.querySelector("#image-modal-caption");
+      const imageModalThumbs = document.querySelector("#image-modal-thumbs");
+      const imageModalPrev = document.querySelector("[data-image-modal-prev]");
+      const imageModalNext = document.querySelector("[data-image-modal-next]");
+      let imageGallery = [];
+      let imageGalleryIndex = 0;
+      const renderImageModal = () => {
+        const current = imageGallery[imageGalleryIndex];
+        if (!current) return;
+        imageModalImg.src = current.url;
+        imageModalImg.alt = `${imageModalCaption.dataset.baseCaption || "产品图片"} ${current.label || ""}`.trim();
+        imageModalCaption.textContent = [imageModalCaption.dataset.baseCaption, current.label].filter(Boolean).join(" · ");
+        const multiple = imageGallery.length > 1;
+        imageModalPrev.hidden = !multiple;
+        imageModalNext.hidden = !multiple;
+        imageModalThumbs.innerHTML = "";
+        imageModalThumbs.hidden = !multiple;
+        if (!multiple) return;
+        imageGallery.forEach((item, index) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = `image-modal-thumb${index === imageGalleryIndex ? " active" : ""}`;
+          button.setAttribute("aria-label", item.label || `图片 ${index + 1}`);
+          const img = document.createElement("img");
+          img.src = item.thumb || item.url;
+          img.alt = item.label || "";
+          button.appendChild(img);
+          button.addEventListener("click", () => {
+            imageGalleryIndex = index;
+            renderImageModal();
+          });
+          imageModalThumbs.appendChild(button);
+        });
+      };
       const openImageModal = (link) => {
-        imageModalImg.src = link.href;
-        imageModalImg.alt = link.querySelector("img")?.alt || "产品图片";
-        imageModalCaption.textContent = link.title.replace("打开 ", "").replace(" 原图", "");
+        try {
+          imageGallery = JSON.parse(link.dataset.gallery || "[]");
+        } catch (_error) {
+          imageGallery = [];
+        }
+        if (!imageGallery.length) {
+          imageGallery = [{ url: link.href, thumb: link.href, label: "" }];
+        }
+        imageGalleryIndex = 0;
+        imageModalCaption.dataset.baseCaption = link.dataset.caption || link.title.replace("打开 ", "").replace(" 原图", "");
+        renderImageModal();
         imageModal.classList.add("open");
         imageModal.setAttribute("aria-hidden", "false");
         document.body.classList.add("modal-open");
@@ -349,7 +420,21 @@
         imageModalImg.src = "";
         imageModalImg.alt = "";
         imageModalCaption.textContent = "";
+        imageModalCaption.dataset.baseCaption = "";
+        imageModalThumbs.innerHTML = "";
+        imageGallery = [];
+        imageGalleryIndex = 0;
       };
+      imageModalPrev.addEventListener("click", () => {
+        if (!imageGallery.length) return;
+        imageGalleryIndex = (imageGalleryIndex + imageGallery.length - 1) % imageGallery.length;
+        renderImageModal();
+      });
+      imageModalNext.addEventListener("click", () => {
+        if (!imageGallery.length) return;
+        imageGalleryIndex = (imageGalleryIndex + 1) % imageGallery.length;
+        renderImageModal();
+      });
 
       document.querySelectorAll(".image-link").forEach((link) => {
         link.addEventListener("click", (event) => {

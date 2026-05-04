@@ -33,6 +33,12 @@ _load_env_file(BASE_DIR / ".env")
 DATA_DIR = _path_from_env("BLD_DATA_DIR", BASE_DIR / "data")
 UPLOAD_DIR = _path_from_env("BLD_UPLOAD_DIR", BASE_DIR / "uploads")
 OUTPUT_DIR = _path_from_env("BLD_OUTPUT_DIR", BASE_DIR / "outputs")
+DRAWING_DIR = DATA_DIR / "drawings"
+DRAWING_PDF_DIR = DRAWING_DIR / "pdf"
+DRAWING_ARCHIVE_DIR = DRAWING_DIR / "archive"
+PRODUCT_IMAGE_DIR = DATA_DIR / "product_images"
+PRODUCT_IMAGE_ARCHIVE_DIR = PRODUCT_IMAGE_DIR / "archive"
+PRODUCT_IMAGE_DATA_PREFIX = "data_product_images/"
 
 CATALOG_PATH = DATA_DIR / "catalog.xlsx"
 MANUAL_MAP_PATH = DATA_DIR / "manual_map.json"

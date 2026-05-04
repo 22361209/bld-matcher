@@ -2,12 +2,16 @@ document.querySelectorAll(".file-picker-input").forEach((input) => {
   const picker = input.closest(".file-picker");
   const name = picker ? picker.querySelector(".file-picker-name") : null;
   const oeInput = picker ? picker.querySelector(".file-picker-oe-input") : null;
+  const clearButton = picker ? picker.querySelector(".file-picker-clear") : null;
   if (!name && !oeInput) return;
 
-  input.addEventListener("change", () => {
+  const syncFilePicker = () => {
     const fileName = input.files && input.files.length ? input.files[0].name : "";
     if (name) {
       name.textContent = fileName || "未选择任何文件";
+    }
+    if (clearButton instanceof HTMLButtonElement) {
+      clearButton.disabled = !fileName;
     }
     if (oeInput && fileName) {
       oeInput.value = fileName;
@@ -15,6 +19,12 @@ document.querySelectorAll(".file-picker-input").forEach((input) => {
     } else if (oeInput) {
       oeInput.readOnly = false;
     }
+  };
+
+  input.addEventListener("change", syncFilePicker);
+  clearButton?.addEventListener("click", () => {
+    input.value = "";
+    syncFilePicker();
   });
 });
 
