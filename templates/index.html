@@ -27,7 +27,7 @@
         {% if catalog_summary %}
           <div class="inquiry-stat-strip" aria-label="产品目录统计">
             <span>启用产品 <strong>{{ product_stats.active }}</strong></span>
-            <span>OE 索引 <strong>{{ catalog_summary.oe_keys }}</strong></span>
+            <span>号码索引 <strong>{{ catalog_summary.oe_keys }}</strong></span>
             <span>BLD 索引 <strong>{{ catalog_summary.bld_keys }}</strong></span>
             <span>停用产品 <strong>{{ product_stats.inactive }}</strong></span>
           </div>
@@ -45,22 +45,22 @@
         {% if can("generate_match") %}
           <form action="{{ url_for('match_inquiry') }}" method="post" enctype="multipart/form-data" class="inquiry-command-row inquiry-upload-form">
             <div class="file-picker-field">
-              <span>客户询价源文件 / OE 号码</span>
+              <span>客户询价源文件 / OE 或品牌号码</span>
               <div class="file-picker inquiry-file-oe-picker">
                 <input id="inquiry-file-input" class="file-picker-input" type="file" name="inquiry" accept=".xls,.xlsx">
                 <div class="file-picker-control">
                   <label class="file-picker-button" for="inquiry-file-input">选择文件</label>
-                  <input class="file-picker-oe-input" name="quick_oe" value="{{ quick_oe }}" placeholder="未选择文件时，可直接输入 OE 号码查询">
+                  <input class="file-picker-oe-input" name="quick_oe" value="{{ quick_oe }}" placeholder="未选择文件时，可直接输入 OE 或品牌号码查询">
                 </div>
               </div>
             </div>
             <button class="linear-button primary" type="submit">开始匹配</button>
           </form>
           {% if quick_oe %}
-            <section class="quick-oe-results" aria-label="快速 OE 查询结果">
+            <section class="quick-oe-results" aria-label="快速号码查询结果">
               <div class="quick-oe-heading">
                 <div>
-                  <h2>快速 OE 查询</h2>
+                  <h2>快速号码查询</h2>
                   <p>{{ quick_results|length }} 条查询结果</p>
                 </div>
               </div>
@@ -103,7 +103,7 @@
                   {% endfor %}
                 </div>
               {% else %}
-                <p class="materials-empty">没有可查询的 OE 号码。</p>
+                <p class="materials-empty">没有可查询的号码。</p>
               {% endif %}
             </section>
           {% endif %}

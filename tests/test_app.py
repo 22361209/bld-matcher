@@ -338,11 +338,60 @@ class WebAppTest(unittest.TestCase):
         html = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("快速 OE 查询", html)
+        self.assertIn("快速号码查询", html)
         self.assertIn("K6004LB", html)
         self.assertIn("OE 精准命中", html)
         self.assertIn("data-quick-oe-image", html)
         self.assertIn('id="quick-oe-image-modal"', html)
+
+    def test_quick_brand_code_lookup_on_homepage(self):
+        from app.database import upsert_product
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K6004BR",
+                    "series": "HYUNDAI",
+                    "item": "CONTROL ARM",
+                    "oe_no_1": "55270-2Z010",
+                    "oe_no_2": "MOOG：K623123",
+                    "models": "Sportage",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        self.login()
+        for query in ["623123", "K623123", "MOOG：K623123"]:
+            with self.subTest(query=query):
+                response = self.client.get("/", query_string={"quick_oe": query})
+                html = response.get_data(as_text=True)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIn("快速号码查询", html)
+                self.assertIn("K6004BR", html)
+                self.assertIn("品牌号码精准命中", html)
+
+    def test_catalog_import_recognizes_chinese_brand_number_header(self):
+        from app.matcher import ProductCatalog
+        from openpyxl import Workbook
+
+        for header in ["品牌号码", "Other Reference"]:
+            with self.subTest(header=header):
+                workbook = Workbook()
+                sheet = workbook.active
+                sheet.append(["BLD NO.", "品牌", "产品名称", "OE Reference", header, "车型"])
+                sheet.append(["K6004CN", "HYUNDAI", "CONTROL ARM", "55270-2Z020", "BRAND-CN-55270", "Sportage"])
+                catalog_path = self.root / f"catalog-brand-number-{header.replace(' ', '-').lower()}.xlsx"
+                workbook.save(catalog_path)
+
+                catalog = ProductCatalog.from_excel(catalog_path)
+                match = catalog.match("", "BRAND-CN-55270")
+
+                self.assertIsNotNone(match)
+                self.assertEqual(match.bld_no, "K6004CN")
+                self.assertEqual(match.reason, "品牌号码精准命中")
 
     def test_manual_column_result_defers_excel_until_download(self):
         from app.database import upsert_product

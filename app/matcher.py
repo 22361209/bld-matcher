@@ -11,11 +11,11 @@ from openpyxl import load_workbook
 
 CATALOG_HEADER_ALIASES = {
     "BLD NO.": {"BLD NO.", "BLD NO", "BLDNO", "BOLAIDE NO", "PART NO"},
-    "OE NO.1": {"OE NO.1", "OE NO1", "OE1", "OE NO.", "OE NO"},
-    "OE NO.2": {"OE NO.2", "OE NO2", "OE2"},
-    "SERIES": {"SERIES", "BRAND"},
-    "ITEM": {"ITEM", "DESCRIPTION", "PRODUCT"},
-    "Models": {"MODELS", "MODEL", "APPLICATION"},
+    "OE NO.1": {"OE NO.1", "OE NO1", "OE1", "OE NO.", "OE NO", "OE REFERENCE", "OE REF", "OE 号", "OE号"},
+    "OE NO.2": {"OE NO.2", "OE NO2", "OE2", "OTHER REFERENCE", "OTHER REF", "BRAND NO", "BRAND NUMBER", "品牌号码", "品牌号"},
+    "SERIES": {"SERIES", "BRAND", "品牌"},
+    "ITEM": {"ITEM", "DESCRIPTION", "PRODUCT", "产品名称", "品名"},
+    "Models": {"MODELS", "MODEL", "APPLICATION", "车型", "适用车型"},
 }
 
 LOOKALIKE_TRANSLATION = str.maketrans(
@@ -79,6 +79,31 @@ def split_codes(value: object) -> list[str]:
     return [part.strip() for part in parts if normalize_code(part)]
 
 
+def _brand_code_aliases(code: str) -> list[str]:
+    aliases = [code]
+    text = str(code).strip()
+    if not text:
+        return []
+
+    colon_parts = [part.strip() for part in re.split(r"[:：]", text)[1:] if normalize_code(part)]
+    aliases.extend(colon_parts)
+
+    for alias in list(aliases):
+        key = normalize_code(alias)
+        match = re.fullmatch(r"[A-Z]{1,4}(\d{4,})", key)
+        if match:
+            aliases.append(match.group(1))
+
+    unique = []
+    seen = set()
+    for alias in aliases:
+        key = normalize_code(alias)
+        if key and key not in seen:
+            seen.add(key)
+            unique.append(alias)
+    return unique
+
+
 def compact_text(value: object) -> str:
     if isinstance(value, float) and math.isfinite(value) and value.is_integer():
         value = int(value)
@@ -86,7 +111,7 @@ def compact_text(value: object) -> str:
 
 
 def _canonical_header(value: object) -> str:
-    return re.sub(r"[^A-Z0-9]+", "", "" if value is None else str(value).upper())
+    return re.sub(r"[^A-Z0-9\u4E00-\u9FFF]+", "", "" if value is None else str(value).upper())
 
 
 def _find_header_row(rows: list[tuple], max_scan: int = 20) -> tuple[int, list[str]]:
@@ -124,6 +149,8 @@ class ProductCatalog:
         self.by_bld: dict[str, dict] = {}
         self.by_oe: dict[str, list[dict]] = {}
         self.by_oe_zero_o: dict[str, list[dict]] = {}
+        self.by_oe_fields: dict[str, set[str]] = {}
+        self.by_oe_zero_o_fields: dict[str, set[str]] = {}
 
         for row in rows:
             bld_no = compact_text(row.get("BLD NO."))
@@ -131,8 +158,14 @@ class ProductCatalog:
                 self.by_bld[normalize_code(bld_no)] = row
             for field in ("OE NO.1", "OE NO.2"):
                 for code in split_codes(row.get(field)):
-                    self.by_oe.setdefault(normalize_code(code), []).append(row)
-                    self.by_oe_zero_o.setdefault(zero_o_key(code), []).append(row)
+                    aliases = _brand_code_aliases(code) if field == "OE NO.2" else [code]
+                    for alias in aliases:
+                        code_key = normalize_code(alias)
+                        tolerant_key = zero_o_key(alias)
+                        self.by_oe.setdefault(code_key, []).append(row)
+                        self.by_oe_zero_o.setdefault(tolerant_key, []).append(row)
+                        self.by_oe_fields.setdefault(code_key, set()).add(field)
+                        self.by_oe_zero_o_fields.setdefault(tolerant_key, set()).add(field)
 
     @classmethod
     def from_excel(cls, path: Path, manual_map: dict[str, str] | None = None) -> "ProductCatalog":
@@ -169,14 +202,14 @@ class ProductCatalog:
 
         if oe_key and oe_key in self.by_oe:
             row = self.by_oe[oe_key][0]
-            return CatalogMatch(compact_text(row.get("BLD NO.")), 95, "OE 精准命中", row, matched_codes=((compact_text(inquiry_oe),) if compact_text(inquiry_oe) else ()))
+            return CatalogMatch(compact_text(row.get("BLD NO.")), 95, self._exact_reason(oe_key), row, matched_codes=((compact_text(inquiry_oe),) if compact_text(inquiry_oe) else ()))
 
         oe_zero_o_key = zero_o_key(inquiry_oe)
         if oe_zero_o_key and oe_zero_o_key != oe_key and oe_zero_o_key in self.by_oe_zero_o:
             rows = self._unique_rows(self.by_oe_zero_o[oe_zero_o_key])
             if len(rows) == 1:
                 row = rows[0]
-                return CatalogMatch(compact_text(row.get("BLD NO.")), 88, "OE 字符容错命中", row, matched_codes=((compact_text(inquiry_oe),) if compact_text(inquiry_oe) else ()))
+                return CatalogMatch(compact_text(row.get("BLD NO.")), 88, self._tolerant_reason(oe_zero_o_key), row, matched_codes=((compact_text(inquiry_oe),) if compact_text(inquiry_oe) else ()))
 
         if name_key and name_key in self.by_bld:
             row = self.by_bld[name_key]
@@ -200,7 +233,7 @@ class ProductCatalog:
 
             if part_key in self.by_oe:
                 row = self.by_oe[part_key][0]
-                matches.append((part, CatalogMatch(compact_text(row.get("BLD NO.")), 95, "OE 多号码精准命中", row)))
+                matches.append((part, CatalogMatch(compact_text(row.get("BLD NO.")), 95, self._multi_exact_reason(part_key), row)))
                 continue
 
             part_zero_o_key = zero_o_key(part)
@@ -208,7 +241,7 @@ class ProductCatalog:
                 rows = self._unique_rows(self.by_oe_zero_o[part_zero_o_key])
                 if len(rows) == 1:
                     row = rows[0]
-                    matches.append((part, CatalogMatch(compact_text(row.get("BLD NO.")), 88, "OE 多号码字符容错命中", row)))
+                    matches.append((part, CatalogMatch(compact_text(row.get("BLD NO.")), 88, self._multi_tolerant_reason(part_zero_o_key), row)))
 
         unique: dict[str, CatalogMatch] = {}
         matched_parts = tuple(part for part, _ in matches)
@@ -237,6 +270,22 @@ class ProductCatalog:
                 seen.add(key)
                 unique.append(row)
         return unique
+
+    def _is_brand_code_key(self, key: str, *, tolerant: bool = False) -> bool:
+        fields = self.by_oe_zero_o_fields if tolerant else self.by_oe_fields
+        return fields.get(key) == {"OE NO.2"}
+
+    def _exact_reason(self, key: str) -> str:
+        return "品牌号码精准命中" if self._is_brand_code_key(key) else "OE 精准命中"
+
+    def _tolerant_reason(self, key: str) -> str:
+        return "品牌号码字符容错命中" if self._is_brand_code_key(key, tolerant=True) else "OE 字符容错命中"
+
+    def _multi_exact_reason(self, key: str) -> str:
+        return "品牌号码多号码精准命中" if self._is_brand_code_key(key) else "OE 多号码精准命中"
+
+    def _multi_tolerant_reason(self, key: str) -> str:
+        return "品牌号码多号码字符容错命中" if self._is_brand_code_key(key, tolerant=True) else "OE 多号码字符容错命中"
 
 
 def load_manual_map(path: Path) -> dict[str, str]:
