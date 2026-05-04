@@ -122,7 +122,7 @@
             <h2>产品明细</h2>
             <p>除车型列可拖动调节外，其余列宽固定。有 PDF 图纸时点击 BLD 号可预览。</p>
           </div>
-          <span>{{ products|length }} 条</span>
+          <span id="products-render-count">已显示 {{ products|length }} / {{ total_products }} 条</span>
         </div>
         <div class="materials-table-wrap">
         <table class="resizable-table materials-grid-table" id="products-table">
@@ -150,49 +150,28 @@
               <th class="sticky-actions">操作</th>
             </tr>
           </thead>
-          <tbody>
-            {% for product in products %}
-              <tr class="{% if not product.active %}muted-row{% endif %}">
-                <td class="bld-cell">
-                  {% if product.drawing_path %}
-                    <a class="bld-drawing-link" href="{{ url_for('product_drawing', product_id=product.id) }}" target="_blank" rel="noopener" title="预览 {{ product.bld_no }} PDF 图纸">{{ product.bld_no }}</a>
-                  {% else %}
-                    <strong>{{ product.bld_no }}</strong>
-                  {% endif %}
-                </td>
-                <td class="preline">{{ product.series }}</td>
-                <td>{{ product.item }}</td>
-                <td class="product-code-list">
-                  {% for code in product.oe_no_1.splitlines() %}
-                    <span>{{ code }}</span>{% if not loop.last %}<br>{% endif %}
-                  {% endfor %}
-                </td>
-                <td class="product-code-list">
-                  {% for code in product.oe_no_2.splitlines() %}
-                    <span>{{ code }}</span>{% if not loop.last %}<br>{% endif %}
-                  {% endfor %}
-                </td>
-                <td class="preline">{{ product.models }}</td>
-                <td>
-                  {% set image_gallery = product_image_urls(product) %}
-                  {% if image_gallery %}
-                    <a class="image-link" href="{{ image_gallery[0].url }}" target="_blank" rel="noopener" title="打开 {{ product.bld_no }} 产品图片" data-gallery='{{ image_gallery|tojson }}' data-caption="{{ product.bld_no }}">
-                      <img class="product-thumb" src="{{ image_gallery[0].thumb or image_gallery[0].url }}" alt="{{ product.bld_no }} 产品图片" loading="lazy" decoding="async">
-                    </a>
-                  {% else %}
-                    <span class="note">无图</span>
-                  {% endif %}
-                </td>
-                <td class="price-cell">{% if product.price_cny is not none %}¥{{ "%.2f"|format(product.price_cny) }}{% endif %}</td>
-                <td class="row-actions sticky-actions">
-                  {% if can("edit_products") %}
-                    <a href="{{ url_for('edit_product', product_id=product.id) }}">编辑</a>
-                  {% endif %}
-                </td>
-              </tr>
-            {% endfor %}
+          <tbody
+            id="products-table-body"
+            data-rows-url="{{ url_for('product_rows') }}"
+            data-next-offset="{{ products|length }}"
+            data-total="{{ total_products }}"
+            data-batch-size="{{ product_page_size }}"
+            data-has-more="{{ '1' if has_more_products else '0' }}"
+          >
+            {% include "_product_rows.html" %}
           </tbody>
         </table>
+        <div class="product-batch-status" id="products-batch-status" aria-live="polite">
+          {% if total_products == 0 %}
+            <span>没有符合条件的产品。</span>
+          {% elif has_more_products %}
+            <button class="linear-button subtle" type="button" id="products-load-more">加载更多</button>
+            <span>继续向下滚动会自动加载下一批。</span>
+          {% else %}
+            <span>已显示全部产品。</span>
+          {% endif %}
+        </div>
+        <div class="product-load-sentinel" id="products-load-sentinel" aria-hidden="true"></div>
         </div>
       </section>
     </main>
@@ -291,7 +270,12 @@
       });
 
       const table = document.querySelector("#products-table");
+      const tableBody = document.querySelector("#products-table-body");
       const stickyCommand = document.querySelector(".products-sticky-command");
+      const productsRenderCount = document.querySelector("#products-render-count");
+      const productsBatchStatus = document.querySelector("#products-batch-status");
+      const productsLoadButton = document.querySelector("#products-load-more");
+      const productsLoadSentinel = document.querySelector("#products-load-sentinel");
       let productHeaderFrame = 0;
       let lastProductHeaderTop = -1;
       const updateProductsTableHeaderTop = () => {
@@ -322,6 +306,67 @@
       requestAnimationFrame(updateProductsTableHeaderTop);
       window.addEventListener("load", scheduleProductsTableHeaderTop);
       window.addEventListener("pageshow", scheduleProductsTableHeaderTop);
+
+      const updateProductBatchStatus = (isLoading = false) => {
+        if (!tableBody || !productsRenderCount || !productsBatchStatus) return;
+        const nextOffset = Number(tableBody.dataset.nextOffset || 0);
+        const total = Number(tableBody.dataset.total || 0);
+        const hasMore = tableBody.dataset.hasMore === "1";
+        productsRenderCount.textContent = `已显示 ${nextOffset} / ${total} 条`;
+        if (total === 0) {
+          productsBatchStatus.innerHTML = "<span>没有符合条件的产品。</span>";
+          return;
+        }
+        if (isLoading) {
+          productsBatchStatus.innerHTML = "<span>正在加载下一批...</span>";
+          return;
+        }
+        if (hasMore) {
+          productsBatchStatus.innerHTML = '<button class="linear-button subtle" type="button" id="products-load-more">加载更多</button><span>继续向下滚动会自动加载下一批。</span>';
+          productsBatchStatus.querySelector("#products-load-more")?.addEventListener("click", loadNextProductRows);
+          return;
+        }
+        productsBatchStatus.innerHTML = "<span>已显示全部产品。</span>";
+      };
+
+      let productRowsLoading = false;
+      const loadNextProductRows = async () => {
+        if (!tableBody || productRowsLoading || tableBody.dataset.hasMore !== "1") return;
+        productRowsLoading = true;
+        updateProductBatchStatus(true);
+        const params = new URLSearchParams(window.location.search);
+        params.set("offset", tableBody.dataset.nextOffset || "0");
+        params.set("limit", tableBody.dataset.batchSize || "50");
+        try {
+          const response = await fetch(`${tableBody.dataset.rowsUrl}?${params.toString()}`, {
+            headers: { "X-Requested-With": "fetch" },
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const data = await response.json();
+          if (data.html) {
+            tableBody.insertAdjacentHTML("beforeend", data.html);
+          }
+          tableBody.dataset.nextOffset = String(data.next_offset || tableBody.children.length);
+          tableBody.dataset.total = String(data.total || tableBody.dataset.total || 0);
+          tableBody.dataset.hasMore = data.has_more ? "1" : "0";
+        } catch (_error) {
+          productsBatchStatus.innerHTML = '<button class="linear-button subtle" type="button" id="products-load-more">重试加载</button><span>这一批加载失败。</span>';
+          productsBatchStatus.querySelector("#products-load-more")?.addEventListener("click", loadNextProductRows);
+          return;
+        } finally {
+          productRowsLoading = false;
+        }
+        updateProductBatchStatus(false);
+        scheduleProductsTableHeaderTop();
+      };
+
+      productsLoadButton?.addEventListener("click", loadNextProductRows);
+      if (productsLoadSentinel && "IntersectionObserver" in window) {
+        const productRowsObserver = new IntersectionObserver((entries) => {
+          if (entries.some((entry) => entry.isIntersecting)) loadNextProductRows();
+        }, { rootMargin: "360px 0px" });
+        productRowsObserver.observe(productsLoadSentinel);
+      }
 
       const cols = Array.from(table.querySelectorAll("col"));
       const modelsCol = cols.find((col) => col.dataset.col === "models");
@@ -449,11 +494,11 @@
         renderImageModal();
       });
 
-      document.querySelectorAll(".image-link").forEach((link) => {
-        link.addEventListener("click", (event) => {
-          event.preventDefault();
-          openImageModal(link);
-        });
+      table?.addEventListener("click", (event) => {
+        const link = event.target.closest(".image-link");
+        if (!link) return;
+        event.preventDefault();
+        openImageModal(link);
       });
       document.querySelectorAll("[data-close-image-modal]").forEach((element) => {
         element.addEventListener("click", closeImageModal);

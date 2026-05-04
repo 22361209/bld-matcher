@@ -4,7 +4,7 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-from flask import flash, redirect, render_template, request, send_file, url_for
+from flask import flash, jsonify, redirect, render_template, request, send_file, url_for
 
 from app.catalog_export import export_products_xlsx
 from app.config import CATALOG_PATH, DATA_DIR, DB_PATH
@@ -16,6 +16,7 @@ from app.database import (
     get_product,
     import_catalog,
     list_products,
+    count_products,
     log_event,
     product_stats,
     upsert_product,
@@ -26,6 +27,35 @@ from app.locks import ImportLockError, import_lock
 from app.price_import import decode_rows, encode_rows, parse_price_file
 from app.product_media import resolve_product_image_path, resolve_product_image_thumb_path, save_product_image
 from app.security import actor_name, login_required, permission_required
+
+
+PRODUCT_PAGE_SIZE = 50
+
+
+def _product_query_args() -> dict[str, object]:
+    query = request.args.get("q", "")
+    bld_query = request.args.get("bld", "")
+    oe_query = request.args.get("oe", "")
+    if oe_query.strip():
+        bld_query = ""
+    status = request.args.get("status", "active")
+    if status not in {"active", "all", "inactive"}:
+        status = "active"
+    return {
+        "query": query,
+        "bld_query": bld_query,
+        "oe_query": oe_query,
+        "status": status,
+        "include_inactive": status == "all",
+        "only_inactive": status == "inactive",
+    }
+
+
+def _request_offset() -> int:
+    try:
+        return max(0, int(request.args.get("offset", "0") or 0))
+    except ValueError:
+        return 0
 
 
 def register(app) -> None:
@@ -70,34 +100,73 @@ def register(app) -> None:
     @app.get("/products")
     @login_required
     def products():
-        query = request.args.get("q", "")
-        bld_query = request.args.get("bld", "")
-        oe_query = request.args.get("oe", "")
-        if oe_query.strip():
-            bld_query = ""
-        status = request.args.get("status", "active")
-        if status not in {"active", "all", "inactive"}:
-            status = "active"
+        filters = _product_query_args()
         with connect(DB_PATH) as conn:
             bootstrap_from_excel(DB_PATH, CATALOG_PATH)
             rows = list_products(
                 conn,
-                query=query,
-                bld_query=bld_query,
-                oe_query=oe_query,
-                include_inactive=status == "all",
-                only_inactive=status == "inactive",
-                limit=3000,
+                query=str(filters["query"]),
+                bld_query=str(filters["bld_query"]),
+                oe_query=str(filters["oe_query"]),
+                include_inactive=bool(filters["include_inactive"]),
+                only_inactive=bool(filters["only_inactive"]),
+                limit=PRODUCT_PAGE_SIZE,
+            )
+            total_products = count_products(
+                conn,
+                query=str(filters["query"]),
+                bld_query=str(filters["bld_query"]),
+                oe_query=str(filters["oe_query"]),
+                include_inactive=bool(filters["include_inactive"]),
+                only_inactive=bool(filters["only_inactive"]),
             )
             stats = product_stats(conn)
         return render_template(
             "products.html",
             products=rows,
-            query=query,
-            bld_query=bld_query or query,
-            oe_query=oe_query,
-            status=status,
+            total_products=total_products,
+            product_page_size=PRODUCT_PAGE_SIZE,
+            has_more_products=len(rows) < total_products,
+            query=str(filters["query"]),
+            bld_query=str(filters["bld_query"] or filters["query"]),
+            oe_query=str(filters["oe_query"]),
+            status=str(filters["status"]),
             stats=stats,
+        )
+
+    @app.get("/products/rows")
+    @login_required
+    def product_rows():
+        filters = _product_query_args()
+        offset = _request_offset()
+        with connect(DB_PATH) as conn:
+            rows = list_products(
+                conn,
+                query=str(filters["query"]),
+                bld_query=str(filters["bld_query"]),
+                oe_query=str(filters["oe_query"]),
+                include_inactive=bool(filters["include_inactive"]),
+                only_inactive=bool(filters["only_inactive"]),
+                limit=PRODUCT_PAGE_SIZE,
+                offset=offset,
+            )
+            total_products = count_products(
+                conn,
+                query=str(filters["query"]),
+                bld_query=str(filters["bld_query"]),
+                oe_query=str(filters["oe_query"]),
+                include_inactive=bool(filters["include_inactive"]),
+                only_inactive=bool(filters["only_inactive"]),
+            )
+        next_offset = offset + len(rows)
+        return jsonify(
+            {
+                "html": render_template("_product_rows.html", products=rows),
+                "rendered": len(rows),
+                "next_offset": next_offset,
+                "total": total_products,
+                "has_more": next_offset < total_products,
+            }
         )
 
     @app.get("/products/export")

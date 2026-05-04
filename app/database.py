@@ -359,18 +359,15 @@ def bootstrap_from_excel(db_path: Path, catalog_path: Path) -> None:
             import_catalog(conn, catalog_path, replace=True)
 
 
-def list_products(
-    conn: sqlite3.Connection,
+def _product_filter_clauses(
     query: str = "",
     include_inactive: bool = False,
     only_inactive: bool = False,
-    limit: int = 3000,
     bld_query: str = "",
     oe_query: str = "",
     series_query: str = "",
     model_query: str = "",
-) -> list[sqlite3.Row]:
-    sql = "SELECT * FROM products"
+) -> tuple[list[str], list[object]]:
     params: list[object] = []
     clauses = []
     if only_inactive:
@@ -396,11 +393,61 @@ def list_products(
     if model_query.strip():
         clauses.append("UPPER(models) LIKE ?")
         params.append(f"%{model_query.strip().upper()}%")
+    return clauses, params
+
+
+def list_products(
+    conn: sqlite3.Connection,
+    query: str = "",
+    include_inactive: bool = False,
+    only_inactive: bool = False,
+    limit: int = 3000,
+    bld_query: str = "",
+    oe_query: str = "",
+    series_query: str = "",
+    model_query: str = "",
+    offset: int = 0,
+) -> list[sqlite3.Row]:
+    sql = "SELECT * FROM products"
+    clauses, params = _product_filter_clauses(
+        query=query,
+        include_inactive=include_inactive,
+        only_inactive=only_inactive,
+        bld_query=bld_query,
+        oe_query=oe_query,
+        series_query=series_query,
+        model_query=model_query,
+    )
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)
-    sql += " ORDER BY bld_no LIMIT ?"
-    params.append(limit)
+    sql += " ORDER BY bld_no LIMIT ? OFFSET ?"
+    params.extend([max(0, limit), max(0, offset)])
     return conn.execute(sql, params).fetchall()
+
+
+def count_products(
+    conn: sqlite3.Connection,
+    query: str = "",
+    include_inactive: bool = False,
+    only_inactive: bool = False,
+    bld_query: str = "",
+    oe_query: str = "",
+    series_query: str = "",
+    model_query: str = "",
+) -> int:
+    sql = "SELECT COUNT(*) FROM products"
+    clauses, params = _product_filter_clauses(
+        query=query,
+        include_inactive=include_inactive,
+        only_inactive=only_inactive,
+        bld_query=bld_query,
+        oe_query=oe_query,
+        series_query=series_query,
+        model_query=model_query,
+    )
+    if clauses:
+        sql += " WHERE " + " AND ".join(clauses)
+    return int(conn.execute(sql, params).fetchone()[0] or 0)
 
 
 def get_product(conn: sqlite3.Connection, product_id: int) -> sqlite3.Row | None:
