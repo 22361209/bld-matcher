@@ -101,7 +101,7 @@ def register(app) -> None:
         )
 
     @app.get("/products/export")
-    @login_required
+    @permission_required("export_catalog")
     def export_products_options():
         status = request.args.get("status", "all")
         return render_template("export_catalog.html", status=status)
@@ -121,7 +121,7 @@ def register(app) -> None:
         return send_file(path)
 
     @app.post("/products/export")
-    @login_required
+    @permission_required("export_catalog")
     def export_products():
         status = request.form.get("status", "all")
         include_inactive = status != "active"

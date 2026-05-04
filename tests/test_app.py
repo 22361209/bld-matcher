@@ -472,14 +472,52 @@ class WebAppTest(unittest.TestCase):
 
     def test_generated_files_are_scoped_to_user(self):
         self.login()
+        user_files = set((self.root / "outputs").glob("u*-007/catalog-export-bld-007-*.xlsx"))
         response = self.client.post("/products/export", data={"status": "active", "export_format": "bld"})
         self.assertEqual(response.status_code, 200)
         response.close()
 
-        user_output_dir = self.root / "outputs" / "u1-007"
-        files = list(user_output_dir.glob("catalog-export-bld-007-*.xlsx"))
+        files = set((self.root / "outputs").glob("u*-007/catalog-export-bld-007-*.xlsx")) - user_files
         self.assertEqual(len(files), 1)
         self.assertFalse(list((self.root / "outputs").glob("catalog-export-bld-007-*.xlsx")))
+
+    def test_catalog_export_is_admin_only(self):
+        from app.database import save_user
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            save_user(
+                conn,
+                {
+                    "username": "editor-export",
+                    "display_name": "Editor Export",
+                    "password": "editor-pw",
+                    "role": "editor",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        self.login()
+        admin_page = self.client.get("/products").get_data(as_text=True)
+        self.assertIn("导出目录", admin_page)
+
+        self.client.post("/logout")
+        login = self.client.post(
+            "/login",
+            data={"username": "editor-export", "password": "editor-pw", "next": "/"},
+            follow_redirects=False,
+        )
+        self.assertEqual(login.status_code, 302)
+
+        editor_page = self.client.get("/products").get_data(as_text=True)
+        self.assertNotIn("导出目录", editor_page)
+        self.assertNotIn('action="/products/export"', editor_page)
+
+        response = self.client.post("/products/export", data={"status": "active", "export_format": "bld"})
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith("/"))
+        self.assertFalse(list((self.root / "outputs").glob("**/catalog-export-bld-editor-export-*.xlsx")))
+        self.client.post("/logout")
 
     def test_product_export_embeds_main_image(self):
         from openpyxl import load_workbook

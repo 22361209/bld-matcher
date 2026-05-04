@@ -97,20 +97,22 @@
               </form>
             </details>
           {% endif %}
-          <details class="toolbar-popover linear-popover">
-            <summary>导出目录</summary>
-            <form action="{{ url_for('export_products') }}" method="post" class="toolbar-popover-form catalog-export-form">
-              <input type="hidden" name="status" value="{{ status }}">
-              <label>
-                导出格式
-                <select name="export_format">
-                  <option value="bld">按 BLD 号升序格式</option>
-                  <option value="brand">按汽车品牌格式</option>
-                </select>
-              </label>
-              <button class="linear-button primary" type="submit">导出 Excel</button>
-            </form>
-          </details>
+          {% if can("export_catalog") %}
+            <details class="toolbar-popover linear-popover">
+              <summary>导出目录</summary>
+              <form action="{{ url_for('export_products') }}" method="post" class="toolbar-popover-form catalog-export-form">
+                <input type="hidden" name="status" value="{{ status }}">
+                <label>
+                  导出格式
+                  <select name="export_format">
+                    <option value="bld">按 BLD 号升序格式</option>
+                    <option value="brand">按汽车品牌格式</option>
+                  </select>
+                </label>
+                <button class="linear-button primary" type="submit">导出 Excel</button>
+              </form>
+            </details>
+          {% endif %}
         </div>
       </section>
 
@@ -290,6 +292,8 @@
 
       const table = document.querySelector("#products-table");
       const stickyCommand = document.querySelector(".products-sticky-command");
+      let productHeaderFrame = 0;
+      let lastProductHeaderTop = -1;
       const updateProductsTableHeaderTop = () => {
         if (!table || !stickyCommand) return;
         const navOffset = Number.parseFloat(
@@ -300,15 +304,24 @@
         const commandIsPinned = commandRect.top <= navOffset + 1;
         const headerWouldTouchCommand = tableRect.top <= commandRect.bottom;
         const headerTop = commandIsPinned && headerWouldTouchCommand ? Math.round(navOffset + commandRect.height) : 0;
+        if (headerTop === lastProductHeaderTop) return;
+        lastProductHeaderTop = headerTop;
         table.style.setProperty("--products-table-header-top", `${headerTop}px`);
       };
-      window.addEventListener("scroll", updateProductsTableHeaderTop, { passive: true });
-      window.addEventListener("resize", updateProductsTableHeaderTop);
-      window.addEventListener("app-nav-offset-change", updateProductsTableHeaderTop);
+      const scheduleProductsTableHeaderTop = () => {
+        if (productHeaderFrame) return;
+        productHeaderFrame = requestAnimationFrame(() => {
+          productHeaderFrame = 0;
+          updateProductsTableHeaderTop();
+        });
+      };
+      window.addEventListener("scroll", scheduleProductsTableHeaderTop, { passive: true });
+      window.addEventListener("resize", scheduleProductsTableHeaderTop);
+      window.addEventListener("app-nav-offset-change", scheduleProductsTableHeaderTop);
       updateProductsTableHeaderTop();
       requestAnimationFrame(updateProductsTableHeaderTop);
-      window.addEventListener("load", updateProductsTableHeaderTop);
-      window.addEventListener("pageshow", updateProductsTableHeaderTop);
+      window.addEventListener("load", scheduleProductsTableHeaderTop);
+      window.addEventListener("pageshow", scheduleProductsTableHeaderTop);
 
       const cols = Array.from(table.querySelectorAll("col"));
       const modelsCol = cols.find((col) => col.dataset.col === "models");

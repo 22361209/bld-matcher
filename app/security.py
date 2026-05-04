@@ -18,6 +18,7 @@ ROLE_PERMISSIONS = {
         "manage_users",
         "import_catalog",
         "edit_products",
+        "export_catalog",
         "manage_aliases",
         "generate_match",
         "view_logs",

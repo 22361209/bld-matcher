@@ -46,18 +46,18 @@
     let lastScrollY = window.scrollY;
     let upwardDistance = 0;
     let revealed = false;
+    let lastOffset = -1;
 
     const setNavOffset = () => {
       const height = revealed ? Math.ceil(nav.getBoundingClientRect().height) : 0;
+      if (height === lastOffset) return;
+      lastOffset = height;
       root.style.setProperty("--revealed-nav-height", `${height}px`);
       window.dispatchEvent(new CustomEvent("app-nav-offset-change"));
     };
 
     const setRevealed = (nextRevealed) => {
-      if (revealed === nextRevealed) {
-        if (revealed) setNavOffset();
-        return;
-      }
+      if (revealed === nextRevealed) return;
       revealed = nextRevealed;
       nav.classList.toggle("nav-revealed", revealed);
       setNavOffset();
