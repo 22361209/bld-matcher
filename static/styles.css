@@ -1119,11 +1119,15 @@ textarea {
 .image-modal-panel {
   position: relative;
   z-index: 1;
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: 10px;
+  width: fit-content;
+  min-width: min(520px, calc(100vw - 48px));
   max-width: min(92vw, 980px);
   max-height: 90vh;
-  padding: 14px;
+  padding: 52px 18px 16px;
   background: #ffffff;
   border-radius: 8px;
   box-shadow: 0 22px 60px rgba(15, 23, 42, 0.28);
@@ -1132,21 +1136,35 @@ textarea {
 .image-modal-panel > img,
 .image-modal-viewer > img {
   display: block;
-  max-width: min(88vw, 940px);
-  max-height: 78vh;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 64vh;
   object-fit: contain;
   border-radius: 6px;
   background: #ffffff;
+  margin-inline: auto;
 }
 
 .image-modal-viewer {
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr) 42px;
   align-items: center;
+  justify-items: center;
   gap: 8px;
+  width: 100%;
+  min-height: 180px;
+}
+
+.image-modal-viewer > img {
+  justify-self: center;
+  max-width: min(calc(92vw - 148px), 760px);
 }
 
 .image-modal-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 42px;
   height: 42px;
   min-height: 42px;
@@ -1159,7 +1177,9 @@ textarea {
 }
 
 .image-modal-nav[hidden] {
+  display: inline-flex !important;
   visibility: hidden;
+  pointer-events: none;
 }
 
 .image-modal-thumbs {

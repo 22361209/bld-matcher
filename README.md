@@ -74,6 +74,13 @@ bash tools/install_bld_launcher.sh
 
 数据库结构变化集中放在 `app/migrations.py`。新增字段或表时，添加一个新的 migration id 和对应函数，让本机和 NAS 在启动连接数据库时自动补齐结构。
 
+产品目录 Excel 中的单元格图片可用 `tools/import_catalog_cell_images.py` 提取到 `data/product_images/`，脚本会解析 `DISPIMG` 图片映射，并应用 Excel/WPS 中的水平或垂直翻转。先运行 dry-run 查看匹配统计，确认后再加 `--apply` 写入图片和数据库：
+
+```bash
+tools/import_catalog_cell_images.py "产品目录/BLD catalogue 2603 new(2个OE).xlsx"
+tools/import_catalog_cell_images.py "产品目录/BLD catalogue 2603 new(2个OE).xlsx" --apply
+```
+
 ## 多用户文件和导入规则
 
 上传和输出文件按用户隔离：
