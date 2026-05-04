@@ -146,6 +146,7 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("第 1-50 条 / 共 121 条", html)
         self.assertIn("第 1 / 3 页，每页 50 条", html)
+        self.assertEqual(html.count('aria-label="产品分页"'), 1)
         self.assertIn("K-PAGE-000", html)
         self.assertIn("K-PAGE-049", html)
         self.assertNotIn("K-PAGE-050", html)

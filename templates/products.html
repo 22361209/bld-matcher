@@ -122,31 +122,8 @@
             <h2>产品明细</h2>
             <p>除车型列可拖动调节外，其余列宽固定。有 PDF 图纸时点击 BLD 号可预览。</p>
           </div>
-          <div class="product-pagination">
+          <div class="product-page-summary">
             <span>第 {{ pagination.start }}-{{ pagination.end }} 条 / 共 {{ total_products }} 条</span>
-            {% if pagination.total_pages > 1 %}
-              <div class="product-pagination-controls" aria-label="产品分页">
-                {% if pagination.has_prev %}
-                  <a class="linear-button subtle" href="{{ pagination.prev_url }}">上一页</a>
-                {% else %}
-                  <span class="linear-button subtle disabled">上一页</span>
-                {% endif %}
-                {% for item in pagination.links %}
-                  {% if item.gap %}
-                    <span class="pagination-gap">...</span>
-                  {% elif item.current %}
-                    <span class="pagination-page current">{{ item.page }}</span>
-                  {% else %}
-                    <a class="pagination-page" href="{{ item.url }}">{{ item.page }}</a>
-                  {% endif %}
-                {% endfor %}
-                {% if pagination.has_next %}
-                  <a class="linear-button subtle" href="{{ pagination.next_url }}">下一页</a>
-                {% else %}
-                  <span class="linear-button subtle disabled">下一页</span>
-                {% endif %}
-              </div>
-            {% endif %}
           </div>
         </div>
         <div class="materials-table-wrap">
