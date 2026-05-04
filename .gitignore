@@ -33,3 +33,6 @@ data/locks/
 产品目录/
 询价/
 单价/
+
+# Generated local launcher build artifacts
+tools/icon_build/

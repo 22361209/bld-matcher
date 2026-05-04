@@ -16,6 +16,21 @@ python3 -m venv .venv
 http://127.0.0.1:5055/
 ```
 
+### macOS 本机启动器
+
+本机可以安装一个名为 `BLD` 的启动器到“应用程序”文件夹，并自动放到 Dock。它只负责启动当前工作区里的 5055 服务并打开浏览器，不用于 NAS。
+
+```bash
+bash tools/install_bld_launcher.sh
+```
+
+启动器资料保存在 `tools/`：
+
+- `tools/start_local_5055.applescript`：启动 5055 的 AppleScript 模板
+- `tools/BLD.icns`：BLD 启动器图标
+
+换电脑或移动项目目录后，重新运行安装脚本即可重建 `/Applications/BLD.app`。
+
 默认管理员账号(首启会自动创建):
 
 ```text
