@@ -122,18 +122,18 @@ class WebAppTest(unittest.TestCase):
                 self.assertIn("K-FILTER-HYUNDAI", html)
                 self.assertNotIn("K-FILTER-HONDA", html)
 
-    def test_products_render_in_batches(self):
+    def test_products_are_paginated(self):
         from app.database import upsert_product
 
         with self.web.connect(self.web.DB_PATH) as conn:
-            for index in range(61):
+            for index in range(121):
                 upsert_product(
                     conn,
                     {
-                        "bld_no": f"K-BATCH-{index:03d}",
-                        "series": "BATCH",
-                        "item": "BATCH PART",
-                        "oe_no_1": f"BATCH-{index:03d}",
+                        "bld_no": f"K-PAGE-{index:03d}",
+                        "series": "PAGED",
+                        "item": "PAGED PART",
+                        "oe_no_1": f"PAGE-{index:03d}",
                         "models": "Batch Tester",
                         "active": "1",
                     },
@@ -141,23 +141,23 @@ class WebAppTest(unittest.TestCase):
                 )
 
         self.login()
-        response = self.client.get("/products", query_string={"bld": "K-BATCH"})
+        response = self.client.get("/products", query_string={"bld": "K-PAGE"})
         html = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
-        self.assertIn("已显示 50 / 61 条", html)
-        self.assertIn('data-next-offset="50"', html)
-        self.assertIn("K-BATCH-000", html)
-        self.assertIn("K-BATCH-049", html)
-        self.assertNotIn("K-BATCH-050", html)
+        self.assertIn("第 1-100 条 / 共 121 条", html)
+        self.assertIn("第 1 / 2 页，每页 100 条", html)
+        self.assertIn("K-PAGE-000", html)
+        self.assertIn("K-PAGE-099", html)
+        self.assertNotIn("K-PAGE-100", html)
+        self.assertNotIn("/products/rows", html)
 
-        rows = self.client.get("/products/rows", query_string={"bld": "K-BATCH", "offset": "50"})
-        self.assertEqual(rows.status_code, 200)
-        payload = rows.get_json()
-        self.assertEqual(payload["rendered"], 11)
-        self.assertEqual(payload["next_offset"], 61)
-        self.assertFalse(payload["has_more"])
-        self.assertIn("K-BATCH-050", payload["html"])
-        self.assertIn("K-BATCH-060", payload["html"])
+        second_page = self.client.get("/products", query_string={"bld": "K-PAGE", "page": "2"})
+        second_html = second_page.get_data(as_text=True)
+        self.assertEqual(second_page.status_code, 200)
+        self.assertIn("第 101-121 条 / 共 121 条", second_html)
+        self.assertIn("K-PAGE-100", second_html)
+        self.assertIn("K-PAGE-120", second_html)
+        self.assertNotIn("K-PAGE-099", second_html)
 
     def test_product_drawing_upload_preview_and_batch_entry(self):
         from app.database import upsert_product

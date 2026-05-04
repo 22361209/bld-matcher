@@ -122,7 +122,32 @@
             <h2>产品明细</h2>
             <p>除车型列可拖动调节外，其余列宽固定。有 PDF 图纸时点击 BLD 号可预览。</p>
           </div>
-          <span id="products-render-count">已显示 {{ products|length }} / {{ total_products }} 条</span>
+          <div class="product-pagination">
+            <span>第 {{ pagination.start }}-{{ pagination.end }} 条 / 共 {{ total_products }} 条</span>
+            {% if pagination.total_pages > 1 %}
+              <div class="product-pagination-controls" aria-label="产品分页">
+                {% if pagination.has_prev %}
+                  <a class="linear-button subtle" href="{{ pagination.prev_url }}">上一页</a>
+                {% else %}
+                  <span class="linear-button subtle disabled">上一页</span>
+                {% endif %}
+                {% for item in pagination.links %}
+                  {% if item.gap %}
+                    <span class="pagination-gap">...</span>
+                  {% elif item.current %}
+                    <span class="pagination-page current">{{ item.page }}</span>
+                  {% else %}
+                    <a class="pagination-page" href="{{ item.url }}">{{ item.page }}</a>
+                  {% endif %}
+                {% endfor %}
+                {% if pagination.has_next %}
+                  <a class="linear-button subtle" href="{{ pagination.next_url }}">下一页</a>
+                {% else %}
+                  <span class="linear-button subtle disabled">下一页</span>
+                {% endif %}
+              </div>
+            {% endif %}
+          </div>
         </div>
         <div class="materials-table-wrap">
         <table class="resizable-table materials-grid-table" id="products-table">
@@ -150,28 +175,38 @@
               <th class="sticky-actions">操作</th>
             </tr>
           </thead>
-          <tbody
-            id="products-table-body"
-            data-rows-url="{{ url_for('product_rows') }}"
-            data-next-offset="{{ products|length }}"
-            data-total="{{ total_products }}"
-            data-batch-size="{{ product_page_size }}"
-            data-has-more="{{ '1' if has_more_products else '0' }}"
-          >
+          <tbody>
             {% include "_product_rows.html" %}
           </tbody>
         </table>
-        <div class="product-batch-status" id="products-batch-status" aria-live="polite">
-          {% if total_products == 0 %}
-            <span>没有符合条件的产品。</span>
-          {% elif has_more_products %}
-            <button class="linear-button subtle" type="button" id="products-load-more">加载更多</button>
-            <span>继续向下滚动会自动加载下一批。</span>
-          {% else %}
-            <span>已显示全部产品。</span>
-          {% endif %}
-        </div>
-        <div class="product-load-sentinel" id="products-load-sentinel" aria-hidden="true"></div>
+        {% if total_products == 0 %}
+          <p class="materials-empty">没有符合条件的产品。</p>
+        {% elif pagination.total_pages > 1 %}
+          <div class="product-pagination bottom">
+            <span>第 {{ pagination.page }} / {{ pagination.total_pages }} 页，每页 {{ product_page_size }} 条</span>
+            <div class="product-pagination-controls" aria-label="产品分页">
+              {% if pagination.has_prev %}
+                <a class="linear-button subtle" href="{{ pagination.prev_url }}">上一页</a>
+              {% else %}
+                <span class="linear-button subtle disabled">上一页</span>
+              {% endif %}
+              {% for item in pagination.links %}
+                {% if item.gap %}
+                  <span class="pagination-gap">...</span>
+                {% elif item.current %}
+                  <span class="pagination-page current">{{ item.page }}</span>
+                {% else %}
+                  <a class="pagination-page" href="{{ item.url }}">{{ item.page }}</a>
+                {% endif %}
+              {% endfor %}
+              {% if pagination.has_next %}
+                <a class="linear-button subtle" href="{{ pagination.next_url }}">下一页</a>
+              {% else %}
+                <span class="linear-button subtle disabled">下一页</span>
+              {% endif %}
+            </div>
+          </div>
+        {% endif %}
         </div>
       </section>
     </main>
@@ -270,12 +305,7 @@
       });
 
       const table = document.querySelector("#products-table");
-      const tableBody = document.querySelector("#products-table-body");
       const stickyCommand = document.querySelector(".products-sticky-command");
-      const productsRenderCount = document.querySelector("#products-render-count");
-      const productsBatchStatus = document.querySelector("#products-batch-status");
-      const productsLoadButton = document.querySelector("#products-load-more");
-      const productsLoadSentinel = document.querySelector("#products-load-sentinel");
       let productHeaderFrame = 0;
       let lastProductHeaderTop = -1;
       const updateProductsTableHeaderTop = () => {
@@ -306,67 +336,6 @@
       requestAnimationFrame(updateProductsTableHeaderTop);
       window.addEventListener("load", scheduleProductsTableHeaderTop);
       window.addEventListener("pageshow", scheduleProductsTableHeaderTop);
-
-      const updateProductBatchStatus = (isLoading = false) => {
-        if (!tableBody || !productsRenderCount || !productsBatchStatus) return;
-        const nextOffset = Number(tableBody.dataset.nextOffset || 0);
-        const total = Number(tableBody.dataset.total || 0);
-        const hasMore = tableBody.dataset.hasMore === "1";
-        productsRenderCount.textContent = `已显示 ${nextOffset} / ${total} 条`;
-        if (total === 0) {
-          productsBatchStatus.innerHTML = "<span>没有符合条件的产品。</span>";
-          return;
-        }
-        if (isLoading) {
-          productsBatchStatus.innerHTML = "<span>正在加载下一批...</span>";
-          return;
-        }
-        if (hasMore) {
-          productsBatchStatus.innerHTML = '<button class="linear-button subtle" type="button" id="products-load-more">加载更多</button><span>继续向下滚动会自动加载下一批。</span>';
-          productsBatchStatus.querySelector("#products-load-more")?.addEventListener("click", loadNextProductRows);
-          return;
-        }
-        productsBatchStatus.innerHTML = "<span>已显示全部产品。</span>";
-      };
-
-      let productRowsLoading = false;
-      const loadNextProductRows = async () => {
-        if (!tableBody || productRowsLoading || tableBody.dataset.hasMore !== "1") return;
-        productRowsLoading = true;
-        updateProductBatchStatus(true);
-        const params = new URLSearchParams(window.location.search);
-        params.set("offset", tableBody.dataset.nextOffset || "0");
-        params.set("limit", tableBody.dataset.batchSize || "50");
-        try {
-          const response = await fetch(`${tableBody.dataset.rowsUrl}?${params.toString()}`, {
-            headers: { "X-Requested-With": "fetch" },
-          });
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          const data = await response.json();
-          if (data.html) {
-            tableBody.insertAdjacentHTML("beforeend", data.html);
-          }
-          tableBody.dataset.nextOffset = String(data.next_offset || tableBody.children.length);
-          tableBody.dataset.total = String(data.total || tableBody.dataset.total || 0);
-          tableBody.dataset.hasMore = data.has_more ? "1" : "0";
-        } catch (_error) {
-          productsBatchStatus.innerHTML = '<button class="linear-button subtle" type="button" id="products-load-more">重试加载</button><span>这一批加载失败。</span>';
-          productsBatchStatus.querySelector("#products-load-more")?.addEventListener("click", loadNextProductRows);
-          return;
-        } finally {
-          productRowsLoading = false;
-        }
-        updateProductBatchStatus(false);
-        scheduleProductsTableHeaderTop();
-      };
-
-      productsLoadButton?.addEventListener("click", loadNextProductRows);
-      if (productsLoadSentinel && "IntersectionObserver" in window) {
-        const productRowsObserver = new IntersectionObserver((entries) => {
-          if (entries.some((entry) => entry.isIntersecting)) loadNextProductRows();
-        }, { rootMargin: "360px 0px" });
-        productRowsObserver.observe(productsLoadSentinel);
-      }
 
       const cols = Array.from(table.querySelectorAll("col"));
       const modelsCol = cols.find((col) => col.dataset.col === "models");

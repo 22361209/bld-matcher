@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import shutil
 from datetime import datetime
+from math import ceil
 from pathlib import Path
 
-from flask import flash, jsonify, redirect, render_template, request, send_file, url_for
+from flask import flash, redirect, render_template, request, send_file, url_for
 
 from app.catalog_export import export_products_xlsx
 from app.config import CATALOG_PATH, DATA_DIR, DB_PATH
@@ -15,8 +16,8 @@ from app.database import (
     delete_product,
     get_product,
     import_catalog,
-    list_products,
     count_products,
+    list_products,
     log_event,
     product_stats,
     upsert_product,
@@ -29,7 +30,7 @@ from app.product_media import resolve_product_image_path, resolve_product_image_
 from app.security import actor_name, login_required, permission_required
 
 
-PRODUCT_PAGE_SIZE = 50
+PRODUCT_PAGE_SIZE = 100
 
 
 def _product_query_args() -> dict[str, object]:
@@ -51,11 +52,53 @@ def _product_query_args() -> dict[str, object]:
     }
 
 
-def _request_offset() -> int:
+def _request_page() -> int:
     try:
-        return max(0, int(request.args.get("offset", "0") or 0))
+        return max(1, int(request.args.get("page", "1") or 1))
     except ValueError:
-        return 0
+        return 1
+
+
+def _product_page_url(filters: dict[str, object], page: int) -> str:
+    params: dict[str, object] = {}
+    if str(filters["oe_query"]).strip():
+        params["oe"] = filters["oe_query"]
+    elif str(filters["bld_query"]).strip():
+        params["bld"] = filters["bld_query"]
+    elif str(filters["query"]).strip():
+        params["q"] = filters["query"]
+    if str(filters["status"]) != "active":
+        params["status"] = filters["status"]
+    if page > 1:
+        params["page"] = page
+    return f"{url_for('products', **params)}#products-results"
+
+
+def _product_pagination(filters: dict[str, object], page: int, total: int) -> dict[str, object]:
+    total_pages = max(1, ceil(total / PRODUCT_PAGE_SIZE))
+    page = min(max(1, page), total_pages)
+    start = ((page - 1) * PRODUCT_PAGE_SIZE) + 1 if total else 0
+    end = min(total, page * PRODUCT_PAGE_SIZE)
+    window = {1, total_pages, page - 1, page, page + 1}
+    pages = sorted(item for item in window if 1 <= item <= total_pages)
+    links = []
+    previous_page = 0
+    for item in pages:
+        if previous_page and item - previous_page > 1:
+            links.append({"gap": True})
+        links.append({"page": item, "url": _product_page_url(filters, item), "current": item == page})
+        previous_page = item
+    return {
+        "page": page,
+        "total_pages": total_pages,
+        "start": start,
+        "end": end,
+        "has_prev": page > 1,
+        "has_next": page < total_pages,
+        "prev_url": _product_page_url(filters, page - 1) if page > 1 else "",
+        "next_url": _product_page_url(filters, page + 1) if page < total_pages else "",
+        "links": links,
+    }
 
 
 def register(app) -> None:
@@ -103,6 +146,15 @@ def register(app) -> None:
         filters = _product_query_args()
         with connect(DB_PATH) as conn:
             bootstrap_from_excel(DB_PATH, CATALOG_PATH)
+            total_products = count_products(
+                conn,
+                query=str(filters["query"]),
+                bld_query=str(filters["bld_query"]),
+                oe_query=str(filters["oe_query"]),
+                include_inactive=bool(filters["include_inactive"]),
+                only_inactive=bool(filters["only_inactive"]),
+            )
+            pagination = _product_pagination(filters, _request_page(), total_products)
             rows = list_products(
                 conn,
                 query=str(filters["query"]),
@@ -111,14 +163,7 @@ def register(app) -> None:
                 include_inactive=bool(filters["include_inactive"]),
                 only_inactive=bool(filters["only_inactive"]),
                 limit=PRODUCT_PAGE_SIZE,
-            )
-            total_products = count_products(
-                conn,
-                query=str(filters["query"]),
-                bld_query=str(filters["bld_query"]),
-                oe_query=str(filters["oe_query"]),
-                include_inactive=bool(filters["include_inactive"]),
-                only_inactive=bool(filters["only_inactive"]),
+                offset=(int(pagination["page"]) - 1) * PRODUCT_PAGE_SIZE,
             )
             stats = product_stats(conn)
         return render_template(
@@ -126,47 +171,12 @@ def register(app) -> None:
             products=rows,
             total_products=total_products,
             product_page_size=PRODUCT_PAGE_SIZE,
-            has_more_products=len(rows) < total_products,
+            pagination=pagination,
             query=str(filters["query"]),
             bld_query=str(filters["bld_query"] or filters["query"]),
             oe_query=str(filters["oe_query"]),
             status=str(filters["status"]),
             stats=stats,
-        )
-
-    @app.get("/products/rows")
-    @login_required
-    def product_rows():
-        filters = _product_query_args()
-        offset = _request_offset()
-        with connect(DB_PATH) as conn:
-            rows = list_products(
-                conn,
-                query=str(filters["query"]),
-                bld_query=str(filters["bld_query"]),
-                oe_query=str(filters["oe_query"]),
-                include_inactive=bool(filters["include_inactive"]),
-                only_inactive=bool(filters["only_inactive"]),
-                limit=PRODUCT_PAGE_SIZE,
-                offset=offset,
-            )
-            total_products = count_products(
-                conn,
-                query=str(filters["query"]),
-                bld_query=str(filters["bld_query"]),
-                oe_query=str(filters["oe_query"]),
-                include_inactive=bool(filters["include_inactive"]),
-                only_inactive=bool(filters["only_inactive"]),
-            )
-        next_offset = offset + len(rows)
-        return jsonify(
-            {
-                "html": render_template("_product_rows.html", products=rows),
-                "rendered": len(rows),
-                "next_offset": next_offset,
-                "total": total_products,
-                "has_more": next_offset < total_products,
-            }
         )
 
     @app.get("/products/export")
