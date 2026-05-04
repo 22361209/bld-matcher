@@ -530,6 +530,167 @@ class WebAppTest(unittest.TestCase):
                 self.assertIn("K6004BR", html)
                 self.assertIn("品牌号码精准命中", html)
 
+    def test_single_pasted_code_keeps_quick_lookup(self):
+        self.login()
+        response = self.client.post("/match", data={"quick_oe": "55270-2Z000"})
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith("/?quick_oe=55270-2Z000"))
+
+    def test_pasted_multiple_codes_generates_match_excel(self):
+        from app.database import upsert_product
+        from openpyxl import load_workbook
+
+        products = [
+            ("K54500L", "54500-2D000", "79.2"),
+            ("K54501L", "54501-2D000", "39.6"),
+            ("K54501A", "54501-A0000", "118.8"),
+        ]
+        with self.web.connect(self.web.DB_PATH) as conn:
+            for bld_no, oe_no, price_cny in products:
+                upsert_product(
+                    conn,
+                    {
+                        "bld_no": bld_no,
+                        "series": "HYUNDAI",
+                        "item": "CONTROL ARM",
+                        "oe_no_1": oe_no,
+                        "models": "Elantra",
+                        "price_cny": price_cny,
+                        "active": "1",
+                    },
+                    actor="tester",
+                )
+
+        self.login()
+        response = self.client.post(
+            "/match",
+            data={"quick_oe": "54500-2d000 54501-2d000 54501-a0000"},
+        )
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("匹配结果", html)
+        self.assertIn("下载 Excel", html)
+        self.assertIn("K54500L", html)
+        self.assertIn("K54501L", html)
+        self.assertIn("K54501A", html)
+        self.assertIn("粘贴号码询价.xlsx", html)
+        self.assertIn("含税单价", html)
+        self.assertIn("¥79.20", html)
+        self.assertIn('id="download-excel-modal"', html)
+        self.assertIn('action="/match/download"', html)
+        self.assertNotIn("返回上一步", html)
+
+        upload_match = re.search(r'name="upload_path" value="([^"]+)"', html)
+        output_match = re.search(r'name="output_name" value="([^"]+)"', html)
+        self.assertIsNotNone(upload_match)
+        self.assertIsNotNone(output_match)
+        upload_path = upload_match.group(1)
+        output_name = output_match.group(1)
+        output_path = self.root / "outputs" / "u1-007" / output_name
+
+        download = self.client.post(
+            "/match/download",
+            data={
+                "upload_path": upload_path,
+                "original_filename": "粘贴号码询价.xlsx",
+                "output_name": output_name,
+                "match_column": "",
+                "price_mode": "usd",
+                "exchange_rate": "7.2",
+            },
+        )
+        self.assertEqual(download.status_code, 200)
+        download.close()
+        self.assertTrue(output_path.exists())
+
+        generated = load_workbook(output_path)
+        sheet = generated.active
+        self.assertEqual(sheet.cell(1, 1).value, "OE号")
+        self.assertEqual(sheet.cell(1, 2).value, "BLD NO.")
+        self.assertEqual(sheet.cell(1, 3).value, "美金价")
+        self.assertEqual(sheet.cell(1, 4).value, "匹配说明")
+        self.assertEqual(sheet.cell(2, 1).value, "54500-2d000")
+        self.assertEqual(sheet.cell(2, 2).value, "K54500L")
+        self.assertEqual(sheet.cell(2, 3).value, 10)
+        self.assertEqual(sheet.cell(3, 2).value, "K54501L")
+        self.assertEqual(sheet.cell(3, 3).value, 5)
+        self.assertEqual(sheet.cell(4, 2).value, "K54501A")
+        self.assertEqual(sheet.cell(4, 3).value, 15)
+        generated.close()
+
+    def test_uploaded_inquiry_can_export_tax_price(self):
+        from app.database import upsert_product
+        from openpyxl import Workbook, load_workbook
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "KPRICE01",
+                    "series": "HYUNDAI",
+                    "item": "CONTROL ARM",
+                    "oe_no_1": "PRICE-001",
+                    "models": "Elantra",
+                    "price_cny": "88.8",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["OE号"])
+        sheet.append(["PRICE-001"])
+        buffer = io.BytesIO()
+        workbook.save(buffer)
+        buffer.seek(0)
+
+        self.login()
+        response = self.client.post(
+            "/match",
+            data={"inquiry": (buffer, "price-export.xlsx")},
+            content_type="multipart/form-data",
+        )
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("KPRICE01", html)
+        self.assertIn("¥88.80", html)
+        self.assertIn('id="download-excel-modal"', html)
+        self.assertNotIn("返回上一步", html)
+
+        upload_match = re.search(r'name="upload_path" value="([^"]+)"', html)
+        output_match = re.search(r'name="output_name" value="([^"]+)"', html)
+        self.assertIsNotNone(upload_match)
+        self.assertIsNotNone(output_match)
+        upload_path = upload_match.group(1)
+        output_name = output_match.group(1)
+        output_path = self.root / "outputs" / "u1-007" / output_name
+
+        download = self.client.post(
+            "/match/download",
+            data={
+                "upload_path": upload_path,
+                "original_filename": "price-export.xlsx",
+                "output_name": output_name,
+                "match_column": "",
+                "price_mode": "tax",
+            },
+        )
+        self.assertEqual(download.status_code, 200)
+        download.close()
+        self.assertTrue(output_path.exists())
+
+        generated = load_workbook(output_path)
+        sheet = generated.active
+        self.assertEqual(sheet.cell(1, 2).value, "BLD NO.")
+        self.assertEqual(sheet.cell(1, 3).value, "含税单价")
+        self.assertEqual(sheet.cell(1, 4).value, "匹配说明")
+        self.assertEqual(sheet.cell(2, 2).value, "KPRICE01")
+        self.assertEqual(sheet.cell(2, 3).value, 88.8)
+        generated.close()
+
     def test_catalog_import_recognizes_chinese_brand_number_header(self):
         from app.matcher import ProductCatalog
         from openpyxl import Workbook
@@ -563,6 +724,7 @@ class WebAppTest(unittest.TestCase):
                     "item": "CONTROL ARM",
                     "oe_no_1": "55270-2Z001",
                     "models": "Sportage",
+                    "price_cny": "55",
                     "active": "1",
                 },
                 actor="tester",
@@ -623,6 +785,9 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("返回上一步", result_html)
         self.assertNotIn("返回首页", result_html)
         self.assertIn("K6004LC", result_html)
+        self.assertIn("¥55.00", result_html)
+        self.assertIn('id="download-excel-modal"', result_html)
+        self.assertIn('name="price_mode"', result_html)
         self.assertFalse(output_path.exists())
 
         drawing_zip = self.client.post(
@@ -655,12 +820,13 @@ class WebAppTest(unittest.TestCase):
         self.assertRegex(back_html, r'<option value="0"[^>]*selected')
 
         download = self.client.post(
-            "/match/column/download",
+            "/match/download",
             data={
                 "upload_path": upload_path,
                 "original_filename": "manual-column.xlsx",
                 "output_name": output_name,
                 "match_column": "0",
+                "price_mode": "tax",
             },
         )
         self.assertEqual(download.status_code, 200)
@@ -670,7 +836,10 @@ class WebAppTest(unittest.TestCase):
         generated = load_workbook(output_path)
         generated_sheet = generated.active
         self.assertEqual(generated_sheet.cell(1, 3).value, "BLD NO.")
+        self.assertEqual(generated_sheet.cell(1, 4).value, "含税单价")
+        self.assertEqual(generated_sheet.cell(1, 5).value, "匹配说明")
         self.assertEqual(generated_sheet.cell(2, 3).value, "K6004LC")
+        self.assertEqual(generated_sheet.cell(2, 4).value, 55)
         generated.close()
 
     def test_uploaded_files_are_scoped_to_user(self):

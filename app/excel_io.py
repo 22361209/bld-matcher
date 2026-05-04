@@ -16,6 +16,8 @@ INQUIRY_HEADERS = {
     "description": {"物料描述", "描述", "DESCRIPTION", "DESC"},
 }
 
+PRICE_EXPORT_MODES = {"none", "tax", "usd"}
+
 
 def _norm_header(value: object) -> str:
     return str(value or "").strip().upper().replace(" ", "")
@@ -98,6 +100,10 @@ def _find_xlsx_inquiry_columns(sheet) -> tuple[int, dict[str, int]]:
 def _summary_row(row_number: int, inquiry_oe: object, inquiry_name: object, match) -> dict:
     parts = split_codes(inquiry_oe)
     match_note = ""
+    price_cny = None
+    if match and " / " not in (match.bld_no or ""):
+        price_cny = _numeric_price(match.row.get("price_cny"))
+
     if len(parts) > 1:
         if match and match.matched_codes:
             notes = [f"命中号码：{', '.join(match.matched_codes)}"]
@@ -114,6 +120,7 @@ def _summary_row(row_number: int, inquiry_oe: object, inquiry_name: object, matc
         "oe": inquiry_oe,
         "name": inquiry_name,
         "bld_no": match.bld_no if match else "",
+        "price_cny": price_cny,
         "reason": match.reason if match else "未找到",
         "score": match.score if match else 0,
         "match_note": match_note,
@@ -126,12 +133,47 @@ def _summary_row(row_number: int, inquiry_oe: object, inquiry_name: object, matc
     return row
 
 
+def _price_export_header(price_mode: str) -> str:
+    if price_mode == "tax":
+        return "含税单价"
+    if price_mode == "usd":
+        return "美金价"
+    return ""
+
+
+def _numeric_price(value: object) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _match_export_price(match, price_mode: str, exchange_rate: float | None) -> float | None:
+    if price_mode not in {"tax", "usd"} or not match:
+        return None
+    if " / " in (match.bld_no or ""):
+        return None
+
+    price = _numeric_price(match.row.get("price_cny"))
+    if price is None:
+        return None
+    if price_mode == "tax":
+        return round(price, 2)
+    if not exchange_rate or exchange_rate <= 0:
+        return None
+    return round(price / 1.1 / exchange_rate, 2)
+
+
 def generate_xls_with_bld(
     inquiry_path: Path,
     output_path: Path,
     catalog: ProductCatalog,
     match_column: int | None = None,
     write_output: bool = True,
+    price_mode: str = "none",
+    exchange_rate: float | None = None,
 ) -> dict:
     book = xlrd.open_workbook(inquiry_path, formatting_info=True, ignore_workbook_corruption=True)
     writable = copy_xls(book) if write_output else None
@@ -149,9 +191,13 @@ def generate_xls_with_bld(
             header_row = 0
             columns = {"oe": match_column}
         output_col = source_sheet.ncols
+        price_header = _price_export_header(price_mode)
+        note_col = output_col + 2 if price_header else output_col + 1
         if target_sheet:
             target_sheet.write(header_row, output_col, "BLD NO.")
-            target_sheet.write(header_row, output_col + 1, "匹配说明")
+            if price_header:
+                target_sheet.write(header_row, output_col + 1, price_header)
+            target_sheet.write(header_row, note_col, "匹配说明")
 
         for row_index in range(header_row + 1, source_sheet.nrows):
             inquiry_name = source_sheet.cell_value(row_index, columns["name"]) if "name" in columns else ""
@@ -165,18 +211,23 @@ def generate_xls_with_bld(
             if match:
                 if target_sheet:
                     target_sheet.write(row_index, output_col, match.bld_no)
+                    if price_header:
+                        price = _match_export_price(match, price_mode, exchange_rate)
+                        target_sheet.write(row_index, output_col + 1, "" if price is None else price)
                 summary["matched"] += 1
                 row_summary = _summary_row(row_index + 1, inquiry_oe, inquiry_name, match)
                 if target_sheet:
-                    target_sheet.write(row_index, output_col + 1, row_summary["match_note"])
+                    target_sheet.write(row_index, note_col, row_summary["match_note"])
                 summary["rows"].append(row_summary)
             else:
                 if target_sheet:
                     target_sheet.write(row_index, output_col, "")
+                    if price_header:
+                        target_sheet.write(row_index, output_col + 1, "")
                 summary["unmatched"] += 1
                 row_summary = _summary_row(row_index + 1, inquiry_oe, inquiry_name, None)
                 if target_sheet:
-                    target_sheet.write(row_index, output_col + 1, row_summary["match_note"])
+                    target_sheet.write(row_index, note_col, row_summary["match_note"])
                 summary["rows"].append(row_summary)
 
     if writable:
@@ -191,6 +242,8 @@ def generate_xlsx_with_bld(
     catalog: ProductCatalog,
     match_column: int | None = None,
     write_output: bool = True,
+    price_mode: str = "none",
+    exchange_rate: float | None = None,
 ) -> dict:
     workbook = load_workbook(inquiry_path)
     summary = {"total": 0, "matched": 0, "unmatched": 0, "rows": []}
@@ -205,9 +258,13 @@ def generate_xlsx_with_bld(
             header_row = 1
             columns = {"oe": match_column + 1}
         output_col = sheet.max_column + 1
+        price_header = _price_export_header(price_mode)
+        note_col = output_col + 2 if price_header else output_col + 1
         if write_output:
             sheet.cell(header_row, output_col).value = "BLD NO."
-            sheet.cell(header_row, output_col + 1).value = "匹配说明"
+            if price_header:
+                sheet.cell(header_row, output_col + 1).value = price_header
+            sheet.cell(header_row, note_col).value = "匹配说明"
 
         for row_index in range(header_row + 1, sheet.max_row + 1):
             inquiry_name = sheet.cell(row_index, columns["name"]).value if "name" in columns else ""
@@ -221,18 +278,25 @@ def generate_xlsx_with_bld(
             if match:
                 if write_output:
                     sheet.cell(row_index, output_col).value = match.bld_no
+                    if price_header:
+                        price = _match_export_price(match, price_mode, exchange_rate)
+                        price_cell = sheet.cell(row_index, output_col + 1)
+                        price_cell.value = price
+                        price_cell.number_format = "0.00"
                 summary["matched"] += 1
                 row_summary = _summary_row(row_index, inquiry_oe, inquiry_name, match)
                 if write_output:
-                    sheet.cell(row_index, output_col + 1).value = row_summary["match_note"]
+                    sheet.cell(row_index, note_col).value = row_summary["match_note"]
                 summary["rows"].append(row_summary)
             else:
                 if write_output:
                     sheet.cell(row_index, output_col).value = ""
+                    if price_header:
+                        sheet.cell(row_index, output_col + 1).value = None
                 summary["unmatched"] += 1
                 row_summary = _summary_row(row_index, inquiry_oe, inquiry_name, None)
                 if write_output:
-                    sheet.cell(row_index, output_col + 1).value = row_summary["match_note"]
+                    sheet.cell(row_index, note_col).value = row_summary["match_note"]
                 summary["rows"].append(row_summary)
 
     if write_output:
@@ -247,10 +311,28 @@ def generate_excel_with_bld(
     catalog: ProductCatalog,
     match_column: int | None = None,
     write_output: bool = True,
+    price_mode: str = "none",
+    exchange_rate: float | None = None,
 ) -> dict:
     suffix = inquiry_path.suffix.lower()
     if suffix == ".xls":
-        return generate_xls_with_bld(inquiry_path, output_path.with_suffix(".xls"), catalog, match_column=match_column, write_output=write_output)
+        return generate_xls_with_bld(
+            inquiry_path,
+            output_path.with_suffix(".xls"),
+            catalog,
+            match_column=match_column,
+            write_output=write_output,
+            price_mode=price_mode,
+            exchange_rate=exchange_rate,
+        )
     if suffix == ".xlsx":
-        return generate_xlsx_with_bld(inquiry_path, output_path.with_suffix(".xlsx"), catalog, match_column=match_column, write_output=write_output)
+        return generate_xlsx_with_bld(
+            inquiry_path,
+            output_path.with_suffix(".xlsx"),
+            catalog,
+            match_column=match_column,
+            write_output=write_output,
+            price_mode=price_mode,
+            exchange_rate=exchange_rate,
+        )
     raise ValueError("客户询价文件仅支持 .xls 或 .xlsx。")

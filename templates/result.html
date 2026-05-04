@@ -24,6 +24,8 @@
       </header>
 
       <section class="materials-table-section">
+        {% set can_regenerate_download = upload_path is defined and upload_path %}
+        {% set has_manual_match_column = match_column is defined and match_column|string != "" %}
         <div class="materials-table-title">
           <div>
             <h2>匹配明细</h2>
@@ -32,28 +34,28 @@
           <div class="materials-table-title-actions">
             <span>{{ summary.rows|length }} 条</span>
             {% if output_pending %}
-              <form action="{{ url_for('download_match_column_result') }}" method="post" class="inline-form">
-                <input type="hidden" name="upload_path" value="{{ upload_path }}">
-                <input type="hidden" name="original_filename" value="{{ original_filename }}">
-                <input type="hidden" name="output_name" value="{{ output_name }}">
-                <input type="hidden" name="match_column" value="{{ match_column }}">
-                <button class="linear-button primary" type="submit">下载 Excel</button>
-              </form>
+              <button class="linear-button primary" type="button" data-open-download-modal>下载 Excel</button>
               <form action="{{ url_for('download_match_drawings') }}" method="post" class="inline-form">
                 <input type="hidden" name="upload_path" value="{{ upload_path }}">
                 <input type="hidden" name="original_filename" value="{{ original_filename }}">
                 <input type="hidden" name="match_column" value="{{ match_column }}">
                 <button class="linear-button subtle" type="submit">下载图纸包</button>
               </form>
-              <form action="{{ url_for('back_to_match_column') }}" method="post" class="inline-form">
-                <input type="hidden" name="upload_path" value="{{ upload_path }}">
-                <input type="hidden" name="original_filename" value="{{ original_filename }}">
-                <input type="hidden" name="output_name" value="{{ output_name }}">
-                <input type="hidden" name="match_column" value="{{ match_column }}">
-                <button class="linear-button subtle" type="submit">返回上一步</button>
-              </form>
+              {% if has_manual_match_column %}
+                <form action="{{ url_for('back_to_match_column') }}" method="post" class="inline-form">
+                  <input type="hidden" name="upload_path" value="{{ upload_path }}">
+                  <input type="hidden" name="original_filename" value="{{ original_filename }}">
+                  <input type="hidden" name="output_name" value="{{ output_name }}">
+                  <input type="hidden" name="match_column" value="{{ match_column }}">
+                  <button class="linear-button subtle" type="submit">返回上一步</button>
+                </form>
+              {% endif %}
             {% else %}
-              <a class="linear-button primary" href="{{ url_for('download', name=download_name(output_path)) }}" download target="_blank" rel="noopener">下载 Excel</a>
+              {% if can_regenerate_download %}
+                <button class="linear-button primary" type="button" data-open-download-modal>下载 Excel</button>
+              {% else %}
+                <a class="linear-button primary" href="{{ url_for('download', name=download_name(output_path)) }}" download target="_blank" rel="noopener">下载 Excel</a>
+              {% endif %}
               {% if upload_path %}
                 <form action="{{ url_for('download_match_drawings') }}" method="post" class="inline-form">
                   <input type="hidden" name="upload_path" value="{{ upload_path }}">
@@ -73,6 +75,7 @@
               <th>OE号</th>
               <th>物料名称</th>
               <th>BLD NO.</th>
+              <th>含税单价</th>
               <th>分数</th>
               <th>说明</th>
             </tr>
@@ -84,6 +87,7 @@
                 <td>{{ row.oe }}</td>
                 <td>{{ row.name }}</td>
                 <td><strong>{{ row.bld_no }}</strong></td>
+                <td class="price-cell">{% if row.price_cny is not none %}¥{{ "%.2f"|format(row.price_cny) }}{% endif %}</td>
                 <td>{{ row.score }}</td>
                 <td>
                   {{ row.reason }}
@@ -98,5 +102,40 @@
         </div>
       </section>
     </main>
+    {% if can_regenerate_download %}
+      <div class="download-modal" id="download-excel-modal" aria-hidden="true">
+        <div class="download-modal-backdrop" data-close-download-modal></div>
+        <div class="download-modal-panel" role="dialog" aria-modal="true" aria-labelledby="download-excel-title">
+          <button class="download-modal-close" type="button" data-close-download-modal aria-label="关闭下载选项">×</button>
+          <div class="modal-heading">
+            <h2 id="download-excel-title">下载 Excel</h2>
+            <p>选择这次导出的单价方式。</p>
+          </div>
+          <form action="{{ url_for('download_match_result') }}" method="post" class="download-options-form">
+            <input type="hidden" name="upload_path" value="{{ upload_path }}">
+            <input type="hidden" name="original_filename" value="{{ original_filename }}">
+            <input type="hidden" name="output_name" value="{{ output_name }}">
+            <input type="hidden" name="match_column" value="{{ match_column|default('') }}">
+            <label>
+              <span>单价</span>
+              <select name="price_mode" data-price-mode>
+                <option value="none" selected>不带单价</option>
+                <option value="tax">带含税单价</option>
+                <option value="usd">美金价</option>
+              </select>
+            </label>
+            <label class="exchange-rate-field" data-exchange-rate-field>
+              <span>汇率</span>
+              <input name="exchange_rate" type="number" step="0.0001" min="0.0001" placeholder="例如 7.20" data-exchange-rate>
+            </label>
+            <div class="download-modal-actions">
+              <button class="download-cancel-button" type="button" data-close-download-modal>取消</button>
+              <button class="download-confirm-button" type="submit">确认</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    {% endif %}
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
   </body>
 </html>
