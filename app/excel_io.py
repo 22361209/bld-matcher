@@ -1,26 +1,54 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 from string import ascii_uppercase
 
 from openpyxl import load_workbook
 import xlrd
 from xlutils.copy import copy as copy_xls
 
-from .matcher import ProductCatalog, split_codes
+from .matcher import ProductCatalog, normalize_code, split_codes
 
 
 INQUIRY_HEADERS = {
     "name": {"物料名称", "产品名称", "名称", "ITEM", "PART"},
-    "oe": {"OE号", "OE", "OE NO", "OE NO.", "OE号码"},
+    "oe": {"OE号", "OE", "OE NO", "OE NO.", "OE号码", "OE REFERENCE", "OE REF"},
     "description": {"物料描述", "描述", "DESCRIPTION", "DESC"},
 }
-
-PRICE_EXPORT_MODES = {"none", "tax", "usd"}
 
 
 def _norm_header(value: object) -> str:
     return str(value or "").strip().upper().replace(" ", "")
+
+
+PRICE_EXPORT_MODES = {"none", "tax", "usd"}
+MANUAL_HEADER_ALIASES = {
+    _norm_header(alias)
+    for aliases in INQUIRY_HEADERS.values()
+    for alias in aliases
+} | {
+    _norm_header(alias)
+    for alias in {"SN", "NO", "NO.", "序号", "客户号码", "客户编码", "号码", "料号", "ITEM NO", "ITEM NO.", "PART NO", "PART NO."}
+}
+
+
+def _looks_like_match_code(value: object) -> bool:
+    text = str(value or "").strip()
+    if not text:
+        return False
+    upper = text.upper()
+    if re.search(r"[A-Z]{3,}\s+[A-Z]{3,}", upper):
+        return False
+    parts = split_codes(text)
+    return any(len(normalize_code(part)) >= 5 and any(char.isdigit() for char in normalize_code(part)) for part in parts)
+
+
+def _looks_like_manual_header(value: object) -> bool:
+    text = str(value or "").strip()
+    if not text:
+        return False
+    return _norm_header(text) in MANUAL_HEADER_ALIASES or not _looks_like_match_code(text)
 
 
 def _find_inquiry_columns(sheet) -> tuple[int, dict[str, int]]:
@@ -35,9 +63,9 @@ def _find_inquiry_columns(sheet) -> tuple[int, dict[str, int]]:
             key = aliases.get(_norm_header(sheet.cell_value(row_index, col_index)))
             if key:
                 columns[key] = col_index
-        if "oe" in columns or "name" in columns:
+        if "oe" in columns:
             return row_index, columns
-    raise ValueError("询价表没有找到可识别表头，需要包含 OE号 或 物料名称。")
+    raise ValueError("询价表没有找到可识别表头，需要包含 OE号。")
 
 
 def _column_label(index: int) -> str:
@@ -92,9 +120,33 @@ def _find_xlsx_inquiry_columns(sheet) -> tuple[int, dict[str, int]]:
             key = aliases.get(_norm_openpyxl_cell(sheet.cell(row_index, col_index).value))
             if key:
                 columns[key] = col_index
-        if "oe" in columns or "name" in columns:
+        if "oe" in columns:
             return row_index, columns
-    raise ValueError("询价表没有找到可识别表头，需要包含 OE号 或 物料名称。")
+    raise ValueError("询价表没有找到可识别表头，需要包含 OE号。")
+
+
+def _find_xls_selected_header_row(sheet, match_column: int) -> int:
+    max_scan = min(sheet.nrows, 20)
+    for row_index in range(max_scan):
+        value = sheet.cell_value(row_index, match_column)
+        if not _looks_like_manual_header(value):
+            continue
+        for next_row in range(row_index + 1, min(sheet.nrows, row_index + 5)):
+            if _looks_like_match_code(sheet.cell_value(next_row, match_column)):
+                return row_index
+    return 0
+
+
+def _find_xlsx_selected_header_row(sheet, match_column: int) -> int:
+    max_scan = min(sheet.max_row, 20)
+    for row_index in range(1, max_scan + 1):
+        value = sheet.cell(row_index, match_column).value
+        if not _looks_like_manual_header(value):
+            continue
+        for next_row in range(row_index + 1, min(sheet.max_row, row_index + 4) + 1):
+            if _looks_like_match_code(sheet.cell(next_row, match_column).value):
+                return row_index
+    return 1
 
 
 def _summary_row(row_number: int, inquiry_oe: object, inquiry_name: object, match) -> dict:
@@ -188,7 +240,7 @@ def generate_xls_with_bld(
         if match_column is None:
             header_row, columns = _find_inquiry_columns(source_sheet)
         else:
-            header_row = 0
+            header_row = _find_xls_selected_header_row(source_sheet, match_column)
             columns = {"oe": match_column}
         output_col = source_sheet.ncols
         price_header = _price_export_header(price_mode)
@@ -255,8 +307,9 @@ def generate_xlsx_with_bld(
         if match_column is None:
             header_row, columns = _find_xlsx_inquiry_columns(sheet)
         else:
-            header_row = 1
-            columns = {"oe": match_column + 1}
+            selected_column = match_column + 1
+            header_row = _find_xlsx_selected_header_row(sheet, selected_column)
+            columns = {"oe": selected_column}
         output_col = sheet.max_column + 1
         price_header = _price_export_header(price_mode)
         note_col = output_col + 2 if price_header else output_col + 1

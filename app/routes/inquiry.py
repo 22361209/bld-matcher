@@ -185,40 +185,13 @@ def register(app) -> None:
 
         output_path = result_output_path(file.filename, fallback_suffix=suffix)
         output_name = output_path.name
-        try:
-            summary = generate_excel_with_bld(upload_path, output_path, catalog, write_output=False)
-            with connect(DB_PATH) as conn:
-                log_event(
-                    conn,
-                    "预览匹配结果",
-                    "inquiry",
-                    clean_original_filename(file.filename, fallback_suffix=suffix),
-                    f"共 {summary['total']} 行，命中 {summary['matched']} 行，未找到 {summary['unmatched']} 行",
-                    actor=actor_name(),
-                )
-                conn.commit()
-        except Exception as exc:
-            if "询价表没有找到可识别表头" in str(exc):
-                preview = preview_inquiry_columns(upload_path)
-                return render_template(
-                    "select_match_column.html",
-                    upload_path=upload_path,
-                    original_filename=clean_original_filename(file.filename, fallback_suffix=suffix),
-                    output_name=output_name,
-                    preview=preview,
-                )
-            flash(f"生成失败：{exc}", "error")
-            return redirect(url_for("index"))
-
+        preview = preview_inquiry_columns(upload_path)
         return render_template(
-            "result.html",
-            summary=summary,
-            output_path=output_path,
-            output_pending=True,
+            "select_match_column.html",
             upload_path=upload_path,
             original_filename=clean_original_filename(file.filename, fallback_suffix=suffix),
             output_name=output_name,
-            match_column="",
+            preview=preview,
         )
 
     @app.post("/match/column")

@@ -437,6 +437,46 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(len(files), 1)
         self.assertFalse(list((self.root / "outputs").glob("catalog-export-bld-007-*.xlsx")))
 
+    def test_product_export_embeds_main_image(self):
+        from openpyxl import load_workbook
+        from PIL import Image
+
+        from app.database import upsert_product
+
+        image_dir = self.root / "data" / "product_images"
+        image_dir.mkdir(parents=True, exist_ok=True)
+        image_path = image_dir / "K-EXPORT-IMG.png"
+        Image.new("RGB", (80, 40), "white").save(image_path)
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-EXPORT-IMG",
+                    "series": "TEST",
+                    "item": "EXPORT IMAGE",
+                    "oe_no_1": "EXPORT-IMAGE-001",
+                    "models": "Tester",
+                    "image_path": "data_product_images/K-EXPORT-IMG.png",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        self.login()
+        response = self.client.post("/products/export", data={"status": "active", "export_format": "bld"})
+        self.assertEqual(response.status_code, 200)
+
+        workbook = load_workbook(io.BytesIO(response.data))
+        sheet = workbook["产品目录"]
+        row_index = next(row[0].row for row in sheet.iter_rows(min_row=2) if row[0].value == "K-EXPORT-IMG")
+
+        self.assertIsNone(sheet.cell(row_index, 7).value)
+        self.assertGreaterEqual(len(sheet._images), 1)
+        self.assertGreaterEqual(sheet.row_dimensions[row_index].height, 62)
+        workbook.close()
+        response.close()
+
     def test_admin_homepage_shows_all_recent_outputs(self):
         output_root = self.root / "outputs"
         other_user_dir = output_root / "u99-other"
@@ -659,10 +699,10 @@ class WebAppTest(unittest.TestCase):
         html = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("KPRICE01", html)
-        self.assertIn("¥88.80", html)
-        self.assertIn('id="download-excel-modal"', html)
-        self.assertNotIn("返回上一步", html)
+        self.assertIn("选择匹配列", html)
+        self.assertIn("没有识别到明确的 OE 号码表头", html)
+        self.assertNotIn("KPRICE01", html)
+        self.assertNotIn('id="download-excel-modal"', html)
 
         upload_match = re.search(r'name="upload_path" value="([^"]+)"', html)
         output_match = re.search(r'name="output_name" value="([^"]+)"', html)
@@ -672,13 +712,30 @@ class WebAppTest(unittest.TestCase):
         output_name = output_match.group(1)
         output_path = self.root / "outputs" / "u1-007" / output_name
 
+        result = self.client.post(
+            "/match/column",
+            data={
+                "upload_path": upload_path,
+                "original_filename": "price-export.xlsx",
+                "output_name": output_name,
+                "match_column": "0",
+            },
+        )
+        result_html = result.get_data(as_text=True)
+
+        self.assertEqual(result.status_code, 200)
+        self.assertIn("KPRICE01", result_html)
+        self.assertIn("¥88.80", result_html)
+        self.assertIn('id="download-excel-modal"', result_html)
+        self.assertIn("返回上一步", result_html)
+
         download = self.client.post(
             "/match/download",
             data={
                 "upload_path": upload_path,
                 "original_filename": "price-export.xlsx",
                 "output_name": output_name,
-                "match_column": "",
+                "match_column": "0",
                 "price_mode": "tax",
             },
         )
@@ -694,6 +751,70 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(sheet.cell(2, 2).value, "KPRICE01")
         self.assertEqual(sheet.cell(2, 3).value, 88.8)
         generated.close()
+
+    def test_item_header_with_code_values_prompts_for_match_column(self):
+        from app.database import upsert_product
+        from openpyxl import Workbook
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "KPIKA01",
+                    "series": "HYUNDAI",
+                    "item": "LOWER ARM",
+                    "oe_no_1": "TST545012B000",
+                    "models": "SANTA FE 2006",
+                    "price_cny": "66",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["PIKA BOOKING ORDER-200426"])
+        sheet.append([])
+        sheet.append(["SN", "ITEM", "DESCRIPTION", "QTY", "PRICE", "PICTURE", "BRAND"])
+        sheet.append(["1", "TST545012B000 ", "LOWER ARM-HYUNDAI SANTA FE 2006", 60, None, None, "L-TGL"])
+        buffer = io.BytesIO()
+        workbook.save(buffer)
+        buffer.seek(0)
+
+        self.login()
+        response = self.client.post(
+            "/match",
+            data={"inquiry": (buffer, "pika-order.xlsx")},
+            content_type="multipart/form-data",
+        )
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("选择匹配列", html)
+        self.assertIn("没有识别到明确的 OE 号码表头", html)
+
+        upload_match = re.search(r'name="upload_path" value="([^"]+)"', html)
+        output_match = re.search(r'name="output_name" value="([^"]+)"', html)
+        self.assertIsNotNone(upload_match)
+        self.assertIsNotNone(output_match)
+
+        result = self.client.post(
+            "/match/column",
+            data={
+                "upload_path": upload_match.group(1),
+                "original_filename": "pika-order.xlsx",
+                "output_name": output_match.group(1),
+                "match_column": "1",
+            },
+        )
+        result_html = result.get_data(as_text=True)
+
+        self.assertEqual(result.status_code, 200)
+        self.assertIn("共 1 行，命中 1 行，未找到 0 行", result_html)
+        self.assertIn("KPIKA01", result_html)
+        self.assertIn("¥66.00", result_html)
+        self.assertIn("<td>4</td>", result_html)
+        self.assertNotIn("<td>3</td>", result_html)
 
     def test_catalog_import_recognizes_chinese_brand_number_header(self):
         from app.matcher import ProductCatalog
