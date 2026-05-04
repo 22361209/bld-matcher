@@ -72,6 +72,8 @@ def product_image_thumb_url(product, slot: int = 1) -> str:
     keys = _product_keys(product)
     explicit = (product[field] if field in keys else "") or ""
     if explicit:
+        if explicit.startswith(PRODUCT_IMAGE_DATA_PREFIX):
+            return url_for("product_image_thumb_data", name=explicit[len(PRODUCT_IMAGE_DATA_PREFIX) :])
         return product_image_url(product, slot)
 
     if slot != 1:

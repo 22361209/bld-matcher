@@ -115,10 +115,13 @@ git fetch origin main
 git reset --hard origin/main
 git status -sb
 sudo /usr/local/bin/docker-compose up -d --build
+sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_product_thumbnails.py
 sudo /usr/local/bin/docker-compose ps
 ```
 
 上述 Docker 重启命令会要求输入 NAS sudo 密码。使用 Codex 操作时，必须打开可见 macOS Terminal 窗口让用户输入密码；不要在隐藏执行会话中运行会等待密码的 sudo 命令。
+
+`generate_product_thumbnails.py` 会在 NAS 的 `data/product_images/thumbs/` 下生成产品列表用的小缩略图。这个目录属于运行数据，不进 Git；如果产品图大量更新，重建容器后再跑一次即可。
 
 确认 `git status -sb` 只显示 `## main`，表示 NAS 运行目录没有脱离 Git 管理。
 

@@ -4,15 +4,17 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
+from PIL import Image, ImageOps, UnidentifiedImageError
 from werkzeug.datastructures import FileStorage
 
-from .config import PRODUCT_IMAGE_ARCHIVE_DIR, PRODUCT_IMAGE_DATA_PREFIX, PRODUCT_IMAGE_DIR
+from .config import PRODUCT_IMAGE_ARCHIVE_DIR, PRODUCT_IMAGE_DATA_PREFIX, PRODUCT_IMAGE_DIR, PRODUCT_IMAGE_THUMB_DIR
 from .database import now_text
 from .drawings import safe_filename_part
 
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 IMAGE_SLOT_FIELDS = ("image_path", "image_path_2", "image_path_3", "image_path_4", "image_path_5")
+PRODUCT_IMAGE_THUMB_SIZE = (160, 120)
 
 
 def image_slot_field(slot: int) -> str:
@@ -51,8 +53,65 @@ def _unique_path(path: Path) -> Path:
         counter += 1
 
 
+def _safe_direct_image_name(name: str) -> str:
+    return Path(name or "").name
+
+
+def product_image_thumb_path(name: str) -> Path | None:
+    safe_name = _safe_direct_image_name(name)
+    if not safe_name:
+        return None
+    path = (PRODUCT_IMAGE_THUMB_DIR / safe_name).resolve()
+    root = PRODUCT_IMAGE_THUMB_DIR.resolve()
+    if root != path.parent:
+        return None
+    return path
+
+
+def generate_product_image_thumb(source: Path) -> Path | None:
+    destination = product_image_thumb_path(source.name)
+    if destination is None:
+        return None
+    PRODUCT_IMAGE_THUMB_DIR.mkdir(parents=True, exist_ok=True)
+    suffix = source.suffix.lower()
+    format_name = "JPEG" if suffix in {".jpg", ".jpeg"} else suffix.lstrip(".").upper()
+    if format_name == "JPG":
+        format_name = "JPEG"
+    if format_name not in {"JPEG", "PNG", "WEBP"}:
+        return None
+
+    temporary = destination.with_name(f".{destination.stem}-{datetime.now().strftime('%Y%m%d%H%M%S%f')}.thumb{suffix}")
+    try:
+        with Image.open(source) as opened:
+            image = ImageOps.exif_transpose(opened)
+            image.thumbnail(PRODUCT_IMAGE_THUMB_SIZE, Image.Resampling.LANCZOS)
+
+            save_kwargs = {}
+            if format_name in {"JPEG", "WEBP"} and image.mode in {"RGBA", "LA", "P"}:
+                image = image.convert("RGBA")
+                background = Image.new("RGB", image.size, "white")
+                background.paste(image, mask=image.getchannel("A"))
+                image = background
+            elif format_name == "JPEG" and image.mode != "RGB":
+                image = image.convert("RGB")
+
+            if format_name == "JPEG":
+                save_kwargs.update({"quality": 82, "optimize": True})
+            elif format_name == "PNG":
+                save_kwargs.update({"optimize": True})
+            elif format_name == "WEBP":
+                save_kwargs.update({"quality": 82, "method": 4})
+
+            image.save(temporary, format=format_name, **save_kwargs)
+        temporary.replace(destination)
+        return destination
+    except (OSError, UnidentifiedImageError, ValueError):
+        temporary.unlink(missing_ok=True)
+        return None
+
+
 def resolve_product_image_path(name: str) -> Path | None:
-    safe_name = Path(name or "").name
+    safe_name = _safe_direct_image_name(name)
     if not safe_name:
         return None
     path = (PRODUCT_IMAGE_DIR / safe_name).resolve()
@@ -60,6 +119,22 @@ def resolve_product_image_path(name: str) -> Path | None:
     if root != path.parent:
         return None
     return path if path.exists() and path.is_file() else None
+
+
+def resolve_product_image_thumb_path(name: str) -> Path | None:
+    source = resolve_product_image_path(name)
+    if not source:
+        return None
+    destination = product_image_thumb_path(source.name)
+    if destination is None:
+        return source
+    try:
+        thumb_is_current = destination.exists() and destination.stat().st_mtime >= source.stat().st_mtime
+    except OSError:
+        thumb_is_current = False
+    if thumb_is_current:
+        return destination
+    return generate_product_image_thumb(source) or source
 
 
 def save_product_image(conn: sqlite3.Connection, product: sqlite3.Row, file: FileStorage, slot: int = 1) -> Path:
@@ -88,6 +163,9 @@ def save_product_image(conn: sqlite3.Connection, product: sqlite3.Row, file: Fil
         if str(image_path or "").startswith(PRODUCT_IMAGE_DATA_PREFIX):
             existing_path = resolve_product_image_path(str(image_path)[len(PRODUCT_IMAGE_DATA_PREFIX) :])
         if existing_path and existing_path.exists():
+            existing_thumb = product_image_thumb_path(existing_path.name)
+            if existing_thumb:
+                existing_thumb.unlink(missing_ok=True)
             archive_dir = PRODUCT_IMAGE_ARCHIVE_DIR / safe_filename_part(product["bld_no"], "product")
             archive_dir.mkdir(parents=True, exist_ok=True)
             archive_path = _unique_path(
@@ -96,6 +174,7 @@ def save_product_image(conn: sqlite3.Connection, product: sqlite3.Row, file: Fil
             existing_path.replace(archive_path)
 
         temporary.replace(destination)
+        generate_product_image_thumb(destination)
     except Exception:
         temporary.unlink(missing_ok=True)
         raise

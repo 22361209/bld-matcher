@@ -18,6 +18,11 @@ from PIL import Image
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from app.product_media import generate_product_image_thumb
+
 DATA_DIR = ROOT / "data"
 DB_PATH = DATA_DIR / "products.sqlite3"
 PRODUCT_IMAGE_DIR = DATA_DIR / "product_images"
@@ -312,6 +317,7 @@ def import_images(workbook_path: Path, db_path: Path, dry_run: bool) -> dict[str
             raw = zf.read(item.media_path)
             with destination.open("wb") as handle:
                 handle.write(transformed_image_bytes(raw, item.suffix, item.flip_h, item.flip_v))
+            generate_product_image_thumb(destination)
             conn.execute(
                 "UPDATE products SET image_path = ?, updated_at = ? WHERE id = ?",
                 (f"{PRODUCT_IMAGE_PREFIX}{filename}", current_time, product["id"]),

@@ -24,7 +24,7 @@ from app.drawings import product_drawing_path, save_product_drawing
 from app.helpers import unique_prefixed_path, user_file_label, user_output_dir, user_upload_path
 from app.locks import ImportLockError, import_lock
 from app.price_import import decode_rows, encode_rows, parse_price_file
-from app.product_media import resolve_product_image_path, save_product_image
+from app.product_media import resolve_product_image_path, resolve_product_image_thumb_path, save_product_image
 from app.security import actor_name, login_required, permission_required
 
 
@@ -115,6 +115,15 @@ def register(app) -> None:
     @login_required
     def product_image_data(name: str):
         path = resolve_product_image_path(name)
+        if not path:
+            flash("产品图片不存在。", "error")
+            return redirect(url_for("products"))
+        return send_file(path)
+
+    @app.get("/product-image-thumbs/<path:name>")
+    @login_required
+    def product_image_thumb_data(name: str):
+        path = resolve_product_image_thumb_path(name)
         if not path:
             flash("产品图片不存在。", "error")
             return redirect(url_for("products"))

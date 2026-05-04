@@ -193,6 +193,7 @@ class WebAppTest(unittest.TestCase):
         html = response.get_data(as_text=True)
         self.assertIn(f'href="/products/{product["id"]}/drawing"', html)
         self.assertNotIn("替换图纸", html)
+        self.assertIn("/product-image-thumbs/K-DRAW-001.png", html)
         self.assertIn("/product-images/K-DRAW-001.png", html)
         self.assertIn("/product-images/K-DRAW-001-2.png", html)
 
@@ -229,6 +230,46 @@ class WebAppTest(unittest.TestCase):
         batch = self.client.get("/products/drawings/batch")
         self.assertEqual(batch.status_code, 200)
         self.assertIn("暂未开放", batch.get_data(as_text=True))
+
+    def test_product_image_table_uses_generated_thumbnail(self):
+        from PIL import Image
+
+        from app.database import upsert_product
+
+        image_dir = self.root / "data" / "product_images"
+        image_dir.mkdir(parents=True, exist_ok=True)
+        image_path = image_dir / "K-THUMB-001.png"
+        Image.new("RGB", (640, 360), "white").save(image_path)
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-THUMB-001",
+                    "series": "TEST",
+                    "item": "THUMB PART",
+                    "oe_no_1": "THUMB-001",
+                    "models": "Tester",
+                    "image_path": "data_product_images/K-THUMB-001.png",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        self.login()
+        response = self.client.get("/products", query_string={"bld": "K-THUMB-001"})
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("/product-image-thumbs/K-THUMB-001.png", html)
+        self.assertIn("/product-images/K-THUMB-001.png", html)
+
+        thumb = self.client.get("/product-image-thumbs/K-THUMB-001.png")
+        self.assertEqual(thumb.status_code, 200)
+        with Image.open(io.BytesIO(thumb.get_data())) as generated:
+            self.assertLessEqual(generated.width, 160)
+            self.assertLessEqual(generated.height, 120)
+        thumb.close()
+        self.assertTrue((image_dir / "thumbs" / "K-THUMB-001.png").exists())
 
     def test_product_edit_can_delete_product(self):
         from app.database import save_alias, upsert_product

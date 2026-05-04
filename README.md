@@ -70,7 +70,7 @@ bash tools/install_bld_launcher.sh
 
 ## 数据库
 
-默认数据库是 `data/products.sqlite3`。这个文件是业务数据，不进入 Git。产品目录 `data/catalog.xlsx`、材料明细 `data/stamping_materials.xlsx`、PDF 图纸目录 `data/drawings/` 和上传产品图片目录 `data/product_images/` 也按运行数据处理，不进入 Git。每个产品最多可维护 5 张产品图片，网页编辑上传的图片文件保存在 `data/product_images/`。NAS 上的 `data/` 目录要按 NAS 备份策略保护，更新代码时不要用本机数据覆盖 NAS 数据。
+默认数据库是 `data/products.sqlite3`。这个文件是业务数据，不进入 Git。产品目录 `data/catalog.xlsx`、材料明细 `data/stamping_materials.xlsx`、PDF 图纸目录 `data/drawings/` 和上传产品图片目录 `data/product_images/` 也按运行数据处理，不进入 Git。每个产品最多可维护 5 张产品图片，网页编辑上传的图片文件保存在 `data/product_images/`。产品目录列表使用 `data/product_images/thumbs/` 下的运行时缩略图，点击预览时才加载原图。NAS 上的 `data/` 目录要按 NAS 备份策略保护，更新代码时不要用本机数据覆盖 NAS 数据。
 
 数据库结构变化集中放在 `app/migrations.py`。新增字段或表时，添加一个新的 migration id 和对应函数，让本机和 NAS 在启动连接数据库时自动补齐结构。
 
@@ -79,6 +79,12 @@ bash tools/install_bld_launcher.sh
 ```bash
 tools/import_catalog_cell_images.py "产品目录/BLD catalogue 2603 new(2个OE).xlsx"
 tools/import_catalog_cell_images.py "产品目录/BLD catalogue 2603 new(2个OE).xlsx" --apply
+```
+
+如果产品图片是历史导入或批量复制进去的，可以预先生成缩略图，避免第一次滚动产品目录时边访问边生成：
+
+```bash
+python tools/generate_product_thumbnails.py
 ```
 
 ## 多用户文件和导入规则
