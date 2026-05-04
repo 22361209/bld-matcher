@@ -30,7 +30,7 @@ from app.product_media import resolve_product_image_path, resolve_product_image_
 from app.security import actor_name, login_required, permission_required
 
 
-PRODUCT_PAGE_SIZE = 100
+PRODUCT_PAGE_SIZE = 50
 
 
 def _product_query_args() -> dict[str, object]:
