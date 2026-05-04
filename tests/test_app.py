@@ -230,6 +230,50 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(batch.status_code, 200)
         self.assertIn("暂未开放", batch.get_data(as_text=True))
 
+    def test_product_edit_can_delete_product(self):
+        from app.database import save_alias, upsert_product
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-DELETE-001",
+                    "series": "TEST",
+                    "item": "DELETE TARGET",
+                    "oe_no_1": "DELETE-001",
+                    "models": "Tester",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            save_alias(conn, "DELETE-ALIAS-001", "K-DELETE-001", actor="tester")
+            product = conn.execute("SELECT * FROM products WHERE bld_no = ?", ("K-DELETE-001",)).fetchone()
+
+        self.login()
+        edit = self.client.get(f"/products/{product['id']}/edit")
+        edit_html = edit.get_data(as_text=True)
+        self.assertEqual(edit.status_code, 200)
+        self.assertIn("删除产品", edit_html)
+        self.assertIn(f'formaction="/products/{product["id"]}/delete"', edit_html)
+        self.assertIn("confirm('确认删除 K-DELETE-001", edit_html)
+
+        delete = self.client.post(f"/products/{product['id']}/delete", follow_redirects=False)
+        self.assertEqual(delete.status_code, 302)
+        self.assertTrue(delete.headers["Location"].endswith("/products"))
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            deleted = conn.execute("SELECT * FROM products WHERE bld_no = ?", ("K-DELETE-001",)).fetchone()
+            alias = conn.execute("SELECT * FROM aliases WHERE source_code = ?", ("DELETEALIAS001",)).fetchone()
+            log = conn.execute(
+                "SELECT * FROM audit_logs WHERE action = ? AND target_key = ? ORDER BY id DESC LIMIT 1",
+                ("删除产品", "K-DELETE-001"),
+            ).fetchone()
+
+        self.assertIsNone(deleted)
+        self.assertEqual(alias["active"], 0)
+        self.assertIsNotNone(log)
+        self.assertIn("DELETE TARGET", log["detail"])
+
     def test_system_updates_page_reads_handoff_notes(self):
         self.login()
         response = self.client.get("/system-updates")

@@ -2396,6 +2396,18 @@ textarea {
   color: #3d4d5f;
 }
 
+.linear-button.danger {
+  border-color: #d9b8b8;
+  background: #fff8f8;
+  color: #9f3a3a;
+}
+
+.linear-button.danger:hover {
+  border-color: #c98d8d;
+  background: #fff0f0;
+  color: #872f2f;
+}
+
 .materials-linear .linear-popover > summary {
   list-style: none;
 }

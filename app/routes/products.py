@@ -12,6 +12,7 @@ from app.database import (
     bootstrap_from_excel,
     connect,
     deactivate_product,
+    delete_product,
     get_product,
     import_catalog,
     list_products,
@@ -315,4 +316,15 @@ def register(app) -> None:
         with connect(DB_PATH) as conn:
             deactivate_product(conn, product_id, actor=actor_name())
         flash("产品已停用，历史资料仍保留。", "success")
+        return redirect(url_for("products"))
+
+    @app.post("/products/<int:product_id>/delete")
+    @permission_required("edit_products")
+    def remove_product(product_id: int):
+        with connect(DB_PATH) as conn:
+            product = delete_product(conn, product_id, actor=actor_name())
+        if not product:
+            flash("产品不存在或已经删除。", "error")
+            return redirect(url_for("products"))
+        flash(f"产品 {product['bld_no']} 已删除。", "success")
         return redirect(url_for("products"))

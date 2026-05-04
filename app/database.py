@@ -415,6 +415,29 @@ def deactivate_product(conn: sqlite3.Connection, product_id: int, actor: str = "
     conn.commit()
 
 
+def delete_product(conn: sqlite3.Connection, product_id: int, actor: str = "") -> sqlite3.Row | None:
+    row = get_product(conn, product_id)
+    if not row:
+        return None
+
+    alias_count = conn.execute(
+        "SELECT COUNT(*) FROM aliases WHERE bld_no = ? AND active = 1",
+        (row["bld_no"],),
+    ).fetchone()[0]
+    conn.execute("DELETE FROM products WHERE id = ?", (product_id,))
+    if alias_count:
+        conn.execute(
+            "UPDATE aliases SET active = 0, updated_at = ? WHERE bld_no = ? AND active = 1",
+            (now_text(), row["bld_no"]),
+        )
+    detail = f"品牌: {row['series'] or '(空)'}；产品名称: {row['item'] or '(空)'}"
+    if alias_count:
+        detail += f"；同步停用人工映射 {alias_count} 条"
+    log_event(conn, "删除产品", "product", row["bld_no"], detail, actor=actor)
+    conn.commit()
+    return row
+
+
 def product_stats(conn: sqlite3.Connection) -> dict[str, int]:
     row = conn.execute(
         "SELECT COUNT(*) AS total, SUM(active = 1) AS active, SUM(active = 0) AS inactive FROM products"
