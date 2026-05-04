@@ -118,6 +118,11 @@ def _save_pasted_inquiry_workbook(codes: list[str]) -> Path:
     return upload_path
 
 
+def _renumber_pasted_summary_rows(summary: dict) -> None:
+    for index, row in enumerate(summary.get("rows", []), start=1):
+        row["row"] = index
+
+
 def _render_pasted_inquiry_result(catalog, query: str):
     codes = _pasted_inquiry_codes(query)
     if len(codes) <= 1:
@@ -127,6 +132,7 @@ def _render_pasted_inquiry_result(catalog, query: str):
     output_path = result_output_path(PASTED_INQUIRY_FILENAME, fallback_suffix=".xlsx")
     try:
         summary = generate_excel_with_bld(upload_path, output_path, catalog, write_output=False)
+        _renumber_pasted_summary_rows(summary)
         with connect(DB_PATH) as conn:
             log_event(
                 conn,
