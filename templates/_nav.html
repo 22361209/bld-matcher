@@ -3,6 +3,9 @@
     <a class="{% if active_page == 'match' %}active{% endif %}" href="{{ url_for('index') }}">询价处理</a>
     <a class="{% if active_page == 'products' %}active{% endif %}" href="{{ url_for('products') }}">产品目录</a>
     <a class="{% if active_page == 'materials' %}active{% endif %}" href="{{ url_for('materials') }}">生产料单</a>
+    {% if can("generate_purchase_contract") %}
+      <a class="{% if active_page == 'purchase_contracts' %}active{% endif %}" href="{{ url_for('purchase_contracts') }}">采购合同</a>
+    {% endif %}
   </div>
   <div class="nav-user">
     {% if can("manage_users") or can("view_logs") %}

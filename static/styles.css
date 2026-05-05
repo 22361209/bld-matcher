@@ -2835,6 +2835,111 @@ textarea {
   padding-left: 2px;
 }
 
+.purchase-contract-page {
+  --purchase-form-width: 1180px;
+}
+
+.purchase-contract-landing {
+  padding-top: 28px;
+}
+
+.purchase-contract-form {
+  display: grid;
+  gap: 0;
+  width: min(var(--purchase-form-width), 100%);
+  margin: 0 auto;
+}
+
+.purchase-contract-field-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.purchase-contract-field-grid label {
+  min-width: 0;
+  gap: 5px;
+  color: var(--linear-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.purchase-contract-field-grid input,
+.purchase-contract-field-grid select,
+.purchase-contract-field-grid textarea,
+.purchase-contract-table input {
+  width: 100%;
+  border-color: var(--linear-line-strong);
+  border-radius: 6px;
+  background: var(--linear-surface);
+}
+
+.purchase-contract-field-grid input,
+.purchase-contract-field-grid select,
+.purchase-contract-table input {
+  height: 34px;
+  padding: 6px 9px;
+}
+
+.purchase-contract-field-grid textarea {
+  min-height: 78px;
+}
+
+.purchase-contract-field-grid .span-2 {
+  grid-column: span 2;
+}
+
+.purchase-contract-items {
+  padding-top: 6px;
+}
+
+.purchase-contract-table {
+  min-width: 1344px;
+}
+
+.purchase-contract-table th,
+.purchase-contract-table td {
+  vertical-align: middle;
+}
+
+.purchase-contract-table td {
+  padding: 5px 6px;
+}
+
+.purchase-contract-table .link-button {
+  white-space: nowrap;
+}
+
+.purchase-image-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  min-height: 46px;
+  color: var(--linear-muted);
+  font-size: 12px;
+}
+
+.purchase-image-preview img {
+  display: block;
+  width: 64px;
+  height: 44px;
+  object-fit: contain;
+  border: 1px solid var(--linear-line);
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.purchase-contract-terms {
+  border-top: 0;
+}
+
+.purchase-contract-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 14px 0 22px;
+}
+
 @media (max-width: 760px) {
   .topbar,
   .grid,
@@ -2930,6 +3035,24 @@ textarea {
   .materials-table-title-actions {
     justify-content: flex-start;
     margin-top: 8px;
+  }
+
+  .purchase-contract-field-grid,
+  .purchase-contract-field-grid .span-2 {
+    display: block;
+  }
+
+  .purchase-contract-field-grid label + label,
+  .purchase-contract-field-grid .span-2 {
+    margin-top: 10px;
+  }
+
+  .purchase-contract-actions {
+    justify-content: stretch;
+  }
+
+  .purchase-contract-actions .linear-button {
+    width: 100%;
   }
 
   .material-table-toolbar {

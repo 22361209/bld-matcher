@@ -148,3 +148,131 @@ document.addEventListener("keydown", (event) => {
     closeDownloadModal();
   }
 });
+
+document.querySelectorAll("[data-purchase-contract-form]").forEach((form) => {
+  const body = form.querySelector("[data-purchase-rows]");
+  const addButton = form.querySelector("[data-add-purchase-row]");
+  if (!(body instanceof HTMLTableSectionElement) || !(addButton instanceof HTMLButtonElement)) return;
+  const productCache = new Map();
+
+  const syncRequiredRow = () => {
+    const rows = Array.from(body.querySelectorAll("tr"));
+    rows.forEach((row, index) => {
+      ["product_code[]", "quantity[]", "unit_price[]"].forEach((name) => {
+        const input = row.querySelector(`[name="${name}"]`);
+        if (input instanceof HTMLInputElement) {
+          input.required = index === 0;
+        }
+      });
+    });
+  };
+
+  const createRow = () => {
+    const row = document.createElement("tr");
+    row.innerHTML = [
+      '<td><input name="product_code[]" data-purchase-bld></td>',
+      '<td><input name="oe_no[]" data-purchase-oe></td>',
+      '<td><input name="product_name[]" data-purchase-name></td>',
+      '<td><input name="models[]" data-purchase-models></td>',
+      '<td><span class="purchase-image-preview" data-purchase-image></span></td>',
+      '<td><input name="quantity[]" inputmode="decimal"></td>',
+      '<td><input name="unit_price[]" inputmode="decimal"></td>',
+      '<td><input name="delivery_date[]"></td>',
+      '<td><input name="item_note[]"></td>',
+      '<td><button class="link-button danger-link" type="button" data-remove-purchase-row>删除</button></td>',
+    ].join("");
+    return row;
+  };
+
+  const setValue = (row, selector, value) => {
+    const input = row.querySelector(selector);
+    if (input instanceof HTMLInputElement) {
+      input.value = value || "";
+    }
+  };
+
+  const setImage = (row, product) => {
+    const holder = row.querySelector("[data-purchase-image]");
+    if (!(holder instanceof HTMLElement)) return;
+    holder.replaceChildren();
+    if (product?.thumb_url || product?.image_url) {
+      const image = document.createElement("img");
+      image.src = product.thumb_url || product.image_url;
+      image.alt = product.bld_no ? `${product.bld_no} 产品图片` : "产品图片";
+      holder.appendChild(image);
+    } else if (product?.found === false) {
+      holder.textContent = "未找到";
+    }
+  };
+
+  const applyProduct = (row, product) => {
+    if (!product || !product.found) {
+      setValue(row, "[data-purchase-oe]", "");
+      setValue(row, "[data-purchase-name]", "");
+      setValue(row, "[data-purchase-models]", "");
+      setImage(row, { found: false });
+      return;
+    }
+    setValue(row, "[data-purchase-bld]", product.bld_no);
+    setValue(row, "[data-purchase-oe]", product.oe_no);
+    setValue(row, "[data-purchase-name]", product.product_name);
+    setValue(row, "[data-purchase-models]", product.models);
+    setImage(row, product);
+  };
+
+  const lookupProduct = async (input) => {
+    const bld = input.value.trim();
+    const row = input.closest("tr");
+    if (!bld || !(row instanceof HTMLTableRowElement)) return;
+    const cacheKey = bld.toUpperCase();
+    if (productCache.has(cacheKey)) {
+      applyProduct(row, productCache.get(cacheKey));
+      return;
+    }
+    try {
+      const response = await fetch(`/purchase-contracts/product-lookup?bld=${encodeURIComponent(bld)}`, {
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) return;
+      const product = await response.json();
+      productCache.set(cacheKey, product);
+      applyProduct(row, product);
+    } catch (_error) {
+      // 留在手动填写状态。
+    }
+  };
+
+  addButton.addEventListener("click", () => {
+    const row = createRow();
+    body.appendChild(row);
+    syncRequiredRow();
+    row.querySelector("input")?.focus();
+  });
+
+  body.addEventListener("click", (event) => {
+    const button = event.target instanceof Element ? event.target.closest("[data-remove-purchase-row]") : null;
+    if (!button) return;
+    const row = button.closest("tr");
+    row?.remove();
+    if (!body.querySelector("tr")) {
+      body.appendChild(createRow());
+    }
+    syncRequiredRow();
+  });
+
+  body.addEventListener("change", (event) => {
+    const input = event.target;
+    if (input instanceof HTMLInputElement && input.matches("[data-purchase-bld]")) {
+      lookupProduct(input);
+    }
+  });
+
+  body.addEventListener("blur", (event) => {
+    const input = event.target;
+    if (input instanceof HTMLInputElement && input.matches("[data-purchase-bld]")) {
+      lookupProduct(input);
+    }
+  }, true);
+
+  syncRequiredRow();
+});

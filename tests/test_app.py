@@ -69,10 +69,86 @@ class WebAppTest(unittest.TestCase):
 
     def test_core_admin_pages_load(self):
         self.login()
-        for path in ["/products", "/materials", "/users", "/logs", "/system-updates"]:
+        for path in ["/products", "/materials", "/purchase-contracts", "/users", "/logs", "/system-updates"]:
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
+
+    def test_purchase_contract_can_generate_pdf(self):
+        from PIL import Image
+        from app.database import upsert_product
+
+        image_dir = self.root / "data" / "product_images"
+        image_dir.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (96, 64), "white").save(image_dir / "K-OUT-001.png")
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-OUT-001",
+                    "oe_no_1": "OE-CATALOG-001",
+                    "item": "目录外购支架",
+                    "models": "目录车型",
+                    "image_path": "data_product_images/K-OUT-001.png",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        self.login()
+        response = self.client.get("/purchase-contracts")
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("采购合同", html)
+        self.assertIn("玉环博莱德机械有限公司", html)
+        self.assertIn("浙江省玉环市金汇路11号", html)
+        self.assertIn("月结 30 天", html)
+        self.assertIn('name="product_code[]"', html)
+        self.assertIn('name="oe_no[]"', html)
+        self.assertIn('name="models[]"', html)
+        self.assertIn('data-add-purchase-row', html)
+
+        lookup = self.client.get("/purchase-contracts/product-lookup", query_string={"bld": "K-OUT-001"})
+        self.assertEqual(lookup.status_code, 200)
+        payload = lookup.get_json()
+        self.assertTrue(payload["found"])
+        self.assertEqual(payload["oe_no"], "OE-CATALOG-001")
+        self.assertEqual(payload["product_name"], "目录外购支架")
+        self.assertEqual(payload["models"], "目录车型")
+        self.assertIn("product-image-thumbs", payload["thumb_url"])
+
+        response = self.client.post(
+            "/purchase-contracts/generate",
+            data={
+                "contract_no": "CG-TEST-001",
+                "contract_date": "2026-05-05",
+                "buyer_name": "玉环博莱德机械有限公司",
+                "buyer_contact": "李四",
+                "buyer_phone": "13900000000",
+                "supplier_name": "外购供应商",
+                "supplier_contact": "张三",
+                "supplier_phone": "13800000000",
+                "delivery_address": "浙江省玉环市",
+                "price_note": "以上价格为含税价（增值税税率13%），含包装费及运费，送达甲方指定地点。",
+                "payment_terms": "月结",
+                "quality_terms": "按图纸执行",
+                "product_code[]": ["K-OUT-001", ""],
+                "oe_no[]": ["手填OE", ""],
+                "product_name[]": ["手填名称", ""],
+                "models[]": ["手填车型", ""],
+                "quantity[]": ["10", ""],
+                "unit_price[]": ["25.5", ""],
+                "delivery_date[]": ["2026-05-20", ""],
+                "item_note[]": ["加急", ""],
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "application/pdf")
+        self.assertTrue(response.get_data().startswith(b"%PDF-"))
+        response.close()
+        files = list((self.root / "outputs").glob("u*-007/采购合同-CG-TEST-001.pdf"))
+        self.assertEqual(len(files), 1)
 
     def test_products_search_uses_results_anchor(self):
         from app.database import upsert_product

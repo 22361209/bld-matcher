@@ -23,10 +23,11 @@ ROLE_PERMISSIONS = {
         "generate_match",
         "view_logs",
         "generate_material_sheet",
+        "generate_purchase_contract",
         "manage_materials",
     },
-    "editor": {"edit_products", "manage_aliases", "generate_match", "view_logs", "generate_material_sheet"},
-    "user": {"generate_match", "generate_material_sheet"},
+    "editor": {"edit_products", "manage_aliases", "generate_match", "view_logs", "generate_material_sheet", "generate_purchase_contract"},
+    "user": {"generate_match", "generate_material_sheet", "generate_purchase_contract"},
     "viewer": set(),
 }
 

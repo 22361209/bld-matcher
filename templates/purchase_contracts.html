@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>采购合同</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
+  </head>
+  <body>
+    <main class="shell wide materials-linear purchase-contract-page">
+      {% set active_page = "purchase_contracts" %}
+      {% include "_nav.html" %}
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <section class="messages materials-messages">
+            {% for category, message in messages %}
+              <div class="message {{ category }}">{{ message }}</div>
+            {% endfor %}
+          </section>
+        {% endif %}
+      {% endwith %}
+
+      <header class="material-landing purchase-contract-landing">
+        <h1>采购合同</h1>
+        <p>录入外购型号、数量、价格和交期，生成 PDF 合同。</p>
+      </header>
+
+      {% if can("generate_purchase_contract") %}
+        <form action="{{ url_for('generate_purchase_contract') }}" method="post" class="purchase-contract-form" data-purchase-contract-form data-enter-navigation>
+          <section class="workbench-form-section purchase-contract-meta">
+            <div class="purchase-contract-field-grid">
+              <label>
+                合同编号
+                <input name="contract_no" value="{{ default_contract_no }}" required>
+              </label>
+              <label>
+                签订日期
+                <input type="date" name="contract_date" value="{{ default_date }}" required>
+              </label>
+              <label>
+                采购方公司名称
+                <input name="buyer_name" value="{{ defaults.buyer_name }}" required>
+              </label>
+              <label>
+                采购方联系人
+                <input name="buyer_contact">
+              </label>
+              <label>
+                采购方电话
+                <input name="buyer_phone">
+              </label>
+              <label>
+                供应方公司名称
+                <input name="supplier_name" required>
+              </label>
+              <label>
+                供应方联系人
+                <input name="supplier_contact">
+              </label>
+              <label>
+                供应方电话
+                <input name="supplier_phone">
+              </label>
+              <label>
+                交货地点
+                <input name="delivery_address" value="{{ defaults.delivery_address }}" placeholder="请输入交货详细地址">
+              </label>
+              <label class="span-2">
+                价格说明
+                <input name="price_note" value="{{ defaults.price_note }}">
+              </label>
+            </div>
+          </section>
+
+          <section class="materials-table-section purchase-contract-items">
+            <div class="materials-table-title">
+              <div>
+                <h2>采购明细</h2>
+                <p>每一行会进入 PDF 合同明细表。</p>
+              </div>
+              <div class="materials-table-title-actions">
+                <button class="linear-button subtle" type="button" data-add-purchase-row>新增一行</button>
+              </div>
+            </div>
+            <div class="materials-table-wrap purchase-contract-table-wrap">
+              <table class="materials-grid-table purchase-contract-table">
+                <colgroup>
+                  <col style="width: 140px">
+                  <col style="width: 150px">
+                  <col style="width: 180px">
+                  <col style="width: 220px">
+                  <col style="width: 92px">
+                  <col style="width: 110px">
+                  <col style="width: 120px">
+                  <col style="width: 150px">
+                  <col style="width: 180px">
+                  <col style="width: 72px">
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>BLD号</th>
+                    <th>OE号</th>
+                    <th>产品名称</th>
+                    <th>适用车型</th>
+                    <th>图片</th>
+                    <th>数量</th>
+                    <th>含税单价</th>
+                    <th>交期</th>
+                    <th>备注</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody data-purchase-rows>
+                  {% for row in range(3) %}
+                    <tr>
+                      <td><input name="product_code[]" data-purchase-bld {% if loop.first %}required{% endif %}></td>
+                      <td><input name="oe_no[]" data-purchase-oe></td>
+                      <td><input name="product_name[]" data-purchase-name></td>
+                      <td><input name="models[]" data-purchase-models></td>
+                      <td><span class="purchase-image-preview" data-purchase-image></span></td>
+                      <td><input name="quantity[]" inputmode="decimal" {% if loop.first %}required{% endif %}></td>
+                      <td><input name="unit_price[]" inputmode="decimal" {% if loop.first %}required{% endif %}></td>
+                      <td><input name="delivery_date[]"></td>
+                      <td><input name="item_note[]"></td>
+                      <td><button class="link-button danger-link" type="button" data-remove-purchase-row>删除</button></td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="workbench-form-section purchase-contract-terms">
+            <div class="purchase-contract-field-grid terms-grid">
+              <label class="span-2">
+                付款方式
+                <textarea name="payment_terms" rows="2">{{ defaults.payment_terms }}</textarea>
+              </label>
+              <label class="span-2">
+                质量要求
+                <textarea name="quality_terms" rows="4">{{ defaults.quality_terms }}</textarea>
+              </label>
+              <label class="span-2">
+                备注
+                <textarea name="remark" rows="3"></textarea>
+              </label>
+            </div>
+          </section>
+
+          <section class="purchase-contract-actions">
+            <button class="linear-button primary" type="submit">生成 PDF</button>
+          </section>
+        </form>
+      {% else %}
+        <p class="materials-muted">当前账号没有生成采购合同权限。</p>
+      {% endif %}
+
+      {% if latest_outputs %}
+        <details class="materials-history-drawer">
+          <summary>
+            <span>最近采购合同</span>
+            <strong>{{ latest_outputs|length }} 个</strong>
+          </summary>
+          <div class="materials-history-panel">
+            <section class="materials-recent">
+              <div class="materials-table-title">
+                <div>
+                  <h2>最近采购合同</h2>
+                  <p>最近生成的 PDF 文件。</p>
+                </div>
+              </div>
+              <ul class="files">
+                {% for path in latest_outputs %}
+                  <li><a href="{{ url_for('download', name=download_name(path)) }}">{{ path.name }}</a></li>
+                {% endfor %}
+              </ul>
+            </section>
+          </div>
+        </details>
+      {% endif %}
+    </main>
+    <script src="{{ url_for('static', filename='app.js', v=static_version('app.js')) }}"></script>
+  </body>
+</html>
