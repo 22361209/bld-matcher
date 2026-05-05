@@ -28,7 +28,7 @@ from app.purchase_contract import (
     generate_purchase_contract_pdf,
     purchase_contract_from_form,
 )
-from app.security import actor_name, can, login_required, permission_required
+from app.security import actor_name, can, permission_required
 
 
 def _product_by_bld(conn, bld_no: str):
@@ -80,7 +80,7 @@ def _apply_catalog_values(conn, contract: dict) -> None:
 
 def register(app) -> None:
     @app.get("/purchase-contracts")
-    @login_required
+    @permission_required("generate_purchase_contract")
     def purchase_contracts():
         latest_outputs = all_recent_outputs("*采购合同*.pdf") if can("manage_users") else user_recent_outputs("*采购合同*.pdf")
         return render_template(
@@ -98,7 +98,7 @@ def register(app) -> None:
         )
 
     @app.get("/purchase-contracts/product-lookup")
-    @login_required
+    @permission_required("generate_purchase_contract")
     def purchase_contract_product_lookup():
         bld_no = request.args.get("bld", "").strip()
         if not bld_no:

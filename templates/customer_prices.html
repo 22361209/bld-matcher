@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>客户价格记录</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
+  </head>
+  <body>
+    <main class="shell wide materials-linear">
+      {% set active_page = "customer_prices" %}
+      {% include "_nav.html" %}
+
+      <header class="materials-hero">
+        <div>
+          <h1>客户价格记录</h1>
+          <p>集中查看客户报价和成交价格，按客户、BLD 号和客户号筛选。</p>
+        </div>
+      </header>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <section class="messages materials-messages">
+            {% for category, message in messages %}
+              <div class="message {{ category }}">{{ message }}</div>
+            {% endfor %}
+          </section>
+        {% endif %}
+      {% endwith %}
+
+      <section class="materials-metrics" aria-label="客户价格记录统计">
+        <div><span>总记录</span><strong>{{ stats.total }}</strong></div>
+        <div><span>报价记录</span><strong>{{ stats.quotes }}</strong></div>
+        <div><span>成交记录</span><strong>{{ stats.orders }}</strong></div>
+        <div><span>客户数</span><strong>{{ stats.customers }}</strong></div>
+      </section>
+
+      <section class="materials-command customer-price-command">
+        <form class="materials-search-form customer-price-search" method="get" action="{{ url_for('customer_prices') }}#customer-price-results">
+          <label>
+            <span>客户</span>
+            <input name="customer_q" value="{{ filters.customer_q or filters.customer }}" placeholder="客户名称">
+          </label>
+          <label>
+            <span>BLD 号</span>
+            <input name="bld_no" value="{{ filters.bld_no }}" placeholder="例如 K6004LB">
+          </label>
+          <label>
+            <span>客户号</span>
+            <input name="source_code" value="{{ filters.source_code }}" placeholder="客户自己的编码">
+          </label>
+          <label>
+            <span>类型</span>
+            <select name="record_type">
+              <option value="" {% if not filters.record_type %}selected{% endif %}>全部</option>
+              <option value="quote" {% if filters.record_type == "quote" %}selected{% endif %}>报价</option>
+              <option value="order" {% if filters.record_type == "order" %}selected{% endif %}>成交</option>
+            </select>
+          </label>
+          <button class="linear-button primary" type="submit">搜索</button>
+          <a class="linear-button subtle" href="{{ url_for('customer_prices') }}">重置</a>
+        </form>
+        {% if can("manage_customer_prices") %}
+          <div class="materials-actions customer-price-actions">
+            <details class="toolbar-popover linear-popover">
+              <summary>新增记录</summary>
+              <form action="{{ url_for('save_customer_price') }}" method="post" class="toolbar-popover-form customer-price-popover-form">
+                <label>
+                  <span>类型</span>
+                  <select name="record_type">
+                    <option value="quote">报价</option>
+                    <option value="order">成交</option>
+                  </select>
+                </label>
+                <label>
+                  <span>客户名称</span>
+                  <input name="customer_name" required>
+                </label>
+                <label>
+                  <span>日期</span>
+                  <input type="date" name="record_date">
+                </label>
+                <label>
+                  <span>单据号</span>
+                  <input name="document_no">
+                </label>
+                <label>
+                  <span>客户号码</span>
+                  <input name="source_code">
+                </label>
+                <label>
+                  <span>OE 号</span>
+                  <input name="oe_no">
+                </label>
+                <label>
+                  <span>BLD NO.</span>
+                  <input name="bld_no">
+                </label>
+                <label>
+                  <span>产品名称</span>
+                  <input name="item">
+                </label>
+                <label>
+                  <span>车型</span>
+                  <input name="models">
+                </label>
+                <label>
+                  <span>含税单价</span>
+                  <input type="number" step="0.01" name="price_cny">
+                </label>
+                <label>
+                  <span>美金价</span>
+                  <input type="number" step="0.0001" name="price_usd">
+                </label>
+                <label>
+                  <span>汇率</span>
+                  <input type="number" step="0.0001" name="exchange_rate">
+                </label>
+                <label>
+                  <span>含税</span>
+                  <select name="tax_included">
+                    <option value="1">是</option>
+                    <option value="0">否</option>
+                  </select>
+                </label>
+                <label class="span-2">
+                  <span>备注</span>
+                  <textarea name="note" rows="2"></textarea>
+                </label>
+                <div class="form-actions span-2">
+                  <button class="linear-button primary" type="submit">保存</button>
+                </div>
+              </form>
+            </details>
+            <details class="toolbar-popover linear-popover">
+              <summary>导入 Excel</summary>
+              <form action="{{ url_for('import_customer_prices') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form customer-price-import-form">
+                <label>
+                  <span>导入类型</span>
+                  <select name="record_type">
+                    <option value="quote">报价记录</option>
+                    <option value="order">成交记录</option>
+                  </select>
+                </label>
+                <label>
+                  <span>默认客户</span>
+                  <input name="default_customer" placeholder="文件无客户列时使用">
+                </label>
+                <label class="file-picker span-2">
+                  <span>客户价格 Excel</span>
+                  <input class="file-picker-input" type="file" name="price_file" accept=".xlsx" required>
+                  <span class="file-picker-control">
+                    <span class="file-picker-button">选择文件</span>
+                    <span class="file-picker-name">未选择任何文件</span>
+                    <button class="embedded-submit" type="submit">确认导入</button>
+                  </span>
+                </label>
+                <span class="note span-2">支持表头：客户、日期、BLD NO.、OE号、客户号码、含税单价、美金价。</span>
+              </form>
+            </details>
+          </div>
+        {% endif %}
+      </section>
+
+      <section class="materials-table-section" id="customer-price-results">
+        <div class="materials-table-title">
+          <div>
+            {% if show_detail %}
+              <h2>价格明细</h2>
+              <p>当前筛选 {{ total_records }} 条。</p>
+            {% else %}
+              <h2>客户概览</h2>
+              <p>默认按客户聚合显示，需要查看单条历史价时进入明细。</p>
+            {% endif %}
+          </div>
+          {% if show_detail %}
+            <div class="materials-table-title-actions">
+              <a class="linear-button subtle" href="{{ url_for('customer_prices', customer_q=filters.customer) if filters.customer else url_for('customer_prices') }}">返回客户概览</a>
+            </div>
+          {% endif %}
+        </div>
+        {% if show_detail and (filters.bld_no or filters.source_code) %}
+          <div class="materials-table-title customer-compare-title">
+            <div>
+              <h2>型号价格对比</h2>
+              <p>按客户和型号汇总当前搜索结果，用于比较同一 BLD 号或客户号在不同客户处的历史价格。</p>
+            </div>
+            <span>{{ model_comparisons|length }} 组</span>
+          </div>
+          <div class="materials-table-wrap customer-compare-wrap">
+            <table class="materials-grid-table customer-compare-table">
+              <colgroup>
+                <col style="width: 94px">
+                <col style="width: 128px">
+                <col style="width: 92px">
+                <col style="width: 132px">
+                <col style="width: 150px">
+                <col style="width: 88px">
+                <col style="width: 78px">
+                <col style="width: 78px">
+                <col style="width: 64px">
+                <col style="width: 86px">
+                <col style="width: 90px">
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>BLD NO.</th>
+                  <th>客户</th>
+                  <th>客户号码</th>
+                  <th>OE 号</th>
+                  <th>产品 / 车型</th>
+                  <th>最近含税价</th>
+                  <th>最低价</th>
+                  <th>最高价</th>
+                  <th>历史数</th>
+                  <th>最近日期</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for item in model_comparisons %}
+                  <tr>
+                    <td><strong>{{ item.bld_no }}</strong></td>
+                    <td>{{ item.customer_name }}</td>
+                    <td>{{ item.source_code }}</td>
+                    <td>{{ item.oe_no }}</td>
+                    <td>
+                      {% if item.item %}<div>{{ item.item }}</div>{% endif %}
+                      {% if item.models %}<div class="muted-cell">{{ item.models }}</div>{% endif %}
+                    </td>
+                    <td>{% if item.latest_price_cny is not none %}¥{{ "%.2f"|format(item.latest_price_cny) }}{% endif %}</td>
+                    <td>{% if item.min_price_cny is not none %}¥{{ "%.2f"|format(item.min_price_cny) }}{% endif %}</td>
+                    <td>{% if item.max_price_cny is not none %}¥{{ "%.2f"|format(item.max_price_cny) }}{% endif %}</td>
+                    <td>{{ item.total_records }}</td>
+                    <td>{{ item.latest_date }}</td>
+                    <td><a href="{{ url_for('customer_prices', customer=item.customer_name, bld_no=filters.bld_no, source_code=filters.source_code) }}#customer-price-results">看流水</a></td>
+                  </tr>
+                {% endfor %}
+                {% if not model_comparisons %}
+                  <tr><td colspan="11">当前搜索没有可对比的型号价格。</td></tr>
+                {% endif %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+        <div class="materials-table-wrap">
+          {% if show_detail %}
+            <table class="materials-grid-table customer-price-table">
+              <colgroup>
+                <col style="width: 82px">
+                <col style="width: 54px">
+                <col style="width: 128px">
+                <col style="width: 92px">
+                <col style="width: 132px">
+                <col style="width: 98px">
+                <col style="width: 150px">
+                <col style="width: 86px">
+                <col style="width: 86px">
+                <col style="width: 70px">
+                <col style="width: 128px">
+                <col style="width: 80px">
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>日期</th>
+                  <th>类型</th>
+                  <th>客户</th>
+                  <th>客户号码</th>
+                  <th>OE 号</th>
+                  <th>BLD NO.</th>
+                  <th>产品 / 车型</th>
+                  <th>含税单价</th>
+                  <th>美金价</th>
+                  <th>汇率</th>
+                  <th>来源 / 单据</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for record in records %}
+                  <tr>
+                    <td>{{ record.record_date }}</td>
+                    <td>
+                      <span class="linear-status {{ 'active' if record.record_type == 'order' else 'inactive' }}">{{ type_labels[record.record_type] }}</span>
+                    </td>
+                    <td><strong>{{ record.customer_name }}</strong></td>
+                    <td>{{ record.source_code }}</td>
+                    <td>{{ record.oe_no }}</td>
+                    <td><strong>{{ record.bld_no }}</strong></td>
+                    <td>
+                      {% if record.item %}<div>{{ record.item }}</div>{% endif %}
+                      {% if record.models %}<div class="muted-cell">{{ record.models }}</div>{% endif %}
+                    </td>
+                    <td>{% if record.price_cny is not none %}¥{{ "%.2f"|format(record.price_cny) }}{% endif %}</td>
+                    <td>{% if record.price_usd is not none %}${{ "%.4f"|format(record.price_usd) }}{% endif %}</td>
+                    <td>{% if record.exchange_rate is not none %}{{ "%.4f"|format(record.exchange_rate) }}{% endif %}</td>
+                    <td>
+                      {% if record.source_file %}<div>{{ record.source_file }}</div>{% endif %}
+                      {% if record.document_no %}<div class="muted-cell">{{ record.document_no }}</div>{% endif %}
+                      {% if record.created_by %}<div class="muted-cell">{{ record.created_by }}</div>{% endif %}
+                      {% if record.note %}<div class="muted-cell">{{ record.note }}</div>{% endif %}
+                    </td>
+                    <td class="row-actions">
+                    {% if can("manage_customer_prices") %}
+                        <button
+                          class="link-button danger-link"
+                          type="button"
+                          data-open-customer-price-delete
+                          data-action="{{ url_for('delete_customer_price', record_id=record.id) }}"
+                          data-customer="{{ record.customer_name }}"
+                          data-date="{{ record.record_date }}"
+                          data-bld="{{ record.bld_no }}"
+                          data-source-code="{{ record.source_code }}"
+                          data-oe="{{ record.oe_no }}"
+                          data-price="{% if record.price_cny is not none %}¥{{ '%.2f'|format(record.price_cny) }}{% elif record.price_usd is not none %}${{ '%.4f'|format(record.price_usd) }}{% endif %}"
+                        >删除</button>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+                {% if not records %}
+                  <tr><td colspan="12">没有找到客户价格记录。</td></tr>
+                {% endif %}
+              </tbody>
+            </table>
+          {% else %}
+            <table class="materials-grid-table customer-summary-table">
+              <colgroup>
+                <col style="width: 180px">
+                <col style="width: 92px">
+                <col style="width: 92px">
+                <col style="width: 92px">
+                <col style="width: 92px">
+                <col style="width: 92px">
+                <col style="width: 96px">
+                <col style="width: 96px">
+                <col style="width: 90px">
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>客户</th>
+                  <th>总型号数</th>
+                  <th>总记录数</th>
+                  <th>报价型号</th>
+                  <th>报价记录</th>
+                  <th>成交型号</th>
+                  <th>最近报价</th>
+                  <th>最近成交</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for item in customer_summaries %}
+                  <tr>
+                    <td>
+                      <a class="customer-summary-link" href="{{ url_for('customer_prices', customer=item.customer_name) }}#customer-price-results">
+                        <strong>{{ item.customer_name }}</strong>
+                      </a>
+                    </td>
+                    <td>{{ item.model_count or 0 }}</td>
+                    <td>{{ item.total_records or 0 }}</td>
+                    <td>{{ item.quote_models or 0 }}</td>
+                    <td>{{ item.quote_records or 0 }}</td>
+                    <td>{{ item.order_models or 0 }}</td>
+                    <td>{{ item.latest_quote_date or "" }}</td>
+                    <td>{{ item.latest_order_date or "" }}</td>
+                    <td><a href="{{ url_for('customer_prices', customer=item.customer_name) }}#customer-price-results">查看明细</a></td>
+                  </tr>
+                {% endfor %}
+                {% if not customer_summaries %}
+                  <tr><td colspan="9">还没有客户价格记录。</td></tr>
+                {% endif %}
+              </tbody>
+            </table>
+          {% endif %}
+        </div>
+        {% if pagination.total_pages > 1 %}
+          <nav class="product-pagination bottom" aria-label="客户价格分页">
+            <div class="product-pagination-controls">
+              {% if pagination.has_prev %}
+                <a class="linear-button subtle" href="{{ pagination.prev_url }}">上一页</a>
+              {% endif %}
+              {% for link in pagination.links %}
+                {% if link.gap %}
+                  <span class="pagination-gap">…</span>
+                {% else %}
+                  <a class="pagination-page {% if link.current %}current{% endif %}" href="{{ link.url }}">{{ link.page }}</a>
+                {% endif %}
+              {% endfor %}
+              {% if pagination.has_next %}
+                <a class="linear-button subtle" href="{{ pagination.next_url }}">下一页</a>
+              {% endif %}
+            </div>
+          </nav>
+        {% endif %}
+      </section>
+    </main>
+    {% if can("manage_customer_prices") %}
+      <div class="product-modal" id="customer-price-delete-modal" aria-hidden="true">
+        <div class="product-modal-backdrop" data-close-customer-price-delete></div>
+        <div class="product-modal-panel customer-price-delete-panel" role="dialog" aria-modal="true" aria-label="删除客户价格记录">
+          <button class="image-modal-close" type="button" data-close-customer-price-delete aria-label="关闭删除确认">×</button>
+          <div class="modal-heading">
+            <h2>删除价格记录</h2>
+            <p class="note">删除后这条历史价格记录将不再显示。</p>
+          </div>
+          <dl class="customer-price-delete-summary">
+            <div><dt>客户</dt><dd data-delete-customer></dd></div>
+            <div><dt>日期</dt><dd data-delete-date></dd></div>
+            <div><dt>BLD NO.</dt><dd data-delete-bld></dd></div>
+            <div><dt>客户号码</dt><dd data-delete-source-code></dd></div>
+            <div><dt>OE 号</dt><dd data-delete-oe></dd></div>
+            <div><dt>单价</dt><dd data-delete-price></dd></div>
+          </dl>
+          <form method="post" class="form-actions customer-price-delete-actions" data-customer-price-delete-form>
+            <button class="linear-button danger" type="submit">确认删除</button>
+            <button class="linear-button subtle" type="button" data-close-customer-price-delete>取消</button>
+          </form>
+        </div>
+      </div>
+    {% endif %}
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script>
+      (() => {
+        const modal = document.querySelector("#customer-price-delete-modal");
+        const form = modal?.querySelector("[data-customer-price-delete-form]");
+        if (!modal || !(form instanceof HTMLFormElement)) return;
+
+        const setText = (selector, value) => {
+          const target = modal.querySelector(selector);
+          if (target) target.textContent = value || "-";
+        };
+
+        const close = () => {
+          modal.classList.remove("open");
+          modal.setAttribute("aria-hidden", "true");
+          document.body.classList.remove("modal-open");
+          form.removeAttribute("action");
+        };
+
+        document.querySelectorAll("[data-open-customer-price-delete]").forEach((button) => {
+          button.addEventListener("click", () => {
+            form.action = button.dataset.action || "";
+            setText("[data-delete-customer]", button.dataset.customer);
+            setText("[data-delete-date]", button.dataset.date);
+            setText("[data-delete-bld]", button.dataset.bld);
+            setText("[data-delete-source-code]", button.dataset.sourceCode);
+            setText("[data-delete-oe]", button.dataset.oe);
+            setText("[data-delete-price]", button.dataset.price);
+            modal.classList.add("open");
+            modal.setAttribute("aria-hidden", "false");
+            document.body.classList.add("modal-open");
+          });
+        });
+
+        document.querySelectorAll("[data-close-customer-price-delete]").forEach((element) => {
+          element.addEventListener("click", close);
+        });
+        document.addEventListener("keydown", (event) => {
+          if (event.key === "Escape" && modal.classList.contains("open")) close();
+        });
+      })();
+    </script>
+  </body>
+</html>

@@ -15,6 +15,7 @@ venv/
 !.env.example
 
 # Runtime data
+logs/
 uploads/
 outputs/
 data/*.sqlite3

@@ -2,6 +2,9 @@
   <div class="nav-links">
     <a class="{% if active_page == 'match' %}active{% endif %}" href="{{ url_for('index') }}">询价处理</a>
     <a class="{% if active_page == 'products' %}active{% endif %}" href="{{ url_for('products') }}">产品目录</a>
+    {% if can("view_customer_prices") %}
+      <a class="{% if active_page == 'customer_prices' %}active{% endif %}" href="{{ url_for('customer_prices') }}">客户价格</a>
+    {% endif %}
     <a class="{% if active_page == 'materials' %}active{% endif %}" href="{{ url_for('materials') }}">生产料单</a>
     {% if can("generate_purchase_contract") %}
       <a class="{% if active_page == 'purchase_contracts' %}active{% endif %}" href="{{ url_for('purchase_contracts') }}">采购合同</a>

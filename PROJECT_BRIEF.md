@@ -50,7 +50,7 @@ cd "/Users/linzhenyue/Documents/New project 5"
 APP_DEBUG=0 SECRET_KEY=local-dev-bld-matcher .venv/bin/python app.py
 ```
 
-本机也有 `/Applications/BLD.app` 启动器；它只用于本机 5055，不用于 NAS。
+本机也有 `/Applications/BLD.app` 启动器；它只用于通过 Terminal 启动本机 5055 并打开浏览器，不用于 NAS。启动日志在 `logs/bld-local-5055.log`。
 
 常用检查：
 
@@ -104,11 +104,12 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 
 采购合同：
 
-- `/purchase-contracts` 提供轻量采购合同页面，按“采购合同范本_玉环博莱德.docx”结构生成 PDF。
+- `/purchase-contracts` 提供纸面预览式采购合同页面，按“采购合同范本_玉环博莱德.docx”结构生成 PDF。
 - 甲方默认带入“玉环博莱德机械有限公司”，并默认带入范本中的价格说明、付款方式、质量、包装、验收、违约、保密和争议解决条款。
 - PDF 抬头甲乙双方均显示公司名称、联系人和电话；交货地点只放在交货条款中。
-- 手动填写 BLD号、数量、含税单价、交期和备注；BLD号输入后自动从产品目录带入 OE号、产品名称、适用车型和图片。
-- 点击“生成 PDF”后直接生成采购合同 PDF，文件保存到当前用户 `outputs/u用户ID-用户名/` 目录，并写入操作日志。
+- 页面按 A4 合同纸面组织，合同抬头、正文条款和签章区与 PDF 基本一致；明细表为了录入保留更宽的表格区域。
+- 手动填写 BLD号、数量、单价、交期和备注，页面实时预览金额和合计；BLD号输入后自动从产品目录带入 OE号、产品名称和适用车型。
+- 点击“生成 PDF”后先二次确认，再生成采购合同 PDF，文件保存到当前用户 `outputs/u用户ID-用户名/` 目录，并写入操作日志。
 - PDF 生成使用 `reportlab` 和内置中文 CID 字体，不依赖本机业务数据文件。
 
 权限：

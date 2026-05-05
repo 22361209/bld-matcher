@@ -92,6 +92,34 @@ CREATE TABLE IF NOT EXISTS material_items (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS customer_price_records (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  record_type TEXT NOT NULL DEFAULT 'quote',
+  customer_name TEXT NOT NULL,
+  record_date TEXT NOT NULL,
+  document_no TEXT DEFAULT '',
+  source_name TEXT DEFAULT '',
+  source_code TEXT DEFAULT '',
+  oe_no TEXT DEFAULT '',
+  bld_no TEXT DEFAULT '',
+  item TEXT DEFAULT '',
+  models TEXT DEFAULT '',
+  price_cny REAL,
+  price_usd REAL,
+  currency TEXT DEFAULT 'CNY',
+  exchange_rate REAL,
+  tax_included INTEGER NOT NULL DEFAULT 1,
+  note TEXT DEFAULT '',
+  source_file TEXT DEFAULT '',
+  created_by TEXT DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_customer_price_records_customer ON customer_price_records(customer_name);
+CREATE INDEX IF NOT EXISTS idx_customer_price_records_bld ON customer_price_records(bld_no);
+CREATE INDEX IF NOT EXISTS idx_customer_price_records_date ON customer_price_records(record_date);
 """
 
 
@@ -495,6 +523,304 @@ def product_stats(conn: sqlite3.Connection) -> dict[str, int]:
         "active": row["active"] or 0,
         "inactive": row["inactive"] or 0,
         "aliases": alias_count or 0,
+    }
+
+
+PRICE_RECORD_TYPES = {"quote", "order"}
+
+
+def _parse_optional_float(value: object) -> float | None:
+    text = compact_text(value)
+    if not text:
+        return None
+    try:
+        return float(text)
+    except ValueError as exc:
+        raise ValueError(f"数字格式不正确：{text}") from exc
+
+
+def _parse_record_date(value: object) -> str:
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d")
+    text = compact_text(value)
+    if not text:
+        return datetime.now().strftime("%Y-%m-%d")
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d"):
+        try:
+            return datetime.strptime(text, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+    raise ValueError(f"日期格式不正确：{text}")
+
+
+def _customer_price_values(data: dict, *, actor: str = "") -> dict:
+    record_type = compact_text(data.get("record_type")).lower() or "quote"
+    if record_type not in PRICE_RECORD_TYPES:
+        raise ValueError("记录类型不正确。")
+    customer_name = clean_multiline(data.get("customer_name"))
+    if not customer_name:
+        raise ValueError("客户名称不能为空。")
+
+    price_cny = _parse_optional_float(data.get("price_cny"))
+    price_usd = _parse_optional_float(data.get("price_usd"))
+    if price_cny is None and price_usd is None:
+        raise ValueError("含税单价或美金价至少填写一个。")
+
+    source_code = clean_oe_list(data.get("source_code"))
+    oe_no = clean_oe_list(data.get("oe_no"))
+    bld_no = compact_text(data.get("bld_no")).upper()
+    item = clean_multiline(data.get("item"))
+    models = clean_multiline(data.get("models"))
+    if not any([source_code, oe_no, bld_no, item]):
+        raise ValueError("客户号码、OE 号、BLD NO. 或产品名称至少填写一个。")
+
+    timestamp = now_text()
+    return {
+        "record_type": record_type,
+        "customer_name": customer_name,
+        "record_date": _parse_record_date(data.get("record_date")),
+        "document_no": compact_text(data.get("document_no")),
+        "source_name": clean_multiline(data.get("source_name")),
+        "source_code": source_code,
+        "oe_no": oe_no,
+        "bld_no": bld_no,
+        "item": item,
+        "models": models,
+        "price_cny": round(price_cny, 2) if price_cny is not None else None,
+        "price_usd": round(price_usd, 4) if price_usd is not None else None,
+        "currency": compact_text(data.get("currency")).upper() or ("USD" if price_usd is not None and price_cny is None else "CNY"),
+        "exchange_rate": _parse_optional_float(data.get("exchange_rate")),
+        "tax_included": 0 if str(data.get("tax_included", "1")) == "0" else 1,
+        "note": clean_multiline(data.get("note")),
+        "source_file": compact_text(data.get("source_file")),
+        "created_by": actor,
+        "created_at": timestamp,
+        "updated_at": timestamp,
+    }
+
+
+def add_customer_price_record(
+    conn: sqlite3.Connection,
+    data: dict,
+    *,
+    actor: str = "",
+    audit: bool = True,
+    commit: bool = True,
+) -> int:
+    values = _customer_price_values(data, actor=actor)
+    cursor = conn.execute(
+        """
+        INSERT INTO customer_price_records
+          (record_type, customer_name, record_date, document_no, source_name, source_code, oe_no, bld_no,
+           item, models, price_cny, price_usd, currency, exchange_rate, tax_included,
+           note, source_file, created_by, created_at, updated_at)
+        VALUES
+          (:record_type, :customer_name, :record_date, :document_no, :source_name, :source_code, :oe_no, :bld_no,
+           :item, :models, :price_cny, :price_usd, :currency, :exchange_rate, :tax_included,
+           :note, :source_file, :created_by, :created_at, :updated_at)
+        """,
+        values,
+    )
+    record_id = int(cursor.lastrowid)
+    if audit:
+        label = "成交记录" if values["record_type"] == "order" else "报价记录"
+        key = values["bld_no"] or values["source_code"] or values["oe_no"] or str(record_id)
+        log_event(conn, "新增客户价格记录", "customer_price", key, f"{label}；客户: {values['customer_name']}", actor=actor)
+    if commit:
+        conn.commit()
+    return record_id
+
+
+def delete_customer_price_record(conn: sqlite3.Connection, record_id: int, *, actor: str = "") -> sqlite3.Row | None:
+    row = conn.execute("SELECT * FROM customer_price_records WHERE id = ?", (record_id,)).fetchone()
+    if not row:
+        return None
+    conn.execute("DELETE FROM customer_price_records WHERE id = ?", (record_id,))
+    key = row["bld_no"] or row["source_code"] or row["oe_no"] or str(record_id)
+    log_event(conn, "删除客户价格记录", "customer_price", key, f"客户: {row['customer_name']}", actor=actor)
+    conn.commit()
+    return row
+
+
+def _customer_price_filter_clauses(
+    customer: str = "",
+    bld_no: str = "",
+    source_code: str = "",
+    record_type: str = "",
+) -> tuple[list[str], list[object]]:
+    clauses: list[str] = []
+    params: list[object] = []
+    if customer.strip():
+        clauses.append("customer_name = ?")
+        params.append(customer.strip())
+    if record_type in PRICE_RECORD_TYPES:
+        clauses.append("record_type = ?")
+        params.append(record_type)
+    if bld_no.strip():
+        clauses.append("UPPER(bld_no) LIKE ?")
+        params.append(f"%{bld_no.strip().upper()}%")
+    if source_code.strip():
+        normalized = f"%{normalize_code(source_code)}%"
+        clauses.append("REPLACE(REPLACE(REPLACE(REPLACE(UPPER(source_code), '-', ''), ' ', ''), CHAR(10), '|'), CHAR(13), '|') LIKE ?")
+        params.append(normalized)
+    return clauses, params
+
+
+def list_customer_price_records(
+    conn: sqlite3.Connection,
+    *,
+    customer: str = "",
+    bld_no: str = "",
+    source_code: str = "",
+    record_type: str = "",
+    limit: int = 100,
+    offset: int = 0,
+) -> list[sqlite3.Row]:
+    sql = "SELECT * FROM customer_price_records"
+    clauses, params = _customer_price_filter_clauses(customer, bld_no, source_code, record_type)
+    if clauses:
+        sql += " WHERE " + " AND ".join(clauses)
+    sql += " ORDER BY record_date DESC, id DESC LIMIT ? OFFSET ?"
+    params.extend([max(0, limit), max(0, offset)])
+    return conn.execute(sql, params).fetchall()
+
+
+def count_customer_price_records(
+    conn: sqlite3.Connection,
+    *,
+    customer: str = "",
+    bld_no: str = "",
+    source_code: str = "",
+    record_type: str = "",
+) -> int:
+    sql = "SELECT COUNT(*) FROM customer_price_records"
+    clauses, params = _customer_price_filter_clauses(customer, bld_no, source_code, record_type)
+    if clauses:
+        sql += " WHERE " + " AND ".join(clauses)
+    return int(conn.execute(sql, params).fetchone()[0] or 0)
+
+
+def list_customer_price_customer_summaries(
+    conn: sqlite3.Connection,
+    *,
+    customer_query: str = "",
+    record_type: str = "",
+    limit: int = 100,
+    offset: int = 0,
+) -> list[sqlite3.Row]:
+    clauses = []
+    params: list[object] = []
+    if customer_query.strip():
+        clauses.append("UPPER(customer_name) LIKE ?")
+        params.append(f"%{customer_query.strip().upper()}%")
+    if record_type in PRICE_RECORD_TYPES:
+        clauses.append("record_type = ?")
+        params.append(record_type)
+    where_sql = "WHERE " + " AND ".join(clauses) if clauses else ""
+    return conn.execute(
+        f"""
+        SELECT
+          customer_name,
+          COUNT(*) AS total_records,
+          COUNT(DISTINCT NULLIF(bld_no, '')) AS model_count,
+          SUM(record_type = 'quote') AS quote_records,
+          COUNT(DISTINCT CASE WHEN record_type = 'quote' THEN NULLIF(bld_no, '') END) AS quote_models,
+          SUM(record_type = 'order') AS order_records,
+          COUNT(DISTINCT CASE WHEN record_type = 'order' THEN NULLIF(bld_no, '') END) AS order_models,
+          MAX(CASE WHEN record_type = 'quote' THEN record_date END) AS latest_quote_date,
+          MAX(CASE WHEN record_type = 'order' THEN record_date END) AS latest_order_date,
+          MAX(record_date) AS latest_date
+        FROM customer_price_records
+        {where_sql}
+        GROUP BY customer_name
+        ORDER BY latest_date DESC, customer_name
+        LIMIT ? OFFSET ?
+        """,
+        [*params, max(0, limit), max(0, offset)],
+    ).fetchall()
+
+
+def count_customer_price_customers(conn: sqlite3.Connection, *, customer_query: str = "", record_type: str = "") -> int:
+    clauses = []
+    params: list[object] = []
+    if customer_query.strip():
+        clauses.append("UPPER(customer_name) LIKE ?")
+        params.append(f"%{customer_query.strip().upper()}%")
+    if record_type in PRICE_RECORD_TYPES:
+        clauses.append("record_type = ?")
+        params.append(record_type)
+    sql = "SELECT COUNT(DISTINCT customer_name) FROM customer_price_records"
+    if clauses:
+        sql += " WHERE " + " AND ".join(clauses)
+    return int(conn.execute(sql, params).fetchone()[0] or 0)
+
+
+def list_customer_price_model_comparisons(
+    conn: sqlite3.Connection,
+    *,
+    customer: str = "",
+    bld_no: str = "",
+    source_code: str = "",
+    record_type: str = "",
+    limit: int = 200,
+) -> list[sqlite3.Row]:
+    clauses, params = _customer_price_filter_clauses(customer, bld_no, source_code, record_type)
+    where_sql = " WHERE " + " AND ".join(clauses) if clauses else ""
+    model_key = "COALESCE(NULLIF(bld_no, ''), NULLIF(source_code, ''), NULLIF(oe_no, ''))"
+    sql = f"""
+        WITH filtered AS (
+          SELECT *
+          FROM customer_price_records
+          {where_sql}
+        ),
+        ranked AS (
+          SELECT
+            *,
+            {model_key} AS model_key,
+            ROW_NUMBER() OVER (
+              PARTITION BY customer_name, {model_key}
+              ORDER BY record_date DESC, id DESC
+            ) AS rn
+          FROM filtered
+          WHERE {model_key} IS NOT NULL
+        )
+        SELECT
+          customer_name,
+          model_key,
+          MAX(CASE WHEN rn = 1 THEN bld_no END) AS bld_no,
+          MAX(CASE WHEN rn = 1 THEN source_code END) AS source_code,
+          MAX(CASE WHEN rn = 1 THEN oe_no END) AS oe_no,
+          MAX(CASE WHEN rn = 1 THEN item END) AS item,
+          MAX(CASE WHEN rn = 1 THEN models END) AS models,
+          MAX(CASE WHEN rn = 1 THEN record_date END) AS latest_date,
+          MAX(CASE WHEN rn = 1 THEN price_cny END) AS latest_price_cny,
+          MIN(price_cny) AS min_price_cny,
+          MAX(price_cny) AS max_price_cny,
+          COUNT(*) AS total_records
+        FROM ranked
+        GROUP BY customer_name, model_key
+        ORDER BY model_key, customer_name
+        LIMIT ?
+    """
+    return conn.execute(sql, [*params, max(0, limit)]).fetchall()
+
+
+def customer_price_stats(conn: sqlite3.Connection) -> dict[str, int]:
+    row = conn.execute(
+        """
+        SELECT
+          COUNT(*) AS total,
+          SUM(record_type = 'quote') AS quotes,
+          SUM(record_type = 'order') AS orders,
+          COUNT(DISTINCT customer_name) AS customers
+        FROM customer_price_records
+        """
+    ).fetchone()
+    return {
+        "total": row["total"] or 0,
+        "quotes": row["quotes"] or 0,
+        "orders": row["orders"] or 0,
+        "customers": row["customers"] or 0,
     }
 
 

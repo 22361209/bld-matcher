@@ -21,137 +21,170 @@
         {% endif %}
       {% endwith %}
 
-      <header class="material-landing purchase-contract-landing">
-        <h1>采购合同</h1>
-        <p>录入外购型号、数量、价格和交期，生成 PDF 合同。</p>
-      </header>
-
       {% if can("generate_purchase_contract") %}
         <form action="{{ url_for('generate_purchase_contract') }}" method="post" class="purchase-contract-form" data-purchase-contract-form data-enter-navigation>
-          <section class="workbench-form-section purchase-contract-meta">
-            <div class="purchase-contract-field-grid">
-              <label>
-                合同编号
-                <input name="contract_no" value="{{ default_contract_no }}" required>
-              </label>
-              <label>
-                签订日期
-                <input type="date" name="contract_date" value="{{ default_date }}" required>
-              </label>
-              <label>
-                采购方公司名称
-                <input name="buyer_name" value="{{ defaults.buyer_name }}" required>
-              </label>
-              <label>
-                采购方联系人
-                <input name="buyer_contact">
-              </label>
-              <label>
-                采购方电话
-                <input name="buyer_phone">
-              </label>
-              <label>
-                供应方公司名称
-                <input name="supplier_name" required>
-              </label>
-              <label>
-                供应方联系人
-                <input name="supplier_contact">
-              </label>
-              <label>
-                供应方电话
-                <input name="supplier_phone">
-              </label>
-              <label>
-                交货地点
-                <input name="delivery_address" value="{{ defaults.delivery_address }}" placeholder="请输入交货详细地址">
-              </label>
-              <label class="span-2">
-                价格说明
-                <input name="price_note" value="{{ defaults.price_note }}">
-              </label>
-            </div>
-          </section>
+          <div class="purchase-contract-action-bar">
+            <h1>采购合同</h1>
+            <button class="linear-button primary" type="submit" data-purchase-submit-button>生成 PDF</button>
+          </div>
+          <div class="purchase-generate-feedback" data-purchase-feedback role="status" hidden></div>
 
-          <section class="materials-table-section purchase-contract-items">
-            <div class="materials-table-title">
-              <div>
-                <h2>采购明细</h2>
-                <p>每一行会进入 PDF 合同明细表。</p>
-              </div>
-              <div class="materials-table-title-actions">
-                <button class="linear-button subtle" type="button" data-add-purchase-row>新增一行</button>
-              </div>
+          <section class="purchase-paper" aria-label="采购合同预览">
+            <h1 class="purchase-paper-title">采 购 合 同</h1>
+
+            <div class="purchase-paper-meta">
+              <label>合同编号：<input class="paper-input" name="contract_no" value="{{ default_contract_no }}" required></label>
+              <label class="right">签订日期：<input class="paper-input date-input" type="date" name="contract_date" value="{{ default_date }}" required></label>
+              <label>采购方（甲方）：<input class="paper-input" name="buyer_name" value="{{ defaults.buyer_name }}" required></label>
+              <label class="supplier-line">供应方（乙方）：<input class="paper-input" name="supplier_name" required></label>
+              <label>联系人：<input class="paper-input compact" name="buyer_contact"></label>
+              <label class="supplier-detail-line">联系人：<input class="paper-input compact" name="supplier_contact"></label>
+              <label>电话：<input class="paper-input compact" name="buyer_phone"></label>
+              <label class="supplier-detail-line">电话：<input class="paper-input compact" name="supplier_phone"></label>
             </div>
-            <div class="materials-table-wrap purchase-contract-table-wrap">
-              <table class="materials-grid-table purchase-contract-table">
+
+            <p class="purchase-body-indent">根据《中华人民共和国民法典》及相关法律法规，甲乙双方经平等协商，就甲方向乙方采购产品事宜，达成如下协议：</p>
+
+            <div class="purchase-section-heading">
+              <h2>第一条 产品名称、规格、数量及价格</h2>
+              <button class="linear-button subtle" type="button" data-add-purchase-row>新增一行</button>
+            </div>
+            <div class="purchase-doc-table-wrap">
+              <table class="purchase-contract-table purchase-doc-table">
                 <colgroup>
-                  <col style="width: 140px">
-                  <col style="width: 150px">
-                  <col style="width: 180px">
-                  <col style="width: 220px">
-                  <col style="width: 92px">
+                  <col style="width: 46px">
+                  <col style="width: 128px">
+                  <col style="width: 142px">
+                  <col style="width: 170px">
+                  <col style="width: 250px">
+                  <col style="width: 90px">
                   <col style="width: 110px">
                   <col style="width: 120px">
-                  <col style="width: 150px">
-                  <col style="width: 180px">
-                  <col style="width: 72px">
+                  <col style="width: 140px">
+                  <col style="width: 132px">
+                  <col style="width: 70px">
                 </colgroup>
                 <thead>
                   <tr>
+                    <th>序号</th>
                     <th>BLD号</th>
                     <th>OE号</th>
                     <th>产品名称</th>
                     <th>适用车型</th>
-                    <th>图片</th>
                     <th>数量</th>
-                    <th>含税单价</th>
-                    <th>交期</th>
+                    <th>单价</th>
+                    <th>金额</th>
                     <th>备注</th>
+                    <th>交期</th>
                     <th>操作</th>
                   </tr>
                 </thead>
                 <tbody data-purchase-rows>
                   {% for row in range(3) %}
                     <tr>
+                      <td class="purchase-row-index" data-purchase-index>{{ loop.index }}</td>
                       <td><input name="product_code[]" data-purchase-bld {% if loop.first %}required{% endif %}></td>
                       <td><input name="oe_no[]" data-purchase-oe></td>
                       <td><input name="product_name[]" data-purchase-name></td>
                       <td><input name="models[]" data-purchase-models></td>
-                      <td><span class="purchase-image-preview" data-purchase-image></span></td>
                       <td><input name="quantity[]" inputmode="decimal" {% if loop.first %}required{% endif %}></td>
                       <td><input name="unit_price[]" inputmode="decimal" {% if loop.first %}required{% endif %}></td>
-                      <td><input name="delivery_date[]"></td>
+                      <td class="purchase-amount-cell" data-purchase-amount></td>
                       <td><input name="item_note[]"></td>
+                      <td><input name="delivery_date[]"></td>
                       <td><button class="link-button danger-link" type="button" data-remove-purchase-row>删除</button></td>
                     </tr>
                   {% endfor %}
                 </tbody>
+                <tfoot>
+                  <tr>
+                    <td colspan="5">合计</td>
+                    <td data-purchase-total-quantity></td>
+                    <td></td>
+                    <td data-purchase-total-amount></td>
+                    <td colspan="3"></td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
-          </section>
 
-          <section class="workbench-form-section purchase-contract-terms">
-            <div class="purchase-contract-field-grid terms-grid">
-              <label class="span-2">
-                付款方式
-                <textarea name="payment_terms" rows="2">{{ defaults.payment_terms }}</textarea>
-              </label>
-              <label class="span-2">
-                质量要求
-                <textarea name="quality_terms" rows="4">{{ defaults.quality_terms }}</textarea>
-              </label>
-              <label class="span-2">
-                备注
-                <textarea name="remark" rows="3"></textarea>
-              </label>
-            </div>
-          </section>
+            <div class="purchase-note">注：<input class="paper-input note-input" name="price_note" value="{{ defaults.price_note }}"></div>
+            <p class="purchase-body">合计金额（大写）：<span data-purchase-total-upper>零元整</span>；¥ <span data-purchase-total-small>0.00</span></p>
 
-          <section class="purchase-contract-actions">
-            <button class="linear-button primary" type="submit">生成 PDF</button>
+            <h2 class="purchase-clause-title">第二条 质量标准</h2>
+            <textarea class="paper-textarea clause-textarea" name="quality_terms" rows="5">{{ defaults.quality_terms }}</textarea>
+
+            <h2 class="purchase-clause-title">第三条 包装要求</h2>
+            <p class="purchase-body-indent">1. 包装应牢固可靠，具备防潮、防锈、防碰撞措施，适应运输及仓储要求。</p>
+            <p class="purchase-body-indent">2. 每件外包装须标明：BLD号、OE号、数量、生产日期。</p>
+            <p class="purchase-body-indent">3. 因包装不当造成的产品损坏、锈蚀等外观或性能缺陷，由乙方承担全部损失。</p>
+
+            <h2 class="purchase-clause-title">第四条 交货时间、地点及方式</h2>
+            <p class="purchase-body-indent">1. 交货时间：各产品交期见第一条表格，乙方须按期交付。</p>
+            <p class="purchase-body-indent">2. 交货地点：<input class="paper-input inline-long" name="delivery_address" value="{{ defaults.delivery_address }}">。</p>
+            <p class="purchase-body-indent">3. 运输方式：由乙方负责运输并承担运费及运输途中的风险。</p>
+
+            <h2 class="purchase-clause-title">第五条 验收</h2>
+            <p class="purchase-body-indent">1. 甲方收到货物后 7 个工作日内进行验收。外观、数量、包装当面点验；质量检验可在 15 个工作日内完成。</p>
+            <p class="purchase-body-indent">2. 验收不合格的，甲方有权拒收或要求退换货，产生费用由乙方承担。</p>
+            <p class="purchase-body-indent">3. 甲方签署验收单后视为乙方已交货，但不免除乙方质保责任。</p>
+
+            <h2 class="purchase-clause-title">第六条 付款方式</h2>
+            <p class="purchase-body-indent">1. 付款方式：<input class="paper-input inline-medium" name="payment_terms" value="{{ defaults.payment_terms }}"></p>
+            <p class="purchase-body-indent">2. 甲方付款前，乙方须开具合法有效的增值税专用发票（税率 13%）。</p>
+
+            <h2 class="purchase-clause-title">第七条 违约责任</h2>
+            <p class="purchase-body-indent">1. 乙方逾期交货的，每逾期一日按该批货款总额的 0.5% 向甲方支付违约金；逾期超过 15 日的，甲方有权单方解除合同，并追究乙方赔偿责任。</p>
+            <p class="purchase-body-indent">2. 产品质量不符合约定的，乙方应无条件退换货并承担全部费用；逾期退换的按逾期交货处理。</p>
+            <p class="purchase-body-indent">3. 甲方逾期付款的，每逾期一日按应付未付金额的 0.5% 向乙方支付违约金。</p>
+
+            <h2 class="purchase-clause-title">第八条 保密条款</h2>
+            <p class="purchase-body-indent">双方对合同内容及履行过程中获知的对方商业秘密（包括但不限于价格、数量、图纸、技术参数等）予以保密，未经对方书面同意不得向第三方披露。违反方赔偿对方全部损失。保密义务自合同终止后 2 年内继续有效。</p>
+
+            <h2 class="purchase-clause-title">第九条 争议解决</h2>
+            <p class="purchase-body-indent">因本合同引起的或与本合同有关的争议，双方友好协商解决；协商不成的，任何一方有权向甲方所在地有管辖权的人民法院提起诉讼。</p>
+
+            <h2 class="purchase-clause-title">第十条 其他约定</h2>
+            <p class="purchase-body-indent">本合同未尽事宜，双方可另行签订补充协议，补充协议与本合同具有同等法律效力。</p>
+            <label class="purchase-remark">备注：<textarea class="paper-textarea remark-textarea" name="remark" rows="2"></textarea></label>
+
+            <section class="purchase-signature">
+              <p>（以下为签章区）</p>
+              <div class="purchase-signature-grid">
+                <p>甲方（盖章）：<span data-buyer-sign-name>{{ defaults.buyer_name }}</span></p>
+                <p>乙方（盖章）：<span data-supplier-sign-name></span></p>
+                <p>统一社会信用代码：</p>
+                <p>统一社会信用代码：</p>
+                <p>地址：</p>
+                <p>地址：</p>
+                <p>电话：</p>
+                <p>电话：</p>
+                <p>开户行：</p>
+                <p>开户行：</p>
+                <p>账号：</p>
+                <p>账号：</p>
+                <p>法定代表人或授权代表（签字）：</p>
+                <p>法定代表人或授权代表（签字）：</p>
+                <p>日期：</p>
+                <p>日期：</p>
+              </div>
+            </section>
           </section>
         </form>
+        <div class="download-modal purchase-confirm-modal" id="purchase-contract-confirm-modal" aria-hidden="true" data-purchase-confirm-modal>
+          <div class="download-modal-backdrop" data-purchase-confirm-cancel></div>
+          <div class="download-modal-panel purchase-confirm-panel" role="dialog" aria-modal="true" aria-labelledby="purchase-confirm-title">
+            <button class="download-modal-close" type="button" data-purchase-confirm-cancel aria-label="关闭生成确认">×</button>
+            <div class="modal-heading">
+              <h2 id="purchase-confirm-title">确认生成采购合同 PDF？</h2>
+              <p>确认后会按当前页面内容生成并下载 PDF，同时写入最近采购合同记录。</p>
+            </div>
+            <div class="purchase-confirm-actions">
+              <button class="download-cancel-button" type="button" data-purchase-confirm-cancel>取消</button>
+              <button class="download-confirm-button" type="button" data-purchase-confirm-submit>确认生成 PDF</button>
+            </div>
+          </div>
+        </div>
       {% else %}
         <p class="materials-muted">当前账号没有生成采购合同权限。</p>
       {% endif %}

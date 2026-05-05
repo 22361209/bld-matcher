@@ -69,7 +69,7 @@ class WebAppTest(unittest.TestCase):
 
     def test_core_admin_pages_load(self):
         self.login()
-        for path in ["/products", "/materials", "/purchase-contracts", "/users", "/logs", "/system-updates"]:
+        for path in ["/products", "/customer-prices", "/materials", "/purchase-contracts", "/users", "/logs", "/system-updates"]:
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
@@ -107,6 +107,9 @@ class WebAppTest(unittest.TestCase):
         self.assertIn('name="oe_no[]"', html)
         self.assertIn('name="models[]"', html)
         self.assertIn('data-add-purchase-row', html)
+        self.assertIn('data-supplier-sign-name', html)
+        self.assertIn('data-purchase-confirm-modal', html)
+        self.assertIn("确认生成 PDF", html)
 
         lookup = self.client.get("/purchase-contracts/product-lookup", query_string={"bld": "K-OUT-001"})
         self.assertEqual(lookup.status_code, 200)
@@ -149,6 +152,195 @@ class WebAppTest(unittest.TestCase):
         response.close()
         files = list((self.root / "outputs").glob("u*-007/采购合同-CG-TEST-001.pdf"))
         self.assertEqual(len(files), 1)
+
+    def test_purchase_contracts_are_admin_only(self):
+        from app.database import save_user
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            save_user(
+                conn,
+                {
+                    "username": "editor-contracts",
+                    "display_name": "Editor Contracts",
+                    "password": "editor-pw",
+                    "role": "editor",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        self.login()
+        admin_page = self.client.get("/").get_data(as_text=True)
+        self.assertIn("采购合同", admin_page)
+        self.client.post("/logout")
+
+        login = self.client.post(
+            "/login",
+            data={"username": "editor-contracts", "password": "editor-pw", "next": "/"},
+            follow_redirects=False,
+        )
+        self.assertEqual(login.status_code, 302)
+
+        editor_page = self.client.get("/").get_data(as_text=True)
+        self.assertNotIn("采购合同", editor_page)
+        response = self.client.get("/purchase-contracts", follow_redirects=False)
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith("/"))
+
+        response = self.client.get("/purchase-contracts/product-lookup", query_string={"bld": "K-OUT-001"}, follow_redirects=False)
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith("/"))
+
+        response = self.client.post("/purchase-contracts/generate", follow_redirects=False)
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith("/"))
+        self.client.post("/logout")
+
+    def test_customer_price_records_can_filter_and_import(self):
+        from openpyxl import Workbook
+
+        self.login()
+        response = self.client.get("/customer-prices")
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("客户价格记录", html)
+        self.assertIn('action="/customer-prices#customer-price-results"', html)
+        self.assertIn("客户概览", html)
+        self.assertIn('name="customer_q"', html)
+        self.assertIn('name="bld_no"', html)
+        self.assertIn('name="source_code"', html)
+        self.assertNotIn('name="date_from"', html)
+        self.assertNotIn('name="date_to"', html)
+        self.assertNotIn("客户号码 / OE", html)
+        self.assertNotIn("<th>数量</th>", html)
+
+        response = self.client.post(
+            "/customer-prices/save",
+            data={
+                "record_type": "quote",
+                "customer_name": "ACME",
+                "record_date": "2026-05-05",
+                "source_code": "ACME-001",
+                "bld_no": "K-PRICE-001",
+                "item": "Control Arm",
+                "price_cny": "88.5",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 302)
+
+        response = self.client.post(
+            "/customer-prices/save",
+            data={
+                "record_type": "quote",
+                "customer_name": "OMEGA",
+                "record_date": "2026-05-05",
+                "source_code": "OMG-001",
+                "bld_no": "K-PRICE-001",
+                "item": "Control Arm",
+                "price_cny": "92",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 302)
+
+        response = self.client.get("/customer-prices")
+        html = response.get_data(as_text=True)
+        self.assertIn("客户概览", html)
+        self.assertIn("ACME", html)
+        self.assertIn('href="/customer-prices?customer=ACME#customer-price-results"', html)
+        self.assertIn("查看明细", html)
+
+        response = self.client.get("/customer-prices", query_string={"customer_q": "ACM"})
+        html = response.get_data(as_text=True)
+        self.assertIn("客户概览", html)
+        self.assertIn("ACME", html)
+        self.assertNotIn("价格明细", html)
+
+        response = self.client.get("/customer-prices", query_string={"customer": "ACME"})
+        html = response.get_data(as_text=True)
+        self.assertIn("价格明细", html)
+        self.assertIn("返回客户概览", html)
+
+        response = self.client.get("/customer-prices", query_string={"bld_no": "K-PRICE"})
+        html = response.get_data(as_text=True)
+        self.assertIn("价格明细", html)
+        self.assertIn("型号价格对比", html)
+        self.assertIn("<th>客户号码</th>", html)
+        self.assertIn("<th>OE 号</th>", html)
+        self.assertIn("K-PRICE-001", html)
+        self.assertIn("¥88.50", html)
+        self.assertIn("OMEGA", html)
+        self.assertIn("¥92.00", html)
+        self.assertIn("ACME-001", html)
+        self.assertIn('id="customer-price-delete-modal"', html)
+        self.assertIn("data-open-customer-price-delete", html)
+
+        response = self.client.get("/customer-prices", query_string={"source_code": "ACME-001"})
+        html = response.get_data(as_text=True)
+        self.assertIn("价格明细", html)
+        self.assertIn("ACME-001", html)
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["客户", "日期", "BLD NO.", "OE号", "含税单价"])
+        sheet.append(["PIKA", "2026-05-05", "K-ORDER-001", "54500-2D000", 120])
+        payload = io.BytesIO()
+        workbook.save(payload)
+        workbook.close()
+        payload.seek(0)
+
+        response = self.client.post(
+            "/customer-prices/import",
+            data={
+                "record_type": "order",
+                "price_file": (payload, "orders.xlsx"),
+            },
+            content_type="multipart/form-data",
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 302)
+
+        response = self.client.get("/customer-prices", query_string={"record_type": "order", "bld_no": "K-ORDER"})
+        html = response.get_data(as_text=True)
+        self.assertIn("PIKA", html)
+        self.assertIn("K-ORDER-001", html)
+        self.assertIn("成交", html)
+
+    def test_customer_prices_are_admin_only(self):
+        from app.database import save_user
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            save_user(
+                conn,
+                {
+                    "username": "editor-prices",
+                    "display_name": "Editor Prices",
+                    "password": "editor-pw",
+                    "role": "editor",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        self.login()
+        admin_page = self.client.get("/").get_data(as_text=True)
+        self.assertIn("客户价格", admin_page)
+        self.client.post("/logout")
+
+        login = self.client.post(
+            "/login",
+            data={"username": "editor-prices", "password": "editor-pw", "next": "/"},
+            follow_redirects=False,
+        )
+        self.assertEqual(login.status_code, 302)
+
+        editor_page = self.client.get("/").get_data(as_text=True)
+        self.assertNotIn("客户价格", editor_page)
+        response = self.client.get("/customer-prices", follow_redirects=False)
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith("/"))
+        self.client.post("/logout")
 
     def test_products_search_uses_results_anchor(self):
         from app.database import upsert_product

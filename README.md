@@ -26,7 +26,7 @@ http://127.0.0.1:5055/
 
 ### macOS 本机启动器
 
-本机可以安装一个名为 `BLD` 的启动器到“应用程序”文件夹，并自动放到 Dock。它只负责启动当前工作区里的 5055 服务并打开浏览器，不用于 NAS。
+本机可以安装一个名为 `BLD` 的启动器到“应用程序”文件夹，并自动放到 Dock。它只负责通过 Terminal 启动当前工作区里的 5055 服务并打开浏览器，不用于 NAS。启动日志写入 `logs/bld-local-5055.log`。
 
 ```bash
 bash tools/install_bld_launcher.sh

@@ -10,11 +10,9 @@ on run
 		return
 	end if
 	
-	set launchCommand to "cd " & quoted form of projectPath & " && APP_DEBUG=0 SECRET_KEY=local-dev-bld-matcher .venv/bin/python app.py"
-	tell application "Terminal"
-		activate
-		do script launchCommand
-	end tell
+	set commandPath to "/tmp/bld-start-local-5055.command"
+	set commandText to "#!/bin/zsh" & linefeed & "cd " & quoted form of projectPath & " || exit 1" & linefeed & "mkdir -p logs" & linefeed & "echo 'BLD 本机服务启动中，请不要关闭此窗口。'" & linefeed & "echo '访问地址：" & serverUrl & "'" & linefeed & "APP_DEBUG=0 SECRET_KEY=local-dev-bld-matcher .venv/bin/python app.py >> logs/bld-local-5055.log 2>&1"
+	do shell script "printf %s " & quoted form of commandText & " > " & quoted form of commandPath & " && chmod +x " & quoted form of commandPath & " && open -a Terminal " & quoted form of commandPath
 	
 	repeat 30 times
 		delay 0.5
@@ -26,5 +24,5 @@ on run
 		end try
 	end repeat
 	
-	display dialog "5055 启动命令已发出，但暂时还没有检测到服务响应。请看 Terminal 窗口里的错误信息。" buttons {"知道了"} default button 1 with icon caution
+	display dialog "5055 启动命令已发出，但暂时还没有检测到服务响应。请查看 Terminal 窗口或项目里的 logs/bld-local-5055.log。" buttons {"知道了"} default button 1 with icon caution
 end run

@@ -11,7 +11,6 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
-from reportlab.platypus import Image as PdfImage
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 
@@ -241,6 +240,14 @@ def _styles() -> dict[str, ParagraphStyle]:
             leading=14,
             alignment=TA_RIGHT,
         ),
+        "supplier_detail": ParagraphStyle(
+            "ContractSupplierDetail",
+            parent=base["BodyText"],
+            fontName=PDF_FONT,
+            fontSize=10.5,
+            leading=15,
+            leftIndent=15 * mm,
+        ),
         "table": ParagraphStyle(
             "ContractTable",
             parent=base["BodyText"],
@@ -303,19 +310,6 @@ def _p(text: object, style: ParagraphStyle) -> Paragraph:
     return Paragraph("".join(parts) or "&nbsp;", style)
 
 
-def _image_cell(path: object) -> object:
-    text = _text(path)
-    if not text:
-        return ""
-    image_path = Path(text)
-    if not image_path.exists() or not image_path.is_file():
-        return ""
-    try:
-        return PdfImage(str(image_path), width=14 * mm, height=10 * mm, kind="proportional")
-    except Exception:
-        return ""
-
-
 def generate_purchase_contract_pdf(contract: dict, output_path: Path) -> None:
     styles = _styles()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -337,18 +331,18 @@ def generate_purchase_contract_pdf(contract: dict, output_path: Path) -> None:
         ],
         [
             _p(f"采购方（甲方）：{contract['buyer_name']}", styles["body"]),
-            _p(f"供应方（乙方）：{contract['supplier_name']}", styles["right"]),
+            _p(f"供应方（乙方）：{contract['supplier_name']}", styles["body"]),
         ],
     ]
     meta_rows.extend(
         [
             [
                 _p(f"联系人：{contract.get('buyer_contact', '')}", styles["body"]),
-                _p(f"联系人：{contract.get('supplier_contact', '')}", styles["right"]),
+                _p(f"联系人：{contract.get('supplier_contact', '')}", styles["supplier_detail"]),
             ],
             [
                 _p(f"电话：{contract.get('buyer_phone', '')}", styles["body"]),
-                _p(f"电话：{contract.get('supplier_phone', '')}", styles["right"]),
+                _p(f"电话：{contract.get('supplier_phone', '')}", styles["supplier_detail"]),
             ],
         ]
     )
@@ -373,9 +367,8 @@ def generate_purchase_contract_pdf(contract: dict, output_path: Path) -> None:
             _p("OE号", styles["table_center"]),
             _p("产品名称", styles["table_center"]),
             _p("适用车型", styles["table_center"]),
-            _p("图片", styles["table_center"]),
             _p("数量", styles["table_center"]),
-            _p("含税单价（元）", styles["table_center"]),
+            _p("单价（元）", styles["table_center"]),
             _p("金额", styles["table_center"]),
             _p("备注", styles["table_center"]),
             _p("交期", styles["table_center"]),
@@ -389,7 +382,6 @@ def generate_purchase_contract_pdf(contract: dict, output_path: Path) -> None:
                 _p(item["oe_no"], styles["table"]),
                 _p(item["product_name"], styles["table"]),
                 _p(item.get("models", ""), styles["table"]),
-                _image_cell(item.get("image_path")),
                 _p(_quantity(item["quantity"]), styles["table_right"]),
                 _p(_money(item["unit_price"]), styles["table_right"]),
                 _p(_money(item["amount"]), styles["table_right"]),
@@ -404,7 +396,6 @@ def generate_purchase_contract_pdf(contract: dict, output_path: Path) -> None:
             "",
             "",
             "",
-            "",
             _p(_quantity(contract["total_quantity"]), styles["table_right"]),
             "",
             _p(_money(contract["total_amount"]), styles["table_right"]),
@@ -415,7 +406,7 @@ def generate_purchase_contract_pdf(contract: dict, output_path: Path) -> None:
 
     items_table = Table(
         table_data,
-        colWidths=[8 * mm, 18 * mm, 21 * mm, 25 * mm, 30 * mm, 16 * mm, 10 * mm, 16 * mm, 18 * mm, 15 * mm, 17 * mm],
+        colWidths=[8 * mm, 19 * mm, 22 * mm, 30 * mm, 35 * mm, 10 * mm, 16 * mm, 18 * mm, 18 * mm, 18 * mm],
         repeatRows=1,
     )
     items_table.setStyle(
@@ -424,7 +415,7 @@ def generate_purchase_contract_pdf(contract: dict, output_path: Path) -> None:
                 ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#aeb9c5")),
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef3f8")),
                 ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#f7fafc")),
-                ("SPAN", (0, -1), (5, -1)),
+                ("SPAN", (0, -1), (4, -1)),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("FONTNAME", (0, 0), (-1, -1), PDF_FONT),
                 ("TOPPADDING", (0, 0), (-1, -1), 3),
@@ -437,7 +428,7 @@ def generate_purchase_contract_pdf(contract: dict, output_path: Path) -> None:
     story.extend([items_table, Spacer(1, 6 * mm)])
 
     clauses = [
-        f"注：1. {contract['price_note']}　2. 行数不够可自行添加。",
+        f"注：{contract['price_note']}",
         f"合计金额（大写）：{contract['total_amount_upper']}　　¥：{_money(contract['total_amount'])}",
         "第二条　质量标准",
         contract["quality_terms"],
@@ -484,7 +475,7 @@ def generate_purchase_contract_pdf(contract: dict, output_path: Path) -> None:
     signature = Table(
         [
             [_p("（以下为签章区）", styles["body"]), ""],
-            [_p(f"甲方（盖章）：{contract['buyer_name']}", styles["body"]), _p("乙方（盖章）：", styles["body"])],
+            [_p(f"甲方（盖章）：{contract['buyer_name']}", styles["body"]), _p(f"乙方（盖章）：{contract['supplier_name']}", styles["body"])],
             [_p("统一社会信用代码：", styles["body"]), _p("统一社会信用代码：", styles["body"])],
             [_p("地址：", styles["body"]), _p("地址：", styles["body"])],
             [_p("电话：", styles["body"]), _p("电话：", styles["body"])],
