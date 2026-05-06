@@ -120,7 +120,7 @@ def register(app) -> None:
                 candidates.append(OUTPUT_DIR / name)
             candidates.append(user_output_dir(create=False) / name)
         candidates.append(OUTPUT_DIR / name)
-        path = next((candidate.resolve() for candidate in candidates if candidate.exists()), None)
+        path = next((candidate.resolve() for candidate in candidates if candidate.is_file()), None)
         if not path or OUTPUT_DIR.resolve() not in path.parents:
             flash("文件不存在。", "error")
             return redirect(url_for("index"))

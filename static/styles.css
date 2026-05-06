@@ -2950,6 +2950,10 @@ textarea {
   --purchase-paper-text: #111827;
   --purchase-paper-muted: #4b5563;
   --purchase-paper-line: #cbd5e1;
+  --purchase-edit-bg: #fff8e8;
+  --purchase-edit-line: #ead391;
+  --purchase-edit-text: #1f5f8b;
+  --purchase-edit-focus: #d5a62d;
 }
 
 .purchase-contract-form {
@@ -2958,6 +2962,25 @@ textarea {
   width: min(var(--purchase-paper-width), 100%);
   margin: 0 auto;
   padding: 28px 0 24px;
+}
+
+.contract-management-hero {
+  margin-bottom: 18px;
+}
+
+.contract-entry-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  width: min(var(--purchase-paper-width), 100%);
+  margin: 0 auto 22px;
+}
+
+.contract-placeholder {
+  width: min(var(--purchase-paper-width), 100%);
+  margin: 28px auto 0;
 }
 
 .purchase-contract-action-bar {
@@ -3030,20 +3053,26 @@ textarea {
 .purchase-paper-meta {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 5px 24px;
+  gap: 6px 24px;
   margin-bottom: 10mm;
   font-size: 14px;
   font-weight: 700;
 }
 
 .purchase-paper-meta label {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
+  min-height: 30px;
+  margin: 0;
+  line-height: 30px;
   white-space: nowrap;
 }
 
 .purchase-paper-meta .right {
-  text-align: right;
+  justify-content: flex-start;
+  text-align: left;
 }
 
 .purchase-paper-meta .supplier-line {
@@ -3051,36 +3080,53 @@ textarea {
 }
 
 .purchase-paper-meta .supplier-detail-line {
-  padding-left: 4em;
   text-align: left;
 }
 
 .paper-input,
 .paper-textarea,
 .purchase-contract-table input {
-  color: inherit;
+  color: var(--purchase-edit-text);
   font: inherit;
   letter-spacing: 0;
-  border: 1px solid transparent;
+  border: 1px solid var(--purchase-edit-line);
   border-radius: 4px;
-  background: transparent;
+  background: var(--purchase-edit-bg);
   box-shadow: none;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.paper-input::placeholder,
+.paper-textarea::placeholder,
+.purchase-contract-table input::placeholder {
+  color: rgba(31, 95, 139, 0.58);
 }
 
 .paper-input:focus,
 .paper-textarea:focus,
 .purchase-contract-table input:focus {
   outline: none;
-  border-color: #d8b84c;
+  border-color: var(--purchase-edit-focus);
   background: #fff8d6;
+  box-shadow: 0 0 0 2px rgba(213, 166, 45, 0.16);
 }
 
 .paper-input {
   width: 215px;
   min-width: 80px;
-  height: 24px;
-  padding: 1px 3px;
+  height: 28px;
+  min-height: 28px;
+  box-sizing: border-box;
+  padding: 2px 5px;
+  line-height: normal;
+  vertical-align: middle;
+}
+
+.purchase-paper-meta .paper-input {
+  height: 28px;
+  min-height: 28px;
+  max-height: 28px;
+  padding-block: 2px;
 }
 
 .paper-input.compact {
@@ -3097,6 +3143,10 @@ textarea {
 
 .paper-input.inline-medium {
   width: 180px;
+}
+
+.paper-input.signature-input {
+  width: min(210px, 100%);
 }
 
 .paper-textarea {
@@ -3236,14 +3286,27 @@ textarea {
 }
 
 .purchase-signature p {
-  margin: 0 0 9px;
-  line-height: 1.6;
+  min-height: 30px;
+  margin: 0;
+  line-height: 30px;
 }
 
 .purchase-signature-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px 32px;
+  gap: 6px 32px;
+}
+
+.purchase-signature-grid label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 30px;
+  margin: 0;
+  line-height: 30px;
+  font-weight: inherit;
+  white-space: nowrap;
 }
 
 @media (max-width: 760px) {
@@ -3379,7 +3442,8 @@ textarea {
   .paper-input.compact,
   .paper-input.date-input,
   .paper-input.inline-long,
-  .paper-input.inline-medium {
+  .paper-input.inline-medium,
+  .paper-input.signature-input {
     width: min(100%, 260px);
   }
 

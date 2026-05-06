@@ -23,6 +23,7 @@
 
       <section class="workbench-form-section">
         <form action="{{ url_for('export_products') }}" method="post" class="workbench-form">
+          {{ csrf_field() }}
           <input type="hidden" name="status" value="{{ status }}">
           <label>
             <span>导出格式</span>

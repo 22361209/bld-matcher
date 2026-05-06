@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
+import threading
 from datetime import datetime
 from pathlib import Path
 from collections import defaultdict
@@ -13,6 +14,9 @@ from .matcher import ProductCatalog, compact_text, normalize_code, split_codes
 
 
 PASSWORD_HASH_METHOD = "pbkdf2:sha256"
+_INIT_LOCK = threading.Lock()
+_INITIALIZED_DB_PATHS: set[Path] = set()
+_BOOTSTRAPPED_SOURCES: set[tuple[str, Path, Path, int | None]] = set()
 
 
 def hash_password(password: str) -> str:
@@ -125,6 +129,7 @@ CREATE INDEX IF NOT EXISTS idx_customer_price_records_date ON customer_price_rec
 
 def connect(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
+    needs_init = not db_path.exists()
     conn = sqlite3.connect(db_path, timeout=5.0)
     conn.row_factory = sqlite3.Row
     # 多人并发匹配/导入时减少 "database is locked"。
@@ -137,9 +142,19 @@ def connect(db_path: Path) -> sqlite3.Connection:
     except sqlite3.DatabaseError:
         # 某些网络挂载文件系统不支持 WAL,退回默认行为不影响功能。
         pass
-    conn.executescript(SCHEMA)
-    run_migrations(conn)
+    resolved = db_path.resolve()
+    if needs_init or resolved not in _INITIALIZED_DB_PATHS:
+        with _INIT_LOCK:
+            if needs_init or resolved not in _INITIALIZED_DB_PATHS:
+                conn.executescript(SCHEMA)
+                run_migrations(conn)
+                _INITIALIZED_DB_PATHS.add(resolved)
     return conn
+
+
+def _bootstrap_key(kind: str, db_path: Path, source_path: Path) -> tuple[str, Path, Path, int | None]:
+    source_mtime = source_path.stat().st_mtime_ns if source_path.exists() else None
+    return (kind, db_path.resolve(), source_path.resolve(), source_mtime)
 
 
 def now_text() -> str:
@@ -381,10 +396,14 @@ def import_catalog(conn: sqlite3.Connection, catalog_path: Path, replace: bool =
 
 
 def bootstrap_from_excel(db_path: Path, catalog_path: Path) -> None:
+    key = _bootstrap_key("catalog", db_path, catalog_path)
+    if key in _BOOTSTRAPPED_SOURCES:
+        return
     with connect(db_path) as conn:
         existing = conn.execute("SELECT COUNT(*) FROM products").fetchone()[0]
         if existing == 0 and catalog_path.exists():
             import_catalog(conn, catalog_path, replace=True)
+    _BOOTSTRAPPED_SOURCES.add(key)
 
 
 def _product_filter_clauses(
@@ -625,7 +644,7 @@ def add_customer_price_record(
     if audit:
         label = "成交记录" if values["record_type"] == "order" else "报价记录"
         key = values["bld_no"] or values["source_code"] or values["oe_no"] or str(record_id)
-        log_event(conn, "新增客户价格记录", "customer_price", key, f"{label}；客户: {values['customer_name']}", actor=actor)
+        log_event(conn, "新增价格维护记录", "customer_price", key, f"{label}；客户: {values['customer_name']}", actor=actor)
     if commit:
         conn.commit()
     return record_id
@@ -637,7 +656,7 @@ def delete_customer_price_record(conn: sqlite3.Connection, record_id: int, *, ac
         return None
     conn.execute("DELETE FROM customer_price_records WHERE id = ?", (record_id,))
     key = row["bld_no"] or row["source_code"] or row["oe_no"] or str(record_id)
-    log_event(conn, "删除客户价格记录", "customer_price", key, f"客户: {row['customer_name']}", actor=actor)
+    log_event(conn, "删除价格维护记录", "customer_price", key, f"客户: {row['customer_name']}", actor=actor)
     conn.commit()
     return row
 
@@ -1028,37 +1047,40 @@ def import_materials_from_excel(conn: sqlite3.Connection, material_path: Path, r
     from openpyxl import load_workbook
 
     wb = load_workbook(material_path, read_only=True, data_only=True)
-    if "材料数据" not in wb.sheetnames:
-        raise ValueError("材料数据文件里找不到工作表：材料数据")
-    ws = wb["材料数据"]
-    timestamp = now_text()
-    rows: list[dict] = []
-    for row_number, values in enumerate(ws.iter_rows(min_row=2, max_col=11, values_only=True), start=2):
-        data = {
-            "model": values[0],
-            "code": values[1],
-            "category": values[2],
-            "car": values[3],
-            "part": values[4],
-            "spec_text": "",
-            "pieces": values[6],
-            "thickness": values[8],
-            "width": values[9],
-            "length": values[10],
-            "active": 1,
-        }
-        if not compact_text(data["model"]):
-            continue
-        if any(value in (None, "") for value in [data["pieces"], data["thickness"], data["width"], data["length"]]):
-            continue
-        row = _material_values_from_data(
-            data,
-            source=material_path.name,
-            source_row=row_number,
-            require_detail_fields=False,
-        )
-        row.update({"created_at": timestamp, "updated_at": timestamp})
-        rows.append(row)
+    try:
+        if "材料数据" not in wb.sheetnames:
+            raise ValueError("材料数据文件里找不到工作表：材料数据")
+        ws = wb["材料数据"]
+        timestamp = now_text()
+        rows: list[dict] = []
+        for row_number, values in enumerate(ws.iter_rows(min_row=2, max_col=11, values_only=True), start=2):
+            data = {
+                "model": values[0],
+                "code": values[1],
+                "category": values[2],
+                "car": values[3],
+                "part": values[4],
+                "spec_text": "",
+                "pieces": values[6],
+                "thickness": values[8],
+                "width": values[9],
+                "length": values[10],
+                "active": 1,
+            }
+            if not compact_text(data["model"]):
+                continue
+            if any(value in (None, "") for value in [data["pieces"], data["thickness"], data["width"], data["length"]]):
+                continue
+            row = _material_values_from_data(
+                data,
+                source=material_path.name,
+                source_row=row_number,
+                require_detail_fields=False,
+            )
+            row.update({"created_at": timestamp, "updated_at": timestamp})
+            rows.append(row)
+    finally:
+        wb.close()
 
     if not rows:
         raise ValueError("材料数据里没有可导入的明细。")
@@ -1081,10 +1103,14 @@ def import_materials_from_excel(conn: sqlite3.Connection, material_path: Path, r
 
 
 def bootstrap_materials_from_excel(db_path: Path, material_path: Path) -> None:
+    key = _bootstrap_key("materials", db_path, material_path)
+    if key in _BOOTSTRAPPED_SOURCES:
+        return
     with connect(db_path) as conn:
         existing = conn.execute("SELECT COUNT(*) FROM material_items").fetchone()[0]
         if existing == 0 and material_path.exists():
             import_materials_from_excel(conn, material_path, replace=True, actor="system")
+    _BOOTSTRAPPED_SOURCES.add(key)
 
 
 def list_material_items(

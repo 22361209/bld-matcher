@@ -48,8 +48,11 @@ def _find_columns(rows: list[list[object]]) -> tuple[int, int, int]:
 def _read_rows(path: Path) -> list[list[object]]:
     if path.suffix.lower() == ".xlsx":
         workbook = load_workbook(path, read_only=True, data_only=True)
-        sheet = workbook.worksheets[0]
-        return [[cell for cell in row] for row in sheet.iter_rows(values_only=True)]
+        try:
+            sheet = workbook.worksheets[0]
+            return [[cell for cell in row] for row in sheet.iter_rows(values_only=True)]
+        finally:
+            workbook.close()
     if path.suffix.lower() == ".xls":
         book = xlrd.open_workbook(path, ignore_workbook_corruption=True)
         sheet = book.sheet_by_index(0)

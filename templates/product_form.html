@@ -23,6 +23,7 @@
 
       <section class="workbench-form-section">
         <form action="{{ url_for('save_product') }}" method="post" enctype="multipart/form-data" class="product-form">
+          {{ csrf_field() }}
           <label>
             BLD NO.
             <input name="bld_no" value="{{ product.bld_no if product else '' }}" {% if product %}readonly{% endif %} required>
@@ -122,5 +123,6 @@
         </form>
       </section>
     </main>
+    <script src="{{ url_for('static', filename='app.js', v=static_version('app.js')) }}"></script>
   </body>
 </html>

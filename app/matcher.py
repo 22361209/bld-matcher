@@ -170,19 +170,22 @@ class ProductCatalog:
     @classmethod
     def from_excel(cls, path: Path, manual_map: dict[str, str] | None = None) -> "ProductCatalog":
         workbook = load_workbook(path, read_only=True, data_only=True)
-        worksheet = workbook.active
-        raw_rows = list(worksheet.iter_rows(values_only=True))
-        header_index, headers = _find_header_row(raw_rows)
+        try:
+            worksheet = workbook.active
+            raw_rows = list(worksheet.iter_rows(values_only=True))
+            header_index, headers = _find_header_row(raw_rows)
 
-        rows: list[dict] = []
-        for raw in raw_rows[header_index + 1 :]:
-            row = {}
-            for header, value in zip(headers, raw):
-                if header:
-                    row[header] = value
-            if compact_text(row.get("BLD NO.")):
-                rows.append(row)
-        return cls(rows, manual_map=manual_map)
+            rows: list[dict] = []
+            for raw in raw_rows[header_index + 1 :]:
+                row = {}
+                for header, value in zip(headers, raw):
+                    if header:
+                        row[header] = value
+                if compact_text(row.get("BLD NO.")):
+                    rows.append(row)
+            return cls(rows, manual_map=manual_map)
+        finally:
+            workbook.close()
 
     def match(self, inquiry_name: object, inquiry_oe: object, inquiry_desc: object = "") -> CatalogMatch | None:
         oe_key = normalize_code(inquiry_oe)
@@ -195,6 +198,10 @@ class ProductCatalog:
             if row:
                 matched_codes = tuple(oe_parts) if len(oe_parts) > 1 else ((compact_text(inquiry_oe),) if compact_text(inquiry_oe) else ())
                 return CatalogMatch(compact_text(row.get("BLD NO.")), 100, "人工确认映射", row, matched_codes=matched_codes)
+
+        if oe_key and oe_key in self.by_bld:
+            row = self.by_bld[oe_key]
+            return CatalogMatch(compact_text(row.get("BLD NO.")), 92, "BLD NO. 精准命中", row, matched_codes=((compact_text(inquiry_oe),) if compact_text(inquiry_oe) else ()))
 
         split_matches = self._match_split_oe_parts(oe_parts)
         if split_matches:
@@ -228,8 +235,13 @@ class ProductCatalog:
             if manual_bld:
                 row = self.by_bld.get(normalize_code(manual_bld))
                 if row:
-                    matches.append((part, CatalogMatch(compact_text(row.get("BLD NO.")), 100, "OE 多号码人工确认映射", row)))
+                    matches.append((part, CatalogMatch(compact_text(row.get("BLD NO.")), 100, "多号码人工确认映射", row)))
                     continue
+
+            if part_key in self.by_bld:
+                row = self.by_bld[part_key]
+                matches.append((part, CatalogMatch(compact_text(row.get("BLD NO.")), 92, "BLD NO. 多号码精准命中", row)))
+                continue
 
             if part_key in self.by_oe:
                 row = self.by_oe[part_key][0]
@@ -258,7 +270,7 @@ class ProductCatalog:
 
         bld_list = " / ".join(unique)
         first = next(iter(unique.values()))
-        return CatalogMatch(bld_list, 80, "多个 OE 命中不同 BLD，请人工确认", first.row, matched_codes=matched_parts, unmatched_codes=unmatched_parts)
+        return CatalogMatch(bld_list, 80, "多个号码命中不同 BLD，请人工确认", first.row, matched_codes=matched_parts, unmatched_codes=unmatched_parts)
 
     @staticmethod
     def _unique_rows(rows: list[dict]) -> list[dict]:

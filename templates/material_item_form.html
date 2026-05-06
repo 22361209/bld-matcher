@@ -33,6 +33,7 @@
 
       <section class="workbench-form-section">
         <form action="{{ url_for('save_material_item') }}" method="post" class="product-form" data-enter-navigation>
+          {{ csrf_field() }}
           {% if item %}<input type="hidden" name="id" value="{{ item.id }}">{% endif %}
           <label>
             母件编码

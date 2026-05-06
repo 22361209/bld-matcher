@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>客户价格记录</title>
+    <title>价格维护</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
   </head>
   <body>
@@ -13,7 +13,7 @@
 
       <header class="materials-hero">
         <div>
-          <h1>客户价格记录</h1>
+          <h1>价格维护</h1>
           <p>集中查看客户报价和成交价格，按客户、BLD 号和客户号筛选。</p>
         </div>
       </header>
@@ -28,7 +28,7 @@
         {% endif %}
       {% endwith %}
 
-      <section class="materials-metrics" aria-label="客户价格记录统计">
+      <section class="materials-metrics" aria-label="价格维护统计">
         <div><span>总记录</span><strong>{{ stats.total }}</strong></div>
         <div><span>报价记录</span><strong>{{ stats.quotes }}</strong></div>
         <div><span>成交记录</span><strong>{{ stats.orders }}</strong></div>
@@ -65,6 +65,7 @@
             <details class="toolbar-popover linear-popover">
               <summary>新增记录</summary>
               <form action="{{ url_for('save_customer_price') }}" method="post" class="toolbar-popover-form customer-price-popover-form">
+                {{ csrf_field() }}
                 <label>
                   <span>类型</span>
                   <select name="record_type">
@@ -135,6 +136,7 @@
             <details class="toolbar-popover linear-popover">
               <summary>导入 Excel</summary>
               <form action="{{ url_for('import_customer_prices') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form customer-price-import-form">
+                {{ csrf_field() }}
                 <label>
                   <span>导入类型</span>
                   <select name="record_type">
@@ -147,7 +149,7 @@
                   <input name="default_customer" placeholder="文件无客户列时使用">
                 </label>
                 <label class="file-picker span-2">
-                  <span>客户价格 Excel</span>
+                  <span>价格记录 Excel</span>
                   <input class="file-picker-input" type="file" name="price_file" accept=".xlsx" required>
                   <span class="file-picker-control">
                     <span class="file-picker-button">选择文件</span>
@@ -319,7 +321,7 @@
                   </tr>
                 {% endfor %}
                 {% if not records %}
-                  <tr><td colspan="12">没有找到客户价格记录。</td></tr>
+                  <tr><td colspan="12">没有找到价格记录。</td></tr>
                 {% endif %}
               </tbody>
             </table>
@@ -368,14 +370,14 @@
                   </tr>
                 {% endfor %}
                 {% if not customer_summaries %}
-                  <tr><td colspan="9">还没有客户价格记录。</td></tr>
+                  <tr><td colspan="9">还没有价格记录。</td></tr>
                 {% endif %}
               </tbody>
             </table>
           {% endif %}
         </div>
         {% if pagination.total_pages > 1 %}
-          <nav class="product-pagination bottom" aria-label="客户价格分页">
+          <nav class="product-pagination bottom" aria-label="价格维护分页">
             <div class="product-pagination-controls">
               {% if pagination.has_prev %}
                 <a class="linear-button subtle" href="{{ pagination.prev_url }}">上一页</a>
@@ -398,7 +400,7 @@
     {% if can("manage_customer_prices") %}
       <div class="product-modal" id="customer-price-delete-modal" aria-hidden="true">
         <div class="product-modal-backdrop" data-close-customer-price-delete></div>
-        <div class="product-modal-panel customer-price-delete-panel" role="dialog" aria-modal="true" aria-label="删除客户价格记录">
+        <div class="product-modal-panel customer-price-delete-panel" role="dialog" aria-modal="true" aria-label="删除价格记录">
           <button class="image-modal-close" type="button" data-close-customer-price-delete aria-label="关闭删除确认">×</button>
           <div class="modal-heading">
             <h2>删除价格记录</h2>
@@ -413,6 +415,7 @@
             <div><dt>单价</dt><dd data-delete-price></dd></div>
           </dl>
           <form method="post" class="form-actions customer-price-delete-actions" data-customer-price-delete-form>
+            {{ csrf_field() }}
             <button class="linear-button danger" type="submit">确认删除</button>
             <button class="linear-button subtle" type="button" data-close-customer-price-delete>取消</button>
           </form>

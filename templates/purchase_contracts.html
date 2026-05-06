@@ -3,12 +3,16 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>采购合同</title>
+    <title>合同管理</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
   </head>
   <body>
     <main class="shell wide materials-linear purchase-contract-page">
-      {% set active_page = "purchase_contracts" %}
+      {% set active_page = "contracts" %}
+      {% set is_sales = contract_mode == "sales" %}
+      {% set contract_label = "销售合同" if is_sales else "采购合同" %}
+      {% set party_a_label = "供方（甲方）" if is_sales else "采购方（甲方）" %}
+      {% set party_b_label = "需方（乙方）" if is_sales else "供应方（乙方）" %}
       {% include "_nav.html" %}
 
       {% with messages = get_flashed_messages(with_categories=true) %}
@@ -21,29 +25,46 @@
         {% endif %}
       {% endwith %}
 
+      <header class="materials-hero contract-management-hero">
+        <div>
+          <h1>合同管理</h1>
+          <p>采购合同和销售合同分别生成、分别归档。</p>
+        </div>
+      </header>
+
+      <section class="contract-entry-switch" aria-label="合同类型">
+        <a class="linear-button {% if not is_sales %}primary{% else %}subtle{% endif %}" href="{{ url_for('contracts') }}">采购合同</a>
+        <a class="linear-button {% if is_sales %}primary{% else %}subtle{% endif %}" href="{{ url_for('sales_contracts') }}">销售合同</a>
+      </section>
+
       {% if can("generate_purchase_contract") %}
-        <form action="{{ url_for('generate_purchase_contract') }}" method="post" class="purchase-contract-form" data-purchase-contract-form data-enter-navigation>
+        <form action="{{ url_for('generate_sales_contract') if is_sales else url_for('generate_purchase_contract') }}" method="post" class="purchase-contract-form" data-purchase-contract-form data-contract-kind="{{ 'sales' if is_sales else 'purchase' }}" data-enter-navigation>
+          {{ csrf_field() }}
           <div class="purchase-contract-action-bar">
-            <h1>采购合同</h1>
+            <h1>{{ contract_label }}</h1>
             <button class="linear-button primary" type="submit" data-purchase-submit-button>生成 PDF</button>
           </div>
           <div class="purchase-generate-feedback" data-purchase-feedback role="status" hidden></div>
 
-          <section class="purchase-paper" aria-label="采购合同预览">
-            <h1 class="purchase-paper-title">采 购 合 同</h1>
+          <section class="purchase-paper" aria-label="{{ contract_label }}预览">
+            <h1 class="purchase-paper-title">{{ "产 品 销 售 合 同" if is_sales else "采 购 合 同" }}</h1>
 
             <div class="purchase-paper-meta">
               <label>合同编号：<input class="paper-input" name="contract_no" value="{{ default_contract_no }}" required></label>
               <label class="right">签订日期：<input class="paper-input date-input" type="date" name="contract_date" value="{{ default_date }}" required></label>
-              <label>采购方（甲方）：<input class="paper-input" name="buyer_name" value="{{ defaults.buyer_name }}" required></label>
-              <label class="supplier-line">供应方（乙方）：<input class="paper-input" name="supplier_name" required></label>
+              <label>{{ party_a_label }}：<input class="paper-input" name="buyer_name" value="{{ defaults.buyer_name }}" required></label>
+              <label class="supplier-line">{{ party_b_label }}：<input class="paper-input" name="supplier_name" required></label>
               <label>联系人：<input class="paper-input compact" name="buyer_contact"></label>
               <label class="supplier-detail-line">联系人：<input class="paper-input compact" name="supplier_contact"></label>
               <label>电话：<input class="paper-input compact" name="buyer_phone"></label>
               <label class="supplier-detail-line">电话：<input class="paper-input compact" name="supplier_phone"></label>
             </div>
 
-            <p class="purchase-body-indent">根据《中华人民共和国民法典》及相关法律法规，甲乙双方经平等协商，就甲方向乙方采购产品事宜，达成如下协议：</p>
+            {% if is_sales %}
+              <p class="purchase-body-indent">根据《中华人民共和国民法典》及相关法律法规，甲乙双方经平等协商，就甲方向乙方销售汽车控制臂产品事宜，达成如下协议：</p>
+            {% else %}
+              <p class="purchase-body-indent">根据《中华人民共和国民法典》及相关法律法规，甲乙双方经平等协商，就甲方向乙方采购产品事宜，达成如下协议：</p>
+            {% endif %}
 
             <div class="purchase-section-heading">
               <h2>第一条 产品名称、规格、数量及价格</h2>
@@ -54,6 +75,7 @@
                 <colgroup>
                   <col style="width: 46px">
                   <col style="width: 128px">
+                  {% if is_sales %}<col style="width: 132px">{% endif %}
                   <col style="width: 142px">
                   <col style="width: 170px">
                   <col style="width: 250px">
@@ -68,6 +90,7 @@
                   <tr>
                     <th>序号</th>
                     <th>BLD号</th>
+                    {% if is_sales %}<th>客户编码</th>{% endif %}
                     <th>OE号</th>
                     <th>产品名称</th>
                     <th>适用车型</th>
@@ -84,6 +107,7 @@
                     <tr>
                       <td class="purchase-row-index" data-purchase-index>{{ loop.index }}</td>
                       <td><input name="product_code[]" data-purchase-bld {% if loop.first %}required{% endif %}></td>
+                      {% if is_sales %}<td><input name="customer_code[]" data-customer-code></td>{% endif %}
                       <td><input name="oe_no[]" data-purchase-oe></td>
                       <td><input name="product_name[]" data-purchase-name></td>
                       <td><input name="models[]" data-purchase-models></td>
@@ -98,7 +122,7 @@
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td colspan="5">合计</td>
+                    <td colspan="{{ 6 if is_sales else 5 }}">合计</td>
                     <td data-purchase-total-quantity></td>
                     <td></td>
                     <td data-purchase-total-amount></td>
@@ -115,31 +139,63 @@
             <textarea class="paper-textarea clause-textarea" name="quality_terms" rows="5">{{ defaults.quality_terms }}</textarea>
 
             <h2 class="purchase-clause-title">第三条 包装要求</h2>
-            <p class="purchase-body-indent">1. 包装应牢固可靠，具备防潮、防锈、防碰撞措施，适应运输及仓储要求。</p>
-            <p class="purchase-body-indent">2. 每件外包装须标明：BLD号、OE号、数量、生产日期。</p>
-            <p class="purchase-body-indent">3. 因包装不当造成的产品损坏、锈蚀等外观或性能缺陷，由乙方承担全部损失。</p>
+            {% if is_sales %}
+              <p class="purchase-body-indent">1. 甲方按行业通用标准及乙方要求进行包装，确保产品在运输和仓储过程中完好无损。</p>
+              <p class="purchase-body-indent">2. 每件外包装标明：产品名称、规格型号、数量等或按乙方要求的信息。</p>
+              <p class="purchase-body-indent">3. 特殊包装要求由乙方书面提出，费用由乙方承担。</p>
+            {% else %}
+              <p class="purchase-body-indent">1. 包装应牢固可靠，具备防潮、防锈、防碰撞措施，适应运输及仓储要求。</p>
+              <p class="purchase-body-indent">2. 每件外包装须标明：BLD号、OE号、数量、生产日期。</p>
+              <p class="purchase-body-indent">3. 因包装不当造成的产品损坏、锈蚀等外观或性能缺陷，由乙方承担全部损失。</p>
+            {% endif %}
 
             <h2 class="purchase-clause-title">第四条 交货时间、地点及方式</h2>
-            <p class="purchase-body-indent">1. 交货时间：各产品交期见第一条表格，乙方须按期交付。</p>
-            <p class="purchase-body-indent">2. 交货地点：<input class="paper-input inline-long" name="delivery_address" value="{{ defaults.delivery_address }}">。</p>
-            <p class="purchase-body-indent">3. 运输方式：由乙方负责运输并承担运费及运输途中的风险。</p>
+            {% if is_sales %}
+              <p class="purchase-body-indent">1. 交货时间：各产品交期见第一条表格，甲方按期交付。逾期交货的，按本合同第七条承担违约责任。</p>
+              <p class="purchase-body-indent">2. 交货地点：<input class="paper-input inline-long" name="delivery_address" value="{{ defaults.delivery_address }}" placeholder="乙方指定地址">。</p>
+              <p class="purchase-body-indent">3. 运输方式：由甲方负责安排运输并承担运费。货物交付乙方签收后，损毁、灭失风险转移至乙方。</p>
+            {% else %}
+              <p class="purchase-body-indent">1. 交货时间：各产品交期见第一条表格，乙方须按期交付。</p>
+              <p class="purchase-body-indent">2. 交货地点：<input class="paper-input inline-long" name="delivery_address" value="{{ defaults.delivery_address }}">。</p>
+              <p class="purchase-body-indent">3. 运输方式：由乙方负责运输并承担运费及运输途中的风险。</p>
+            {% endif %}
 
             <h2 class="purchase-clause-title">第五条 验收</h2>
-            <p class="purchase-body-indent">1. 甲方收到货物后 7 个工作日内进行验收。外观、数量、包装当面点验；质量检验可在 15 个工作日内完成。</p>
-            <p class="purchase-body-indent">2. 验收不合格的，甲方有权拒收或要求退换货，产生费用由乙方承担。</p>
-            <p class="purchase-body-indent">3. 甲方签署验收单后视为乙方已交货，但不免除乙方质保责任。</p>
+            {% if is_sales %}
+              <p class="purchase-body-indent">1. 乙方收到货物后应在3 个工作日内进行验收。</p>
+              <p class="purchase-body-indent">2. 验收不合格的，乙方须在验收期内书面通知甲方，甲方负责退换货或补足，费用由甲方承担。</p>
+              <p class="purchase-body-indent">3. 乙方逾期未提出异议的，视为验收合格。验收合格后乙方不得以数量、外观等事由要求退换。</p>
+            {% else %}
+              <p class="purchase-body-indent">1. 甲方收到货物后 7 个工作日内进行验收。</p>
+              <p class="purchase-body-indent">2. 验收不合格的，甲方有权拒收或要求退换货，产生费用由乙方承担。</p>
+              <p class="purchase-body-indent">3. 甲方签署验收单后视为乙方已交货，但不免除乙方质保责任。</p>
+            {% endif %}
 
             <h2 class="purchase-clause-title">第六条 付款方式</h2>
             <p class="purchase-body-indent">1. 付款方式：<input class="paper-input inline-medium" name="payment_terms" value="{{ defaults.payment_terms }}"></p>
-            <p class="purchase-body-indent">2. 甲方付款前，乙方须开具合法有效的增值税专用发票（税率 13%）。</p>
+            {% if is_sales %}
+              <p class="purchase-body-indent">2. 增值税专用发票（税率 13%）的开具时间由双方另行约定。</p>
+            {% else %}
+              <p class="purchase-body-indent">2. 甲方付款前，乙方须开具合法有效的增值税专用发票（税率 13%）。</p>
+            {% endif %}
 
             <h2 class="purchase-clause-title">第七条 违约责任</h2>
-            <p class="purchase-body-indent">1. 乙方逾期交货的，每逾期一日按该批货款总额的 0.5% 向甲方支付违约金；逾期超过 15 日的，甲方有权单方解除合同，并追究乙方赔偿责任。</p>
-            <p class="purchase-body-indent">2. 产品质量不符合约定的，乙方应无条件退换货并承担全部费用；逾期退换的按逾期交货处理。</p>
-            <p class="purchase-body-indent">3. 甲方逾期付款的，每逾期一日按应付未付金额的 0.5% 向乙方支付违约金。</p>
+            {% if is_sales %}
+              <p class="purchase-body-indent">1. 甲方如无法按约定时间交付货物，应提前告知乙方；如无通知每逾期一日按该批货款总额的 0.5% 向乙方支付违约金；逾期超过 15 日的，乙方有权单方解除合同。</p>
+              <p class="purchase-body-indent">2. 经双方确认产品质量不符合约定的，甲方应无条件退换货并承担全部费用。</p>
+              <p class="purchase-body-indent">3. 乙方逾期付款的，每逾期一日按应付未付金额的 0.5% 向甲方支付违约金；逾期超过 15 日的，甲方有权暂停后续供货并追索全部欠款。</p>
+            {% else %}
+              <p class="purchase-body-indent">1. 乙方逾期交货的，每逾期一日按该批货款总额的 0.5% 向甲方支付违约金；逾期超过 15 日的，甲方有权单方解除合同，并追究乙方赔偿责任。</p>
+              <p class="purchase-body-indent">2. 产品质量不符合约定的，乙方应无条件退换货并承担全部费用；逾期退换的按逾期交货处理。</p>
+              <p class="purchase-body-indent">3. 甲方逾期付款的，每逾期一日按应付未付金额的 0.5% 向乙方支付违约金。</p>
+            {% endif %}
 
             <h2 class="purchase-clause-title">第八条 保密条款</h2>
-            <p class="purchase-body-indent">双方对合同内容及履行过程中获知的对方商业秘密（包括但不限于价格、数量、图纸、技术参数等）予以保密，未经对方书面同意不得向第三方披露。违反方赔偿对方全部损失。保密义务自合同终止后 2 年内继续有效。</p>
+            {% if is_sales %}
+              <p class="purchase-body-indent">双方对合同内容及履行过程中获知的对方商业秘密（包括但不限于价格、数量、图纸、技术参数、客户信息等）予以保密，未经对方书面同意不得向第三方披露。违反方赔偿对方全部损失。保密义务自合同终止后 2 年内继续有效。</p>
+            {% else %}
+              <p class="purchase-body-indent">双方对合同内容及履行过程中获知的对方商业秘密（包括但不限于价格、数量、图纸、技术参数等）予以保密，未经对方书面同意不得向第三方披露。违反方赔偿对方全部损失。保密义务自合同终止后 2 年内继续有效。</p>
+            {% endif %}
 
             <h2 class="purchase-clause-title">第九条 争议解决</h2>
             <p class="purchase-body-indent">因本合同引起的或与本合同有关的争议，双方友好协商解决；协商不成的，任何一方有权向甲方所在地有管辖权的人民法院提起诉讼。</p>
@@ -153,20 +209,18 @@
               <div class="purchase-signature-grid">
                 <p>甲方（盖章）：<span data-buyer-sign-name>{{ defaults.buyer_name }}</span></p>
                 <p>乙方（盖章）：<span data-supplier-sign-name></span></p>
-                <p>统一社会信用代码：</p>
-                <p>统一社会信用代码：</p>
-                <p>地址：</p>
-                <p>地址：</p>
-                <p>电话：</p>
-                <p>电话：</p>
-                <p>开户行：</p>
-                <p>开户行：</p>
-                <p>账号：</p>
-                <p>账号：</p>
+                <label>地址：<input class="paper-input signature-input" name="buyer_signature_address"></label>
+                <label>地址：<input class="paper-input signature-input" name="supplier_signature_address"></label>
+                <label>电话：<input class="paper-input signature-input" name="buyer_signature_phone"></label>
+                <label>电话：<input class="paper-input signature-input" name="supplier_signature_phone"></label>
+                <label>开户行：<input class="paper-input signature-input" name="buyer_bank"></label>
+                <label>开户行：<input class="paper-input signature-input" name="supplier_bank"></label>
+                <label>账号：<input class="paper-input signature-input" name="buyer_bank_account"></label>
+                <label>账号：<input class="paper-input signature-input" name="supplier_bank_account"></label>
                 <p>法定代表人或授权代表（签字）：</p>
                 <p>法定代表人或授权代表（签字）：</p>
-                <p>日期：</p>
-                <p>日期：</p>
+                <label>日期：<input class="paper-input signature-input date-input" type="date" name="buyer_signature_date"></label>
+                <label>日期：<input class="paper-input signature-input date-input" type="date" name="supplier_signature_date"></label>
               </div>
             </section>
           </section>
@@ -176,8 +230,8 @@
           <div class="download-modal-panel purchase-confirm-panel" role="dialog" aria-modal="true" aria-labelledby="purchase-confirm-title">
             <button class="download-modal-close" type="button" data-purchase-confirm-cancel aria-label="关闭生成确认">×</button>
             <div class="modal-heading">
-              <h2 id="purchase-confirm-title">确认生成采购合同 PDF？</h2>
-              <p>确认后会按当前页面内容生成并下载 PDF，同时写入最近采购合同记录。</p>
+              <h2 id="purchase-confirm-title">确认生成{{ contract_label }} PDF？</h2>
+              <p>确认后会按当前页面内容生成并下载 PDF，同时写入最近合同记录。</p>
             </div>
             <div class="purchase-confirm-actions">
               <button class="download-cancel-button" type="button" data-purchase-confirm-cancel>取消</button>
@@ -186,31 +240,59 @@
           </div>
         </div>
       {% else %}
-        <p class="materials-muted">当前账号没有生成采购合同权限。</p>
+        <p class="materials-muted">当前账号没有合同管理权限。</p>
       {% endif %}
 
-      {% if latest_outputs %}
-        <details class="materials-history-drawer">
-          <summary>
-            <span>最近采购合同</span>
-            <strong>{{ latest_outputs|length }} 个</strong>
-          </summary>
-          <div class="materials-history-panel">
-            <section class="materials-recent">
-              <div class="materials-table-title">
-                <div>
-                  <h2>最近采购合同</h2>
-                  <p>最近生成的 PDF 文件。</p>
-                </div>
+      {% if purchase_outputs or sales_outputs %}
+        <section class="contract-output-history">
+          {% if purchase_outputs %}
+            <details class="materials-history-drawer">
+              <summary>
+                <span>最近采购合同</span>
+                <strong>{{ purchase_outputs|length }} 个</strong>
+              </summary>
+              <div class="materials-history-panel">
+                <section class="materials-recent">
+                  <div class="materials-table-title">
+                    <div>
+                      <h2>最近采购合同</h2>
+                      <p>最近生成的采购合同 PDF 文件。</p>
+                    </div>
+                  </div>
+                  <ul class="files">
+                    {% for path in purchase_outputs %}
+                      <li><a href="{{ url_for('download', name=download_name(path)) }}">{{ path.name }}</a></li>
+                    {% endfor %}
+                  </ul>
+                </section>
               </div>
-              <ul class="files">
-                {% for path in latest_outputs %}
-                  <li><a href="{{ url_for('download', name=download_name(path)) }}">{{ path.name }}</a></li>
-                {% endfor %}
-              </ul>
-            </section>
-          </div>
-        </details>
+            </details>
+          {% endif %}
+
+          {% if sales_outputs %}
+            <details class="materials-history-drawer">
+              <summary>
+                <span>最近销售合同</span>
+                <strong>{{ sales_outputs|length }} 个</strong>
+              </summary>
+              <div class="materials-history-panel">
+                <section class="materials-recent">
+                  <div class="materials-table-title">
+                    <div>
+                      <h2>最近销售合同</h2>
+                      <p>最近生成的销售合同 PDF 文件。</p>
+                    </div>
+                  </div>
+                  <ul class="files">
+                    {% for path in sales_outputs %}
+                      <li><a href="{{ url_for('download', name=download_name(path)) }}">{{ path.name }}</a></li>
+                    {% endfor %}
+                  </ul>
+                </section>
+              </div>
+            </details>
+          {% endif %}
+        </section>
       {% endif %}
     </main>
     <script src="{{ url_for('static', filename='app.js', v=static_version('app.js')) }}"></script>

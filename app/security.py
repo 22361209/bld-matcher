@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import hmac
+import secrets
 from functools import wraps
+from urllib.parse import urlsplit
 
-from flask import flash, g, redirect, request, url_for
+from flask import flash, g, redirect, request, session, url_for
+from markupsafe import Markup, escape
 from werkzeug.security import check_password_hash
 
+
+CSRF_SESSION_KEY = "_csrf_token"
 
 ROLE_LABELS = {
     "admin": "管理员",
@@ -55,6 +61,51 @@ def password_matches(stored_hash: str, password: str) -> bool:
         if str(stored_hash or "").startswith("scrypt:") and "scrypt" in str(exc):
             return False
         raise
+
+
+def safe_redirect_target(target: str | None, default: str) -> str:
+    target = (target or "").strip()
+    if not target:
+        return default
+    parts = urlsplit(target)
+    if parts.scheme or parts.netloc or not target.startswith("/") or target.startswith("//"):
+        return default
+    return target
+
+
+def safe_referrer(default: str) -> str:
+    referrer = (request.referrer or "").strip()
+    if not referrer:
+        return default
+    parts = urlsplit(referrer)
+    if parts.scheme or parts.netloc:
+        if parts.netloc != request.host:
+            return default
+        path = parts.path or "/"
+        if parts.query:
+            path += f"?{parts.query}"
+        if parts.fragment:
+            path += f"#{parts.fragment}"
+        return safe_redirect_target(path, default)
+    return safe_redirect_target(referrer, default)
+
+
+def csrf_token() -> str:
+    token = session.get(CSRF_SESSION_KEY)
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session[CSRF_SESSION_KEY] = token
+    return token
+
+
+def csrf_field() -> Markup:
+    return Markup(f'<input type="hidden" name="csrf_token" value="{escape(csrf_token())}">')
+
+
+def validate_csrf_token() -> bool:
+    expected = session.get(CSRF_SESSION_KEY)
+    submitted = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token")
+    return bool(expected and submitted and hmac.compare_digest(str(expected), str(submitted)))
 
 
 def login_required(fn):

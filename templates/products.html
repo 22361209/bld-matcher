@@ -66,6 +66,7 @@
             <details class="toolbar-popover linear-popover">
               <summary>维护单价</summary>
               <form action="{{ url_for('price_import_preview') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form price-import-form">
+                {{ csrf_field() }}
                 <label class="file-picker">
                   <span>单价 Excel</span>
                   <input class="file-picker-input" type="file" name="price_file" accept=".xls,.xlsx" required>
@@ -83,6 +84,7 @@
             <details class="toolbar-popover linear-popover">
               <summary>导入目录</summary>
               <form action="{{ url_for('upload_catalog') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form catalog-import-form">
+                {{ csrf_field() }}
                 <input type="hidden" name="next" value="products">
                 <label class="file-picker">
                   <span>产品目录 Excel</span>
@@ -101,6 +103,7 @@
             <details class="toolbar-popover linear-popover">
               <summary>导出目录</summary>
               <form action="{{ url_for('export_products') }}" method="post" class="toolbar-popover-form catalog-export-form">
+                {{ csrf_field() }}
                 <input type="hidden" name="status" value="{{ status }}">
                 <label>
                   导出格式
@@ -188,6 +191,7 @@
             <p class="note">一个 BLD NO. 可以维护多个 OE、多个品牌和多个车型；每行一个 OE 会更清楚。</p>
           </div>
           <form action="{{ url_for('save_product') }}" method="post" class="product-form modal-product-form">
+            {{ csrf_field() }}
             <label>
               BLD NO.
               <input name="bld_no" required>

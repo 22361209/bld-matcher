@@ -66,10 +66,30 @@ class WebAppTest(unittest.TestCase):
         self.assertIn('class="embedded-submit" type="submit">开始匹配', html)
         self.assertIn('class="embedded-input-control"', html)
         self.assertIn('class="embedded-submit" type="submit">搜索', html)
+        nav_order = ["询价处理", "价格维护", "合同管理", "产品目录", "生产料单"]
+        nav_positions = [html.index(label) for label in nav_order]
+        self.assertEqual(nav_positions, sorted(nav_positions))
+
+    def test_login_next_rejects_external_url(self):
+        response = self.client.post(
+            "/login",
+            data={"username": "007", "password": "test-admin-pw", "next": "https://example.com/phish"},
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertNotIn("example.com", response.headers["Location"])
+
+    def test_download_does_not_send_directories(self):
+        self.login()
+        output_dir = self.root / "outputs" / "u1-007"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        response = self.client.get("/download/u1-007", follow_redirects=False)
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith("/"))
 
     def test_core_admin_pages_load(self):
         self.login()
-        for path in ["/products", "/customer-prices", "/materials", "/purchase-contracts", "/users", "/logs", "/system-updates"]:
+        for path in ["/customer-prices", "/contracts", "/contracts/sales", "/products", "/materials", "/purchase-contracts", "/users", "/logs", "/system-updates"]:
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
@@ -89,6 +109,7 @@ class WebAppTest(unittest.TestCase):
                     "oe_no_1": "OE-CATALOG-001",
                     "item": "目录外购支架",
                     "models": "目录车型",
+                    "price_cny": "45.5",
                     "image_path": "data_product_images/K-OUT-001.png",
                     "active": "1",
                 },
@@ -96,10 +117,13 @@ class WebAppTest(unittest.TestCase):
             )
 
         self.login()
-        response = self.client.get("/purchase-contracts")
+        response = self.client.get("/contracts")
         html = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
+        self.assertIn("合同管理", html)
         self.assertIn("采购合同", html)
+        self.assertIn("销售合同", html)
+        self.assertNotIn("销售合同模板后续接入", html)
         self.assertIn("玉环博莱德机械有限公司", html)
         self.assertIn("浙江省玉环市金汇路11号", html)
         self.assertIn("月结 30 天", html)
@@ -110,6 +134,13 @@ class WebAppTest(unittest.TestCase):
         self.assertIn('data-supplier-sign-name', html)
         self.assertIn('data-purchase-confirm-modal', html)
         self.assertIn("确认生成 PDF", html)
+        self.assertNotIn("统一社会信用代码", html)
+        self.assertIn('name="buyer_signature_address"', html)
+        self.assertIn('name="supplier_signature_address"', html)
+        self.assertIn('name="buyer_bank"', html)
+        self.assertIn('name="supplier_bank_account"', html)
+        self.assertIn('name="buyer_signature_date"', html)
+        self.assertIn("supplier-detail-line", html)
 
         lookup = self.client.get("/purchase-contracts/product-lookup", query_string={"bld": "K-OUT-001"})
         self.assertEqual(lookup.status_code, 200)
@@ -118,6 +149,7 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(payload["oe_no"], "OE-CATALOG-001")
         self.assertEqual(payload["product_name"], "目录外购支架")
         self.assertEqual(payload["models"], "目录车型")
+        self.assertEqual(payload["price_cny"], 45.5)
         self.assertIn("product-image-thumbs", payload["thumb_url"])
 
         response = self.client.post(
@@ -131,6 +163,16 @@ class WebAppTest(unittest.TestCase):
                 "supplier_name": "外购供应商",
                 "supplier_contact": "张三",
                 "supplier_phone": "13800000000",
+                "buyer_signature_address": "甲方签章地址",
+                "supplier_signature_address": "乙方签章地址",
+                "buyer_signature_phone": "0576-11111111",
+                "supplier_signature_phone": "0576-22222222",
+                "buyer_bank": "甲方开户行",
+                "supplier_bank": "乙方开户行",
+                "buyer_bank_account": "11112222",
+                "supplier_bank_account": "33334444",
+                "buyer_signature_date": "2026-05-06",
+                "supplier_signature_date": "2026-05-07",
                 "delivery_address": "浙江省玉环市",
                 "price_note": "以上价格为含税价（增值税税率13%），含包装费及运费，送达甲方指定地点。",
                 "payment_terms": "月结",
@@ -148,10 +190,104 @@ class WebAppTest(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.mimetype, "application/pdf")
+        self.assertIn("CG-TEST-001", response.headers["Content-Disposition"])
         self.assertTrue(response.get_data().startswith(b"%PDF-"))
         response.close()
-        files = list((self.root / "outputs").glob("u*-007/采购合同-CG-TEST-001.pdf"))
+        files = list((self.root / "outputs").glob("u*-007/采购合同/外购供应商/CG-TEST-001外购供应商.pdf"))
         self.assertEqual(len(files), 1)
+
+    def test_sales_contract_can_generate_pdf_with_customer_code(self):
+        from app.database import upsert_product
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-SALE-001",
+                    "oe_no_1": "OE-SALE-001",
+                    "item": "销售控制臂",
+                    "models": "销售车型",
+                    "price_cny": "88.8",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        self.login()
+        response = self.client.get("/contracts/sales")
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("产 品 销 售 合 同", html)
+        self.assertIn("供方（甲方）", html)
+        self.assertIn("需方（乙方）", html)
+        self.assertIn("客户编码", html)
+        self.assertIn('name="customer_code[]"', html)
+        self.assertIn('action="/sales-contracts/generate"', html)
+        self.assertIn("甲方按行业通用标准及乙方要求进行包装", html)
+        self.assertIn("增值税专用发票（税率 13%）的开具时间由双方另行约定", html)
+
+        response = self.client.post(
+            "/sales-contracts/generate",
+            data={
+                "contract_no": "XS-TEST-001",
+                "contract_date": "2026-05-06",
+                "buyer_name": "玉环博莱德机械有限公司",
+                "buyer_contact": "李四",
+                "buyer_phone": "13900000000",
+                "supplier_name": "销售客户",
+                "supplier_contact": "王五",
+                "supplier_phone": "13700000000",
+                "delivery_address": "客户仓库",
+                "price_note": "以上价格为含税价。",
+                "payment_terms": "月结 30 天",
+                "quality_terms": "按封样执行",
+                "product_code[]": ["K-SALE-001"],
+                "customer_code[]": ["CUST-001"],
+                "oe_no[]": ["手填销售OE"],
+                "product_name[]": ["手填销售名称"],
+                "models[]": ["手填销售车型"],
+                "quantity[]": ["3"],
+                "unit_price[]": ["88.8"],
+                "delivery_date[]": ["2026-05-25"],
+                "item_note[]": ["销售备注"],
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "application/pdf")
+        self.assertIn("XS-TEST-001", response.headers["Content-Disposition"])
+        self.assertTrue(response.get_data().startswith(b"%PDF-"))
+        response.close()
+        files = list((self.root / "outputs").glob("u*-007/销售合同/销售客户/XS-TEST-001销售客户.pdf"))
+        self.assertEqual(len(files), 1)
+
+    def test_purchase_contract_signature_fields_are_optional(self):
+        from app.purchase_contract import purchase_contract_from_form
+
+        class FormData(dict):
+            def getlist(self, key):
+                value = self.get(key, [])
+                return value if isinstance(value, list) else [value]
+
+        contract = purchase_contract_from_form(
+            FormData(
+                {
+                    "contract_no": "CG-OPTIONAL-SIGN",
+                    "contract_date": "2026-05-06",
+                    "buyer_name": "甲方公司",
+                    "supplier_name": "乙方公司",
+                    "product_code[]": ["K-OPTIONAL-001"],
+                    "quantity[]": ["1"],
+                    "unit_price[]": ["2.50"],
+                }
+            )
+        )
+
+        self.assertEqual(contract["buyer_signature_address"], "")
+        self.assertEqual(contract["supplier_signature_phone"], "")
+        self.assertEqual(contract["buyer_bank"], "")
+        self.assertEqual(contract["supplier_bank_account"], "")
+        self.assertEqual(contract["buyer_signature_date"], "")
 
     def test_purchase_contracts_are_admin_only(self):
         from app.database import save_user
@@ -171,7 +307,7 @@ class WebAppTest(unittest.TestCase):
 
         self.login()
         admin_page = self.client.get("/").get_data(as_text=True)
-        self.assertIn("采购合同", admin_page)
+        self.assertIn("合同管理", admin_page)
         self.client.post("/logout")
 
         login = self.client.post(
@@ -182,18 +318,22 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(login.status_code, 302)
 
         editor_page = self.client.get("/").get_data(as_text=True)
-        self.assertNotIn("采购合同", editor_page)
-        response = self.client.get("/purchase-contracts", follow_redirects=False)
-        self.assertEqual(response.status_code, 302)
-        self.assertTrue(response.headers["Location"].endswith("/"))
+        self.assertNotIn("合同管理", editor_page)
+        for path in ["/contracts", "/contracts/sales", "/purchase-contracts"]:
+            with self.subTest(path=path):
+                response = self.client.get(path, follow_redirects=False)
+                self.assertEqual(response.status_code, 302)
+                self.assertTrue(response.headers["Location"].endswith("/"))
 
         response = self.client.get("/purchase-contracts/product-lookup", query_string={"bld": "K-OUT-001"}, follow_redirects=False)
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.headers["Location"].endswith("/"))
 
-        response = self.client.post("/purchase-contracts/generate", follow_redirects=False)
-        self.assertEqual(response.status_code, 302)
-        self.assertTrue(response.headers["Location"].endswith("/"))
+        for path in ["/purchase-contracts/generate", "/sales-contracts/generate"]:
+            with self.subTest(path=path):
+                response = self.client.post(path, follow_redirects=False)
+                self.assertEqual(response.status_code, 302)
+                self.assertTrue(response.headers["Location"].endswith("/"))
         self.client.post("/logout")
 
     def test_customer_price_records_can_filter_and_import(self):
@@ -203,7 +343,7 @@ class WebAppTest(unittest.TestCase):
         response = self.client.get("/customer-prices")
         html = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
-        self.assertIn("客户价格记录", html)
+        self.assertIn("价格维护", html)
         self.assertIn('action="/customer-prices#customer-price-results"', html)
         self.assertIn("客户概览", html)
         self.assertIn('name="customer_q"', html)
@@ -325,7 +465,7 @@ class WebAppTest(unittest.TestCase):
 
         self.login()
         admin_page = self.client.get("/").get_data(as_text=True)
-        self.assertIn("客户价格", admin_page)
+        self.assertIn("价格维护", admin_page)
         self.client.post("/logout")
 
         login = self.client.post(
@@ -336,7 +476,7 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(login.status_code, 302)
 
         editor_page = self.client.get("/").get_data(as_text=True)
-        self.assertNotIn("客户价格", editor_page)
+        self.assertNotIn("价格维护", editor_page)
         response = self.client.get("/customer-prices", follow_redirects=False)
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.headers["Location"].endswith("/"))
@@ -462,6 +602,7 @@ class WebAppTest(unittest.TestCase):
         for slot in range(1, 6):
             self.assertIn(f'name="product_image_{slot}"', edit_html)
         self.assertIn("file-picker-clear", edit_html)
+        self.assertIn("/static/app.js", edit_html)
         self.assertIn('name="drawing"', edit_html)
 
         upload = self.client.post(
@@ -800,15 +941,21 @@ class WebAppTest(unittest.TestCase):
 
     def test_oversized_upload_redirects(self):
         self.login()
-        big_file = io.BytesIO(b"x" * (20 * 1024 * 1024 + 1))
-        response = self.client.post(
-            "/catalog",
-            data={"catalog": (big_file, "big.xlsx")},
-            content_type="multipart/form-data",
-            follow_redirects=False,
-        )
-        self.assertEqual(response.status_code, 302)
-        self.assertTrue(response.headers["Location"].endswith("/products"))
+        original_limit = self.web.app.config["MAX_CONTENT_LENGTH"]
+        self.web.app.config["MAX_CONTENT_LENGTH"] = 10
+        try:
+            big_file = io.BytesIO(b"x" * 11)
+            response = self.client.post(
+                "/catalog",
+                data={"catalog": (big_file, "big.xlsx")},
+                content_type="multipart/form-data",
+                follow_redirects=False,
+            )
+            self.assertEqual(response.status_code, 302)
+            self.assertTrue(response.headers["Location"].endswith("/products"))
+            response.close()
+        finally:
+            self.web.app.config["MAX_CONTENT_LENGTH"] = original_limit
 
     def test_migrations_are_recorded(self):
         with self.web.connect(self.web.DB_PATH) as conn:
@@ -1000,6 +1147,32 @@ class WebAppTest(unittest.TestCase):
                 self.assertIn("K6004BR", html)
                 self.assertIn("品牌号码精准命中", html)
 
+    def test_quick_bld_lookup_on_homepage(self):
+        from app.database import upsert_product
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-BLD-LOOKUP",
+                    "series": "HYUNDAI",
+                    "item": "CONTROL ARM",
+                    "oe_no_1": "BLDLOOKUP-OE",
+                    "models": "Sportage",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        self.login()
+        response = self.client.get("/", query_string={"quick_oe": "K-BLD-LOOKUP"})
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("快速号码查询", html)
+        self.assertIn("K-BLD-LOOKUP", html)
+        self.assertIn("BLD NO. 精准命中", html)
+
     def test_single_pasted_code_keeps_quick_lookup(self):
         self.login()
         response = self.client.post("/match", data={"quick_oe": "55270-2Z000"})
@@ -1092,6 +1265,34 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(sheet.cell(4, 2).value, "K54501A")
         self.assertEqual(sheet.cell(4, 3).value, 15)
         generated.close()
+
+    def test_pasted_multiple_bld_codes_generates_match_excel(self):
+        from app.database import upsert_product
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            for bld_no in ["K-BLD-BATCH-1", "K-BLD-BATCH-2"]:
+                upsert_product(
+                    conn,
+                    {
+                        "bld_no": bld_no,
+                        "series": "HYUNDAI",
+                        "item": "CONTROL ARM",
+                        "oe_no_1": f"{bld_no}-OE",
+                        "models": "Elantra",
+                        "active": "1",
+                    },
+                    actor="tester",
+                )
+
+        self.login()
+        response = self.client.post("/match", data={"quick_oe": "K-BLD-BATCH-1 K-BLD-BATCH-2"})
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("匹配结果", html)
+        self.assertIn("K-BLD-BATCH-1", html)
+        self.assertIn("K-BLD-BATCH-2", html)
+        self.assertIn("BLD NO. 精准命中", html)
 
     def test_uploaded_inquiry_can_export_tax_price(self):
         from app.database import upsert_product

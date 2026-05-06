@@ -44,13 +44,14 @@
         </div>
         {% if can("generate_match") %}
           <form action="{{ url_for('match_inquiry') }}" method="post" enctype="multipart/form-data" class="inquiry-command-row inquiry-upload-form">
+            {{ csrf_field() }}
             <div class="file-picker-field">
-              <span>客户询价源文件 / OE 或品牌号码</span>
+              <span>客户询价源文件 / OE、品牌号码或 BLD 号</span>
               <div class="file-picker inquiry-file-oe-picker">
                 <input id="inquiry-file-input" class="file-picker-input" type="file" name="inquiry" accept=".xls,.xlsx">
                 <div class="file-picker-control">
                   <label class="file-picker-button" for="inquiry-file-input">选择文件</label>
-                  <input class="file-picker-oe-input" name="quick_oe" value="{{ quick_oe }}" placeholder="输入单个号码查询；粘贴多个号码可生成匹配结果">
+                  <input class="file-picker-oe-input" name="quick_oe" value="{{ quick_oe }}" placeholder="输入 OE、品牌号码或 BLD 号查询；粘贴多个号码可生成匹配结果">
                   <button class="embedded-submit" type="submit">开始匹配</button>
                 </div>
               </div>

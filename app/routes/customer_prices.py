@@ -21,7 +21,7 @@ from app.database import (
     log_event,
 )
 from app.helpers import clean_original_filename, user_upload_path
-from app.security import actor_name, permission_required
+from app.security import actor_name, permission_required, safe_referrer
 
 
 PRICE_RECORD_PAGE_SIZE = 100
@@ -169,7 +169,7 @@ def _import_price_records(path: Path, *, record_type: str, default_customer: str
                         errors.append(f"第 {excel_index} 行：{exc}")
             log_event(
                 conn,
-                "导入客户价格记录",
+                "导入价格维护记录",
                 "customer_price",
                 source_file,
                 f"{TYPE_LABELS[record_type]}记录 {imported} 条，跳过 {skipped} 条",
@@ -251,7 +251,7 @@ def register(app) -> None:
         except Exception as exc:
             flash(f"保存失败：{exc}", "error")
             return redirect(url_for("customer_prices"))
-        flash("客户价格记录已保存。", "success")
+        flash("价格记录已保存。", "success")
         return redirect(url_for("customer_prices", customer=request.form.get("customer_name", "")) + "#customer-price-results")
 
     @app.post("/customer-prices/import")
@@ -263,10 +263,10 @@ def register(app) -> None:
             return redirect(url_for("customer_prices"))
         file = request.files.get("price_file")
         if not file or not file.filename:
-            flash("请选择客户价格 Excel 文件。", "error")
+            flash("请选择价格记录 Excel 文件。", "error")
             return redirect(url_for("customer_prices"))
         if Path(file.filename).suffix.lower() != ".xlsx":
-            flash("客户价格记录请使用 .xlsx 文件。", "error")
+            flash("价格记录请使用 .xlsx 文件。", "error")
             return redirect(url_for("customer_prices"))
 
         original_name = clean_original_filename(file.filename, fallback_suffix=".xlsx")
@@ -294,7 +294,7 @@ def register(app) -> None:
         with connect(DB_PATH) as conn:
             row = delete_customer_price_record(conn, record_id, actor=actor_name())
         if not row:
-            flash("客户价格记录不存在。", "error")
+            flash("价格记录不存在。", "error")
         else:
-            flash("客户价格记录已删除。", "success")
-        return redirect(request.referrer or (url_for("customer_prices") + "#customer-price-results"))
+            flash("价格记录已删除。", "success")
+        return redirect(safe_referrer(url_for("customer_prices") + "#customer-price-results"))

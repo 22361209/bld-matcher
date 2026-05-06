@@ -33,6 +33,7 @@
 
       <section class="materials-flow">
         <form action="{{ url_for('price_import_preview') }}" method="post" enctype="multipart/form-data" class="materials-generate-form">
+          {{ csrf_field() }}
           <label class="file-picker">
             <span>单价 Excel 文件</span>
             <input class="file-picker-input" type="file" name="price_file" accept=".xls,.xlsx" required>
@@ -60,6 +61,7 @@
             <p class="note">确认后会批量更新匹配到的产品单价。</p>
           </div>
           <form action="{{ url_for('price_import_apply') }}" method="post" class="materials-actions">
+            {{ csrf_field() }}
             <input type="hidden" name="payload" value="{{ payload }}">
             <button class="linear-button primary" type="submit">确认批量更新单价</button>
           </form>

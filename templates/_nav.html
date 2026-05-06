@@ -1,14 +1,14 @@
 <nav class="app-nav">
   <div class="nav-links">
     <a class="{% if active_page == 'match' %}active{% endif %}" href="{{ url_for('index') }}">询价处理</a>
-    <a class="{% if active_page == 'products' %}active{% endif %}" href="{{ url_for('products') }}">产品目录</a>
     {% if can("view_customer_prices") %}
-      <a class="{% if active_page == 'customer_prices' %}active{% endif %}" href="{{ url_for('customer_prices') }}">客户价格</a>
+      <a class="{% if active_page == 'customer_prices' %}active{% endif %}" href="{{ url_for('customer_prices') }}">价格维护</a>
     {% endif %}
-    <a class="{% if active_page == 'materials' %}active{% endif %}" href="{{ url_for('materials') }}">生产料单</a>
     {% if can("generate_purchase_contract") %}
-      <a class="{% if active_page == 'purchase_contracts' %}active{% endif %}" href="{{ url_for('purchase_contracts') }}">采购合同</a>
+      <a class="{% if active_page == 'contracts' %}active{% endif %}" href="{{ url_for('contracts') }}">合同管理</a>
     {% endif %}
+    <a class="{% if active_page == 'products' %}active{% endif %}" href="{{ url_for('products') }}">产品目录</a>
+    <a class="{% if active_page == 'materials' %}active{% endif %}" href="{{ url_for('materials') }}">生产料单</a>
   </div>
   <div class="nav-user">
     {% if can("manage_users") or can("view_logs") %}
@@ -29,7 +29,7 @@
     {% else %}
       <span class="user-badge">{{ g.user.username }} · {{ ROLE_LABELS.get(g.user.role, g.user.role) }}</span>
     {% endif %}
-    <form action="{{ url_for('logout') }}" method="post"><button class="ghost compact" type="submit">退出</button></form>
+    <form action="{{ url_for('logout') }}" method="post">{{ csrf_field() }}<button class="ghost compact" type="submit">退出</button></form>
   </div>
 </nav>
 <script>

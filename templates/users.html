@@ -32,6 +32,7 @@
         <article class="workbench-section">
           <h2>{{ "编辑账号" if editing else "新增账号" }}</h2>
           <form action="{{ url_for('save_user_route') }}" method="post" class="workbench-form">
+            {{ csrf_field() }}
             <input type="hidden" name="id" value="{{ editing.id if editing else '' }}">
             <label>
               <span>登录名</span>

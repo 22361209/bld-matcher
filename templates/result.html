@@ -36,6 +36,7 @@
             {% if output_pending %}
               <button class="linear-button primary" type="button" data-open-download-modal>下载 Excel</button>
               <form action="{{ url_for('download_match_drawings') }}" method="post" class="inline-form">
+                {{ csrf_field() }}
                 <input type="hidden" name="upload_path" value="{{ upload_path }}">
                 <input type="hidden" name="original_filename" value="{{ original_filename }}">
                 <input type="hidden" name="match_column" value="{{ match_column }}">
@@ -43,6 +44,7 @@
               </form>
               {% if has_manual_match_column %}
                 <form action="{{ url_for('back_to_match_column') }}" method="post" class="inline-form">
+                  {{ csrf_field() }}
                   <input type="hidden" name="upload_path" value="{{ upload_path }}">
                   <input type="hidden" name="original_filename" value="{{ original_filename }}">
                   <input type="hidden" name="output_name" value="{{ output_name }}">
@@ -58,6 +60,7 @@
               {% endif %}
               {% if upload_path %}
                 <form action="{{ url_for('download_match_drawings') }}" method="post" class="inline-form">
+                  {{ csrf_field() }}
                   <input type="hidden" name="upload_path" value="{{ upload_path }}">
                   <input type="hidden" name="original_filename" value="{{ original_filename }}">
                   <input type="hidden" name="match_column" value="{{ match_column|default('') }}">
@@ -112,6 +115,7 @@
             <p>选择这次导出的单价方式。</p>
           </div>
           <form action="{{ url_for('download_match_result') }}" method="post" class="download-options-form">
+            {{ csrf_field() }}
             <input type="hidden" name="upload_path" value="{{ upload_path }}">
             <input type="hidden" name="original_filename" value="{{ original_filename }}">
             <input type="hidden" name="output_name" value="{{ output_name }}">

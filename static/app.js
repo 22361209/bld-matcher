@@ -153,6 +153,7 @@ document.querySelectorAll("[data-purchase-contract-form]").forEach((form) => {
   const body = form.querySelector("[data-purchase-rows]");
   const addButton = form.querySelector("[data-add-purchase-row]");
   if (!(body instanceof HTMLTableSectionElement) || !(addButton instanceof HTMLButtonElement)) return;
+  const isSalesContract = form.dataset.contractKind === "sales";
   const productCache = new Map();
 
   const totalQuantityCell = form.querySelector("[data-purchase-total-quantity]");
@@ -164,6 +165,7 @@ document.querySelectorAll("[data-purchase-contract-form]").forEach((form) => {
   const buyerSignName = form.querySelector("[data-buyer-sign-name]");
   const supplierSignName = form.querySelector("[data-supplier-sign-name]");
   const submitButton = form.querySelector("[data-purchase-submit-button]");
+  const submitButtonText = submitButton instanceof HTMLButtonElement ? submitButton.textContent : "生成 PDF";
   const feedback = form.querySelector("[data-purchase-feedback]");
   const confirmModal = document.querySelector("[data-purchase-confirm-modal]");
   const confirmSubmitButton = confirmModal?.querySelector("[data-purchase-confirm-submit]");
@@ -318,6 +320,7 @@ document.querySelectorAll("[data-purchase-contract-form]").forEach((form) => {
     row.innerHTML = [
       '<td class="purchase-row-index" data-purchase-index></td>',
       '<td><input name="product_code[]" data-purchase-bld></td>',
+      isSalesContract ? '<td><input name="customer_code[]" data-customer-code></td>' : "",
       '<td><input name="oe_no[]" data-purchase-oe></td>',
       '<td><input name="product_name[]" data-purchase-name></td>',
       '<td><input name="models[]" data-purchase-models></td>',
@@ -349,6 +352,11 @@ document.querySelectorAll("[data-purchase-contract-form]").forEach((form) => {
     setValue(row, "[data-purchase-oe]", product.oe_no);
     setValue(row, "[data-purchase-name]", product.product_name);
     setValue(row, "[data-purchase-models]", product.models);
+    const unitPriceInput = row.querySelector('[name="unit_price[]"]');
+    if (isSalesContract && unitPriceInput instanceof HTMLInputElement && !unitPriceInput.value && product.price_cny !== null && product.price_cny !== undefined) {
+      unitPriceInput.value = String(product.price_cny);
+      syncRows();
+    }
   };
 
   const lookupProduct = async (input) => {
@@ -466,12 +474,12 @@ document.querySelectorAll("[data-purchase-contract-form]").forEach((form) => {
       submitButton.disabled = true;
       submitButton.textContent = "正在生成...";
     }
-    setFeedback("已确认生成 PDF，浏览器会开始下载；生成记录可在页面底部「最近采购合同」查看。");
+    setFeedback("已确认生成 PDF，浏览器会开始下载；生成记录可在页面底部「最近合同」查看。");
     window.setTimeout(() => {
       confirmedSubmit = false;
       if (submitButton instanceof HTMLButtonElement) {
         submitButton.disabled = false;
-        submitButton.textContent = "生成 PDF";
+        submitButton.textContent = submitButtonText || "生成 PDF";
       }
     }, 6000);
   });

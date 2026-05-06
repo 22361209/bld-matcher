@@ -24,9 +24,15 @@ from app.purchase_contract import (
     DEFAULT_PAYMENT_TERMS,
     DEFAULT_PRICE_NOTE,
     DEFAULT_QUALITY_TERMS,
+    DEFAULT_SALES_PAYMENT_TERMS,
+    DEFAULT_SALES_PRICE_NOTE,
+    DEFAULT_SALES_QUALITY_TERMS,
     default_contract_no,
+    default_sales_contract_no,
     generate_purchase_contract_pdf,
+    generate_sales_contract_pdf,
     purchase_contract_from_form,
+    sales_contract_from_form,
 )
 from app.security import actor_name, can, permission_required
 
@@ -79,23 +85,41 @@ def _apply_catalog_values(conn, contract: dict) -> None:
 
 
 def register(app) -> None:
-    @app.get("/purchase-contracts")
-    @permission_required("generate_purchase_contract")
-    def purchase_contracts():
-        latest_outputs = all_recent_outputs("*采购合同*.pdf") if can("manage_users") else user_recent_outputs("*采购合同*.pdf")
+    def _render_contract_management(contract_mode: str = "purchase"):
+        is_sales = contract_mode == "sales"
+        output_reader = all_recent_outputs if can("manage_users") else user_recent_outputs
+        purchase_outputs = output_reader("采购合同/**/*.pdf")
+        sales_outputs = output_reader("销售合同/**/*.pdf")
         return render_template(
             "purchase_contracts.html",
-            default_contract_no=default_contract_no(user_file_label()),
+            contract_mode=contract_mode,
+            default_contract_no=default_sales_contract_no(user_file_label()) if is_sales else default_contract_no(user_file_label()),
             default_date=date.today().isoformat(),
             defaults={
                 "buyer_name": DEFAULT_BUYER_NAME,
-                "delivery_address": DEFAULT_DELIVERY_ADDRESS,
-                "payment_terms": DEFAULT_PAYMENT_TERMS,
-                "price_note": DEFAULT_PRICE_NOTE,
-                "quality_terms": DEFAULT_QUALITY_TERMS,
+                "delivery_address": "" if is_sales else DEFAULT_DELIVERY_ADDRESS,
+                "payment_terms": DEFAULT_SALES_PAYMENT_TERMS if is_sales else DEFAULT_PAYMENT_TERMS,
+                "price_note": DEFAULT_SALES_PRICE_NOTE if is_sales else DEFAULT_PRICE_NOTE,
+                "quality_terms": DEFAULT_SALES_QUALITY_TERMS if is_sales else DEFAULT_QUALITY_TERMS,
             },
-            latest_outputs=latest_outputs,
+            purchase_outputs=purchase_outputs,
+            sales_outputs=sales_outputs,
         )
+
+    @app.get("/contracts")
+    @permission_required("generate_purchase_contract")
+    def contracts():
+        return _render_contract_management("purchase")
+
+    @app.get("/purchase-contracts")
+    @permission_required("generate_purchase_contract")
+    def purchase_contracts():
+        return _render_contract_management("purchase")
+
+    @app.get("/contracts/sales")
+    @permission_required("generate_purchase_contract")
+    def sales_contracts():
+        return _render_contract_management("sales")
 
     @app.get("/purchase-contracts/product-lookup")
     @permission_required("generate_purchase_contract")
@@ -117,6 +141,7 @@ def register(app) -> None:
                 "oe_no": product["oe_no_1"] or "",
                 "product_name": product["item"] or "",
                 "models": product["models"] or "",
+                "price_cny": product["price_cny"],
                 "image_url": image_url,
                 "thumb_url": thumb_url or image_url,
             }
@@ -128,9 +153,13 @@ def register(app) -> None:
         try:
             contract = purchase_contract_from_form(request.form)
             bootstrap_from_excel(DB_PATH, CATALOG_PATH)
-            filename_stem = safe_filename_part(f"采购合同-{contract['contract_no']}", "purchase-contract")
+            supplier_folder = safe_filename_part(contract["supplier_name"], "supplier")
+            filename_stem = safe_filename_part(
+                f"{contract['contract_no']}{contract['supplier_name']}",
+                "purchase-contract",
+            )
             filename = f"{filename_stem}.pdf"
-            output_path = unique_prefixed_path(user_output_dir(), filename)
+            output_path = unique_prefixed_path(user_output_dir() / "采购合同" / supplier_folder, filename)
             with connect(DB_PATH) as conn:
                 _apply_catalog_values(conn, contract)
                 generate_purchase_contract_pdf(contract, output_path)
@@ -145,6 +174,37 @@ def register(app) -> None:
                 conn.commit()
         except Exception as exc:
             flash(f"生成失败：{exc}", "error")
-            return redirect(url_for("purchase_contracts"))
+            return redirect(url_for("contracts"))
+
+        return send_file(output_path, as_attachment=True, download_name=output_path.name)
+
+    @app.post("/sales-contracts/generate")
+    @permission_required("generate_purchase_contract")
+    def generate_sales_contract():
+        try:
+            contract = sales_contract_from_form(request.form)
+            bootstrap_from_excel(DB_PATH, CATALOG_PATH)
+            customer_folder = safe_filename_part(contract["customer_name"], "customer")
+            filename_stem = safe_filename_part(
+                f"{contract['contract_no']}{contract['customer_name']}",
+                "sales-contract",
+            )
+            filename = f"{filename_stem}.pdf"
+            output_path = unique_prefixed_path(user_output_dir() / "销售合同" / customer_folder, filename)
+            with connect(DB_PATH) as conn:
+                _apply_catalog_values(conn, contract)
+                generate_sales_contract_pdf(contract, output_path)
+                log_event(
+                    conn,
+                    "生成销售合同",
+                    "sales_contract",
+                    output_path.name,
+                    f"{contract['customer_name']}，{len(contract['items'])} 行，合计 ¥{contract['total_amount']}",
+                    actor=actor_name(),
+                )
+                conn.commit()
+        except Exception as exc:
+            flash(f"生成失败：{exc}", "error")
+            return redirect(url_for("sales_contracts"))
 
         return send_file(output_path, as_attachment=True, download_name=output_path.name)

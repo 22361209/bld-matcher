@@ -4,13 +4,13 @@ from flask import flash, redirect, render_template, request, session, url_for
 
 from app.config import DB_PATH
 from app.database import connect, get_user_by_username
-from app.security import login_required, password_matches
+from app.security import login_required, password_matches, safe_redirect_target
 
 
 def register(app) -> None:
     @app.get("/login")
     def login():
-        return render_template("login.html", next=request.args.get("next", ""))
+        return render_template("login.html", next=safe_redirect_target(request.args.get("next"), ""))
 
     @app.post("/login")
     def do_login():
@@ -23,7 +23,7 @@ def register(app) -> None:
             return redirect(url_for("login"))
         session["user_id"] = user["id"]
         flash("登录成功。", "success")
-        return redirect(request.form.get("next") or url_for("index"))
+        return redirect(safe_redirect_target(request.form.get("next"), url_for("index")))
 
     @app.post("/logout")
     @login_required

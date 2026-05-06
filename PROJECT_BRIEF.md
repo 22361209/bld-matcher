@@ -1,6 +1,6 @@
 # BLD Project Brief
 
-更新时间：2026-05-05
+更新时间：2026-05-06
 
 这是给新接手 Codex 或开发者的短版项目说明。先读 `AGENTS.md`，再读本文件。详细历史在 `项目交接说明.md`，需要查旧决策时用 `rg` 搜索，不要默认整篇读取。
 
@@ -8,11 +8,11 @@
 
 BLD 是一个局域网内部使用的 Flask 业务系统，主要用于：
 
-- 客户询价 Excel/OE 号码匹配
+- 客户询价 Excel/OE/品牌号码/BLD 号匹配
 - 产品目录、OE、车型、图片、PDF 图纸、含税单价维护
 - 询价结果 Excel 和图纸压缩包下载
 - 生产料单生成和冲压材料明细维护
-- 外购型号采购合同 PDF 生成
+- 合同管理和采购/销售合同 PDF 生成
 - 多用户账号、权限和操作日志
 
 ## 位置和访问
@@ -79,7 +79,7 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 
 询价处理：
 
-- 首页文件/OE 输入框可上传询价 Excel，也可直接输入单个 OE 快速查询。
+- 首页文件/号码输入框可上传询价 Excel，也可直接输入单个 OE、品牌号码或 BLD 号快速查询。
 - 粘贴多个号码会生成临时询价源表并进入匹配结果页。
 - 上传 Excel 后必须手动选择要匹配的列，系统不自动猜列。
 - 匹配结果页先展示网页结果，点击“下载 Excel”时才生成 Excel。
@@ -102,20 +102,23 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 - 材料规格尺寸由规格输入解析生成。
 - 材料明细搜索支持母件编码、零件编码、规格尺寸等。
 
-采购合同：
+合同管理：
 
-- `/purchase-contracts` 提供纸面预览式采购合同页面，按“采购合同范本_玉环博莱德.docx”结构生成 PDF。
-- 甲方默认带入“玉环博莱德机械有限公司”，并默认带入范本中的价格说明、付款方式、质量、包装、验收、违约、保密和争议解决条款。
+- `/contracts` 提供合同管理页面，包含采购合同和销售合同两个入口；旧路径 `/purchase-contracts` 仍保留兼容。
+- 采购合同按“采购合同范本_玉环博莱德.docx”结构生成 PDF；销售合同按“产品销售合同范本_玉环博莱德.docx”的条款生成 PDF。
+- 两类合同共用采购合同式明细字段：BLD号、OE号、产品名称、适用车型、数量、单价、金额、备注和交期；销售合同明细额外包含客户编码。
+- 甲方默认带入“玉环博莱德机械有限公司”，并默认带入对应合同的价格说明、付款方式、质量、包装、验收、违约、保密和争议解决条款。
 - PDF 抬头甲乙双方均显示公司名称、联系人和电话；交货地点只放在交货条款中。
 - 页面按 A4 合同纸面组织，合同抬头、正文条款和签章区与 PDF 基本一致；明细表为了录入保留更宽的表格区域。
-- 手动填写 BLD号、数量、单价、交期和备注，页面实时预览金额和合计；BLD号输入后自动从产品目录带入 OE号、产品名称和适用车型。
-- 点击“生成 PDF”后先二次确认，再生成采购合同 PDF，文件保存到当前用户 `outputs/u用户ID-用户名/` 目录，并写入操作日志。
-- PDF 生成使用 `reportlab` 和内置中文 CID 字体，不依赖本机业务数据文件。
+- 页面可录入位置使用独立颜色提示；签章区不显示统一社会信用代码；甲乙双方的地址、电话、开户行、账号和签章日期均为可选字段，留空也可生成 PDF。
+- 手动填写 BLD号、数量、单价、交期和备注，页面实时预览金额和合计；BLD号输入后自动从产品目录带入 OE号、产品名称和适用车型。销售合同在单价为空时还会带入当前目录含税单价。
+- 点击“生成 PDF”后先二次确认，再生成合同 PDF；采购合同保存到当前用户 `outputs/u用户ID-用户名/采购合同/乙方公司名称/`，销售合同保存到 `outputs/u用户ID-用户名/销售合同/客户名称/`，文件名为 `合同编号公司名称.pdf`，并写入操作日志。
+- PDF 生成使用 `reportlab`；中文使用 `STSong-Light` 宋体风格字体，英文和数字优先使用 Arial，找不到 Arial 时兜底为 Helvetica。
 
 权限：
 
 - 管理员可管理用户、日志、导入目录、导出目录、维护单价和编辑产品。
-- 管理员、编辑员、普通用户可生成采购合同；只读用户不可生成。
+- 合同管理、价格维护和目录导出仅管理员可见可用。
 - 普通用户不能调用只开放给管理员的后端地址；权限由服务端装饰器拦截。
 
 ## NAS 更新流程
@@ -150,15 +153,15 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 - `app/routes/inquiry.py`：询价上传、匹配、下载 Excel、图纸包
 - `app/routes/products.py`：产品目录、图片、图纸、单价导入、目录导入导出
 - `app/routes/materials.py`：生产料单和材料明细
-- `app/routes/purchase_contracts.py`：采购合同页面和 PDF 下载
+- `app/routes/purchase_contracts.py`：合同管理、采购/销售合同生成和 PDF 下载
 - `app/routes/admin.py`：用户、日志、系统更新页面
 - `app/database.py`：SQLite 表结构、查询、写入、迁移调用
 - `app/matcher.py`：产品匹配逻辑
 - `app/product_media.py`：产品图片上传、缩略图生成和读取
 - `app/catalog_export.py`：产品目录 Excel 导出和图片嵌入
-- `app/purchase_contract.py`：采购合同表单校验和 PDF 生成
+- `app/purchase_contract.py`：采购/销售合同表单校验和 PDF 生成
 - `templates/products.html`：产品目录页面
-- `templates/purchase_contracts.html`：采购合同页面
+- `templates/purchase_contracts.html`：合同管理和采购/销售合同页面
 - `templates/_product_rows.html`：产品目录行模板
 - `static/styles.css`：主要样式
 - `tests/test_app.py`：主要回归测试

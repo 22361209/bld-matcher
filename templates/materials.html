@@ -47,6 +47,7 @@
         </div>
         {% if can("generate_material_sheet") %}
           <form action="{{ url_for('generate_materials') }}" method="post" enctype="multipart/form-data" class="inquiry-command-row material-generate-row">
+            {{ csrf_field() }}
             <div class="file-picker-field">
               <span>生产计划 Excel</span>
               <label class="file-picker">
@@ -79,6 +80,7 @@
               <details class="toolbar-popover linear-popover">
                 <summary>导入材料数据</summary>
                 <form action="{{ url_for('upload_material_data') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form material-import-form">
+                  {{ csrf_field() }}
                   <label class="file-picker">
                     <span>材料数据 Excel</span>
                     <input class="file-picker-input" type="file" name="material_data" accept=".xlsx" required>
@@ -159,6 +161,7 @@
                       <a href="{{ url_for('edit_material_item', item_id=item.id) }}">编辑</a>
                       {% if item.active %}
                         <form action="{{ url_for('stop_material_item', item_id=item.id) }}" method="post" class="inline-delete-form">
+                          {{ csrf_field() }}
                           <button class="link-button danger-link" type="submit">停用</button>
                         </form>
                       {% endif %}
@@ -208,6 +211,7 @@
             <p class="note">母件编码用于匹配生产计划；规格尺寸支持空格、*、-、/ 分隔。</p>
           </div>
           <form action="{{ url_for('save_material_item') }}" method="post" class="product-form modal-product-form material-modal-form" data-enter-navigation>
+            {{ csrf_field() }}
             <label>
               母件编码
               <input name="model" required>

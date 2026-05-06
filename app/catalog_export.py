@@ -203,6 +203,9 @@ def export_products_xlsx(
         for item in cell:
             item.number_format = '¥#,##0.00'
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    workbook.save(output_path)
-    return output_path
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        workbook.save(output_path)
+        return output_path
+    finally:
+        workbook.close()

@@ -205,7 +205,7 @@ def user_recent_outputs(pattern: str = "*", limit: int = 8) -> list[Path]:
     directory = user_output_dir(create=False)
     if not directory.exists():
         return []
-    return sorted((path for path in directory.glob(pattern) if path.is_file()), key=lambda path: path.stat().st_mtime, reverse=True)[:limit]
+    return sorted((path for path in directory.rglob(pattern) if path.is_file()), key=lambda path: path.stat().st_mtime, reverse=True)[:limit]
 
 
 def all_recent_outputs(pattern: str = "*", limit: int = 8) -> list[Path]:

@@ -173,7 +173,7 @@ def register(app) -> None:
             quick_oe = request.form.get("quick_oe", "").strip()
             if quick_oe:
                 return _render_pasted_inquiry_result(catalog, quick_oe)
-            flash("请选择客户询价文件或输入 OE 号码。", "error")
+            flash("请选择客户询价文件或输入 OE、品牌号码或 BLD 号。", "error")
             return redirect(url_for("index"))
         suffix = Path(file.filename).suffix.lower()
         if suffix not in {".xls", ".xlsx"}:

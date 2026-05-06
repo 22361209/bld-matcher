@@ -23,6 +23,7 @@
           {% endif %}
         {% endwith %}
         <form action="{{ url_for('do_login') }}" method="post" class="form vertical">
+          {{ csrf_field() }}
           <input type="hidden" name="next" value="{{ next }}">
           <label>
             登录名

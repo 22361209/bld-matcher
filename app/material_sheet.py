@@ -150,79 +150,85 @@ def create_plan_template(path: Path) -> None:
 
 def read_plan(path: Path) -> tuple[str, list[dict[str, Any]]]:
     wb = load_workbook(path, data_only=True)
-    ws = wb.active
-    title = ws["A1"].value if ws["A1"].value else path.stem
+    try:
+        ws = wb.active
+        title = ws["A1"].value if ws["A1"].value else path.stem
 
-    header_row = None
-    header_map: dict[str, int] = {}
-    for row in range(1, min(ws.max_row, 20) + 1):
-        values = [normalize_model(ws.cell(row, col).value) for col in range(1, ws.max_column + 1)]
-        if "型号" in values and "计划数/只" in values:
-            header_row = row
-            header_map = {name: values.index(name) + 1 for name in PLAN_HEADERS if name in values}
-            break
-    if header_row is None:
-        raise ValueError("生产计划里找不到表头，请包含：型号、车型、计划数/只、L、R、冲压完成时间、备注")
-    for required in ["型号", "计划数/只"]:
-        if required not in header_map:
-            raise ValueError(f"生产计划缺少必需列：{required}")
+        header_row = None
+        header_map: dict[str, int] = {}
+        for row in range(1, min(ws.max_row, 20) + 1):
+            values = [normalize_model(ws.cell(row, col).value) for col in range(1, ws.max_column + 1)]
+            if "型号" in values and "计划数/只" in values:
+                header_row = row
+                header_map = {name: values.index(name) + 1 for name in PLAN_HEADERS if name in values}
+                break
+        if header_row is None:
+            raise ValueError("生产计划里找不到表头，请包含：型号、车型、计划数/只、L、R、冲压完成时间、备注")
+        for required in ["型号", "计划数/只"]:
+            if required not in header_map:
+                raise ValueError(f"生产计划缺少必需列：{required}")
 
-    plans: list[dict[str, Any]] = []
-    for row in range(header_row + 1, ws.max_row + 1):
-        model = normalize_model(ws.cell(row, header_map["型号"]).value)
-        if not model:
-            continue
-        qty = to_number(ws.cell(row, header_map["计划数/只"]).value, "计划数/只", row)
-        plans.append(
-            {
-                "model": model,
-                "car": ws.cell(row, header_map.get("车型", 0)).value if "车型" in header_map else "",
-                "qty": qty,
-                "left": ws.cell(row, header_map.get("L", 0)).value if "L" in header_map else "",
-                "right": ws.cell(row, header_map.get("R", 0)).value if "R" in header_map else "",
-                "finish_date": ws.cell(row, header_map.get("冲压完成时间", 0)).value
-                if "冲压完成时间" in header_map
-                else "",
-                "remark": ws.cell(row, header_map.get("备注", 0)).value if "备注" in header_map else "",
-            }
-        )
-    if not plans:
-        raise ValueError("生产计划里没有可计算的型号")
-    return clean_sheet_title(title), plans
+        plans: list[dict[str, Any]] = []
+        for row in range(header_row + 1, ws.max_row + 1):
+            model = normalize_model(ws.cell(row, header_map["型号"]).value)
+            if not model:
+                continue
+            qty = to_number(ws.cell(row, header_map["计划数/只"]).value, "计划数/只", row)
+            plans.append(
+                {
+                    "model": model,
+                    "car": ws.cell(row, header_map.get("车型", 0)).value if "车型" in header_map else "",
+                    "qty": qty,
+                    "left": ws.cell(row, header_map.get("L", 0)).value if "L" in header_map else "",
+                    "right": ws.cell(row, header_map.get("R", 0)).value if "R" in header_map else "",
+                    "finish_date": ws.cell(row, header_map.get("冲压完成时间", 0)).value
+                    if "冲压完成时间" in header_map
+                    else "",
+                    "remark": ws.cell(row, header_map.get("备注", 0)).value if "备注" in header_map else "",
+                }
+            )
+        if not plans:
+            raise ValueError("生产计划里没有可计算的型号")
+        return clean_sheet_title(title), plans
+    finally:
+        wb.close()
 
 
 def read_materials(path: Path) -> dict[str, list[dict[str, Any]]]:
     wb = load_workbook(path, data_only=False)
-    if "材料数据" not in wb.sheetnames:
-        raise ValueError("材料数据文件里找不到工作表：材料数据")
-    ws = wb["材料数据"]
-    rows_by_model: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for row_number, values in enumerate(ws.iter_rows(min_row=2, max_col=11, values_only=True), start=2):
-        model = normalize_model(values[0])
-        if not model:
-            continue
-        pieces = values[6]
-        thickness = values[8]
-        width = values[9]
-        length = values[10]
-        if any(value in (None, "") for value in [pieces, thickness, width, length]):
-            continue
-        rows_by_model[model].append(
-            {
-                "source_row": row_number,
-                "model": model,
-                "code": values[1],
-                "category": values[2],
-                "car": values[3],
-                "part": values[4],
-                "spec_text": format_spec(float(thickness), float(width), float(length)),
-                "pieces": float(pieces),
-                "thickness": float(thickness),
-                "width": float(width),
-                "length": float(length),
-            }
-        )
-    return rows_by_model
+    try:
+        if "材料数据" not in wb.sheetnames:
+            raise ValueError("材料数据文件里找不到工作表：材料数据")
+        ws = wb["材料数据"]
+        rows_by_model: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for row_number, values in enumerate(ws.iter_rows(min_row=2, max_col=11, values_only=True), start=2):
+            model = normalize_model(values[0])
+            if not model:
+                continue
+            pieces = values[6]
+            thickness = values[8]
+            width = values[9]
+            length = values[10]
+            if any(value in (None, "") for value in [pieces, thickness, width, length]):
+                continue
+            rows_by_model[model].append(
+                {
+                    "source_row": row_number,
+                    "model": model,
+                    "code": values[1],
+                    "category": values[2],
+                    "car": values[3],
+                    "part": values[4],
+                    "spec_text": format_spec(float(thickness), float(width), float(length)),
+                    "pieces": float(pieces),
+                    "thickness": float(thickness),
+                    "width": float(width),
+                    "length": float(length),
+                }
+            )
+        return rows_by_model
+    finally:
+        wb.close()
 
 
 def material_data_stats(path: Path) -> dict[str, Any]:
@@ -241,28 +247,31 @@ def material_data_stats(path: Path) -> dict[str, Any]:
             "updated_at": datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d %H:%M"),
             "filename": path.name,
         }
-    if "材料数据" not in wb.sheetnames:
-        return {"exists": True, "invalid": True, "model_count": 0, "detail_count": 0, "sheet_count": len(wb.sheetnames)}
-    ws = wb["材料数据"]
-    models: set[str] = set()
-    detail_count = 0
-    for values in ws.iter_rows(min_row=2, max_col=11, values_only=True):
-        model = normalize_model(values[0])
-        if not model:
-            continue
-        models.add(model)
-        required_values = [values[6], values[8], values[9], values[10]]
-        if all(value not in (None, "") for value in required_values):
-            detail_count += 1
-    return {
-        "exists": True,
-        "invalid": False,
-        "model_count": len(models),
-        "detail_count": detail_count,
-        "sheet_count": len(wb.sheetnames),
-        "updated_at": datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d %H:%M"),
-        "filename": path.name,
-    }
+    try:
+        if "材料数据" not in wb.sheetnames:
+            return {"exists": True, "invalid": True, "model_count": 0, "detail_count": 0, "sheet_count": len(wb.sheetnames)}
+        ws = wb["材料数据"]
+        models: set[str] = set()
+        detail_count = 0
+        for values in ws.iter_rows(min_row=2, max_col=11, values_only=True):
+            model = normalize_model(values[0])
+            if not model:
+                continue
+            models.add(model)
+            required_values = [values[6], values[8], values[9], values[10]]
+            if all(value not in (None, "") for value in required_values):
+                detail_count += 1
+        return {
+            "exists": True,
+            "invalid": False,
+            "model_count": len(models),
+            "detail_count": detail_count,
+            "sheet_count": len(wb.sheetnames),
+            "updated_at": datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d %H:%M"),
+            "filename": path.name,
+        }
+    finally:
+        wb.close()
 
 
 def calculate(plans: list[dict[str, Any]], materials: dict[str, list[dict[str, Any]]]) -> tuple[list[dict[str, Any]], list[str]]:

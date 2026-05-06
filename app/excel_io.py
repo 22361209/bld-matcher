@@ -13,7 +13,7 @@ from .matcher import ProductCatalog, normalize_code, split_codes
 
 INQUIRY_HEADERS = {
     "name": {"物料名称", "产品名称", "名称", "ITEM", "PART"},
-    "oe": {"OE号", "OE", "OE NO", "OE NO.", "OE号码", "OE REFERENCE", "OE REF"},
+    "oe": {"OE号", "OE", "OE NO", "OE NO.", "OE号码", "OE REFERENCE", "OE REF", "号码", "查询号码", "客户号码", "BLD号", "BLD NO", "BLD NO."},
     "description": {"物料描述", "描述", "DESCRIPTION", "DESC"},
 }
 
@@ -92,16 +92,19 @@ def preview_inquiry_columns(inquiry_path: Path, max_rows: int = 8, max_cols: int
         }
 
     workbook = load_workbook(inquiry_path, read_only=True, data_only=True)
-    sheet = workbook.worksheets[0]
-    cols = min(sheet.max_column, max_cols)
-    rows = []
-    for row_index in range(1, min(sheet.max_row, max_rows) + 1):
-        rows.append([sheet.cell(row_index, col_index).value for col_index in range(1, cols + 1)])
-    return {
-        "sheet": sheet.title,
-        "columns": [{"index": i, "label": _column_label(i)} for i in range(cols)],
-        "rows": rows,
-    }
+    try:
+        sheet = workbook.worksheets[0]
+        cols = min(sheet.max_column, max_cols)
+        rows = []
+        for row_index in range(1, min(sheet.max_row, max_rows) + 1):
+            rows.append([sheet.cell(row_index, col_index).value for col_index in range(1, cols + 1)])
+        return {
+            "sheet": sheet.title,
+            "columns": [{"index": i, "label": _column_label(i)} for i in range(cols)],
+            "rows": rows,
+        }
+    finally:
+        workbook.close()
 
 
 def _norm_openpyxl_cell(value: object) -> str:
@@ -298,64 +301,67 @@ def generate_xlsx_with_bld(
     exchange_rate: float | None = None,
 ) -> dict:
     workbook = load_workbook(inquiry_path)
-    summary = {"total": 0, "matched": 0, "unmatched": 0, "rows": []}
+    try:
+        summary = {"total": 0, "matched": 0, "unmatched": 0, "rows": []}
 
-    for sheet in workbook.worksheets:
-        if sheet.max_row == 0:
-            continue
-
-        if match_column is None:
-            header_row, columns = _find_xlsx_inquiry_columns(sheet)
-        else:
-            selected_column = match_column + 1
-            header_row = _find_xlsx_selected_header_row(sheet, selected_column)
-            columns = {"oe": selected_column}
-        output_col = sheet.max_column + 1
-        price_header = _price_export_header(price_mode)
-        note_col = output_col + 2 if price_header else output_col + 1
-        if write_output:
-            sheet.cell(header_row, output_col).value = "BLD NO."
-            if price_header:
-                sheet.cell(header_row, output_col + 1).value = price_header
-            sheet.cell(header_row, note_col).value = "匹配说明"
-
-        for row_index in range(header_row + 1, sheet.max_row + 1):
-            inquiry_name = sheet.cell(row_index, columns["name"]).value if "name" in columns else ""
-            inquiry_oe = sheet.cell(row_index, columns["oe"]).value if "oe" in columns else ""
-            inquiry_desc = sheet.cell(row_index, columns["description"]).value if "description" in columns else ""
-            if not str(inquiry_name or "").strip() and not str(inquiry_oe or "").strip():
+        for sheet in workbook.worksheets:
+            if sheet.max_row == 0:
                 continue
 
-            match = catalog.match(inquiry_name, inquiry_oe, inquiry_desc)
-            summary["total"] += 1
-            if match:
-                if write_output:
-                    sheet.cell(row_index, output_col).value = match.bld_no
-                    if price_header:
-                        price = _match_export_price(match, price_mode, exchange_rate)
-                        price_cell = sheet.cell(row_index, output_col + 1)
-                        price_cell.value = price
-                        price_cell.number_format = "0.00"
-                summary["matched"] += 1
-                row_summary = _summary_row(row_index, inquiry_oe, inquiry_name, match)
-                if write_output:
-                    sheet.cell(row_index, note_col).value = row_summary["match_note"]
-                summary["rows"].append(row_summary)
+            if match_column is None:
+                header_row, columns = _find_xlsx_inquiry_columns(sheet)
             else:
-                if write_output:
-                    sheet.cell(row_index, output_col).value = ""
-                    if price_header:
-                        sheet.cell(row_index, output_col + 1).value = None
-                summary["unmatched"] += 1
-                row_summary = _summary_row(row_index, inquiry_oe, inquiry_name, None)
-                if write_output:
-                    sheet.cell(row_index, note_col).value = row_summary["match_note"]
-                summary["rows"].append(row_summary)
+                selected_column = match_column + 1
+                header_row = _find_xlsx_selected_header_row(sheet, selected_column)
+                columns = {"oe": selected_column}
+            output_col = sheet.max_column + 1
+            price_header = _price_export_header(price_mode)
+            note_col = output_col + 2 if price_header else output_col + 1
+            if write_output:
+                sheet.cell(header_row, output_col).value = "BLD NO."
+                if price_header:
+                    sheet.cell(header_row, output_col + 1).value = price_header
+                sheet.cell(header_row, note_col).value = "匹配说明"
 
-    if write_output:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        workbook.save(output_path)
-    return summary
+            for row_index in range(header_row + 1, sheet.max_row + 1):
+                inquiry_name = sheet.cell(row_index, columns["name"]).value if "name" in columns else ""
+                inquiry_oe = sheet.cell(row_index, columns["oe"]).value if "oe" in columns else ""
+                inquiry_desc = sheet.cell(row_index, columns["description"]).value if "description" in columns else ""
+                if not str(inquiry_name or "").strip() and not str(inquiry_oe or "").strip():
+                    continue
+
+                match = catalog.match(inquiry_name, inquiry_oe, inquiry_desc)
+                summary["total"] += 1
+                if match:
+                    if write_output:
+                        sheet.cell(row_index, output_col).value = match.bld_no
+                        if price_header:
+                            price = _match_export_price(match, price_mode, exchange_rate)
+                            price_cell = sheet.cell(row_index, output_col + 1)
+                            price_cell.value = price
+                            price_cell.number_format = "0.00"
+                    summary["matched"] += 1
+                    row_summary = _summary_row(row_index, inquiry_oe, inquiry_name, match)
+                    if write_output:
+                        sheet.cell(row_index, note_col).value = row_summary["match_note"]
+                    summary["rows"].append(row_summary)
+                else:
+                    if write_output:
+                        sheet.cell(row_index, output_col).value = ""
+                        if price_header:
+                            sheet.cell(row_index, output_col + 1).value = None
+                    summary["unmatched"] += 1
+                    row_summary = _summary_row(row_index, inquiry_oe, inquiry_name, None)
+                    if write_output:
+                        sheet.cell(row_index, note_col).value = row_summary["match_note"]
+                    summary["rows"].append(row_summary)
+
+        if write_output:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            workbook.save(output_path)
+        return summary
+    finally:
+        workbook.close()
 
 
 def generate_excel_with_bld(
