@@ -48,6 +48,10 @@ document.querySelectorAll(".file-picker-input").forEach((input) => {
   input.addEventListener("change", syncFilePicker);
   clearButton?.addEventListener("click", () => {
     input.value = "";
+    if (oeInput instanceof HTMLInputElement) {
+      oeInput.value = "";
+      oeInput.readOnly = false;
+    }
     syncFilePicker();
   });
 

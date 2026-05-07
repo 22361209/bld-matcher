@@ -44,10 +44,11 @@
             <a class="linear-button subtle" href="{{ url_for('index') }}">返回上一步</a>
           </form>
         </div>
-        <div class="materials-table-wrap">
-        <table class="materials-grid-table">
+        <div class="materials-table-wrap match-preview-wrap">
+        <table class="materials-grid-table match-preview-table">
           <thead>
             <tr>
+              <th>源行</th>
               {% for column in preview.columns %}
                 <th>{{ column.label }} 列</th>
               {% endfor %}
@@ -56,8 +57,9 @@
           <tbody>
             {% for row in preview.rows %}
               <tr>
+                <td><div class="match-preview-cell">{{ loop.index }}</div></td>
                 {% for value in row %}
-                  <td>{{ value }}</td>
+                  <td><div class="match-preview-cell" title="{{ value }}">{{ value }}</div></td>
                 {% endfor %}
               </tr>
             {% endfor %}

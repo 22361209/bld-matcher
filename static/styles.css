@@ -1626,6 +1626,10 @@ textarea {
   cursor: pointer;
 }
 
+.inquiry-command-row .file-picker-clear {
+  font-size: 13px;
+}
+
 .inquiry-command-row .file-picker-name {
   padding: 0 12px;
 }
@@ -2240,6 +2244,63 @@ textarea {
 
 .match-column-form label {
   width: 150px;
+}
+
+.match-preview-wrap {
+  max-height: calc(100vh - 250px);
+  overflow: auto;
+}
+
+.match-preview-table {
+  table-layout: fixed;
+}
+
+.match-preview-table th,
+.match-preview-table td {
+  min-width: 120px;
+  max-width: 220px;
+  vertical-align: top;
+}
+
+.match-preview-table th:first-child,
+.match-preview-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  width: 58px;
+  min-width: 58px;
+  max-width: 58px;
+  background: inherit;
+  text-align: center;
+}
+
+.match-preview-table td:first-child {
+  background: #ffffff;
+}
+
+.match-preview-table tbody tr:nth-child(even) td:first-child {
+  background: #fbfcfe;
+}
+
+.match-preview-table tbody tr:hover td:first-child {
+  background: #f2f7fb;
+}
+
+.match-preview-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.match-preview-table thead th:first-child {
+  z-index: 3;
+}
+
+.match-preview-cell {
+  max-height: 54px;
+  overflow: auto;
+  line-height: 1.35;
+  word-break: break-word;
 }
 
 .materials-table-title-actions {

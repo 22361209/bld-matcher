@@ -1094,6 +1094,7 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("data-file-drop-zone", html)
         self.assertIn("可拖入询价文件", html)
         self.assertIn("输入 OE或 BLD 号", html)
+        self.assertIn("file-picker-clear", html)
         self.assertIn("old-root-result.xlsx", html)
         self.assertIn("other-user-result.xlsx", html)
         self.assertIn("other", html)
@@ -1473,6 +1474,9 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("选择匹配列", html)
         self.assertIn("没有识别到明确的 OE 号码表头", html)
+        self.assertIn("match-preview-table", html)
+        self.assertIn("match-preview-cell", html)
+        self.assertIn("<th>源行</th>", html)
 
         upload_match = re.search(r'name="upload_path" value="([^"]+)"', html)
         output_match = re.search(r'name="output_name" value="([^"]+)"', html)
