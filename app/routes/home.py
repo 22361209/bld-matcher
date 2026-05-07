@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+import re
 
 from flask import flash, redirect, render_template, request, send_file, url_for
 
 from app.config import CATALOG_PATH, DB_PATH, OUTPUT_DIR
 from app.database import connect, product_stats
 from app.helpers import all_recent_outputs, load_catalog, user_output_dir, user_recent_outputs
-from app.matcher import ProductCatalog, catalog_summary, split_codes
+from app.matcher import CatalogMatch, ProductCatalog, catalog_summary, compact_text, normalize_code, split_codes
 from app.security import can
 from app.security import login_required
 
@@ -49,6 +50,51 @@ def _history_rows(paths: list[Path], query: str) -> list[dict]:
     return rows[:80]
 
 
+def _product_from_match(match: CatalogMatch) -> dict:
+    row = match.row
+    return {
+        "bld_no": match.bld_no,
+        "series": row.get("SERIES", ""),
+        "item": row.get("ITEM", ""),
+        "oe_no_1": row.get("OE NO.1", ""),
+        "oe_no_2": row.get("OE NO.2", ""),
+        "models": row.get("Models", ""),
+        "price_cny": row.get("price_cny"),
+        "image_path": row.get("image_path", ""),
+        "image_path_2": row.get("image_path_2", ""),
+        "image_path_3": row.get("image_path_3", ""),
+        "image_path_4": row.get("image_path_4", ""),
+        "image_path_5": row.get("image_path_5", ""),
+    }
+
+
+def _quick_result_from_match(query: str, match: CatalogMatch) -> dict:
+    return {
+        "query": query,
+        "product": _product_from_match(match),
+        "reason": match.reason,
+        "score": match.score,
+    }
+
+
+def _quick_bld_fragment_results(catalog: ProductCatalog, query: str) -> list[dict]:
+    key = normalize_code(query)
+    if not re.fullmatch(r"\d{4}", key):
+        return []
+
+    results = []
+    seen = set()
+    for row in catalog.rows:
+        bld_no = compact_text(row.get("BLD NO."))
+        bld_key = normalize_code(bld_no)
+        if not bld_no or key not in bld_key or bld_key in seen:
+            continue
+        seen.add(bld_key)
+        match = CatalogMatch(bld_no, 86, "BLD NO. 片段命中", row, matched_codes=(query,))
+        results.append(_quick_result_from_match(query, match))
+    return results
+
+
 def _quick_oe_results(catalog: ProductCatalog | None, query: str) -> list[dict]:
     if not catalog:
         return []
@@ -59,32 +105,16 @@ def _quick_oe_results(catalog: ProductCatalog | None, query: str) -> list[dict]:
 
     results = []
     for code in codes[:20]:
+        bld_fragment_results = _quick_bld_fragment_results(catalog, code)
+        if bld_fragment_results:
+            results.extend(bld_fragment_results)
+            continue
+
         match = catalog.match("", code)
-        product = None
         if match:
-            row = match.row
-            product = {
-                "bld_no": match.bld_no,
-                "series": row.get("SERIES", ""),
-                "item": row.get("ITEM", ""),
-                "oe_no_1": row.get("OE NO.1", ""),
-                "oe_no_2": row.get("OE NO.2", ""),
-                "models": row.get("Models", ""),
-                "price_cny": row.get("price_cny"),
-                "image_path": row.get("image_path", ""),
-                "image_path_2": row.get("image_path_2", ""),
-                "image_path_3": row.get("image_path_3", ""),
-                "image_path_4": row.get("image_path_4", ""),
-                "image_path_5": row.get("image_path_5", ""),
-            }
-        results.append(
-            {
-                "query": code,
-                "product": product,
-                "reason": match.reason if match else "未找到",
-                "score": match.score if match else 0,
-            }
-        )
+            results.append(_quick_result_from_match(code, match))
+        else:
+            results.append({"query": code, "product": None, "reason": "未找到", "score": 0})
     return results
 
 

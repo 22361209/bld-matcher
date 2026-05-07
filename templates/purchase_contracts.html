@@ -37,6 +37,77 @@
         <a class="linear-button {% if is_sales %}primary{% else %}subtle{% endif %}" href="{{ url_for('sales_contracts') }}">销售合同</a>
       </section>
 
+      {% set history_action = url_for('sales_contracts') if is_sales else url_for('contracts') %}
+      {% set history_has_filter = contract_filters.contract_q or contract_filters.contract_type != "all" %}
+      <details class="contract-history-drawer" id="contract-history"{% if history_has_filter %} open{% endif %}>
+        <summary>
+          <span>
+            <strong>历史合同记录</strong>
+            <small>按合同类型、公司名或合同编号查找已生成的 PDF</small>
+          </span>
+          <em>{{ contract_outputs|length }} 个</em>
+        </summary>
+        <section class="materials-table-section contract-history-section">
+        <div class="materials-table-title">
+          <div>
+            <h2>已生成合同</h2>
+            <p>按合同类型、公司名或合同编号查找已生成的 PDF。</p>
+          </div>
+          <span>{{ contract_outputs|length }} 个</span>
+        </div>
+        <form class="materials-search-form contract-history-search" method="get" action="{{ history_action }}#contract-history">
+          <label>
+            <span>搜索合同</span>
+            <input name="contract_q" value="{{ contract_filters.contract_q }}" placeholder="合同编号、客户/供应商、文件名或操作用户">
+          </label>
+          <label class="compact-select">
+            <span>类型</span>
+            <select name="contract_type">
+              <option value="all" {% if contract_filters.contract_type == "all" %}selected{% endif %}>全部合同</option>
+              <option value="purchase" {% if contract_filters.contract_type == "purchase" %}selected{% endif %}>采购合同</option>
+              <option value="sales" {% if contract_filters.contract_type == "sales" %}selected{% endif %}>销售合同</option>
+            </select>
+          </label>
+          <button class="linear-button primary" type="submit">搜索</button>
+          {% if contract_filters.contract_q or contract_filters.contract_type != "all" %}
+            <a class="linear-button subtle" href="{{ history_action }}#contract-history">重置</a>
+          {% endif %}
+        </form>
+        {% if contract_outputs %}
+          <div class="materials-table-wrap">
+            <table class="materials-grid-table contract-history-table">
+              <thead>
+                <tr>
+                  <th>类型</th>
+                  <th>客户/供应商</th>
+                  <th>文件名</th>
+                  <th>操作用户</th>
+                  <th>生成时间</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for contract in contract_outputs %}
+                  <tr>
+                    <td>{{ contract.kind }}</td>
+                    <td>{{ contract.party or "-" }}</td>
+                    <td><a href="{{ url_for('download', name=download_name(contract.path)) }}">{{ contract.name }}</a></td>
+                    <td>{{ contract.operator }}</td>
+                    <td>{{ contract.updated_at }}</td>
+                    <td><a href="{{ url_for('download', name=download_name(contract.path)) }}">下载</a></td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="materials-empty">
+            {% if contract_filters.contract_q %}没有找到匹配的合同。{% else %}还没有已生成的合同。{% endif %}
+          </p>
+        {% endif %}
+        </section>
+      </details>
+
       {% if can("generate_purchase_contract") %}
         <form action="{{ url_for('generate_sales_contract') if is_sales else url_for('generate_purchase_contract') }}" method="post" class="purchase-contract-form" data-purchase-contract-form data-contract-kind="{{ 'sales' if is_sales else 'purchase' }}" data-enter-navigation>
           {{ csrf_field() }}
@@ -241,58 +312,6 @@
         </div>
       {% else %}
         <p class="materials-muted">当前账号没有合同管理权限。</p>
-      {% endif %}
-
-      {% if purchase_outputs or sales_outputs %}
-        <section class="contract-output-history">
-          {% if purchase_outputs %}
-            <details class="materials-history-drawer">
-              <summary>
-                <span>最近采购合同</span>
-                <strong>{{ purchase_outputs|length }} 个</strong>
-              </summary>
-              <div class="materials-history-panel">
-                <section class="materials-recent">
-                  <div class="materials-table-title">
-                    <div>
-                      <h2>最近采购合同</h2>
-                      <p>最近生成的采购合同 PDF 文件。</p>
-                    </div>
-                  </div>
-                  <ul class="files">
-                    {% for path in purchase_outputs %}
-                      <li><a href="{{ url_for('download', name=download_name(path)) }}">{{ path.name }}</a></li>
-                    {% endfor %}
-                  </ul>
-                </section>
-              </div>
-            </details>
-          {% endif %}
-
-          {% if sales_outputs %}
-            <details class="materials-history-drawer">
-              <summary>
-                <span>最近销售合同</span>
-                <strong>{{ sales_outputs|length }} 个</strong>
-              </summary>
-              <div class="materials-history-panel">
-                <section class="materials-recent">
-                  <div class="materials-table-title">
-                    <div>
-                      <h2>最近销售合同</h2>
-                      <p>最近生成的销售合同 PDF 文件。</p>
-                    </div>
-                  </div>
-                  <ul class="files">
-                    {% for path in sales_outputs %}
-                      <li><a href="{{ url_for('download', name=download_name(path)) }}">{{ path.name }}</a></li>
-                    {% endfor %}
-                  </ul>
-                </section>
-              </div>
-            </details>
-          {% endif %}
-        </section>
       {% endif %}
     </main>
     <script src="{{ url_for('static', filename='app.js', v=static_version('app.js')) }}"></script>

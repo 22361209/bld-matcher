@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from flask import flash, jsonify, redirect, render_template, request, send_file, url_for
@@ -35,6 +35,9 @@ from app.purchase_contract import (
     sales_contract_from_form,
 )
 from app.security import actor_name, can, permission_required
+
+
+CONTRACT_HISTORY_LIMIT = 200
 
 
 def _product_by_bld(conn, bld_no: str):
@@ -84,12 +87,91 @@ def _apply_catalog_values(conn, contract: dict) -> None:
         item["image_path"] = str(image_path) if image_path else ""
 
 
+def _operation_user(path: Path) -> str:
+    try:
+        first_part = path.resolve().relative_to(user_output_dir(create=False).resolve().parents[0]).parts[0]
+    except (IndexError, OSError, ValueError):
+        first_part = path.parent.name
+    if first_part.startswith("u") and "-" in first_part:
+        return first_part.split("-", 1)[1] or first_part
+    return first_part
+
+
+def _contract_party(path: Path, kind: str) -> str:
+    parent = path.parent.name
+    if parent.startswith("u") and "-" in parent:
+        return ""
+    if parent == kind:
+        return ""
+    return parent
+
+
+def _contract_output_rows(paths: list[Path], kind: str, query: str) -> list[dict]:
+    needle = query.strip().lower()
+    rows = []
+    for path in paths:
+        party = _contract_party(path, kind)
+        operator = _operation_user(path)
+        stat = path.stat()
+        updated_at = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
+        haystack = " ".join([kind, path.name, party, operator, updated_at]).lower()
+        if needle and needle not in haystack:
+            continue
+        rows.append(
+            {
+                "path": path,
+                "kind": kind,
+                "party": party,
+                "name": path.name,
+                "operator": operator,
+                "updated_at": updated_at,
+            }
+        )
+    return rows
+
+
+def _collect_contract_outputs(output_reader, patterns: tuple[str, ...]) -> list[Path]:
+    seen: set[Path] = set()
+    paths: list[Path] = []
+    for pattern in patterns:
+        for path in output_reader(pattern, limit=CONTRACT_HISTORY_LIMIT):
+            resolved = path.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            paths.append(path)
+    return sorted(paths, key=lambda item: item.stat().st_mtime, reverse=True)
+
+
+def _contract_history(output_reader) -> tuple[list[dict], dict[str, str]]:
+    history_type = request.args.get("contract_type", "all")
+    if history_type not in {"all", "purchase", "sales"}:
+        history_type = "all"
+    query = request.args.get("contract_q", "").strip()
+
+    rows: list[dict] = []
+    if history_type in {"all", "purchase"}:
+        purchase_paths = _collect_contract_outputs(
+            output_reader,
+            ("采购合同/**/*.pdf",),
+        )
+        rows.extend(_contract_output_rows(purchase_paths, "采购合同", query))
+    if history_type in {"all", "sales"}:
+        sales_paths = _collect_contract_outputs(
+            output_reader,
+            ("销售合同/**/*.pdf",),
+        )
+        rows.extend(_contract_output_rows(sales_paths, "销售合同", query))
+
+    rows = sorted(rows, key=lambda item: item["path"].stat().st_mtime, reverse=True)[:CONTRACT_HISTORY_LIMIT]
+    return rows, {"contract_type": history_type, "contract_q": query}
+
+
 def register(app) -> None:
     def _render_contract_management(contract_mode: str = "purchase"):
         is_sales = contract_mode == "sales"
         output_reader = all_recent_outputs if can("manage_users") else user_recent_outputs
-        purchase_outputs = output_reader("采购合同/**/*.pdf")
-        sales_outputs = output_reader("销售合同/**/*.pdf")
+        contract_outputs, contract_filters = _contract_history(output_reader)
         return render_template(
             "purchase_contracts.html",
             contract_mode=contract_mode,
@@ -102,8 +184,8 @@ def register(app) -> None:
                 "price_note": DEFAULT_SALES_PRICE_NOTE if is_sales else DEFAULT_PRICE_NOTE,
                 "quality_terms": DEFAULT_SALES_QUALITY_TERMS if is_sales else DEFAULT_QUALITY_TERMS,
             },
-            purchase_outputs=purchase_outputs,
-            sales_outputs=sales_outputs,
+            contract_outputs=contract_outputs,
+            contract_filters=contract_filters,
         )
 
     @app.get("/contracts")

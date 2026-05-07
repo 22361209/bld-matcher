@@ -123,6 +123,8 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("合同管理", html)
         self.assertIn("采购合同", html)
         self.assertIn("销售合同", html)
+        self.assertIn('class="contract-history-drawer" id="contract-history">', html)
+        self.assertIn("历史合同记录", html)
         self.assertNotIn("销售合同模板后续接入", html)
         self.assertIn("玉环博莱德机械有限公司", html)
         self.assertIn("浙江省玉环市金汇路11号", html)
@@ -195,6 +197,14 @@ class WebAppTest(unittest.TestCase):
         response.close()
         files = list((self.root / "outputs").glob("u*-007/采购合同/外购供应商/CG-TEST-001外购供应商.pdf"))
         self.assertEqual(len(files), 1)
+        response = self.client.get("/contracts", query_string={"contract_q": "CG-TEST-001"})
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("已生成合同", html)
+        self.assertIn('class="contract-history-drawer" id="contract-history" open>', html)
+        self.assertIn("外购供应商", html)
+        self.assertIn("CG-TEST-001外购供应商.pdf", html)
+        self.assertIn("下载", html)
 
     def test_sales_contract_can_generate_pdf_with_customer_code(self):
         from app.database import upsert_product
@@ -218,6 +228,7 @@ class WebAppTest(unittest.TestCase):
         html = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
         self.assertIn("产 品 销 售 合 同", html)
+        self.assertIn('class="contract-history-drawer" id="contract-history">', html)
         self.assertIn("供方（甲方）", html)
         self.assertIn("需方（乙方）", html)
         self.assertIn("客户编码", html)
@@ -260,6 +271,13 @@ class WebAppTest(unittest.TestCase):
         response.close()
         files = list((self.root / "outputs").glob("u*-007/销售合同/销售客户/XS-TEST-001销售客户.pdf"))
         self.assertEqual(len(files), 1)
+        response = self.client.get("/contracts", query_string={"contract_type": "sales", "contract_q": "销售客户"})
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("已生成合同", html)
+        self.assertIn("销售合同", html)
+        self.assertIn("销售客户", html)
+        self.assertIn("XS-TEST-001销售客户.pdf", html)
 
     def test_purchase_contract_signature_fields_are_optional(self):
         from app.purchase_contract import purchase_contract_from_form
@@ -1073,6 +1091,9 @@ class WebAppTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("操作用户", html)
+        self.assertIn("data-file-drop-zone", html)
+        self.assertIn("可拖入询价文件", html)
+        self.assertIn("输入 OE或 BLD 号", html)
         self.assertIn("old-root-result.xlsx", html)
         self.assertIn("other-user-result.xlsx", html)
         self.assertIn("other", html)
@@ -1172,6 +1193,35 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("快速号码查询", html)
         self.assertIn("K-BLD-LOOKUP", html)
         self.assertIn("BLD NO. 精准命中", html)
+
+    def test_quick_bld_fragment_lookup_on_homepage(self):
+        from app.database import upsert_product
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            for bld_no in ["K6004LB", "K6004RB", "K6015B"]:
+                upsert_product(
+                    conn,
+                    {
+                        "bld_no": bld_no,
+                        "series": "HYUNDAI",
+                        "item": "CONTROL ARM",
+                        "oe_no_1": f"OE-{bld_no}",
+                        "models": "Sportage",
+                        "active": "1",
+                    },
+                    actor="tester",
+                )
+
+        self.login()
+        response = self.client.get("/", query_string={"quick_oe": "6004"})
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("快速号码查询", html)
+        self.assertIn("K6004LB", html)
+        self.assertIn("K6004RB", html)
+        self.assertNotIn("K6015B", html)
+        self.assertIn("BLD NO. 片段命中", html)
 
     def test_single_pasted_code_keeps_quick_lookup(self):
         self.login()
