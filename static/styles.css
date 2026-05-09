@@ -974,6 +974,49 @@ textarea {
   box-shadow: 0 22px 60px rgba(15, 23, 42, 0.28);
 }
 
+.product-edit-modal-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(1080px, calc(100vw - 48px));
+  height: min(860px, calc(100vh - 48px));
+  padding: 0;
+  overflow: hidden;
+}
+
+.product-edit-modal-panel .modal-heading {
+  flex: 0 0 auto;
+  padding: 20px 62px 14px 20px;
+  margin: 0;
+  border-bottom: 1px solid var(--linear-line);
+}
+
+.draggable-modal-heading {
+  cursor: move;
+  user-select: none;
+}
+
+.product-edit-frame {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  background: #f5f7fa;
+}
+
+.embedded-product-form-page {
+  background: #f5f7fa;
+}
+
+.embedded-product-form-shell {
+  width: 100%;
+  padding: 0;
+}
+
+.embedded-product-form-shell .workbench-form-section {
+  padding: 16px 18px 22px;
+  border-bottom: 0;
+}
+
 .download-modal-panel {
   position: relative;
   z-index: 1;

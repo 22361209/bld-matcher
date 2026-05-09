@@ -184,9 +184,9 @@
     {% if can("edit_products") %}
       <div class="product-modal" id="product-modal" aria-hidden="true">
         <div class="product-modal-backdrop" data-close-product-modal></div>
-        <div class="product-modal-panel" role="dialog" aria-modal="true" aria-label="新增产品">
+        <div class="product-modal-panel" role="dialog" aria-modal="true" aria-label="新增产品" data-draggable-modal-panel>
           <button class="image-modal-close" type="button" data-close-product-modal aria-label="关闭新增产品">×</button>
-          <div class="modal-heading">
+          <div class="modal-heading draggable-modal-heading" data-modal-drag-handle>
             <h2>新增产品</h2>
             <p class="note">一个 BLD NO. 可以维护多个 OE、多个品牌和多个车型；每行一个 OE 会更清楚。</p>
           </div>
@@ -229,6 +229,17 @@
               <button class="ghost" type="button" data-close-product-modal>取消</button>
             </div>
           </form>
+        </div>
+      </div>
+      <div class="product-modal" id="product-edit-modal" aria-hidden="true">
+        <div class="product-modal-backdrop" data-close-product-edit-modal></div>
+        <div class="product-modal-panel product-edit-modal-panel" role="dialog" aria-modal="true" aria-label="编辑产品" data-draggable-modal-panel>
+          <button class="image-modal-close" type="button" data-close-product-edit-modal aria-label="关闭编辑产品">×</button>
+          <div class="modal-heading draggable-modal-heading" data-modal-drag-handle>
+            <h2>编辑产品</h2>
+            <p class="note">保存或删除后会刷新当前产品目录列表。</p>
+          </div>
+          <iframe id="product-edit-frame" class="product-edit-frame" title="编辑产品"></iframe>
         </div>
       </div>
     {% endif %}
@@ -343,7 +354,17 @@
 
       const productModal = document.querySelector("#product-modal");
       const productForm = productModal?.querySelector("form");
+      const productEditModal = document.querySelector("#product-edit-modal");
+      const productEditFrame = document.querySelector("#product-edit-frame");
+      const resetModalPosition = (modal) => {
+        const panel = modal?.querySelector("[data-draggable-modal-panel]");
+        if (!panel) return;
+        panel.style.transform = "";
+        panel.dataset.dragX = "0";
+        panel.dataset.dragY = "0";
+      };
       const openProductModal = () => {
+        resetModalPosition(productModal);
         productModal.classList.add("open");
         productModal.setAttribute("aria-hidden", "false");
         document.body.classList.add("modal-open");
@@ -353,11 +374,62 @@
         productModal.classList.remove("open");
         productModal.setAttribute("aria-hidden", "true");
         document.body.classList.remove("modal-open");
+        resetModalPosition(productModal);
         productForm?.reset();
+      };
+      const openProductEditModal = (url) => {
+        if (!productEditModal || !productEditFrame) return;
+        resetModalPosition(productEditModal);
+        productEditFrame.src = `${url}${url.includes("?") ? "&" : "?"}embedded=1`;
+        productEditModal.classList.add("open");
+        productEditModal.setAttribute("aria-hidden", "false");
+        document.body.classList.add("modal-open");
+      };
+      const closeProductEditModal = () => {
+        if (!productEditModal || !productEditFrame) return;
+        productEditModal.classList.remove("open");
+        productEditModal.setAttribute("aria-hidden", "true");
+        document.body.classList.remove("modal-open");
+        productEditFrame.src = "";
+        resetModalPosition(productEditModal);
       };
       document.querySelector("[data-open-product-modal]")?.addEventListener("click", openProductModal);
       document.querySelectorAll("[data-close-product-modal]").forEach((element) => {
         element.addEventListener("click", closeProductModal);
+      });
+      document.querySelectorAll("[data-close-product-edit-modal]").forEach((element) => {
+        element.addEventListener("click", closeProductEditModal);
+      });
+
+      document.querySelectorAll("[data-draggable-modal-panel]").forEach((panel) => {
+        const handle = panel.querySelector("[data-modal-drag-handle]");
+        if (!handle) return;
+        panel.dataset.dragX = "0";
+        panel.dataset.dragY = "0";
+        handle.addEventListener("mousedown", (event) => {
+          if (event.button !== 0) return;
+          event.preventDefault();
+          const startX = event.clientX;
+          const startY = event.clientY;
+          const originX = Number(panel.dataset.dragX || 0);
+          const originY = Number(panel.dataset.dragY || 0);
+
+          const onMove = (moveEvent) => {
+            const nextX = originX + moveEvent.clientX - startX;
+            const nextY = originY + moveEvent.clientY - startY;
+            panel.dataset.dragX = String(nextX);
+            panel.dataset.dragY = String(nextY);
+            panel.style.transform = `translate(${nextX}px, ${nextY}px)`;
+          };
+
+          const onUp = () => {
+            document.removeEventListener("mousemove", onMove);
+            document.removeEventListener("mouseup", onUp);
+          };
+
+          document.addEventListener("mousemove", onMove);
+          document.addEventListener("mouseup", onUp);
+        });
       });
 
       const imageModal = document.querySelector("#image-modal");
@@ -436,6 +508,12 @@
       });
 
       table?.addEventListener("click", (event) => {
+        const editLink = event.target.closest("[data-open-edit-product-modal]");
+        if (editLink) {
+          event.preventDefault();
+          openProductEditModal(editLink.href);
+          return;
+        }
         const link = event.target.closest(".image-link");
         if (!link) return;
         event.preventDefault();
@@ -453,11 +531,15 @@
           closeProductModal();
           return;
         }
+        if (productEditModal?.classList.contains("open")) {
+          closeProductEditModal();
+          return;
+        }
         if (imageModal.classList.contains("open")) {
           closeImageModal();
 	        }
 	      });
 	    </script>
-	    <script src="{{ url_for('static', filename='app.js') }}"></script>
+	    <script src="{{ url_for('static', filename='app.js', v=static_version('app.js')) }}"></script>
 	  </body>
 	</html>

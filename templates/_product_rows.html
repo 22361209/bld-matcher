@@ -33,7 +33,7 @@
     <td class="price-cell">{% if product.price_cny is not none %}¥{{ "%.2f"|format(product.price_cny) }}{% endif %}</td>
     <td class="row-actions sticky-actions">
       {% if can("edit_products") %}
-        <a href="{{ url_for('edit_product', product_id=product.id) }}">编辑</a>
+        <a href="{{ url_for('edit_product', product_id=product.id) }}" data-open-edit-product-modal>编辑</a>
       {% endif %}
     </td>
   </tr>

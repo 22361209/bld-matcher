@@ -406,6 +406,15 @@ def bootstrap_from_excel(db_path: Path, catalog_path: Path) -> None:
     _BOOTSTRAPPED_SOURCES.add(key)
 
 
+def _normalized_code_sql(column: str) -> str:
+    expression = f"UPPER({column})"
+    for item in ("-", " ", ".", "/", "_"):
+        expression = f"REPLACE({expression}, '{item}', '')"
+    for char_code, replacement in ((9, ""), (10, "|"), (13, "|")):
+        expression = f"REPLACE({expression}, CHAR({char_code}), '{replacement}')"
+    return expression
+
+
 def _product_filter_clauses(
     query: str = "",
     include_inactive: bool = False,
@@ -429,9 +438,10 @@ def _product_filter_clauses(
         params.extend([product_key, product_key, product_key])
     if oe_query.strip():
         norm_key = f"%{normalize_code(oe_query)}%"
+        oe1 = _normalized_code_sql("oe_no_1")
+        oe2 = _normalized_code_sql("oe_no_2")
         clauses.append(
-            "(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(oe_no_1), '-', ''), ' ', ''), CHAR(10), '|'), CHAR(13), '|') LIKE ? "
-            "OR REPLACE(REPLACE(REPLACE(REPLACE(UPPER(oe_no_2), '-', ''), ' ', ''), CHAR(10), '|'), CHAR(13), '|') LIKE ?)"
+            f"({oe1} LIKE ? OR {oe2} LIKE ?)"
         )
         params.extend([norm_key, norm_key])
     if series_query.strip():

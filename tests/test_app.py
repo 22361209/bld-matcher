@@ -528,6 +528,18 @@ class WebAppTest(unittest.TestCase):
                 },
                 actor="tester",
             )
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-FILTER-DOT-OE",
+                    "series": "PEUGEOT",
+                    "item": "CONTROL ARM",
+                    "oe_no_1": "3521.R1",
+                    "models": "C-CROSSER",
+                    "active": "1",
+                },
+                actor="tester",
+            )
 
         self.login()
         response = self.client.get("/products")
@@ -540,6 +552,9 @@ class WebAppTest(unittest.TestCase):
         self.assertIn('<button class="linear-button primary" type="submit">搜索</button>', html)
         self.assertIn('class="embedded-submit" type="submit">上传预览', html)
         self.assertIn('class="embedded-submit" type="submit">确认导入', html)
+        self.assertIn('id="product-modal"', html)
+        self.assertIn('id="product-edit-modal"', html)
+        self.assertIn("data-draggable-modal-panel", html)
 
         for query in ["HYUNDAI", "Sportage"]:
             with self.subTest(query=query):
@@ -547,6 +562,12 @@ class WebAppTest(unittest.TestCase):
                 html = response.get_data(as_text=True)
                 self.assertIn("K-FILTER-HYUNDAI", html)
                 self.assertNotIn("K-FILTER-HONDA", html)
+
+        for query in ["3521.r1", "3521R1", "3521-R1"]:
+            with self.subTest(query=query):
+                response = self.client.get("/products", query_string={"oe": query})
+                html = response.get_data(as_text=True)
+                self.assertIn("K-FILTER-DOT-OE", html)
 
     def test_products_are_paginated(self):
         from app.database import upsert_product
@@ -609,6 +630,7 @@ class WebAppTest(unittest.TestCase):
         response = self.client.get("/products", query_string={"bld": "K-DRAW-001"})
         html = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
+        self.assertIn("data-open-edit-product-modal", html)
         self.assertNotIn("PDF图纸", html)
         self.assertIn("批量上传图纸", html)
         self.assertNotIn('name="drawing"', html)
@@ -622,6 +644,31 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("file-picker-clear", edit_html)
         self.assertIn("/static/app.js", edit_html)
         self.assertIn('name="drawing"', edit_html)
+
+        embedded = self.client.get(f"/products/{product['id']}/edit", query_string={"embedded": "1"})
+        embedded_html = embedded.get_data(as_text=True)
+        self.assertEqual(embedded.status_code, 200)
+        self.assertIn("embedded-product-form-page", embedded_html)
+        self.assertIn('name="embedded" value="1"', embedded_html)
+        self.assertNotIn("返回目录", embedded_html)
+
+        embedded_save = self.client.post(
+            "/products/save",
+            data={
+                "embedded": "1",
+                "bld_no": "K-DRAW-001",
+                "series": "TEST",
+                "item": "DRAWING PART",
+                "oe_no_1": "DRAW-001",
+                "oe_no_2": "",
+                "models": "Tester",
+                "price_cny": "",
+                "active": "1",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(embedded_save.status_code, 200)
+        self.assertIn("window.parent.location.reload()", embedded_save.get_data(as_text=True))
 
         upload = self.client.post(
             "/products/save",

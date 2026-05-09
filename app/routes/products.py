@@ -5,7 +5,7 @@ from datetime import datetime
 from math import ceil
 from pathlib import Path
 
-from flask import flash, redirect, render_template, request, send_file, url_for
+from flask import Response, flash, redirect, render_template, request, send_file, url_for
 
 from app.catalog_export import export_products_xlsx
 from app.config import CATALOG_PATH, DATA_DIR, DB_PATH
@@ -99,6 +99,26 @@ def _product_pagination(filters: dict[str, object], page: int, total: int) -> di
         "next_url": _product_page_url(filters, page + 1) if page < total_pages else "",
         "links": links,
     }
+
+
+def _embedded_product_done_response() -> Response:
+    fallback = url_for("products")
+    return Response(
+        f"""<!doctype html>
+<html lang="zh-CN">
+  <head><meta charset="utf-8"><title>产品已保存</title></head>
+  <body>
+    <script>
+      if (window.parent && window.parent !== window) {{
+        window.parent.location.reload();
+      }} else {{
+        window.location.href = {fallback!r};
+      }}
+    </script>
+  </body>
+</html>""",
+        mimetype="text/html",
+    )
 
 
 def register(app) -> None:
@@ -306,7 +326,7 @@ def register(app) -> None:
         if not product:
             flash("产品不存在。", "error")
             return redirect(url_for("products"))
-        return render_template("product_form.html", product=product)
+        return render_template("product_form.html", product=product, embedded=request.args.get("embedded") == "1")
 
     @app.post("/products/save")
     @permission_required("edit_products")
@@ -351,8 +371,12 @@ def register(app) -> None:
                         conn.commit()
         except Exception as exc:
             flash(f"保存失败：{exc}", "error")
+            if request.form.get("embedded") == "1":
+                return _embedded_product_done_response()
             return redirect(url_for("products"))
         flash("产品已保存。", "success")
+        if request.form.get("embedded") == "1":
+            return _embedded_product_done_response()
         return redirect(url_for("products", q=data["bld_no"]))
 
     @app.post("/products/<int:product_id>/drawing")
@@ -413,6 +437,10 @@ def register(app) -> None:
             product = delete_product(conn, product_id, actor=actor_name())
         if not product:
             flash("产品不存在或已经删除。", "error")
+            if request.form.get("embedded") == "1":
+                return _embedded_product_done_response()
             return redirect(url_for("products"))
         flash(f"产品 {product['bld_no']} 已删除。", "success")
+        if request.form.get("embedded") == "1":
+            return _embedded_product_done_response()
         return redirect(url_for("products"))
