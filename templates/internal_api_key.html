@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>内部 API Key</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
+  </head>
+  <body>
+    <main class="shell wide materials-linear">
+      {% set active_page = "internal_api_key" %}
+      {% include "_nav.html" %}
+
+      <header class="materials-hero">
+        <div>
+          <h1>内部 API Key</h1>
+          <p>供 OpenClaw 机器人调用内部 API。API 必须带 Key，不能匿名调用。</p>
+        </div>
+        <div class="materials-file-meta">
+          <span>状态</span>
+          <strong>{{ "已启用" if status.enabled else "未启用" }}</strong>
+          {% if status.preview %}<span>{{ status.preview }}</span>{% endif %}
+        </div>
+      </header>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <section class="messages materials-messages">
+            {% for category, message in messages %}
+              <div class="message {{ category }}">{{ message }}</div>
+            {% endfor %}
+          </section>
+        {% endif %}
+      {% endwith %}
+
+      {% if generated_token %}
+        <section class="api-key-reveal" aria-label="新生成的 API Key">
+          <div>
+            <h2>请立即复制保存</h2>
+            <p>完整 Key 只显示这一次。离开页面后只能重新生成，不能查看旧 Key 明文。</p>
+          </div>
+          <div class="api-key-copy-row">
+            <code id="generated-api-key">{{ generated_token }}</code>
+            <button class="linear-button primary" type="button" data-copy-api-key>复制</button>
+          </div>
+        </section>
+      {% endif %}
+
+      <section class="workbench-split">
+        <article class="workbench-section">
+          <h2>{{ "重新生成 API Key" if status.enabled else "生成 API Key" }}</h2>
+          <p class="note">生成新 Key 会自动停用旧 Key。OpenClaw 调用时使用 <code>Authorization: Bearer &lt;key&gt;</code>。</p>
+          <form action="{{ url_for('generate_internal_api_key_route') }}" method="post" class="workbench-form">
+            {{ csrf_field() }}
+            <label>
+              <span>Key 名称</span>
+              <input name="name" value="{{ status.name or 'OpenClaw' }}" placeholder="例如 OpenClaw">
+            </label>
+            <button class="linear-button primary" type="submit">{{ "重新生成" if status.enabled else "生成 API Key" }}</button>
+          </form>
+        </article>
+
+        <article class="workbench-section">
+          <h2>当前 Key</h2>
+          <dl class="api-key-status">
+            <div><dt>启用状态</dt><dd>{{ "已启用" if status.enabled else "未启用" }}</dd></div>
+            <div><dt>Key 标识</dt><dd>{{ status.preview or "暂无" }}</dd></div>
+            <div><dt>创建人</dt><dd>{{ status.created_by or "暂无" }}</dd></div>
+            <div><dt>创建时间</dt><dd>{{ status.created_at or "暂无" }}</dd></div>
+            <div><dt>最近使用</dt><dd>{{ status.last_used_at or "暂无" }}</dd></div>
+          </dl>
+          <form action="{{ url_for('disable_internal_api_key_route') }}" method="post" class="materials-actions">
+            {{ csrf_field() }}
+            <button class="linear-button subtle" type="submit" {% if not status.enabled %}disabled{% endif %}>停用 API Key</button>
+          </form>
+        </article>
+      </section>
+
+      <section class="materials-table-section">
+        <div class="materials-table-title">
+          <div>
+            <h2>调用格式</h2>
+            <p>机器人只需要带上 Key，然后调用内部 API 获取结构化摘要和文件路径。</p>
+          </div>
+        </div>
+        <pre class="api-key-example">Authorization: Bearer bld_sk_xxxxx
+POST /api/internal/inquiry/numbers
+POST /api/internal/inquiry/file
+POST /api/internal/inquiry/analyze</pre>
+      </section>
+    </main>
+    <script>
+      (() => {
+        const button = document.querySelector("[data-copy-api-key]");
+        const key = document.querySelector("#generated-api-key");
+        if (!button || !key) return;
+        button.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(key.textContent.trim());
+            button.textContent = "已复制";
+          } catch (_error) {
+            button.textContent = "请手动复制";
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>

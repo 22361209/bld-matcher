@@ -85,6 +85,8 @@ def _price_log_text(price_options: dict) -> str:
         return f"；导出美金价，汇率 {price_options.get('exchange_rate')}"
     if mode == "tax":
         return "；导出含税单价"
+    if mode == "net":
+        return "；导出不含税单价"
     return ""
 
 

@@ -3,6 +3,9 @@ from __future__ import annotations
 import re
 import sqlite3
 import threading
+import hashlib
+import hmac
+import secrets
 from datetime import datetime
 from pathlib import Path
 from collections import defaultdict
@@ -124,6 +127,20 @@ CREATE TABLE IF NOT EXISTS customer_price_records (
 CREATE INDEX IF NOT EXISTS idx_customer_price_records_customer ON customer_price_records(customer_name);
 CREATE INDEX IF NOT EXISTS idx_customer_price_records_bld ON customer_price_records(bld_no);
 CREATE INDEX IF NOT EXISTS idx_customer_price_records_date ON customer_price_records(record_date);
+
+CREATE TABLE IF NOT EXISTS internal_api_keys (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL DEFAULT 'OpenClaw',
+  token_hash TEXT NOT NULL UNIQUE,
+  token_prefix TEXT DEFAULT '',
+  token_suffix TEXT DEFAULT '',
+  active INTEGER NOT NULL DEFAULT 1,
+  created_by TEXT DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  last_used_at TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_internal_api_keys_active ON internal_api_keys(active);
 """
 
 
@@ -295,6 +312,97 @@ def log_event(conn: sqlite3.Connection, action: str, target_type: str, target_ke
         "INSERT INTO audit_logs (action, target_type, target_key, actor, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)",
         (action, target_type, target_key, actor, detail, now_text()),
     )
+
+
+def _hash_api_token(token: str) -> str:
+    return hashlib.sha256(str(token or "").encode("utf-8")).hexdigest()
+
+
+def _new_api_token() -> str:
+    return f"bld_sk_{secrets.token_urlsafe(32)}"
+
+
+def _api_key_preview(row: sqlite3.Row | None) -> str:
+    if not row:
+        return ""
+    prefix = str(row["token_prefix"] or "bld_sk")
+    suffix = str(row["token_suffix"] or "")
+    return f"{prefix}****{suffix}" if suffix else f"{prefix}****"
+
+
+def internal_api_key_status(conn: sqlite3.Connection) -> dict:
+    active = conn.execute(
+        """
+        SELECT * FROM internal_api_keys
+        WHERE active = 1
+        ORDER BY id DESC
+        LIMIT 1
+        """
+    ).fetchone()
+    latest = conn.execute(
+        """
+        SELECT * FROM internal_api_keys
+        ORDER BY id DESC
+        LIMIT 1
+        """
+    ).fetchone()
+    row = active or latest
+    return {
+        "enabled": bool(active),
+        "preview": _api_key_preview(active),
+        "name": row["name"] if row else "OpenClaw",
+        "created_by": row["created_by"] if row else "",
+        "created_at": row["created_at"] if row else "",
+        "updated_at": row["updated_at"] if row else "",
+        "last_used_at": row["last_used_at"] if row else "",
+    }
+
+
+def create_internal_api_key(conn: sqlite3.Connection, *, actor: str = "", name: str = "OpenClaw") -> str:
+    token = _new_api_token()
+    timestamp = now_text()
+    label = compact_text(name) or "OpenClaw"
+    conn.execute("UPDATE internal_api_keys SET active = 0, updated_at = ? WHERE active = 1", (timestamp,))
+    conn.execute(
+        """
+        INSERT INTO internal_api_keys
+          (name, token_hash, token_prefix, token_suffix, active, created_by, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 1, ?, ?, ?)
+        """,
+        (label, _hash_api_token(token), "bld_sk_", token[-6:], actor, timestamp, timestamp),
+    )
+    log_event(conn, "生成内部 API Key", "internal_api_key", label, "旧 Key 已自动停用，新 Key 只在生成页面显示一次。", actor=actor)
+    conn.commit()
+    return token
+
+
+def disable_internal_api_key(conn: sqlite3.Connection, *, actor: str = "") -> bool:
+    timestamp = now_text()
+    cursor = conn.execute(
+        "UPDATE internal_api_keys SET active = 0, updated_at = ? WHERE active = 1",
+        (timestamp,),
+    )
+    changed = cursor.rowcount > 0
+    if changed:
+        log_event(conn, "停用内部 API Key", "internal_api_key", "OpenClaw", "内部 API 已停用。", actor=actor)
+        conn.commit()
+    return changed
+
+
+def verify_internal_api_token(conn: sqlite3.Connection, token: str) -> bool:
+    token_hash = _hash_api_token(token)
+    rows = conn.execute(
+        "SELECT id, token_hash FROM internal_api_keys WHERE active = 1"
+    ).fetchall()
+    for row in rows:
+        if hmac.compare_digest(str(row["token_hash"]), token_hash):
+            conn.execute(
+                "UPDATE internal_api_keys SET last_used_at = ? WHERE id = ?",
+                (now_text(), row["id"]),
+            )
+            conn.commit()
+            return True
+    return False
 
 
 def _field_changes(before: sqlite3.Row | None, after: dict) -> list[str]:

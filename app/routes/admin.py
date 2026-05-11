@@ -3,7 +3,17 @@ from __future__ import annotations
 from flask import flash, redirect, render_template, request, url_for
 
 from app.config import BASE_DIR, DB_PATH
-from app.database import connect, get_user, list_audit_logs, list_log_actors, list_users, save_user
+from app.database import (
+    connect,
+    create_internal_api_key,
+    disable_internal_api_key,
+    get_user,
+    internal_api_key_status,
+    list_audit_logs,
+    list_log_actors,
+    list_users,
+    save_user,
+)
 from app.security import actor_name, permission_required
 
 
@@ -82,6 +92,31 @@ def register(app) -> None:
             return redirect(url_for("users"))
         flash("账号已保存。", "success")
         return redirect(url_for("users"))
+
+    @app.get("/internal-api-key")
+    @permission_required("manage_users")
+    def internal_api_key():
+        with connect(DB_PATH) as conn:
+            status = internal_api_key_status(conn)
+        return render_template("internal_api_key.html", status=status, generated_token="")
+
+    @app.post("/internal-api-key/generate")
+    @permission_required("manage_users")
+    def generate_internal_api_key_route():
+        name = request.form.get("name", "OpenClaw")
+        with connect(DB_PATH) as conn:
+            token = create_internal_api_key(conn, actor=actor_name(), name=name)
+            status = internal_api_key_status(conn)
+        flash("内部 API Key 已生成。请立即复制保存，离开页面后不会再次显示完整 Key。", "success")
+        return render_template("internal_api_key.html", status=status, generated_token=token)
+
+    @app.post("/internal-api-key/disable")
+    @permission_required("manage_users")
+    def disable_internal_api_key_route():
+        with connect(DB_PATH) as conn:
+            changed = disable_internal_api_key(conn, actor=actor_name())
+        flash("内部 API Key 已停用。" if changed else "当前没有启用中的内部 API Key。", "success")
+        return redirect(url_for("internal_api_key"))
 
     @app.get("/logs")
     @permission_required("view_logs")

@@ -1,6 +1,6 @@
 # BLD Project Brief
 
-更新时间：2026-05-06
+更新时间：2026-05-11
 
 这是给新接手 Codex 或开发者的短版项目说明。先读 `AGENTS.md`，再读本文件。详细历史在 `项目交接说明.md`，需要查旧决策时用 `rg` 搜索，不要默认整篇读取。
 
@@ -9,6 +9,7 @@
 BLD 是一个局域网内部使用的 Flask 业务系统，主要用于：
 
 - 客户询价 Excel/OE/品牌号码/BLD 号匹配
+- OpenClaw 机器人内部 API 查询和生成结果文件
 - 产品目录、OE、车型、图片、PDF 图纸、含税单价维护
 - 询价结果 Excel 和图纸压缩包下载
 - 生产料单生成和冲压材料明细维护
@@ -83,8 +84,20 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 - 粘贴多个号码会生成临时询价源表并进入匹配结果页。
 - 上传 Excel 后必须手动选择要匹配的列，系统不自动猜列。
 - 匹配结果页先展示网页结果，点击“下载 Excel”时才生成 Excel。
-- 下载 Excel 时弹窗选择不带单价、含税单价或美金价；美金价为 `含税单价 / 1.1 / 汇率`。
+- 下载 Excel 时弹窗选择不带单价、含税单价、不含税单价或美金价；不含税单价为 `含税单价 / 1.1` 后四舍五入到整数，美金价为 `含税单价 / 1.1 / 汇率`。
 - 匹配结果可下载图纸包，按 BLD NO. 查找 PDF。
+
+OpenClaw 内部 API：
+
+- 文档在 `OPENCLAW_API.md`，接口前缀为 `/api/internal/`。
+- 管理员菜单里有“内部 API Key”页面，可生成、重新生成、停用 Key；完整 Key 只显示一次。
+- `/api/internal/*` 必须带 `Authorization: Bearer <key>`，不允许匿名调用；`.env` 的 `INTERNAL_API_TOKEN` 仅作为应急 fallback。
+- `/api/internal/inquiry/numbers`：号码数组或文字号码查询；默认仅分析，传 `export: true` 才生成新 Excel，输出到 `outputs/openclaw/`。
+- `/api/internal/inquiry/file`：传本机 Excel 路径或上传文件；默认仅分析，传 `export: true` 才在原文件基础上追加结果列。
+- `/api/internal/inquiry/analyze`：只返回命中摘要，不生成文件。
+- API 导出文件名统一为 `reYYMMDD_源文件名称_openclaw.xls/xlsx`；号码数组/文字号码没有源文件，导出前必须由机器人询问并传 `source_name`；重名自动追加 `_2`、`_3`。
+- API 的 `file_path` 只允许读取项目目录、`uploads/`、`outputs/` 下的 `.xls/.xlsx`。
+- API 价格模式支持 `none`、`tax`、`net`、`usd`；`net` 为不含税价，`usd` 需要传汇率。
 
 产品目录：
 
@@ -152,6 +165,7 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 
 - `app.py`：应用入口、全局 before_request、模板全局函数
 - `app/routes/inquiry.py`：询价上传、匹配、下载 Excel、图纸包
+- `app/routes/internal_api.py`：OpenClaw 内部 API
 - `app/routes/products.py`：产品目录、图片、图纸、单价导入、目录导入导出
 - `app/routes/materials.py`：生产料单和材料明细
 - `app/routes/purchase_contracts.py`：合同管理、采购/销售合同生成和 PDF 下载
@@ -173,3 +187,4 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 - `PROJECT_BRIEF.md`：当前状态和快速接手说明，保持短。
 - `项目交接说明.md`：详细历史和系统更新来源，按需搜索。
 - `README.md`：安装、启动和通用说明。
+- `OPENCLAW_API.md`：机器人内部 API 调用说明。

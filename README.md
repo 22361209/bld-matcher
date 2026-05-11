@@ -60,6 +60,7 @@ bash tools/install_bld_launcher.sh
 - `BLD_DATA_DIR`：数据目录，默认 `data`
 - `BLD_UPLOAD_DIR`：上传目录，默认 `uploads`
 - `BLD_OUTPUT_DIR`：输出目录，默认 `outputs`
+- `INTERNAL_API_TOKEN`：可选应急 fallback；日常在网页“内部 API Key”页面生成 Key。`/api/internal/*` 始终需要 `Authorization: Bearer <token>`
 
 ## 目录说明
 
@@ -75,6 +76,7 @@ bash tools/install_bld_launcher.sh
 - `data/`：运行数据目录，业务 Excel、SQLite 数据、PDF 图纸和上传图片不提交 Git
 - `uploads/`：运行时上传文件，按用户目录隔离，不提交 Git
 - `outputs/`：运行时导出文件，按用户目录隔离，不提交 Git
+- `OPENCLAW_API.md`：供 OpenClaw 机器人调用的内部 API 说明
 
 ## 数据库
 
@@ -105,6 +107,8 @@ outputs/u用户ID-用户名/
 ```
 
 生成文件名会带用户名，例如 `re260429-007-客户询价.xlsx` 或 `catalog-export-bld-007-260429.xlsx`。普通用户只能看到和下载自己的输出文件，管理员可以在最近结果里看到所有用户和旧根目录输出。
+
+OpenClaw 内部 API 的询价导出固定写入 `outputs/openclaw/`，文件名统一为 `reYYMMDD_源文件名称_openclaw.xls/xlsx`。号码数组/文字号码没有源文件，导出前必须由机器人询问并传 `source_name`；重名时自动追加 `_2`、`_3`。
 
 会修改全局数据的导入操作使用导入锁，避免多人同时覆盖数据：
 

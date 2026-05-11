@@ -35,6 +35,7 @@ class WebAppTest(unittest.TestCase):
         os.environ["BLD_UPLOAD_DIR"] = str(root / "uploads")
         os.environ["BLD_OUTPUT_DIR"] = str(root / "outputs")
         os.environ["DEFAULT_ADMIN_PASSWORD"] = "test-admin-pw"
+        os.environ["INTERNAL_API_TOKEN"] = ""
         cls.web = load_web_module()
         cls.web.app.config["TESTING"] = True
         cls.client = cls.web.app.test_client()
@@ -49,6 +50,12 @@ class WebAppTest(unittest.TestCase):
             data={"username": "007", "password": "test-admin-pw", "next": "/"},
             follow_redirects=False,
         )
+
+    def create_internal_api_token(self):
+        from app.database import create_internal_api_key
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            return create_internal_api_key(conn, actor="tester", name="OpenClaw Test")
 
     def test_login_and_homepage(self):
         response = self.client.get("/login")
@@ -89,10 +96,269 @@ class WebAppTest(unittest.TestCase):
 
     def test_core_admin_pages_load(self):
         self.login()
-        for path in ["/customer-prices", "/contracts", "/contracts/sales", "/products", "/materials", "/purchase-contracts", "/users", "/logs", "/system-updates"]:
+        for path in ["/customer-prices", "/contracts", "/contracts/sales", "/products", "/materials", "/purchase-contracts", "/users", "/internal-api-key", "/logs", "/system-updates"]:
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
+
+    def test_internal_api_numbers_generate_openclaw_workbook(self):
+        from app.database import upsert_product
+        from openpyxl import load_workbook
+
+        token = self.create_internal_api_token()
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-API-001",
+                    "series": "HYUNDAI",
+                    "item": "API CONTROL ARM",
+                    "oe_no_1": "API-001",
+                    "models": "ApiTester",
+                    "price_cny": "88.8",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        response = self.client.post(
+            "/api/internal/inquiry/numbers",
+            json={
+                "numbers": ["API-001", "NO-MATCH-001"],
+                "source_name": "机器人询价结果",
+                "price_mode": "net",
+                "rows_limit": 10,
+                "export": True,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        payload = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["mode"], "new-workbook")
+        self.assertEqual(payload["matched_count"], 1)
+        self.assertEqual(payload["unmatched_count"], 1)
+        self.assertEqual(payload["rows"][0]["bld_no"], "K-API-001")
+        self.assertEqual(payload["rows"][0]["export_price"], 81)
+        self.assertIn("NO-MATCH-001", payload["unmatched_list"])
+        self.assertTrue(payload["output_path"].endswith(payload["output_name"]))
+        self.assertRegex(payload["output_name"], r"^re\d{6}_机器人询价结果_openclaw\.xlsx$")
+        output_path = Path(payload["output_path"])
+        self.assertEqual(output_path.parent.resolve(), (self.root / "outputs" / "openclaw").resolve())
+        self.assertTrue(output_path.exists())
+
+        workbook = load_workbook(output_path)
+        sheet = workbook.active
+        self.assertEqual(sheet.cell(1, 1).value, "OE号")
+        self.assertEqual(sheet.cell(1, 2).value, "BLD NO.")
+        self.assertEqual(sheet.cell(1, 3).value, "不含税单价")
+        self.assertEqual(sheet.cell(2, 2).value, "K-API-001")
+        self.assertEqual(sheet.cell(2, 3).value, 81)
+        workbook.close()
+
+        rejected_export = self.client.post(
+            "/api/internal/inquiry/numbers",
+            json={"numbers": ["API-001"], "export": True},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        rejected_payload = rejected_export.get_json()
+        self.assertEqual(rejected_export.status_code, 400)
+        self.assertFalse(rejected_payload["ok"])
+        self.assertIn("必须传 source_name", rejected_payload["error"])
+
+    def test_internal_api_file_augment_and_analyze(self):
+        from app.database import upsert_product
+        from openpyxl import Workbook, load_workbook
+
+        token = self.create_internal_api_token()
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-API-FILE",
+                    "series": "HYUNDAI",
+                    "item": "API FILE ARM",
+                    "oe_no_1": "API-FILE-OE",
+                    "models": "ApiFileTester",
+                    "price_cny": "79.2",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        source_path = self.root / "uploads" / "api-file-source.xlsx"
+        source_path.parent.mkdir(parents=True, exist_ok=True)
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["编号", "数量"])
+        sheet.append(["API-FILE-OE", 2])
+        workbook.save(source_path)
+        workbook.close()
+
+        analyze = self.client.post(
+            "/api/internal/inquiry/analyze",
+            json={"file_path": str(source_path), "match_column": "A", "price_mode": "tax"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        analyze_payload = analyze.get_json()
+        self.assertEqual(analyze.status_code, 200)
+        self.assertTrue(analyze_payload["ok"])
+        self.assertEqual(analyze_payload["mode"], "augment-source-workbook")
+        self.assertEqual(analyze_payload["summary"]["output_generated"], False)
+        self.assertIsNone(analyze_payload["output_path"])
+        self.assertEqual(analyze_payload["matched_count"], 1)
+
+        response = self.client.post(
+            "/api/internal/inquiry/file",
+            json={
+                "file_path": str(source_path),
+                "match_column": "A",
+                "price_mode": "usd",
+                "exchange_rate": "7.2",
+                "export": True,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["mode"], "augment-source-workbook")
+        self.assertEqual(payload["rows"][0]["export_price"], 10)
+        output_path = Path(payload["output_path"])
+        self.assertEqual(output_path.parent.resolve(), (self.root / "outputs" / "openclaw").resolve())
+        self.assertRegex(payload["output_name"], r"^re\d{6}_api-file-source_openclaw\.xlsx$")
+        self.assertTrue(output_path.exists())
+
+        generated = load_workbook(output_path)
+        sheet = generated.active
+        self.assertEqual(sheet.cell(1, 3).value, "BLD NO.")
+        self.assertEqual(sheet.cell(1, 4).value, "美金价")
+        self.assertEqual(sheet.cell(1, 5).value, "匹配说明")
+        self.assertEqual(sheet.cell(2, 3).value, "K-API-FILE")
+        self.assertEqual(sheet.cell(2, 4).value, 10)
+        generated.close()
+
+    def test_internal_api_defaults_to_analysis_and_restricts_file_path(self):
+        from app.database import upsert_product
+        from openpyxl import Workbook
+
+        token = self.create_internal_api_token()
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-API-DEFAULT",
+                    "oe_no_1": "API-DEFAULT-OE",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        response = self.client.post(
+            "/api/internal/inquiry/numbers",
+            json={"numbers": ["API-DEFAULT-OE"]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["matched_count"], 1)
+        self.assertFalse(payload["summary"]["output_generated"])
+        self.assertIsNone(payload["output_path"])
+
+        outside_path = self.root / "outside-api-source.xlsx"
+        workbook = Workbook()
+        workbook.active.append(["OE号"])
+        workbook.active.append(["API-DEFAULT-OE"])
+        workbook.save(outside_path)
+        workbook.close()
+
+        rejected = self.client.post(
+            "/api/internal/inquiry/file",
+            json={"file_path": str(outside_path), "export": True},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        rejected_payload = rejected.get_json()
+        self.assertEqual(rejected.status_code, 400)
+        self.assertFalse(rejected_payload["ok"])
+        self.assertIn("file_path 不在允许读取范围内", rejected_payload["error"])
+
+    def test_internal_api_requires_api_key(self):
+        response = self.client.post(
+            "/api/internal/inquiry/numbers",
+            json={"numbers": ["API-001"]},
+        )
+        self.assertEqual(response.status_code, 401)
+        self.assertFalse(response.get_json()["ok"])
+
+        from app.database import upsert_product
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-API-AUTH",
+                    "oe_no_1": "API-AUTH-OE",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+        token = self.create_internal_api_token()
+        response = self.client.post(
+            "/api/internal/inquiry/analyze",
+            json={"numbers": ["API-AUTH-OE"]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["ok"])
+
+    def test_admin_can_generate_and_disable_internal_api_key(self):
+        self.login()
+        page = self.client.get("/internal-api-key")
+        html = page.get_data(as_text=True)
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("内部 API Key", html)
+        self.assertIn("生成 API Key", html)
+
+        generated = self.client.post(
+            "/internal-api-key/generate",
+            data={"name": "OpenClaw Visual"},
+        )
+        html = generated.get_data(as_text=True)
+        self.assertEqual(generated.status_code, 200)
+        token_match = re.search(r'id="generated-api-key">(bld_sk_[^<]+)</code>', html)
+        self.assertIsNotNone(token_match)
+        token = token_match.group(1)
+        self.assertIn("OpenClaw Visual", html)
+        self.assertIn(token[-6:], html)
+
+        from app.database import upsert_product
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-API-VISUAL",
+                    "oe_no_1": "API-VISUAL-OE",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+        api_response = self.client.post(
+            "/api/internal/inquiry/analyze",
+            json={"numbers": ["API-VISUAL-OE"]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        self.assertEqual(api_response.status_code, 200)
+
+        disabled = self.client.post("/internal-api-key/disable")
+        self.assertEqual(disabled.status_code, 302)
+        rejected = self.client.post(
+            "/api/internal/inquiry/analyze",
+            json={"numbers": ["NO-MATCH-VISUAL"]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        self.assertEqual(rejected.status_code, 401)
 
     def test_purchase_contract_can_generate_pdf(self):
         from PIL import Image
@@ -1027,7 +1293,13 @@ class WebAppTest(unittest.TestCase):
             rows = conn.execute("SELECT id FROM schema_migrations ORDER BY id").fetchall()
         self.assertEqual(
             [row["id"] for row in rows],
-            ["001_audit_log_actor", "002_product_price_and_image", "003_product_drawings", "004_product_image_slots"],
+            [
+                "001_audit_log_actor",
+                "002_product_price_and_image",
+                "003_product_drawings",
+                "004_product_image_slots",
+                "005_internal_api_keys",
+            ],
         )
 
     def test_generated_files_are_scoped_to_user(self):
@@ -1456,6 +1728,7 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("KPRICE01", result_html)
         self.assertIn("¥88.80", result_html)
         self.assertIn('id="download-excel-modal"', result_html)
+        self.assertIn('value="net">带不含税单价', result_html)
         self.assertIn("返回上一步", result_html)
 
         download = self.client.post(
@@ -1479,6 +1752,26 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(sheet.cell(1, 4).value, "匹配说明")
         self.assertEqual(sheet.cell(2, 2).value, "KPRICE01")
         self.assertEqual(sheet.cell(2, 3).value, 88.8)
+        generated.close()
+
+        net_download = self.client.post(
+            "/match/download",
+            data={
+                "upload_path": upload_path,
+                "original_filename": "price-export.xlsx",
+                "output_name": output_name,
+                "match_column": "0",
+                "price_mode": "net",
+            },
+        )
+        self.assertEqual(net_download.status_code, 200)
+        net_download.close()
+
+        generated = load_workbook(output_path)
+        sheet = generated.active
+        self.assertEqual(sheet.cell(1, 3).value, "不含税单价")
+        self.assertEqual(sheet.cell(2, 3).value, 81)
+        self.assertEqual(sheet.cell(2, 3).number_format, "0")
         generated.close()
 
     def test_item_header_with_code_values_prompts_for_match_column(self):

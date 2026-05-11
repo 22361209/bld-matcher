@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 import re
 from string import ascii_uppercase
@@ -22,7 +23,7 @@ def _norm_header(value: object) -> str:
     return str(value or "").strip().upper().replace(" ", "")
 
 
-PRICE_EXPORT_MODES = {"none", "tax", "usd"}
+PRICE_EXPORT_MODES = {"none", "tax", "net", "usd"}
 MANUAL_HEADER_ALIASES = {
     _norm_header(alias)
     for aliases in INQUIRY_HEADERS.values()
@@ -191,33 +192,48 @@ def _summary_row(row_number: int, inquiry_oe: object, inquiry_name: object, matc
 def _price_export_header(price_mode: str) -> str:
     if price_mode == "tax":
         return "含税单价"
+    if price_mode == "net":
+        return "不含税单价"
     if price_mode == "usd":
         return "美金价"
     return ""
 
 
-def _numeric_price(value: object) -> float | None:
+def _decimal_price(value: object) -> Decimal | None:
     if value in (None, ""):
         return None
     try:
-        return float(value)
-    except (TypeError, ValueError):
+        return Decimal(str(value).strip())
+    except (InvalidOperation, ValueError):
         return None
 
 
+def _numeric_price(value: object) -> float | None:
+    price = _decimal_price(value)
+    if price is None:
+        return None
+    return float(price)
+
+
 def _match_export_price(match, price_mode: str, exchange_rate: float | None) -> float | None:
-    if price_mode not in {"tax", "usd"} or not match:
+    if price_mode not in {"tax", "net", "usd"} or not match:
         return None
     if " / " in (match.bld_no or ""):
         return None
 
-    price = _numeric_price(match.row.get("price_cny"))
-    if price is None:
+    raw_price = match.row.get("price_cny")
+    decimal_price = _decimal_price(raw_price)
+    if decimal_price is None:
         return None
     if price_mode == "tax":
+        price = float(decimal_price)
         return round(price, 2)
+    if price_mode == "net":
+        net_price = (decimal_price / Decimal("1.1")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        return int(net_price)
     if not exchange_rate or exchange_rate <= 0:
         return None
+    price = float(decimal_price)
     return round(price / 1.1 / exchange_rate, 2)
 
 
@@ -339,7 +355,7 @@ def generate_xlsx_with_bld(
                             price = _match_export_price(match, price_mode, exchange_rate)
                             price_cell = sheet.cell(row_index, output_col + 1)
                             price_cell.value = price
-                            price_cell.number_format = "0.00"
+                            price_cell.number_format = "0" if price_mode == "net" else "0.00"
                     summary["matched"] += 1
                     row_summary = _summary_row(row_index, inquiry_oe, inquiry_name, match)
                     if write_output:

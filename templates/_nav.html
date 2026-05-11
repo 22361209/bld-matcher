@@ -13,12 +13,13 @@
   <div class="nav-user">
     {% if can("manage_users") or can("view_logs") %}
       <details class="admin-menu" data-admin-menu>
-        <summary class="user-badge admin-menu-trigger {% if active_page in ['users', 'logs', 'system_updates'] %}active{% endif %}">
+        <summary class="user-badge admin-menu-trigger {% if active_page in ['users', 'internal_api_key', 'logs', 'system_updates'] %}active{% endif %}">
           {{ g.user.username }} · {{ ROLE_LABELS.get(g.user.role, g.user.role) }}
         </summary>
         <div class="admin-menu-panel">
           {% if can("manage_users") %}
             <a class="{% if active_page == 'users' %}active{% endif %}" href="{{ url_for('users') }}">账号管理</a>
+            <a class="{% if active_page == 'internal_api_key' %}active{% endif %}" href="{{ url_for('internal_api_key') }}">内部 API Key</a>
           {% endif %}
           {% if can("view_logs") %}
             <a class="{% if active_page == 'logs' %}active{% endif %}" href="{{ url_for('logs') }}">操作日志</a>

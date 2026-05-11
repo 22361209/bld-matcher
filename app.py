@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Flask, flash, g, redirect, request, session, url_for
+from flask import Flask, flash, g, jsonify, redirect, request, session, url_for
 from werkzeug.exceptions import RequestEntityTooLarge
 
 from app.config import APP_DEBUG, APP_HOST, APP_PORT, DB_PATH, MAX_CONTENT_LENGTH, MAX_UPLOAD_MB, SECRET_KEY, assert_production_secrets
@@ -40,6 +40,9 @@ def create_app() -> Flask:
 
     @web_app.before_request
     def load_current_user():
+        if request.path.startswith("/api/internal/"):
+            g.user = None
+            return
         if request.endpoint in {"login", "do_login", "static"}:
             if request.method == "POST" and not web_app.config.get("TESTING") and not validate_csrf_token():
                 flash("页面已过期，请刷新后重试。", "error")
@@ -63,6 +66,8 @@ def create_app() -> Flask:
 
     @web_app.errorhandler(RequestEntityTooLarge)
     def upload_too_large(_error):
+        if request.path.startswith("/api/internal/"):
+            return jsonify({"ok": False, "error": f"上传文件不能超过 {MAX_UPLOAD_MB}MB。"}), 413
         flash(f"上传文件不能超过 {MAX_UPLOAD_MB}MB。", "error")
         if request.path.startswith("/materials"):
             return redirect(url_for("materials"))

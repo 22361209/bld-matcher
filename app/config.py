@@ -60,6 +60,7 @@ APP_DEBUG = os.environ.get("APP_DEBUG", "").lower() in {"1", "true", "yes", "on"
 # 并在登录后立即从后台修改。
 DEFAULT_ADMIN_USERNAME = os.environ.get("DEFAULT_ADMIN_USERNAME", "007").strip() or "007"
 DEFAULT_ADMIN_PASSWORD = os.environ.get("DEFAULT_ADMIN_PASSWORD", "change-me-on-first-login")
+INTERNAL_API_TOKEN = os.environ.get("INTERNAL_API_TOKEN", "").strip()
 
 
 def assert_production_secrets() -> None:

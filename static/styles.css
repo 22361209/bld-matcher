@@ -2513,6 +2513,70 @@ textarea {
   white-space: nowrap;
 }
 
+.api-key-reveal {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 16px;
+  border: 1px solid #f1c46b;
+  border-radius: 8px;
+  background: #fff8e8;
+}
+
+.api-key-reveal h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+.api-key-reveal p {
+  margin: 0;
+  color: var(--linear-muted);
+}
+
+.api-key-copy-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.api-key-copy-row code,
+.api-key-example {
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--linear-line-strong);
+  border-radius: 6px;
+  background: #ffffff;
+  color: #172033;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  white-space: pre;
+}
+
+.api-key-status {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.api-key-status div {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.api-key-status dt {
+  color: var(--linear-muted);
+  font-weight: 700;
+}
+
+.api-key-status dd {
+  margin: 0;
+  color: var(--linear-text);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
 .linear-button,
 .materials-linear .linear-popover > summary {
   display: inline-flex;

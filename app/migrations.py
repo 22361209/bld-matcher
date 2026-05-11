@@ -42,11 +42,32 @@ def _add_product_image_slots(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE products ADD COLUMN {field} TEXT DEFAULT ''")
 
 
+def _add_internal_api_keys(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS internal_api_keys (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL DEFAULT 'OpenClaw',
+          token_hash TEXT NOT NULL UNIQUE,
+          token_prefix TEXT DEFAULT '',
+          token_suffix TEXT DEFAULT '',
+          active INTEGER NOT NULL DEFAULT 1,
+          created_by TEXT DEFAULT '',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          last_used_at TEXT DEFAULT ''
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_internal_api_keys_active ON internal_api_keys(active)")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
     ("003_product_drawings", _add_product_drawings),
     ("004_product_image_slots", _add_product_image_slots),
+    ("005_internal_api_keys", _add_internal_api_keys),
 )
 
 
