@@ -1543,6 +1543,74 @@ class WebAppTest(unittest.TestCase):
         self.assertNotIn("K6015B", html)
         self.assertIn("BLD NO. 片段命中", html)
 
+    def test_quick_partial_number_lookup_checks_bld_oe_and_brand_codes(self):
+        from app.database import upsert_product
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            for bld_no, oe_no, brand_no in [
+                ("K-DV613-L", "DV613A424AF", "X15CJ6600"),
+                ("K-DV613-R", "DV613A423AF", "X15CJ6601"),
+                ("K-NUM-5450", "54500-2D000", "BRAND-54500"),
+            ]:
+                upsert_product(
+                    conn,
+                    {
+                        "bld_no": bld_no,
+                        "series": "FORD",
+                        "item": "CONTROL ARM",
+                        "oe_no_1": oe_no,
+                        "oe_no_2": brand_no,
+                        "models": "Transit",
+                        "active": "1",
+                    },
+                    actor="tester",
+                )
+
+        self.login()
+        response = self.client.get("/", query_string={"quick_oe": "dv613"})
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("K-DV613-L", html)
+        self.assertIn("K-DV613-R", html)
+        self.assertIn("OE 前缀命中", html)
+
+        response = self.client.get("/", query_string={"quick_oe": "5450"})
+        html = response.get_data(as_text=True)
+        self.assertIn("K-NUM-5450", html)
+        self.assertIn("OE 前缀命中", html)
+
+        response = self.client.get("/", query_string={"quick_oe": "15CJ"})
+        html = response.get_data(as_text=True)
+        self.assertIn("K-DV613-L", html)
+        self.assertIn("K-DV613-R", html)
+        self.assertIn("品牌号码片段命中", html)
+
+    def test_quick_lookup_requires_at_least_four_normalized_chars(self):
+        from app.database import upsert_product
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-SHORT-001",
+                    "series": "FORD",
+                    "item": "CONTROL ARM",
+                    "oe_no_1": "ABC12345",
+                    "models": "Transit",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        self.login()
+        response = self.client.get("/", query_string={"quick_oe": "abc"})
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("请输入至少 4 位号码", html)
+        self.assertNotIn("K-SHORT-001", html)
+
     def test_single_pasted_code_keeps_quick_lookup(self):
         self.login()
         response = self.client.post("/match", data={"quick_oe": "55270-2Z000"})

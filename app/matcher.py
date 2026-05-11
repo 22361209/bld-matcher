@@ -79,7 +79,7 @@ def split_codes(value: object) -> list[str]:
     return [part.strip() for part in parts if normalize_code(part)]
 
 
-def _brand_code_aliases(code: str) -> list[str]:
+def brand_code_aliases(code: str) -> list[str]:
     aliases = [code]
     text = str(code).strip()
     if not text:
@@ -158,7 +158,7 @@ class ProductCatalog:
                 self.by_bld[normalize_code(bld_no)] = row
             for field in ("OE NO.1", "OE NO.2"):
                 for code in split_codes(row.get(field)):
-                    aliases = _brand_code_aliases(code) if field == "OE NO.2" else [code]
+                    aliases = brand_code_aliases(code) if field == "OE NO.2" else [code]
                     for alias in aliases:
                         code_key = normalize_code(alias)
                         tolerant_key = zero_o_key(alias)

@@ -2,16 +2,27 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-import re
 
 from flask import flash, redirect, render_template, request, send_file, url_for
 
 from app.config import CATALOG_PATH, DB_PATH, OUTPUT_DIR
 from app.database import connect, product_stats
 from app.helpers import all_recent_outputs, load_catalog, user_output_dir, user_recent_outputs
-from app.matcher import CatalogMatch, ProductCatalog, catalog_summary, compact_text, normalize_code, split_codes
+from app.matcher import (
+    CatalogMatch,
+    ProductCatalog,
+    brand_code_aliases,
+    catalog_summary,
+    compact_text,
+    normalize_code,
+    split_codes,
+)
 from app.security import can
 from app.security import login_required
+
+
+QUICK_SEARCH_MIN_LENGTH = 4
+QUICK_SEARCH_LIMIT = 80
 
 
 def _is_inquiry_result(path: Path) -> bool:
@@ -77,22 +88,69 @@ def _quick_result_from_match(query: str, match: CatalogMatch) -> dict:
     }
 
 
-def _quick_bld_fragment_results(catalog: ProductCatalog, query: str) -> list[dict]:
+def _add_quick_candidate(
+    candidates: dict[str, CatalogMatch],
+    *,
+    query: str,
+    row: dict,
+    score: int,
+    reason: str,
+) -> None:
+    bld_no = compact_text(row.get("BLD NO."))
+    bld_key = normalize_code(bld_no)
+    if not bld_key:
+        return
+
+    existing = candidates.get(bld_key)
+    if existing and existing.score >= score:
+        return
+    candidates[bld_key] = CatalogMatch(bld_no, score, reason, row, matched_codes=(query,))
+
+
+def _quick_candidate_matches(catalog: ProductCatalog, query: str) -> list[CatalogMatch]:
     key = normalize_code(query)
-    if not re.fullmatch(r"\d{4}", key):
+    if len(key) < QUICK_SEARCH_MIN_LENGTH:
         return []
 
-    results = []
-    seen = set()
+    candidates: dict[str, CatalogMatch] = {}
     for row in catalog.rows:
         bld_no = compact_text(row.get("BLD NO."))
         bld_key = normalize_code(bld_no)
-        if not bld_no or key not in bld_key or bld_key in seen:
+        if key and bld_key:
+            if key == bld_key:
+                _add_quick_candidate(candidates, query=query, row=row, score=96, reason="BLD NO. 精准命中")
+            elif key in bld_key:
+                _add_quick_candidate(candidates, query=query, row=row, score=86, reason="BLD NO. 片段命中")
+
+        for field in ("OE NO.1", "OE NO.2"):
+            exact_reason = "品牌号码精准命中" if field == "OE NO.2" else "OE 精准命中"
+            prefix_reason = "品牌号码前缀命中" if field == "OE NO.2" else "OE 前缀命中"
+            partial_reason = "品牌号码片段命中" if field == "OE NO.2" else "OE 片段命中"
+            for code in split_codes(row.get(field)):
+                aliases = brand_code_aliases(code) if field == "OE NO.2" else [code]
+                for alias in aliases:
+                    code_key = normalize_code(alias)
+                    if not code_key:
+                        continue
+                    if key == code_key:
+                        _add_quick_candidate(candidates, query=query, row=row, score=95, reason=exact_reason)
+                    elif code_key.startswith(key):
+                        _add_quick_candidate(candidates, query=query, row=row, score=90, reason=prefix_reason)
+                    elif key in code_key:
+                        _add_quick_candidate(candidates, query=query, row=row, score=82, reason=partial_reason)
+
+    for source_key, manual_bld in catalog.manual_map.items():
+        row = catalog.by_bld.get(normalize_code(manual_bld))
+        if not row:
             continue
-        seen.add(bld_key)
-        match = CatalogMatch(bld_no, 86, "BLD NO. 片段命中", row, matched_codes=(query,))
-        results.append(_quick_result_from_match(query, match))
-    return results
+        if key == source_key:
+            _add_quick_candidate(candidates, query=query, row=row, score=100, reason="人工映射号码精准命中")
+        elif source_key.startswith(key):
+            _add_quick_candidate(candidates, query=query, row=row, score=90, reason="人工映射号码前缀命中")
+        elif key in source_key:
+            _add_quick_candidate(candidates, query=query, row=row, score=82, reason="人工映射号码片段命中")
+
+    return sorted(candidates.values(), key=lambda match: (-match.score, normalize_code(match.bld_no)))[:QUICK_SEARCH_LIMIT]
 
 
 def _quick_oe_results(catalog: ProductCatalog | None, query: str) -> list[dict]:
@@ -105,17 +163,22 @@ def _quick_oe_results(catalog: ProductCatalog | None, query: str) -> list[dict]:
 
     results = []
     for code in codes[:20]:
-        bld_fragment_results = _quick_bld_fragment_results(catalog, code)
-        if bld_fragment_results:
-            results.extend(bld_fragment_results)
+        key = normalize_code(code)
+        if len(key) < QUICK_SEARCH_MIN_LENGTH:
+            results.append({"query": code, "product": None, "reason": "请输入至少 4 位号码", "score": 0})
             continue
 
-        match = catalog.match("", code)
-        if match:
-            results.append(_quick_result_from_match(code, match))
+        matches = _quick_candidate_matches(catalog, code)
+        if matches:
+            for match in matches:
+                results.append(_quick_result_from_match(code, match))
         else:
             results.append({"query": code, "product": None, "reason": "未找到", "score": 0})
-    return results
+
+        if len(results) >= QUICK_SEARCH_LIMIT:
+            break
+
+    return results[:QUICK_SEARCH_LIMIT]
 
 
 def register(app) -> None:
