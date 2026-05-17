@@ -12,6 +12,7 @@ from collections import defaultdict
 
 from werkzeug.security import generate_password_hash
 
+from .bld_sort import compare_bld_no
 from .migrations import run_migrations
 from .matcher import ProductCatalog, compact_text, normalize_code, split_codes
 
@@ -149,6 +150,7 @@ def connect(db_path: Path) -> sqlite3.Connection:
     needs_init = not db_path.exists()
     conn = sqlite3.connect(db_path, timeout=5.0)
     conn.row_factory = sqlite3.Row
+    conn.create_collation("BLD_NATURAL", compare_bld_no)
     # 多人并发匹配/导入时减少 "database is locked"。
     # WAL 一次性设置,后续连接都受益;synchronous=NORMAL 在 WAL 下安全且更快;
     # busy_timeout 让短暂冲突自动重试,而不是立刻抛 OperationalError。
@@ -585,7 +587,7 @@ def list_products(
     )
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)
-    sql += " ORDER BY bld_no LIMIT ? OFFSET ?"
+    sql += " ORDER BY bld_no COLLATE BLD_NATURAL LIMIT ? OFFSET ?"
     params.extend([max(0, limit), max(0, offset)])
     return conn.execute(sql, params).fetchall()
 
@@ -1025,7 +1027,7 @@ def list_aliases(conn: sqlite3.Connection) -> list[sqlite3.Row]:
 
 def rows_for_catalog(conn: sqlite3.Connection) -> tuple[list[dict], dict[str, str]]:
     products = []
-    for row in conn.execute("SELECT * FROM products WHERE active = 1 ORDER BY bld_no"):
+    for row in conn.execute("SELECT * FROM products WHERE active = 1 ORDER BY bld_no COLLATE BLD_NATURAL"):
         products.append(
             {
                 "BLD NO.": row["bld_no"],

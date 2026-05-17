@@ -211,6 +211,10 @@ class ProductCatalog:
             row = self.by_oe[oe_key][0]
             return CatalogMatch(compact_text(row.get("BLD NO.")), 95, self._exact_reason(oe_key), row, matched_codes=((compact_text(inquiry_oe),) if compact_text(inquiry_oe) else ()))
 
+        prefix_match = self._match_unique_oe_prefix(oe_key, inquiry_oe)
+        if prefix_match:
+            return prefix_match
+
         oe_zero_o_key = zero_o_key(inquiry_oe)
         if oe_zero_o_key and oe_zero_o_key != oe_key and oe_zero_o_key in self.by_oe_zero_o:
             rows = self._unique_rows(self.by_oe_zero_o[oe_zero_o_key])
@@ -223,6 +227,32 @@ class ProductCatalog:
             return CatalogMatch(compact_text(row.get("BLD NO.")), 92, "BLD NO. 精准命中", row)
 
         return None
+
+    def _match_unique_oe_prefix(self, key: str, inquiry_oe: object) -> CatalogMatch | None:
+        if len(key) < 5:
+            return None
+
+        rows: list[dict] = []
+        fields: set[str] = set()
+        for code_key, code_rows in self.by_oe.items():
+            if not code_key.startswith(key) or code_key == key:
+                continue
+            rows.extend(code_rows)
+            fields.update(self.by_oe_fields.get(code_key, set()))
+
+        unique_rows = self._unique_rows(rows)
+        if len(unique_rows) != 1:
+            return None
+
+        row = unique_rows[0]
+        reason = "品牌号码组合前缀命中" if fields == {"OE NO.2"} else "OE 组合前缀命中"
+        return CatalogMatch(
+            compact_text(row.get("BLD NO.")),
+            96,
+            reason,
+            row,
+            matched_codes=((compact_text(inquiry_oe),) if compact_text(inquiry_oe) else ()),
+        )
 
     def _match_split_oe_parts(self, oe_parts: list[str]) -> CatalogMatch | None:
         if len(oe_parts) <= 1:

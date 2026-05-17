@@ -148,10 +148,10 @@ def export_products_xlsx(
     if not include_inactive:
         sql += " WHERE active = 1"
     if export_format == "brand":
-        sql += " ORDER BY series, bld_no"
+        sql += " ORDER BY series COLLATE NOCASE, bld_no COLLATE BLD_NATURAL"
         _setup_sheet(sheet, BRAND_HEADERS)
     else:
-        sql += " ORDER BY bld_no"
+        sql += " ORDER BY bld_no COLLATE BLD_NATURAL"
         _setup_sheet(sheet, BLD_HEADERS)
 
     image_col = 8 if export_format == "brand" else 7

@@ -51,7 +51,7 @@
                 <input id="inquiry-file-input" class="file-picker-input" type="file" name="inquiry" accept=".xls,.xlsx">
                 <div class="file-picker-control">
                   <label class="file-picker-button" for="inquiry-file-input">选择文件</label>
-                  <input class="file-picker-oe-input" name="quick_oe" value="{{ quick_oe }}" placeholder="输入 OE或 BLD 号">
+                  <input class="file-picker-oe-input" name="quick_oe" value="{{ quick_oe }}" maxlength="5000" placeholder="输入 OE或 BLD 号">
                   <button class="file-picker-clear" type="button" disabled>清除</button>
                   <button class="embedded-submit" type="submit">开始匹配</button>
                 </div>

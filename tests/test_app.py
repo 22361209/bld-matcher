@@ -835,6 +835,46 @@ class WebAppTest(unittest.TestCase):
                 html = response.get_data(as_text=True)
                 self.assertIn("K-FILTER-DOT-OE", html)
 
+    def test_products_use_bld_natural_order(self):
+        from app.bld_sort import bld_sort_key
+        from app.database import upsert_product
+
+        self.assertEqual(
+            sorted(["K8274LA", "K8274RA", "K8274LB", "K8274RB"], key=bld_sort_key),
+            ["K8274LA", "K8274RA", "K8274LB", "K8274RB"],
+        )
+        self.assertEqual(
+            sorted(["K8058LA-1", "K8058RA-1", "K8058LB", "K8058RB"], key=bld_sort_key),
+            ["K8058LA-1", "K8058RA-1", "K8058LB", "K8058RB"],
+        )
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            for bld_no in ["K8274LA", "K8274RA", "K8274LB", "K8274RB", "K8058LA-1", "K8058RA-1", "K8058LB", "K8058RB"]:
+                upsert_product(
+                    conn,
+                    {
+                        "bld_no": bld_no,
+                        "series": "SORT",
+                        "item": "SORT TEST",
+                        "oe_no_1": f"OE-{bld_no}",
+                        "active": "1",
+                    },
+                    actor="tester",
+                )
+
+        self.login()
+        response = self.client.get("/products", query_string={"bld": "K8274"})
+        html = response.get_data(as_text=True)
+        self.assertLess(html.index("K8274LA"), html.index("K8274RA"))
+        self.assertLess(html.index("K8274RA"), html.index("K8274LB"))
+        self.assertLess(html.index("K8274LB"), html.index("K8274RB"))
+
+        response = self.client.get("/products", query_string={"bld": "K8058"})
+        html = response.get_data(as_text=True)
+        self.assertLess(html.index("K8058LA-1"), html.index("K8058RA-1"))
+        self.assertLess(html.index("K8058RA-1"), html.index("K8058LB"))
+        self.assertLess(html.index("K8058LB"), html.index("K8058RB"))
+
     def test_products_are_paginated(self):
         from app.database import upsert_product
 
@@ -1391,6 +1431,38 @@ class WebAppTest(unittest.TestCase):
         workbook.close()
         response.close()
 
+    def test_catalog_export_uses_bld_natural_order(self):
+        from openpyxl import load_workbook
+
+        from app.database import upsert_product
+
+        expected = ["K8274LA", "K8274RA", "K8274LB", "K8274RB"]
+        with self.web.connect(self.web.DB_PATH) as conn:
+            for bld_no in expected:
+                upsert_product(
+                    conn,
+                    {
+                        "bld_no": bld_no,
+                        "series": "SORT EXPORT",
+                        "item": "SORT EXPORT TEST",
+                        "oe_no_1": f"OE-{bld_no}",
+                        "active": "1",
+                    },
+                    actor="tester",
+                )
+
+        self.login()
+        response = self.client.post("/products/export", data={"status": "active", "export_format": "bld"})
+        self.assertEqual(response.status_code, 200)
+
+        workbook = load_workbook(io.BytesIO(response.data), read_only=True)
+        sheet = workbook["产品目录"]
+        exported = [row[0] for row in sheet.iter_rows(min_row=2, values_only=True) if row[0] in expected]
+
+        self.assertEqual(exported, expected)
+        workbook.close()
+        response.close()
+
     def test_admin_homepage_shows_all_recent_outputs(self):
         output_root = self.root / "outputs"
         other_user_dir = output_root / "u99-other"
@@ -1617,6 +1689,31 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.headers["Location"].endswith("/?quick_oe=55270-2Z000"))
 
+    def test_pasted_inquiry_has_character_limit(self):
+        from app.database import upsert_product
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-LIMIT-001",
+                    "oe_no_1": "LIMIT-001",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        self.login()
+        response = self.client.post(
+            "/match",
+            data={"quick_oe": "A" * 5001},
+            follow_redirects=True,
+        )
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("粘贴号码最多支持 5000 个字符", html)
+
     def test_pasted_multiple_codes_generates_match_excel(self):
         from app.database import upsert_product
         from openpyxl import load_workbook
@@ -1703,6 +1800,96 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(sheet.cell(4, 2).value, "K54501A")
         self.assertEqual(sheet.cell(4, 3).value, 15)
         generated.close()
+
+    def test_pasted_combined_oe_prefix_stays_one_query(self):
+        from app.database import upsert_product
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K8282RA",
+                    "series": "FORD",
+                    "item": "Front Right Lower Control Arm",
+                    "oe_no_1": "F1F1-3A423-AAA\nF1F1-3A423-AAB",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K8235RA",
+                    "series": "FORD",
+                    "item": "Front Right Lower Control Arm",
+                    "oe_no_1": "JX61\n3A423\nAPB",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        self.login()
+        response = self.client.post("/match", data={"quick_oe": "F1F1 3A423"})
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("匹配结果", html)
+        self.assertIn("K8282RA", html)
+        self.assertIn("OE 组合前缀命中", html)
+        self.assertNotIn("K8235RA", html)
+        self.assertIn("<td>1</td>", html)
+        self.assertNotIn("<td>2</td>", html)
+
+    def test_uploaded_inquiry_combined_oe_prefix_matches_before_fragments(self):
+        from app.database import upsert_product
+        from app.excel_io import generate_excel_with_bld
+        from app.helpers import load_catalog
+        from openpyxl import Workbook
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K8282RA",
+                    "series": "FORD",
+                    "item": "Front Right Lower Control Arm",
+                    "oe_no_1": "F1F1-3A423-AAA\nF1F1-3A423-AAB",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K8235RA",
+                    "series": "FORD",
+                    "item": "Front Right Lower Control Arm",
+                    "oe_no_1": "JX61\n3A423\nAPB",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        inquiry_path = self.root / "uploads" / "combined-prefix.xlsx"
+        inquiry_path.parent.mkdir(parents=True, exist_ok=True)
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["OE号"])
+        sheet.append(["F1F1 3A423"])
+        workbook.save(inquiry_path)
+        workbook.close()
+
+        summary = generate_excel_with_bld(
+            inquiry_path,
+            self.root / "outputs" / "combined-prefix-result.xlsx",
+            load_catalog(),
+            write_output=False,
+        )
+
+        self.assertEqual(summary["total"], 1)
+        self.assertEqual(summary["matched"], 1)
+        self.assertEqual(summary["rows"][0]["bld_no"], "K8282RA")
+        self.assertEqual(summary["rows"][0]["reason"], "OE 组合前缀命中")
 
     def test_pasted_multiple_bld_codes_generates_match_excel(self):
         from app.database import upsert_product

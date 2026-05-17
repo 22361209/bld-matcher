@@ -27,6 +27,7 @@ from app.security import actor_name, permission_required
 
 
 PASTED_INQUIRY_FILENAME = "粘贴号码询价.xlsx"
+PASTED_INQUIRY_MAX_CHARS = 5000
 
 
 def _validated_user_upload_path() -> Path | None:
@@ -90,20 +91,36 @@ def _price_log_text(price_options: dict) -> str:
     return ""
 
 
-def _pasted_inquiry_codes(value: str) -> list[str]:
+def _pasted_segment_codes(segment: str, catalog) -> list[str]:
+    segment = segment.strip()
+    if not segment or not normalize_code(segment):
+        return []
+
+    if re.search(r"\s+", segment) and catalog.match("", segment):
+        return [segment]
+
+    whitespace_codes = [part.strip() for part in re.split(r"\s+", segment) if normalize_code(part)]
+    if len(whitespace_codes) > 1:
+        return whitespace_codes
+
+    return [segment]
+
+
+def _pasted_inquiry_codes(value: str, catalog) -> list[str]:
     text = value.strip()
     if not text:
         return []
 
-    split_codes = [part.strip() for part in re.split(r"[\n\r\t,，;；、/]+", text) if normalize_code(part)]
-    if len(split_codes) > 1:
-        return split_codes
+    codes: list[str] = []
+    for segment in re.split(r"[\n\r\t,，;；、/]+", text):
+        codes.extend(_pasted_segment_codes(segment, catalog))
+    return codes
 
-    whitespace_codes = [part.strip() for part in re.split(r"\s+", text) if normalize_code(part)]
-    if len(whitespace_codes) > 1:
-        return whitespace_codes
 
-    return split_codes or ([text] if normalize_code(text) else [])
+def _should_render_pasted_result(query: str, codes: list[str]) -> bool:
+    if len(codes) > 1:
+        return True
+    return bool(codes and re.search(r"\s+", query.strip()) and normalize_code(codes[0]) == normalize_code(query))
 
 
 def _save_pasted_inquiry_workbook(codes: list[str]) -> Path:
@@ -126,8 +143,8 @@ def _renumber_pasted_summary_rows(summary: dict) -> None:
 
 
 def _render_pasted_inquiry_result(catalog, query: str):
-    codes = _pasted_inquiry_codes(query)
-    if len(codes) <= 1:
+    codes = _pasted_inquiry_codes(query, catalog)
+    if not _should_render_pasted_result(query, codes):
         return redirect(url_for("index", quick_oe=query))
 
     upload_path = _save_pasted_inquiry_workbook(codes)
@@ -174,6 +191,9 @@ def register(app) -> None:
         if not file or not file.filename:
             quick_oe = request.form.get("quick_oe", "").strip()
             if quick_oe:
+                if len(quick_oe) > PASTED_INQUIRY_MAX_CHARS:
+                    flash(f"粘贴号码最多支持 {PASTED_INQUIRY_MAX_CHARS} 个字符，请改用 Excel 文件导入。", "error")
+                    return redirect(url_for("index"))
                 return _render_pasted_inquiry_result(catalog, quick_oe)
             flash("请选择客户询价文件或输入 OE、品牌号码或 BLD 号。", "error")
             return redirect(url_for("index"))
