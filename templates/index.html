@@ -60,17 +60,26 @@
             </div>
           </form>
           {% if quick_oe %}
-            <section class="quick-oe-results" aria-label="快速号码查询结果">
+            <section class="quick-oe-results" aria-label="快速号码查询结果" data-quick-results data-initial-filter="{{ quick_filter }}">
               <div class="quick-oe-heading">
                 <div>
                   <h2>快速号码查询</h2>
-                  <p>{{ quick_results|length }} 条查询结果</p>
+                  <p><span data-quick-filter-prefix>{% if quick_filter %}{{ quick_filter_labels[quick_filter] }} · {% endif %}</span><span data-quick-result-count>{{ quick_results|length }}</span> 条查询结果</p>
+                </div>
+                <div class="quick-oe-filters" aria-label="快速号码查询筛选">
+                  {% for filter_key, filter_label in quick_filter_labels.items() %}
+                    {% if quick_filter == filter_key %}
+                      <a class="quick-oe-filter active" href="{{ url_for('index', quick_oe=quick_oe) }}" data-quick-filter="{{ filter_key }}" data-filter-label="{{ filter_label }}" aria-pressed="true">{{ filter_label }}</a>
+                    {% else %}
+                      <a class="quick-oe-filter" href="{{ url_for('index', quick_oe=quick_oe, quick_filter=filter_key) }}" data-quick-filter="{{ filter_key }}" data-filter-label="{{ filter_label }}" aria-pressed="false">{{ filter_label }}</a>
+                    {% endif %}
+                  {% endfor %}
                 </div>
               </div>
               {% if quick_results %}
                 <div class="quick-oe-grid">
                   {% for result in quick_results %}
-                    <article class="quick-oe-card {% if not result.product %}unmatched{% endif %}">
+                    <article class="quick-oe-card {% if not result.product %}unmatched{% endif %}" data-quick-card data-match-type="{{ result.match_type or '' }}">
                       <div class="quick-oe-code">{{ result.query }}</div>
                       {% if result.product %}
                         {% set image_url = product_image_url(result.product) %}
@@ -86,6 +95,9 @@
                           <div class="quick-oe-main">
                             <strong>{{ result.product.bld_no }}</strong>
                             <span>{{ result.reason }}</span>
+                            {% if result.hit_code %}
+                              <span class="quick-oe-hit">命中{{ result.hit_label }}：<b>{{ result.hit_code }}</b></span>
+                            {% endif %}
                           </div>
                           <div class="quick-oe-meta">
                             {% if result.product.series %}<span>{{ result.product.series }}</span>{% endif %}
@@ -105,6 +117,7 @@
                     </article>
                   {% endfor %}
                 </div>
+                <p class="materials-empty quick-oe-filter-empty" data-quick-filter-empty hidden>没有符合筛选的结果。</p>
               {% else %}
                 <p class="materials-empty">没有可查询的号码。</p>
               {% endif %}

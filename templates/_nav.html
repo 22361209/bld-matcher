@@ -9,6 +9,9 @@
     {% endif %}
     <a class="{% if active_page == 'products' %}active{% endif %}" href="{{ url_for('products') }}">产品目录</a>
     <a class="{% if active_page == 'materials' %}active{% endif %}" href="{{ url_for('materials') }}">生产料单</a>
+    {% if can("recognize_shipments") %}
+      <a class="{% if active_page == 'shipment_recognition' %}active{% endif %}" href="{{ url_for('shipment_recognition') }}">货物识别</a>
+    {% endif %}
   </div>
   <div class="nav-user">
     {% if can("manage_users") or can("view_logs") %}

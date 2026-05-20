@@ -9,7 +9,7 @@ from app.config import APP_DEBUG, APP_HOST, APP_PORT, DB_PATH, MAX_CONTENT_LENGT
 from app.database import connect, ensure_default_admin, get_user
 from app.helpers import download_name, product_image_thumb_url, product_image_url, product_image_urls
 from app.routes import register_routes
-from app.security import ROLE_LABELS, can, csrf_field, safe_referrer, validate_csrf_token
+from app.security import ROLE_LABELS, can, csrf_field, safe_referrer, validate_csrf_token, wants_json_response
 
 
 def create_app() -> Flask:
@@ -45,10 +45,14 @@ def create_app() -> Flask:
             return
         if request.endpoint in {"login", "do_login", "static"}:
             if request.method == "POST" and not web_app.config.get("TESTING") and not validate_csrf_token():
+                if wants_json_response():
+                    return jsonify({"ok": False, "error": "页面已过期，请刷新后重试。"}), 400
                 flash("页面已过期，请刷新后重试。", "error")
                 return redirect(safe_referrer(url_for("login")))
             return
         if request.method == "POST" and not web_app.config.get("TESTING") and not validate_csrf_token():
+            if wants_json_response():
+                return jsonify({"ok": False, "error": "页面已过期，请刷新后重试。"}), 400
             flash("页面已过期，请刷新后重试。", "error")
             return redirect(safe_referrer(url_for("index")))
 
@@ -58,15 +62,19 @@ def create_app() -> Flask:
             with connect(DB_PATH) as conn:
                 g.user = get_user(conn, int(user_id))
         if request.endpoint and not g.user:
+            if wants_json_response():
+                return jsonify({"ok": False, "error": "登录已失效，请刷新页面重新登录。"}), 401
             return redirect(url_for("login", next=request.full_path if request.query_string else request.path))
         if g.user and not g.user["active"]:
             session.clear()
+            if wants_json_response():
+                return jsonify({"ok": False, "error": "账号已停用。"}), 403
             flash("账号已停用。", "error")
             return redirect(url_for("login"))
 
     @web_app.errorhandler(RequestEntityTooLarge)
     def upload_too_large(_error):
-        if request.path.startswith("/api/internal/"):
+        if request.path.startswith("/api/internal/") or wants_json_response():
             return jsonify({"ok": False, "error": f"上传文件不能超过 {MAX_UPLOAD_MB}MB。"}), 413
         flash(f"上传文件不能超过 {MAX_UPLOAD_MB}MB。", "error")
         if request.path.startswith("/materials"):

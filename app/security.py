@@ -5,7 +5,7 @@ import secrets
 from functools import wraps
 from urllib.parse import urlsplit
 
-from flask import flash, g, redirect, request, session, url_for
+from flask import flash, g, jsonify, redirect, request, session, url_for
 from markupsafe import Markup, escape
 from werkzeug.security import check_password_hash
 
@@ -33,9 +33,10 @@ ROLE_PERMISSIONS = {
         "manage_materials",
         "view_customer_prices",
         "manage_customer_prices",
+        "recognize_shipments",
     },
-    "editor": {"edit_products", "manage_aliases", "generate_match", "view_logs", "generate_material_sheet"},
-    "user": {"generate_match", "generate_material_sheet"},
+    "editor": {"edit_products", "manage_aliases", "generate_match", "view_logs", "generate_material_sheet", "recognize_shipments"},
+    "user": {"generate_match", "generate_material_sheet", "recognize_shipments"},
     "viewer": set(),
 }
 
@@ -52,6 +53,14 @@ def can(permission: str) -> bool:
     if not user:
         return False
     return permission in ROLE_PERMISSIONS.get(user["role"], set())
+
+
+def wants_json_response() -> bool:
+    return (
+        request.headers.get("X-Requested-With") == "fetch"
+        or request.accept_mimetypes.best == "application/json"
+        or "application/json" in request.headers.get("Accept", "")
+    )
 
 
 def password_matches(stored_hash: str, password: str) -> bool:
@@ -112,6 +121,8 @@ def login_required(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
         if not getattr(g, "user", None):
+            if wants_json_response():
+                return jsonify({"ok": False, "error": "登录已失效，请刷新页面重新登录。"}), 401
             return redirect(url_for("login", next=request.path))
         return fn(*args, **kwargs)
 
@@ -123,8 +134,12 @@ def permission_required(permission: str):
         @wraps(fn)
         def wrapper(*args, **kwargs):
             if not getattr(g, "user", None):
+                if wants_json_response():
+                    return jsonify({"ok": False, "error": "登录已失效，请刷新页面重新登录。"}), 401
                 return redirect(url_for("login", next=request.path))
             if not can(permission):
+                if wants_json_response():
+                    return jsonify({"ok": False, "error": "当前账号没有权限执行这个操作。"}), 403
                 flash("当前账号没有权限执行这个操作。", "error")
                 return redirect(url_for("index"))
             return fn(*args, **kwargs)

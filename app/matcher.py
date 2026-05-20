@@ -4,6 +4,7 @@ import json
 import math
 import re
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -47,6 +48,8 @@ LOOKALIKE_TRANSLATION = str.maketrans(
     }
 )
 
+PSA_352X_BRANDS = ("PEUGEOT", "CITROEN", "CITROËN", "PSA", "标致", "雪铁龙")
+
 
 @dataclass(frozen=True)
 class CatalogMatch:
@@ -61,12 +64,33 @@ class CatalogMatch:
 def normalize_code(value: object) -> str:
     if isinstance(value, float) and math.isfinite(value) and value.is_integer():
         value = int(value)
-    text = ("" if value is None else str(value)).translate(LOOKALIKE_TRANSLATION)
+    text = "" if value is None else str(value).strip()
+    if isinstance(value, str) and re.fullmatch(r"\d+(?:\.0+|(?:\.\d+)?[Ee][+-]?\d+)", text):
+        try:
+            numeric_value = Decimal(text)
+        except InvalidOperation:
+            pass
+        else:
+            if numeric_value == numeric_value.to_integral_value():
+                text = str(int(numeric_value))
+    text = text.translate(LOOKALIKE_TRANSLATION)
     return re.sub(r"[^A-Z0-9]", "", text.upper())
 
 
 def zero_o_key(value: object) -> str:
     return normalize_code(value).replace("O", "0")
+
+
+def psa_352x_key(value: object) -> tuple[str, bool] | None:
+    text = compact_text(value).translate(LOOKALIKE_TRANSLATION).upper()
+    match = re.fullmatch(r"(352[01])\s*[.．]\s*([A-Z0-9]{2})", text)
+    if match:
+        return f"{match.group(1)}{match.group(2)}", True
+
+    key = normalize_code(value)
+    if re.fullmatch(r"352[01][A-Z0-9]{2}", key):
+        return key, False
+    return None
 
 
 def split_codes(value: object) -> list[str]:
@@ -151,6 +175,7 @@ class ProductCatalog:
         self.by_oe_zero_o: dict[str, list[dict]] = {}
         self.by_oe_fields: dict[str, set[str]] = {}
         self.by_oe_zero_o_fields: dict[str, set[str]] = {}
+        self.by_psa_352x: dict[str, list[dict]] = {}
 
         for row in rows:
             bld_no = compact_text(row.get("BLD NO."))
@@ -166,6 +191,9 @@ class ProductCatalog:
                         self.by_oe_zero_o.setdefault(tolerant_key, []).append(row)
                         self.by_oe_fields.setdefault(code_key, set()).add(field)
                         self.by_oe_zero_o_fields.setdefault(tolerant_key, set()).add(field)
+                        psa_key = psa_352x_key(alias)
+                        if psa_key and self._row_is_psa_352x(row):
+                            self.by_psa_352x.setdefault(psa_key[0], []).append(row)
 
     @classmethod
     def from_excel(cls, path: Path, manual_map: dict[str, str] | None = None) -> "ProductCatalog":
@@ -207,6 +235,13 @@ class ProductCatalog:
         if split_matches:
             return split_matches
 
+        psa_probe = psa_352x_key(inquiry_oe)
+        psa_match = self._match_psa_352x(inquiry_oe)
+        if psa_match:
+            return psa_match
+        if psa_probe and psa_probe[1]:
+            return None
+
         if oe_key and oe_key in self.by_oe:
             row = self.by_oe[oe_key][0]
             return CatalogMatch(compact_text(row.get("BLD NO.")), 95, self._exact_reason(oe_key), row, matched_codes=((compact_text(inquiry_oe),) if compact_text(inquiry_oe) else ()))
@@ -214,6 +249,10 @@ class ProductCatalog:
         prefix_match = self._match_unique_oe_prefix(oe_key, inquiry_oe)
         if prefix_match:
             return prefix_match
+
+        suffix_variant_match = self._match_oe_suffix_variant(oe_key, inquiry_oe)
+        if suffix_variant_match:
+            return suffix_variant_match
 
         oe_zero_o_key = zero_o_key(inquiry_oe)
         if oe_zero_o_key and oe_zero_o_key != oe_key and oe_zero_o_key in self.by_oe_zero_o:
@@ -254,6 +293,69 @@ class ProductCatalog:
             matched_codes=((compact_text(inquiry_oe),) if compact_text(inquiry_oe) else ()),
         )
 
+    def _match_oe_suffix_variant(self, key: str, inquiry_oe: object) -> CatalogMatch | None:
+        suffix_match = re.fullmatch(r"(.+\d)[A-Z]+", key)
+        if not suffix_match:
+            return None
+
+        base_key = suffix_match.group(1)
+        if len(base_key) < 5:
+            return None
+
+        rows: list[dict] = []
+        fields: set[str] = set()
+        for code_key, code_rows in self.by_oe.items():
+            if code_key.startswith(base_key):
+                rows.extend(code_rows)
+                fields.update(self.by_oe_fields.get(code_key, set()))
+
+        unique_rows = self._unique_rows(rows)
+        if len(unique_rows) != 1:
+            return None
+
+        row = unique_rows[0]
+        reason = "品牌号码尾字母容错命中" if fields == {"OE NO.2"} else "OE 尾字母容错命中"
+        return CatalogMatch(
+            compact_text(row.get("BLD NO.")),
+            89,
+            reason,
+            row,
+            matched_codes=((compact_text(inquiry_oe),) if compact_text(inquiry_oe) else ()),
+        )
+
+    def _match_psa_352x(self, inquiry_oe: object) -> CatalogMatch | None:
+        probe = psa_352x_key(inquiry_oe)
+        if not probe:
+            return None
+
+        key, has_separator = probe
+        psa_rows = self._unique_rows(self.by_psa_352x.get(key, []))
+        exact_rows = self._unique_rows(self.by_oe.get(key, []))
+        non_psa_exact_rows = [row for row in exact_rows if not self._row_is_psa_352x(row)]
+        matched_codes = ((compact_text(inquiry_oe),) if compact_text(inquiry_oe) else ())
+
+        if has_separator:
+            if len(psa_rows) == 1:
+                row = psa_rows[0]
+                return CatalogMatch(compact_text(row.get("BLD NO.")), 97, "PSA 号码点号容错命中", row, matched_codes=matched_codes)
+            if len(psa_rows) > 1:
+                return self._ambiguous_match(psa_rows, 80, "PSA 号码命中多个 BLD，请人工确认", matched_codes)
+            return None
+
+        if psa_rows and non_psa_exact_rows:
+            combined_rows = self._unique_rows(psa_rows + non_psa_exact_rows)
+            if len(combined_rows) == 1:
+                row = combined_rows[0]
+                return CatalogMatch(compact_text(row.get("BLD NO.")), 97, "PSA 号码点号容错命中", row, matched_codes=matched_codes)
+            return self._ambiguous_match(combined_rows, 80, "3520/3521 号码同时命中 PSA 与其他品牌，请人工确认", matched_codes)
+
+        if len(psa_rows) == 1:
+            row = psa_rows[0]
+            return CatalogMatch(compact_text(row.get("BLD NO.")), 97, "PSA 号码点号容错命中", row, matched_codes=matched_codes)
+        if len(psa_rows) > 1:
+            return self._ambiguous_match(psa_rows, 80, "PSA 号码命中多个 BLD，请人工确认", matched_codes)
+        return None
+
     def _match_split_oe_parts(self, oe_parts: list[str]) -> CatalogMatch | None:
         if len(oe_parts) <= 1:
             return None
@@ -271,6 +373,14 @@ class ProductCatalog:
             if part_key in self.by_bld:
                 row = self.by_bld[part_key]
                 matches.append((part, CatalogMatch(compact_text(row.get("BLD NO.")), 92, "BLD NO. 多号码精准命中", row)))
+                continue
+
+            psa_probe = psa_352x_key(part)
+            psa_match = self._match_psa_352x(part)
+            if psa_match:
+                matches.append((part, psa_match))
+                continue
+            if psa_probe and psa_probe[1]:
                 continue
 
             if part_key in self.by_oe:
@@ -302,6 +412,13 @@ class ProductCatalog:
         first = next(iter(unique.values()))
         return CatalogMatch(bld_list, 80, "多个号码命中不同 BLD，请人工确认", first.row, matched_codes=matched_parts, unmatched_codes=unmatched_parts)
 
+    def _ambiguous_match(self, rows: list[dict], score: int, reason: str, matched_codes: tuple[str, ...]) -> CatalogMatch | None:
+        unique_rows = self._unique_rows(rows)
+        if not unique_rows:
+            return None
+        bld_list = " / ".join(compact_text(row.get("BLD NO.")) for row in unique_rows)
+        return CatalogMatch(bld_list, score, reason, unique_rows[0], matched_codes=matched_codes)
+
     @staticmethod
     def _unique_rows(rows: list[dict]) -> list[dict]:
         seen = set()
@@ -312,6 +429,11 @@ class ProductCatalog:
                 seen.add(key)
                 unique.append(row)
         return unique
+
+    @staticmethod
+    def _row_is_psa_352x(row: dict) -> bool:
+        text = f"{compact_text(row.get('SERIES'))} {compact_text(row.get('Models'))}".upper()
+        return any(brand in text for brand in PSA_352X_BRANDS)
 
     def _is_brand_code_key(self, key: str, *, tolerant: bool = False) -> bool:
         fields = self.by_oe_zero_o_fields if tolerant else self.by_oe_fields

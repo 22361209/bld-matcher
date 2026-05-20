@@ -14,7 +14,7 @@ from werkzeug.security import generate_password_hash
 
 from .bld_sort import compare_bld_no
 from .migrations import run_migrations
-from .matcher import ProductCatalog, compact_text, normalize_code, split_codes
+from .matcher import PSA_352X_BRANDS, ProductCatalog, compact_text, normalize_code, psa_352x_key, split_codes
 
 
 PASSWORD_HASH_METHOD = "pbkdf2:sha256"
@@ -142,6 +142,16 @@ CREATE TABLE IF NOT EXISTS internal_api_keys (
   last_used_at TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_internal_api_keys_active ON internal_api_keys(active);
+
+CREATE TABLE IF NOT EXISTS shipment_recognition_jobs (
+  id TEXT PRIMARY KEY,
+  owner TEXT NOT NULL,
+  payload TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_shipment_recognition_jobs_owner ON shipment_recognition_jobs(owner);
+CREATE INDEX IF NOT EXISTS idx_shipment_recognition_jobs_updated ON shipment_recognition_jobs(updated_at);
 """
 
 
@@ -525,6 +535,16 @@ def _normalized_code_sql(column: str) -> str:
     return expression
 
 
+def _psa_product_clause() -> tuple[str, list[str]]:
+    checks = []
+    params = []
+    for brand in PSA_352X_BRANDS:
+        checks.append("UPPER(series) LIKE ?")
+        checks.append("UPPER(models) LIKE ?")
+        params.extend([f"%{brand}%", f"%{brand}%"])
+    return "(" + " OR ".join(checks) + ")", params
+
+
 def _product_filter_clauses(
     query: str = "",
     include_inactive: bool = False,
@@ -547,13 +567,18 @@ def _product_filter_clauses(
         clauses.append("(UPPER(bld_no) LIKE ? OR UPPER(series) LIKE ? OR UPPER(models) LIKE ?)")
         params.extend([product_key, product_key, product_key])
     if oe_query.strip():
-        norm_key = f"%{normalize_code(oe_query)}%"
+        psa_probe = psa_352x_key(oe_query)
+        norm_key = f"%{psa_probe[0] if psa_probe else normalize_code(oe_query)}%"
         oe1 = _normalized_code_sql("oe_no_1")
         oe2 = _normalized_code_sql("oe_no_2")
-        clauses.append(
-            f"({oe1} LIKE ? OR {oe2} LIKE ?)"
-        )
-        params.extend([norm_key, norm_key])
+        oe_clause = f"({oe1} LIKE ? OR {oe2} LIKE ?)"
+        if psa_probe and psa_probe[1]:
+            psa_clause, psa_params = _psa_product_clause()
+            clauses.append(f"({oe_clause} AND {psa_clause})")
+            params.extend([norm_key, norm_key, *psa_params])
+        else:
+            clauses.append(oe_clause)
+            params.extend([norm_key, norm_key])
     if series_query.strip():
         clauses.append("UPPER(series) LIKE ?")
         params.append(f"%{series_query.strip().upper()}%")

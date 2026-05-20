@@ -5,10 +5,12 @@ import os
 import re
 import sys
 import tempfile
+import time
 import unittest
 import zipfile
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
+from unittest.mock import patch
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -73,9 +75,89 @@ class WebAppTest(unittest.TestCase):
         self.assertIn('class="embedded-submit" type="submit">开始匹配', html)
         self.assertIn('class="embedded-input-control"', html)
         self.assertIn('class="embedded-submit" type="submit">搜索', html)
-        nav_order = ["询价处理", "价格维护", "合同管理", "产品目录", "生产料单"]
+        nav_order = ["询价处理", "价格维护", "合同管理", "产品目录", "生产料单", "货物识别"]
         nav_positions = [html.index(label) for label in nav_order]
         self.assertEqual(nav_positions, sorted(nav_positions))
+
+    def test_quick_inquiry_results_can_filter_by_match_source(self):
+        from app.database import upsert_product
+
+        self.login()
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "QF6010B",
+                    "series": "TEST",
+                    "item": "BLD FILTER HIT",
+                    "oe_no_1": "OE-BLD-FILTER",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "QF-OE-HIT",
+                    "series": "TEST",
+                    "item": "OE FILTER HIT",
+                    "oe_no_1": "QF6010-OE",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "QF-BRAND-HIT",
+                    "series": "TEST",
+                    "item": "BRAND FILTER HIT",
+                    "oe_no_2": "QF6010-BRAND",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            conn.commit()
+
+        response = self.client.get("/?quick_oe=QF6010")
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("只看BLD号", html)
+        self.assertIn("只看OE号", html)
+        self.assertIn("只看品牌号", html)
+        self.assertIn("QF6010B", html)
+        self.assertIn("QF-OE-HIT", html)
+        self.assertIn("QF-BRAND-HIT", html)
+        self.assertIn("命中BLD号：", html)
+        self.assertIn("命中OE号：", html)
+        self.assertIn("命中品牌号：", html)
+        self.assertIn("QF6010-OE", html)
+        self.assertIn("QF6010-BRAND", html)
+        self.assertIn('data-quick-results data-initial-filter=""', html)
+        self.assertIn('data-match-type="bld"', html)
+        self.assertIn('data-match-type="oe"', html)
+        self.assertIn('data-match-type="brand"', html)
+
+        response = self.client.get("/?quick_oe=QF6010&quick_filter=bld")
+        html = response.get_data(as_text=True)
+        self.assertIn('data-quick-results data-initial-filter="bld"', html)
+        self.assertIn("QF6010B", html)
+        self.assertIn("QF-OE-HIT", html)
+        self.assertIn("QF-BRAND-HIT", html)
+
+        response = self.client.get("/?quick_oe=QF6010&quick_filter=oe")
+        html = response.get_data(as_text=True)
+        self.assertIn('data-quick-results data-initial-filter="oe"', html)
+        self.assertIn("QF6010B", html)
+        self.assertIn("QF-OE-HIT", html)
+        self.assertIn("QF-BRAND-HIT", html)
+
+        response = self.client.get("/?quick_oe=QF6010&quick_filter=brand")
+        html = response.get_data(as_text=True)
+        self.assertIn('data-quick-results data-initial-filter="brand"', html)
+        self.assertIn("QF6010B", html)
+        self.assertIn("QF-BRAND-HIT", html)
+        self.assertIn("QF-OE-HIT", html)
 
     def test_login_next_rejects_external_url(self):
         response = self.client.post(
@@ -96,10 +178,108 @@ class WebAppTest(unittest.TestCase):
 
     def test_core_admin_pages_load(self):
         self.login()
-        for path in ["/customer-prices", "/contracts", "/contracts/sales", "/products", "/materials", "/purchase-contracts", "/users", "/internal-api-key", "/logs", "/system-updates"]:
+        for path in ["/customer-prices", "/contracts", "/contracts/sales", "/products", "/materials", "/shipment-recognition", "/purchase-contracts", "/users", "/internal-api-key", "/logs", "/system-updates"]:
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
+
+    def test_shipment_recognition_requires_photos(self):
+        self.login()
+        response = self.client.post(
+            "/shipment-recognition/run",
+            data={"provider": "tesseract"},
+            follow_redirects=True,
+        )
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("请选择 jpg、png、webp、bmp、tif、heic 或 heif 照片", html)
+
+    def test_shipment_recognition_async_job_completes(self):
+        self.login()
+
+        def fake_recognize_photo(job, _args):
+            return {
+                "relative_name": job.relative_name,
+                "path": str(job.path),
+                "status": "ok",
+                "seconds": 0.01,
+                "model": "fake-qwen-vl",
+                "usage": {"prompt_tokens": 11, "completion_tokens": 7, "total_tokens": 18},
+                "result": {
+                    "photo_summary": "测试照片",
+                    "labels": [
+                        {
+                            "label_index": 1,
+                            "visible": True,
+                            "label_type": "part",
+                            "numbers": ["54501-8Y50B"],
+                            "part_no": "54501-8Y50B",
+                            "bld_no": "",
+                            "oe_no": "",
+                            "customer_code": "",
+                            "product_name": "CONTROL ARM",
+                            "models": "TEST CAR",
+                            "quantity": 10,
+                            "carton_size": "",
+                            "barcode": "",
+                            "confidence": 0.95,
+                            "notes": "",
+                        }
+                    ],
+                },
+                "error": "",
+            }
+
+        png_bytes = (
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+            b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\xff\xff?"
+            b"\x00\x05\xfe\x02\xfeA\x89\xa3\x95\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
+        with patch("app.routes.shipment_recognition.recognizer.recognize_photo", side_effect=fake_recognize_photo):
+            response = self.client.post(
+                "/shipment-recognition/run",
+                data={
+                    "provider": "openai-compatible",
+                    "shipment_photos": (io.BytesIO(png_bytes), "IMG_0001.png"),
+                },
+                headers={"Accept": "application/json", "X-Requested-With": "fetch"},
+                content_type="multipart/form-data",
+            )
+            payload = response.get_json()
+            self.assertEqual(response.status_code, 202)
+            self.assertTrue(payload["ok"])
+
+            status_payload = None
+            for _ in range(30):
+                status = self.client.get(payload["status_url"], headers={"Accept": "application/json"})
+                status_payload = status.get_json()
+                if status_payload["job"]["status"] == "completed":
+                    break
+                time.sleep(0.1)
+
+        self.assertIsNotNone(status_payload)
+        job = status_payload["job"]
+        self.assertEqual(job["status"], "completed")
+        self.assertEqual(job["result"]["photos"], 1)
+        self.assertEqual(job["result"]["labels"], 1)
+        self.assertEqual(job["result"]["total_tokens"], 18)
+        self.assertTrue(job["result"]["excel_url"].startswith("/download/"))
+
+    def test_shipment_recognition_prepares_heic_images(self):
+        from PIL import Image
+        from tools.shipment_photo_recognition import _prepare_image, find_photos
+
+        image_dir = self.root / "uploads" / "heic-test"
+        image_dir.mkdir(parents=True, exist_ok=True)
+        image_path = image_dir / "label.heic"
+        Image.new("RGB", (12, 8), "white").save(image_path, format="HEIF")
+
+        jobs = find_photos(image_dir)
+        raw, mime = _prepare_image(image_path, max_side=2200)
+
+        self.assertEqual([job.relative_name for job in jobs], ["label.heic"])
+        self.assertEqual(mime, "image/jpeg")
+        self.assertTrue(raw.startswith(b"\xff\xd8\xff"))
 
     def test_internal_api_numbers_generate_openclaw_workbook(self):
         from app.database import upsert_product
@@ -166,6 +346,78 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(rejected_export.status_code, 400)
         self.assertFalse(rejected_payload["ok"])
         self.assertIn("必须传 source_name", rejected_payload["error"])
+
+    def test_internal_api_numbers_use_oe_suffix_variant_matching(self):
+        from app.database import upsert_product
+
+        token = self.create_internal_api_token()
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K8041LB",
+                    "series": "VW",
+                    "item": "Front Left Lower Control Arm",
+                    "oe_no_1": "561407151A\n561407151C",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        response = self.client.post(
+            "/api/internal/inquiry/numbers",
+            json={"numbers": ["561407151D"], "rows_limit": 10},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        payload = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["matched_count"], 1)
+        self.assertEqual(payload["unmatched_count"], 0)
+        self.assertEqual(payload["rows"][0]["bld_no"], "K8041LB")
+        self.assertEqual(payload["rows"][0]["match_reason"], "OE 尾字母容错命中")
+
+    def test_internal_api_numbers_use_psa_352x_dot_rule(self):
+        from app.database import upsert_product
+
+        token = self.create_internal_api_token()
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-API-PSA-352126",
+                    "series": "PEUGEOT\nCITROEN",
+                    "item": "Front Left Lower Control Arm",
+                    "oe_no_1": "3521.26",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-API-GM-352126",
+                    "series": "GM\nOPEL",
+                    "item": "Front Left Lower Control Arm",
+                    "oe_no_1": "352126",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        response = self.client.post(
+            "/api/internal/inquiry/numbers",
+            json={"numbers": ["3521.26"], "rows_limit": 10},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        payload = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["matched_count"], 1)
+        self.assertEqual(payload["rows"][0]["bld_no"], "K-API-PSA-352126")
+        self.assertEqual(payload["rows"][0]["match_reason"], "PSA 号码点号容错命中")
 
     def test_internal_api_file_augment_and_analyze(self):
         from app.database import upsert_product
@@ -835,6 +1087,48 @@ class WebAppTest(unittest.TestCase):
                 html = response.get_data(as_text=True)
                 self.assertIn("K-FILTER-DOT-OE", html)
 
+    def test_products_oe_search_psa_352x_dot_does_not_show_gm_exact(self):
+        from app.database import upsert_product
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-PRODUCT-PSA-352125",
+                    "series": "PEUGEOT\nCITROEN",
+                    "item": "CONTROL ARM",
+                    "oe_no_1": "3521.25",
+                    "models": "C5",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-PRODUCT-GM-352125",
+                    "series": "GM\nOPEL",
+                    "item": "CONTROL ARM",
+                    "oe_no_1": "352125",
+                    "models": "OPEL",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        self.login()
+        dotted = self.client.get("/products", query_string={"oe": "3521.25"})
+        dotted_html = dotted.get_data(as_text=True)
+        self.assertEqual(dotted.status_code, 200)
+        self.assertIn("K-PRODUCT-PSA-352125", dotted_html)
+        self.assertNotIn("K-PRODUCT-GM-352125", dotted_html)
+
+        undotted = self.client.get("/products", query_string={"oe": "352125"})
+        undotted_html = undotted.get_data(as_text=True)
+        self.assertEqual(undotted.status_code, 200)
+        self.assertIn("K-PRODUCT-PSA-352125", undotted_html)
+        self.assertIn("K-PRODUCT-GM-352125", undotted_html)
+
     def test_products_use_bld_natural_order(self):
         from app.bld_sort import bld_sort_key
         from app.database import upsert_product
@@ -1328,6 +1622,29 @@ class WebAppTest(unittest.TestCase):
         finally:
             self.web.app.config["MAX_CONTENT_LENGTH"] = original_limit
 
+    def test_async_shipment_oversized_upload_returns_json(self):
+        self.login()
+        original_limit = self.web.app.config["MAX_CONTENT_LENGTH"]
+        self.web.app.config["MAX_CONTENT_LENGTH"] = 100
+        try:
+            response = self.client.post(
+                "/shipment-recognition/run",
+                data={
+                    "provider": "tesseract",
+                    "shipment_photos": (io.BytesIO(b"x" * 200), "photo.jpg"),
+                },
+                headers={"Accept": "application/json", "X-Requested-With": "fetch"},
+                content_type="multipart/form-data",
+                follow_redirects=False,
+            )
+            payload = response.get_json()
+            self.assertEqual(response.status_code, 413)
+            self.assertEqual(payload["ok"], False)
+            self.assertIn("上传文件不能超过", payload["error"])
+            response.close()
+        finally:
+            self.web.app.config["MAX_CONTENT_LENGTH"] = original_limit
+
     def test_migrations_are_recorded(self):
         with self.web.connect(self.web.DB_PATH) as conn:
             rows = conn.execute("SELECT id FROM schema_migrations ORDER BY id").fetchall()
@@ -1339,6 +1656,7 @@ class WebAppTest(unittest.TestCase):
                 "003_product_drawings",
                 "004_product_image_slots",
                 "005_internal_api_keys",
+                "006_shipment_recognition_jobs",
             ],
         )
 
@@ -1683,6 +2001,66 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("请输入至少 4 位号码", html)
         self.assertNotIn("K-SHORT-001", html)
 
+    def test_quick_lookup_uses_unique_oe_suffix_variant(self):
+        from app.database import upsert_product
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K8041LB",
+                    "series": "VW",
+                    "item": "Front Left Lower Control Arm",
+                    "oe_no_1": "561407151A\n561407151C",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        self.login()
+        response = self.client.get("/", query_string={"quick_oe": "561407151D"})
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("K8041LB", html)
+        self.assertIn("OE 尾字母容错命中", html)
+
+    def test_quick_lookup_psa_352x_dot_prefers_psa_over_gm_exact(self):
+        from app.database import upsert_product
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-PSA-352088-QUICK",
+                    "series": "PEUGEOT\nCITROEN",
+                    "item": "Front Left Lower Control Arm",
+                    "oe_no_1": "3520.88",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-GM-352088-QUICK",
+                    "series": "GM\nOPEL",
+                    "item": "Front Left Lower Control Arm",
+                    "oe_no_1": "352088",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        self.login()
+        response = self.client.get("/", query_string={"quick_oe": "3520.88"})
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("K-PSA-352088-QUICK", html)
+        self.assertIn("PSA 号码点号容错命中", html)
+        self.assertNotIn("K-GM-352088-QUICK", html)
+
     def test_single_pasted_code_keeps_quick_lookup(self):
         self.login()
         response = self.client.post("/match", data={"quick_oe": "55270-2Z000"})
@@ -1890,6 +2268,210 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(summary["matched"], 1)
         self.assertEqual(summary["rows"][0]["bld_no"], "K8282RA")
         self.assertEqual(summary["rows"][0]["reason"], "OE 组合前缀命中")
+
+    def test_uploaded_inquiry_integer_decimal_text_matches_prefix(self):
+        from app.database import upsert_product
+        from app.excel_io import generate_excel_with_bld
+        from app.helpers import load_catalog
+        from openpyxl import Workbook
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K8041LB",
+                    "series": "VW",
+                    "item": "Front Left Lower Control Arm",
+                    "oe_no_1": "561407151A\n561407151C",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        inquiry_path = self.root / "uploads" / "integer-decimal-text.xlsx"
+        inquiry_path.parent.mkdir(parents=True, exist_ok=True)
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["OE号"])
+        sheet.append(["561407151.0"])
+        workbook.save(inquiry_path)
+        workbook.close()
+
+        summary = generate_excel_with_bld(
+            inquiry_path,
+            self.root / "outputs" / "integer-decimal-text-result.xlsx",
+            load_catalog(),
+            write_output=False,
+        )
+
+        self.assertEqual(summary["total"], 1)
+        self.assertEqual(summary["matched"], 1)
+        self.assertEqual(summary["rows"][0]["bld_no"], "K8041LB")
+        self.assertEqual(summary["rows"][0]["reason"], "OE 组合前缀命中")
+
+    def test_uploaded_inquiry_oe_suffix_variant_matches_unique_base(self):
+        from app.database import upsert_product
+        from app.excel_io import generate_excel_with_bld
+        from app.helpers import load_catalog
+        from openpyxl import Workbook
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K8041LB",
+                    "series": "VW",
+                    "item": "Front Left Lower Control Arm",
+                    "oe_no_1": "561407151A\n561407151C",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        inquiry_path = self.root / "uploads" / "oe-suffix-variant.xlsx"
+        inquiry_path.parent.mkdir(parents=True, exist_ok=True)
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["OE号"])
+        sheet.append(["561407151D"])
+        workbook.save(inquiry_path)
+        workbook.close()
+
+        summary = generate_excel_with_bld(
+            inquiry_path,
+            self.root / "outputs" / "oe-suffix-variant-result.xlsx",
+            load_catalog(),
+            write_output=False,
+        )
+
+        self.assertEqual(summary["total"], 1)
+        self.assertEqual(summary["matched"], 1)
+        self.assertEqual(summary["rows"][0]["bld_no"], "K8041LB")
+        self.assertEqual(summary["rows"][0]["reason"], "OE 尾字母容错命中")
+
+    def test_psa_352x_dot_matches_psa_before_gm_exact(self):
+        from app.matcher import ProductCatalog
+
+        catalog = ProductCatalog(
+            [
+                {
+                    "BLD NO.": "K-PSA-352123",
+                    "SERIES": "PEUGEOT\nCITROEN",
+                    "ITEM": "Front Left Lower Control Arm",
+                    "OE NO.1": "3521.23",
+                },
+                {
+                    "BLD NO.": "K-GM-352123",
+                    "SERIES": "GM\nOPEL",
+                    "ITEM": "Front Left Lower Control Arm",
+                    "OE NO.1": "352123",
+                },
+            ]
+        )
+
+        match = catalog.match("", "3521.23")
+
+        self.assertIsNotNone(match)
+        self.assertEqual(match.bld_no, "K-PSA-352123")
+        self.assertEqual(match.reason, "PSA 号码点号容错命中")
+
+    def test_psa_352x_without_dot_is_ambiguous_when_gm_exact_also_exists(self):
+        from app.matcher import ProductCatalog
+
+        catalog = ProductCatalog(
+            [
+                {
+                    "BLD NO.": "K-PSA-352123",
+                    "SERIES": "PEUGEOT\nCITROEN",
+                    "ITEM": "Front Left Lower Control Arm",
+                    "OE NO.1": "3521.23",
+                },
+                {
+                    "BLD NO.": "K-GM-352123",
+                    "SERIES": "GM\nOPEL",
+                    "ITEM": "Front Left Lower Control Arm",
+                    "OE NO.1": "352123",
+                },
+            ]
+        )
+
+        match = catalog.match("", "352123")
+
+        self.assertIsNotNone(match)
+        self.assertIn("K-PSA-352123", match.bld_no)
+        self.assertIn("K-GM-352123", match.bld_no)
+        self.assertEqual(match.reason, "3520/3521 号码同时命中 PSA 与其他品牌，请人工确认")
+
+    def test_psa_352x_without_dot_still_matches_gm_when_no_psa_exists(self):
+        from app.matcher import ProductCatalog
+
+        catalog = ProductCatalog(
+            [
+                {
+                    "BLD NO.": "K-GM-352023",
+                    "SERIES": "GM\nOPEL",
+                    "ITEM": "Front Left Lower Control Arm",
+                    "OE NO.1": "352023",
+                }
+            ]
+        )
+
+        match = catalog.match("", "352023")
+
+        self.assertIsNotNone(match)
+        self.assertEqual(match.bld_no, "K-GM-352023")
+        self.assertEqual(match.reason, "OE 精准命中")
+
+    def test_uploaded_inquiry_psa_352x_dot_does_not_match_gm_exact(self):
+        from app.database import upsert_product
+        from app.excel_io import generate_excel_with_bld
+        from app.helpers import load_catalog
+        from openpyxl import Workbook
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-PSA-352124-FILE",
+                    "series": "PEUGEOT\nCITROEN",
+                    "item": "Front Left Lower Control Arm",
+                    "oe_no_1": "3521.24",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-GM-352124-FILE",
+                    "series": "GM\nOPEL",
+                    "item": "Front Left Lower Control Arm",
+                    "oe_no_1": "352124",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        inquiry_path = self.root / "uploads" / "psa-352x-dot.xlsx"
+        inquiry_path.parent.mkdir(parents=True, exist_ok=True)
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["OE号"])
+        sheet.append(["3521.24"])
+        workbook.save(inquiry_path)
+        workbook.close()
+
+        summary = generate_excel_with_bld(
+            inquiry_path,
+            self.root / "outputs" / "psa-352x-dot-result.xlsx",
+            load_catalog(),
+            write_output=False,
+        )
+
+        self.assertEqual(summary["total"], 1)
+        self.assertEqual(summary["matched"], 1)
+        self.assertEqual(summary["rows"][0]["bld_no"], "K-PSA-352124-FILE")
+        self.assertEqual(summary["rows"][0]["reason"], "PSA 号码点号容错命中")
 
     def test_pasted_multiple_bld_codes_generates_match_excel(self):
         from app.database import upsert_product

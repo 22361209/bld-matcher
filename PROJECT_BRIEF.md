@@ -1,6 +1,6 @@
 # BLD Project Brief
 
-更新时间：2026-05-11
+更新时间：2026-05-19
 
 这是给新接手 Codex 或开发者的短版项目说明。先读 `AGENTS.md`，再读本文件。详细历史在 `项目交接说明.md`，需要查旧决策时用 `rg` 搜索，不要默认整篇读取。
 
@@ -13,6 +13,7 @@ BLD 是一个局域网内部使用的 Flask 业务系统，主要用于：
 - 产品目录、OE、车型、图片、PDF 图纸、含税单价维护
 - 询价结果 Excel 和图纸压缩包下载
 - 生产料单生成和冲压材料明细维护
+- 发货照片标签识别和 Excel 汇总草稿
 - 合同管理和采购/销售合同 PDF 生成
 - 多用户账号、权限和操作日志
 
@@ -108,12 +109,28 @@ OpenClaw 内部 API：
 - 导出目录只对管理员开放。
 - 产品编辑页可上传/替换单个 PDF 图纸和最多 5 张产品图片，也可删除产品。
 
+外部品牌号码审核工具：
+
+- `tools/manual_rockauto_lookup.py` 可在本机用浏览器逐个 OE 查询 RockAuto，提取 Mevotech、MOOG、Dorman、Delphi 号码。
+- 该工具单线程、随机延时、写 JSON 缓存和失败记录，输出 `outputs/cross_reference_work/rockauto_manual_review.xlsx` 审核表。
+- 它只生成审核材料，不自动修改 `data/products.sqlite3`；如遇验证码、Cloudflare 或访问限制，应暂停人工处理，不绕过限制。
+
 生产料单：
 
 - 页面采用工作台风格。
 - 新增/编辑材料明细使用浮层。
 - 材料规格尺寸由规格输入解析生成。
 - 材料明细搜索支持母件编码、零件编码、规格尺寸等。
+
+发货照片识别：
+
+- `tools/shipment_photo_recognition.py` 可读取 NAS 挂载目录或本机照片文件夹，识别货物白色标签并生成 Excel 和 JSON。
+- 导航栏“货物识别”是试验入口，页面支持选择多张照片或拖入照片文件夹，上传后保存到当前用户 `uploads/u*/shipment_photos/`；识别走后台线程，任务状态写入 SQLite `shipment_recognition_jobs` 并轮询真实进度，服务重启后未完成线程仍会中断。
+- 第一版不写入产品库、不匹配现有目录；按标签内容汇总日期、标签号码、BLD号、产品名称、数量、车型和箱数。
+- 箱数按识别出的标签张数计算；数量只使用标签上明确写出的数量，看不清时为 0 并保留低置信备注。
+- 支持 jpg、png、webp、bmp、tif、heic/heif 图片；HEIC 解码依赖 `pillow-heif`。
+- 默认支持 OpenAI-compatible 视觉 Chat Completions 接口，配置 `SHIPMENT_VISION_API_KEY`、`SHIPMENT_VISION_BASE_URL`、`SHIPMENT_VISION_MODEL`；也可用 `--provider tesseract` 做本机 OCR 草稿。
+- Qwen/DashScope 返回的 `usage` 会记录到 JSON，并写入 Excel“照片清单”的输入 Token、输出 Token、总 Token、耗时秒和模型列；页面本次结果会汇总显示 Token 和耗时。
 
 合同管理：
 
@@ -168,6 +185,7 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 - `app/routes/internal_api.py`：OpenClaw 内部 API
 - `app/routes/products.py`：产品目录、图片、图纸、单价导入、目录导入导出
 - `app/routes/materials.py`：生产料单和材料明细
+- `app/routes/shipment_recognition.py`：货物识别页面，触发发货照片标签识别批处理
 - `app/routes/purchase_contracts.py`：合同管理、采购/销售合同生成和 PDF 下载
 - `app/routes/admin.py`：用户、日志、系统更新页面
 - `app/database.py`：SQLite 表结构、查询、写入、迁移调用
@@ -175,6 +193,7 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 - `app/product_media.py`：产品图片上传、缩略图生成和读取
 - `app/catalog_export.py`：产品目录 Excel 导出和图片嵌入
 - `app/purchase_contract.py`：采购/销售合同表单校验和 PDF 生成
+- `tools/shipment_photo_recognition.py`：发货照片标签识别批处理，输出汇总 Excel 和原始 JSON，支持 HEIC/HEIF
 - `templates/products.html`：产品目录页面
 - `templates/purchase_contracts.html`：合同管理和采购/销售合同页面
 - `templates/_product_rows.html`：产品目录行模板

@@ -62,12 +62,29 @@ def _add_internal_api_keys(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_internal_api_keys_active ON internal_api_keys(active)")
 
 
+def _add_shipment_recognition_jobs(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS shipment_recognition_jobs (
+          id TEXT PRIMARY KEY,
+          owner TEXT NOT NULL,
+          payload TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_shipment_recognition_jobs_owner ON shipment_recognition_jobs(owner)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_shipment_recognition_jobs_updated ON shipment_recognition_jobs(updated_at)")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
     ("003_product_drawings", _add_product_drawings),
     ("004_product_image_slots", _add_product_image_slots),
     ("005_internal_api_keys", _add_internal_api_keys),
+    ("006_shipment_recognition_jobs", _add_shipment_recognition_jobs),
 )
 
 

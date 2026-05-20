@@ -63,6 +63,21 @@ DEFAULT_ADMIN_PASSWORD = os.environ.get("DEFAULT_ADMIN_PASSWORD", "change-me-on-
 INTERNAL_API_TOKEN = os.environ.get("INTERNAL_API_TOKEN", "").strip()
 
 
+def _shipment_photo_roots() -> tuple[Path, ...]:
+    value = os.environ.get("SHIPMENT_PHOTO_INPUT_ROOTS", "").strip()
+    if not value:
+        return ((UPLOAD_DIR / "shipment_photos").resolve(),)
+    roots = []
+    for part in value.split(","):
+        text = part.strip()
+        if text:
+            roots.append(Path(text).expanduser().resolve())
+    return tuple(roots) or ((UPLOAD_DIR / "shipment_photos").resolve(),)
+
+
+SHIPMENT_PHOTO_INPUT_ROOTS = _shipment_photo_roots()
+
+
 def assert_production_secrets() -> None:
     """生产模式(非 DEBUG)下拒绝使用默认 SECRET_KEY 启动。
 
