@@ -1258,20 +1258,13 @@ def bootstrap_materials_from_excel(db_path: Path, material_path: Path) -> None:
     _BOOTSTRAPPED_SOURCES.add(key)
 
 
-def list_material_items(
-    conn: sqlite3.Connection,
+def _material_item_filter_clauses(
     query: str = "",
     include_inactive: bool = False,
     only_inactive: bool = False,
-    limit: int = 3000,
-) -> list[sqlite3.Row]:
-    sql = """
-        SELECT *,
-               (width * length * 7.85 * thickness / pieces / 1000000.0) AS unit_weight
-        FROM material_items
-    """
-    params: list[object] = []
+) -> tuple[list[str], list[object]]:
     clauses = []
+    params: list[object] = []
     if only_inactive:
         clauses.append("active = 0")
     elif not include_inactive:
@@ -1290,10 +1283,48 @@ def list_material_items(
             "(" + " OR ".join(search_clauses) + ")"
         )
         params.extend(search_params)
+    return clauses, params
+
+
+def count_material_items(
+    conn: sqlite3.Connection,
+    query: str = "",
+    include_inactive: bool = False,
+    only_inactive: bool = False,
+) -> int:
+    sql = "SELECT COUNT(*) FROM material_items"
+    clauses, params = _material_item_filter_clauses(
+        query=query,
+        include_inactive=include_inactive,
+        only_inactive=only_inactive,
+    )
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)
-    sql += " ORDER BY model, code, id LIMIT ?"
-    params.append(limit)
+    return int(conn.execute(sql, params).fetchone()[0] or 0)
+
+
+def list_material_items(
+    conn: sqlite3.Connection,
+    query: str = "",
+    include_inactive: bool = False,
+    only_inactive: bool = False,
+    limit: int = 3000,
+    offset: int = 0,
+) -> list[sqlite3.Row]:
+    sql = """
+        SELECT *,
+               (width * length * 7.85 * thickness / pieces / 1000000.0) AS unit_weight
+        FROM material_items
+    """
+    clauses, params = _material_item_filter_clauses(
+        query=query,
+        include_inactive=include_inactive,
+        only_inactive=only_inactive,
+    )
+    if clauses:
+        sql += " WHERE " + " AND ".join(clauses)
+    sql += " ORDER BY model, code, id LIMIT ? OFFSET ?"
+    params.extend([limit, max(0, offset)])
     return conn.execute(sql, params).fetchall()
 
 

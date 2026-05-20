@@ -4,11 +4,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from flask import flash, redirect, render_template, request, send_file, url_for
+from flask import flash, jsonify, redirect, render_template, request, send_file, url_for
 
 from app.config import CATALOG_PATH, DB_PATH, OUTPUT_DIR
 from app.database import connect, product_stats
-from app.helpers import all_recent_outputs, load_catalog, user_output_dir, user_recent_outputs
+from app.helpers import all_recent_outputs, download_name, load_catalog, user_output_dir, user_recent_outputs
 from app.matcher import (
     CatalogMatch,
     ProductCatalog,
@@ -74,6 +74,28 @@ def _history_rows(paths: list[Path], query: str) -> list[dict]:
             }
         )
     return rows[:80]
+
+
+def _load_history_rows(query: str) -> list[dict]:
+    output_candidates = all_recent_outputs(limit=500) if can("manage_users") else user_recent_outputs(limit=500)
+    return _history_rows(output_candidates, query)
+
+
+def _history_payload(query: str) -> dict:
+    rows = _load_history_rows(query)
+    return {
+        "count": len(rows),
+        "rows": [
+            {
+                "name": row["name"],
+                "kind": row["kind"],
+                "operator": row["operator"],
+                "updated_at": row["updated_at"],
+                "download_url": url_for("download", name=download_name(row["path"])),
+            }
+            for row in rows
+        ],
+    }
 
 
 def _product_from_match(match: CatalogMatch) -> dict:
@@ -260,8 +282,7 @@ def register(app) -> None:
         catalog = load_catalog()
         with connect(DB_PATH) as conn:
             stats = product_stats(conn)
-        output_candidates = all_recent_outputs(limit=500) if can("manage_users") else user_recent_outputs(limit=500)
-        history_files = _history_rows(output_candidates, history_query)
+        history_files = _load_history_rows(history_query) if history_query else []
         quick_results = _quick_oe_results(catalog, quick_oe) if can("generate_match") and quick_oe else []
         return render_template(
             "index.html",
@@ -274,7 +295,14 @@ def register(app) -> None:
             quick_results=quick_results,
             history_query=history_query,
             history_files=history_files,
+            history_loaded=bool(history_query),
         )
+
+    @app.get("/history-files")
+    @login_required
+    def inquiry_history_files():
+        query = request.args.get("history_q", "").strip()
+        return jsonify(_history_payload(query))
 
     @app.get("/download/<path:name>")
     @login_required

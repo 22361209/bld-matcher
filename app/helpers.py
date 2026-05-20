@@ -109,9 +109,35 @@ def bootstrap_catalog() -> None:
         shutil.copy2(candidates[0], CATALOG_PATH)
 
 
-def load_catalog() -> ProductCatalog | None:
-    bootstrap_catalog()
-    bootstrap_from_excel(DB_PATH, CATALOG_PATH)
+def _file_signature(path: Path) -> tuple[int, int]:
+    try:
+        stat = path.stat()
+    except OSError:
+        return (0, 0)
+    return (stat.st_mtime_ns, stat.st_size)
+
+
+def _catalog_version() -> tuple[object, ...]:
+    with connect(DB_PATH) as conn:
+        products = conn.execute(
+            "SELECT COUNT(*) AS total, COALESCE(MAX(updated_at), '') AS updated_at FROM products"
+        ).fetchone()
+        aliases = conn.execute(
+            "SELECT COUNT(*) AS total, COALESCE(MAX(updated_at), '') AS updated_at FROM aliases WHERE active = 1"
+        ).fetchone()
+    return (
+        products["total"] or 0,
+        products["updated_at"] or "",
+        aliases["total"] or 0,
+        aliases["updated_at"] or "",
+        _file_signature(DB_PATH),
+        _file_signature(DB_PATH.with_name(f"{DB_PATH.name}-wal")),
+        _file_signature(MANUAL_MAP_PATH),
+    )
+
+
+@lru_cache(maxsize=8)
+def _load_catalog_cached(version: tuple[object, ...]) -> ProductCatalog | None:
     with connect(DB_PATH) as conn:
         products, aliases = rows_for_catalog(conn)
     if not products:
@@ -119,6 +145,12 @@ def load_catalog() -> ProductCatalog | None:
     legacy_map = load_manual_map(MANUAL_MAP_PATH)
     aliases.update(legacy_map)
     return ProductCatalog(products, manual_map=aliases)
+
+
+def load_catalog() -> ProductCatalog | None:
+    bootstrap_catalog()
+    bootstrap_from_excel(DB_PATH, CATALOG_PATH)
+    return _load_catalog_cached(_catalog_version())
 
 
 def safe_upload_name(filename: str) -> str:

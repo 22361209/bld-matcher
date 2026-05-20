@@ -128,10 +128,16 @@
         {% endif %}
       </section>
 
-      <details class="inquiry-history-drawer" {% if history_query %}open{% endif %}>
+      <details
+        class="inquiry-history-drawer"
+        {% if history_query %}open{% endif %}
+        data-history-loader
+        data-history-url="{{ url_for('inquiry_history_files') }}"
+        data-history-loaded="{{ 'true' if history_loaded else 'false' }}"
+      >
         <summary>
           <span>历史报价文件</span>
-          <strong>{{ history_files|length }} 条</strong>
+          <strong data-history-count>{% if history_loaded %}{{ history_files|length }} 条{% else %}展开后加载{% endif %}</strong>
         </summary>
         <div class="inquiry-history-panel">
           <form class="inquiry-command-row inquiry-history-search" method="get" action="{{ url_for('index') }}">
@@ -152,10 +158,9 @@
                 <h2>历史报价文件</h2>
                 <p>按文件名搜索已经处理过的询价结果，方便重新下载。</p>
               </div>
-              <span>{{ history_files|length }} 条</span>
+              <span data-history-table-count>{% if history_loaded %}{{ history_files|length }} 条{% else %}未加载{% endif %}</span>
             </div>
-            {% if history_files %}
-              <div class="materials-table-wrap inquiry-history-wrap">
+            <div class="materials-table-wrap inquiry-history-wrap" {% if not history_files %}hidden{% endif %} data-history-table-wrap>
                 <table class="materials-grid-table inquiry-history-table">
                   <thead>
                     <tr>
@@ -166,7 +171,7 @@
                       <th>操作</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody data-history-rows>
                     {% for file in history_files %}
                       <tr>
                         <td><a href="{{ url_for('download', name=download_name(file.path)) }}">{{ file.name }}</a></td>
@@ -178,12 +183,14 @@
                     {% endfor %}
                   </tbody>
                 </table>
-              </div>
-            {% else %}
-              <p class="materials-empty">
+            </div>
+            <p class="materials-empty" data-history-empty {% if history_files %}hidden{% endif %}>
+              {% if history_loaded %}
                 {% if history_query %}没有找到匹配的报价文件。{% else %}还没有历史报价文件。{% endif %}
-              </p>
-            {% endif %}
+              {% else %}
+                展开后加载最近历史报价文件。
+              {% endif %}
+            </p>
           </section>
         </div>
       </details>

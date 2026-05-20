@@ -1800,15 +1800,26 @@ class WebAppTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("操作用户", html)
+        self.assertIn("data-history-loader", html)
+        self.assertIn("展开后加载", html)
         self.assertIn("data-file-drop-zone", html)
         self.assertIn("可拖入询价文件", html)
         self.assertIn("输入 OE或 BLD 号", html)
         self.assertIn("file-picker-clear", html)
-        self.assertIn("old-root-result.xlsx", html)
-        self.assertIn("other-user-result.xlsx", html)
-        self.assertIn("other", html)
-        self.assertNotIn("catalog-export-bld-history-sample.xlsx", html)
-        self.assertNotIn("26年4月冲压生产计划260423料单.xlsx", html)
+        self.assertNotIn("old-root-result.xlsx", html)
+        self.assertNotIn("other-user-result.xlsx", html)
+
+        response = self.client.get("/history-files")
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(payload)
+        names = [item["name"] for item in payload["rows"]]
+        self.assertIn("old-root-result.xlsx", names)
+        self.assertIn("other-user-result.xlsx", names)
+        operators = {item["name"]: item["operator"] for item in payload["rows"]}
+        self.assertEqual(operators["other-user-result.xlsx"], "other")
+        self.assertNotIn("catalog-export-bld-history-sample.xlsx", names)
+        self.assertNotIn("26年4月冲压生产计划260423料单.xlsx", names)
 
         response = self.client.get("/?history_q=other-user")
         html = response.get_data(as_text=True)
@@ -1819,6 +1830,12 @@ class WebAppTest(unittest.TestCase):
         html = response.get_data(as_text=True)
         self.assertIn("other-user-result.xlsx", html)
         self.assertNotIn("old-root-result.xlsx", html)
+
+        response = self.client.get("/history-files?history_q=other")
+        payload = response.get_json()
+        names = [item["name"] for item in payload["rows"]]
+        self.assertIn("other-user-result.xlsx", names)
+        self.assertNotIn("old-root-result.xlsx", names)
 
     def test_quick_oe_lookup_on_homepage(self):
         from app.database import upsert_product

@@ -74,7 +74,13 @@
             <p>按母件编码和零件编码排序。规格尺寸会自动识别并统一显示。</p>
           </div>
           <div class="materials-table-title-actions">
-            <span>{{ material_items|length }} 条</span>
+            <span>
+              {% if total_material_items %}
+                第 {{ pagination.start }}-{{ pagination.end }} 条 / 共 {{ total_material_items }} 条
+              {% else %}
+                0 条
+              {% endif %}
+            </span>
             {% if can("manage_materials") %}
               <button class="linear-button primary" type="button" data-open-material-modal>新增材料明细</button>
               <details class="toolbar-popover linear-popover">
@@ -175,6 +181,26 @@
             </tbody>
           </table>
         </div>
+        {% if pagination.total_pages > 1 %}
+          <nav class="product-pagination bottom" aria-label="材料明细分页">
+            <span>第 {{ pagination.page }} / {{ pagination.total_pages }} 页，每页 {{ material_page_size }} 条</span>
+            <div class="product-pagination-controls">
+              {% if pagination.has_prev %}
+                <a class="linear-button subtle" href="{{ pagination.prev_url }}">上一页</a>
+              {% endif %}
+              {% for link in pagination.links %}
+                {% if link.gap %}
+                  <span class="pagination-gap">…</span>
+                {% else %}
+                  <a class="pagination-page {% if link.current %}current{% endif %}" href="{{ link.url }}">{{ link.page }}</a>
+                {% endif %}
+              {% endfor %}
+              {% if pagination.has_next %}
+                <a class="linear-button subtle" href="{{ pagination.next_url }}">下一页</a>
+              {% endif %}
+            </div>
+          </nav>
+        {% endif %}
       </section>
 
       {% if latest_outputs %}

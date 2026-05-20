@@ -176,6 +176,95 @@ document.querySelectorAll("[data-quick-results]").forEach((panel) => {
   applyFilter(activeFilter, false);
 });
 
+document.querySelectorAll("[data-history-loader]").forEach((drawer) => {
+  const url = drawer.dataset.historyUrl || "";
+  const count = drawer.querySelector("[data-history-count]");
+  const tableCount = drawer.querySelector("[data-history-table-count]");
+  const rows = drawer.querySelector("[data-history-rows]");
+  const tableWrap = drawer.querySelector("[data-history-table-wrap]");
+  const empty = drawer.querySelector("[data-history-empty]");
+  const searchInput = drawer.querySelector("input[name='history_q']");
+  let loaded = drawer.dataset.historyLoaded === "true";
+  let loading = false;
+
+  const setCount = (value) => {
+    const text = `${value} 条`;
+    if (count instanceof HTMLElement) count.textContent = text;
+    if (tableCount instanceof HTMLElement) tableCount.textContent = text;
+  };
+
+  const appendCell = (row, text, href = "") => {
+    const cell = document.createElement("td");
+    if (href) {
+      const link = document.createElement("a");
+      link.href = href;
+      link.textContent = text;
+      cell.appendChild(link);
+    } else {
+      cell.textContent = text;
+    }
+    row.appendChild(cell);
+  };
+
+  const renderRows = (items) => {
+    if (!(rows instanceof HTMLElement)) return;
+    rows.replaceChildren();
+    items.forEach((item) => {
+      const row = document.createElement("tr");
+      appendCell(row, item.name || "", item.download_url || "");
+      appendCell(row, item.kind || "");
+      appendCell(row, item.operator || "");
+      appendCell(row, item.updated_at || "");
+      appendCell(row, "下载", item.download_url || "");
+      rows.appendChild(row);
+    });
+    if (tableWrap instanceof HTMLElement) tableWrap.hidden = items.length === 0;
+    if (empty instanceof HTMLElement) {
+      empty.hidden = items.length > 0;
+      empty.textContent = items.length ? "" : "还没有历史报价文件。";
+    }
+    setCount(items.length);
+  };
+
+  const loadHistory = async () => {
+    if (!url || loaded || loading) return;
+    loading = true;
+    if (count instanceof HTMLElement) count.textContent = "加载中";
+    if (tableCount instanceof HTMLElement) tableCount.textContent = "加载中";
+    if (empty instanceof HTMLElement) {
+      empty.hidden = false;
+      empty.textContent = "正在加载历史报价文件...";
+    }
+    try {
+      const requestUrl = new URL(url, window.location.origin);
+      const query = searchInput instanceof HTMLInputElement ? searchInput.value.trim() : "";
+      if (query) requestUrl.searchParams.set("history_q", query);
+      const response = await fetch(requestUrl, { headers: { Accept: "application/json" } });
+      if (!response.ok) throw new Error("load failed");
+      const payload = await response.json();
+      renderRows(Array.isArray(payload.rows) ? payload.rows : []);
+      loaded = true;
+      drawer.dataset.historyLoaded = "true";
+    } catch (_error) {
+      if (count instanceof HTMLElement) count.textContent = "加载失败";
+      if (tableCount instanceof HTMLElement) tableCount.textContent = "加载失败";
+      if (empty instanceof HTMLElement) {
+        empty.hidden = false;
+        empty.textContent = "历史报价文件加载失败，请刷新后再试。";
+      }
+    } finally {
+      loading = false;
+    }
+  };
+
+  if (drawer.open) {
+    loadHistory();
+  }
+  drawer.addEventListener("toggle", () => {
+    if (drawer.open) loadHistory();
+  });
+});
+
 document.querySelectorAll(".shipment-folder-picker").forEach((picker) => {
   const photoInput = picker.querySelector(".shipment-file-input");
   const status = picker.querySelector("[data-shipment-file-status]");

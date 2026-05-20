@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import shutil
 from datetime import datetime
+from functools import lru_cache
+from math import ceil
 from pathlib import Path
 
 from flask import flash, redirect, render_template, request, send_file, url_for
@@ -10,6 +12,7 @@ from app.config import DATA_DIR, DB_PATH, MATERIAL_DATA_PATH, MATERIAL_TEMPLATE_
 from app.database import (
     bootstrap_materials_from_excel,
     connect,
+    count_material_items,
     deactivate_material_item,
     get_material_item,
     import_materials_from_excel,
@@ -30,6 +33,71 @@ from app.material_sheet import (
 from app.security import actor_name, can, login_required, permission_required
 
 
+MATERIAL_PAGE_SIZE = 50
+
+
+def _request_page() -> int:
+    try:
+        return max(1, int(request.args.get("page", "1") or 1))
+    except ValueError:
+        return 1
+
+
+def _material_page_url(query: str, status: str, page: int) -> str:
+    params: dict[str, object] = {}
+    if query.strip():
+        params["q"] = query
+    if status != "active":
+        params["status"] = status
+    if page > 1:
+        params["page"] = page
+    return f"{url_for('materials', **params)}#materials-results"
+
+
+def _material_pagination(query: str, status: str, page: int, total: int) -> dict[str, object]:
+    total_pages = max(1, ceil(total / MATERIAL_PAGE_SIZE))
+    page = min(max(1, page), total_pages)
+    start = ((page - 1) * MATERIAL_PAGE_SIZE) + 1 if total else 0
+    end = min(total, page * MATERIAL_PAGE_SIZE)
+    window = {1, total_pages, page - 1, page, page + 1}
+    pages = sorted(item for item in window if 1 <= item <= total_pages)
+    links = []
+    previous_page = 0
+    for item in pages:
+        if previous_page and item - previous_page > 1:
+            links.append({"gap": True})
+        links.append({"page": item, "url": _material_page_url(query, status, item), "current": item == page})
+        previous_page = item
+    return {
+        "page": page,
+        "total_pages": total_pages,
+        "start": start,
+        "end": end,
+        "has_prev": page > 1,
+        "has_next": page < total_pages,
+        "prev_url": _material_page_url(query, status, page - 1) if page > 1 else "",
+        "next_url": _material_page_url(query, status, page + 1) if page < total_pages else "",
+        "links": links,
+    }
+
+
+def _file_signature(path: Path) -> tuple[int, int]:
+    try:
+        stat = path.stat()
+    except OSError:
+        return (0, 0)
+    return (stat.st_mtime_ns, stat.st_size)
+
+
+@lru_cache(maxsize=16)
+def _cached_material_data_stats(path_text: str, signature: tuple[int, int]) -> dict:
+    return material_data_stats(Path(path_text))
+
+
+def _material_data_stats(path: Path) -> dict:
+    return _cached_material_data_stats(str(path), _file_signature(path))
+
+
 def register(app) -> None:
     @app.get("/materials")
     @login_required
@@ -40,20 +108,31 @@ def register(app) -> None:
         if status not in {"active", "all", "inactive"}:
             status = "active"
         with connect(DB_PATH) as conn:
+            total_items = count_material_items(
+                conn,
+                query=query,
+                include_inactive=status == "all",
+                only_inactive=status == "inactive",
+            )
+            pagination = _material_pagination(query, status, _request_page(), total_items)
             items = list_material_items(
                 conn,
                 query=query,
                 include_inactive=status == "all",
                 only_inactive=status == "inactive",
-                limit=3000,
+                limit=MATERIAL_PAGE_SIZE,
+                offset=(int(pagination["page"]) - 1) * MATERIAL_PAGE_SIZE,
             )
             stats = material_item_stats(conn)
         latest_outputs = all_recent_outputs("*料单*.xlsx") if can("manage_users") else user_recent_outputs("*料单*.xlsx")
         return render_template(
             "materials.html",
-            material_file_stats=material_data_stats(MATERIAL_DATA_PATH),
+            material_file_stats=_material_data_stats(MATERIAL_DATA_PATH),
             material_stats=stats,
             material_items=items,
+            total_material_items=total_items,
+            material_page_size=MATERIAL_PAGE_SIZE,
+            pagination=pagination,
             material_path=MATERIAL_DATA_PATH if MATERIAL_DATA_PATH.exists() else None,
             query=query,
             status=status,
