@@ -10,7 +10,7 @@ from openpyxl import Workbook
 from app.config import DB_PATH
 from app.database import append_product_code, connect, delete_alias, log_event, save_alias
 from app.drawings import build_drawings_zip
-from app.excel_io import PRICE_EXPORT_MODES, generate_excel_with_bld, preview_inquiry_columns
+from app.excel_io import PRICE_EXPORT_MODES, generate_excel_with_bld, preview_inquiry_columns, sanitize_inquiry_workbook_if_needed
 from app.helpers import (
     clean_original_filename,
     column_display,
@@ -38,21 +38,49 @@ def _validated_user_upload_path() -> Path | None:
     return upload_path
 
 
-def _selected_match_column() -> int | None:
-    try:
-        return int(request.form.get("match_column", "0"))
-    except ValueError:
+def _match_columns_from_request(required: bool) -> list[int] | None:
+    raw_values = request.form.getlist("match_columns")
+    if not raw_values:
+        raw_values = [request.form.get("match_column", "")]
+
+    columns: list[int] = []
+    seen = set()
+    for value in raw_values:
+        text = str(value or "").strip()
+        if not text:
+            continue
+        try:
+            column = int(text)
+        except ValueError:
+            return None
+        if column < 0 or column in seen:
+            continue
+        seen.add(column)
+        columns.append(column)
+
+    if required and not columns:
         return None
+    return columns
 
 
-def _optional_match_column() -> int | None:
-    value = request.form.get("match_column", "").strip()
-    if not value:
+def _selected_match_columns() -> list[int] | None:
+    return _match_columns_from_request(required=True)
+
+
+def _optional_match_columns() -> list[int]:
+    return _match_columns_from_request(required=False) or []
+
+
+def _match_column_payload(match_columns: list[int]) -> object:
+    if not match_columns:
         return None
-    try:
-        return int(value)
-    except ValueError:
-        return None
+    if len(match_columns) == 1:
+        return match_columns[0]
+    return match_columns
+
+
+def _match_columns_display(match_columns: list[int]) -> str:
+    return "、".join(column_display(column) for column in match_columns)
 
 
 def _price_options_from_request() -> tuple[dict, str | None]:
@@ -137,6 +165,27 @@ def _save_pasted_inquiry_workbook(codes: list[str]) -> Path:
     return upload_path
 
 
+def _clean_inquiry_workbook_for_matching(upload_path: Path, original_filename: str) -> tuple[Path, str]:
+    cleanup = sanitize_inquiry_workbook_if_needed(
+        upload_path,
+        user_upload_path(original_filename, prefix="inquiry-cleaned"),
+    )
+    if not cleanup.cleaned:
+        return upload_path, ""
+
+    with connect(DB_PATH) as conn:
+        log_event(
+            conn,
+            "自动清理询价文件",
+            "inquiry",
+            clean_original_filename(original_filename, fallback_suffix=upload_path.suffix),
+            cleanup.message,
+            actor=actor_name(),
+        )
+        conn.commit()
+    return cleanup.path, cleanup.message
+
+
 def _renumber_pasted_summary_rows(summary: dict) -> None:
     for index, row in enumerate(summary.get("rows", []), start=1):
         row["row"] = index
@@ -204,16 +253,18 @@ def register(app) -> None:
 
         upload_path = user_upload_path(file.filename, prefix="inquiry")
         file.save(upload_path)
+        match_upload_path, cleanup_message = _clean_inquiry_workbook_for_matching(upload_path, file.filename)
 
         output_path = result_output_path(file.filename, fallback_suffix=suffix)
         output_name = output_path.name
-        preview = preview_inquiry_columns(upload_path)
+        preview = preview_inquiry_columns(match_upload_path)
         return render_template(
             "select_match_column.html",
-            upload_path=upload_path,
+            upload_path=match_upload_path,
             original_filename=clean_original_filename(file.filename, fallback_suffix=suffix),
             output_name=output_name,
             preview=preview,
+            cleanup_message=cleanup_message,
         )
 
     @app.post("/match/column")
@@ -229,8 +280,8 @@ def register(app) -> None:
             flash("询价源文件不存在，请重新上传。", "error")
             return redirect(url_for("index"))
 
-        match_column = _selected_match_column()
-        if match_column is None:
+        match_columns = _selected_match_columns()
+        if match_columns is None:
             flash("请选择有效的匹配列。", "error")
             return redirect(url_for("index"))
 
@@ -242,7 +293,7 @@ def register(app) -> None:
                 upload_path,
                 output_path,
                 catalog,
-                match_column=match_column,
+                match_column=_match_column_payload(match_columns),
                 write_output=False,
             )
         except Exception as exc:
@@ -257,7 +308,8 @@ def register(app) -> None:
             upload_path=upload_path,
             original_filename=original_filename,
             output_name=output_path.name,
-            match_column=match_column,
+            match_columns=match_columns,
+            cleanup_message=request.form.get("cleanup_message", ""),
         )
 
     @app.post("/match/column/back")
@@ -268,9 +320,7 @@ def register(app) -> None:
             flash("询价源文件不存在，请重新上传。", "error")
             return redirect(url_for("index"))
 
-        selected_column = _selected_match_column()
-        if selected_column is None:
-            selected_column = 0
+        selected_columns = _optional_match_columns() or [0]
         preview = preview_inquiry_columns(upload_path)
         return render_template(
             "select_match_column.html",
@@ -278,7 +328,8 @@ def register(app) -> None:
             original_filename=request.form.get("original_filename") or upload_path.name,
             output_name=request.form.get("output_name") or result_output_path(upload_path.name, fallback_suffix=upload_path.suffix).name,
             preview=preview,
-            selected_column=selected_column,
+            selected_columns=selected_columns,
+            cleanup_message=request.form.get("cleanup_message", ""),
         )
 
     def _send_match_result_download(require_match_column: bool = False):
@@ -292,10 +343,11 @@ def register(app) -> None:
             flash("询价源文件不存在，请重新上传。", "error")
             return redirect(url_for("index"))
 
-        match_column = _selected_match_column() if require_match_column else _optional_match_column()
-        if require_match_column and match_column is None:
+        match_columns = _selected_match_columns() if require_match_column else _optional_match_columns()
+        if require_match_column and match_columns is None:
             flash("请选择有效的匹配列。", "error")
             return redirect(url_for("index"))
+        match_columns = match_columns or []
 
         price_options, price_error = _price_options_from_request()
         if price_error:
@@ -310,12 +362,12 @@ def register(app) -> None:
                 upload_path,
                 output_path,
                 catalog,
-                match_column=match_column,
+                match_column=_match_column_payload(match_columns),
                 **_price_generation_options(price_options),
             )
             detail = f"共 {summary['total']} 行，命中 {summary['matched']} 行，未找到 {summary['unmatched']} 行{_price_log_text(price_options)}"
-            if match_column is not None:
-                detail = f"手动选择 {column_display(match_column)} 列；" + detail
+            if match_columns:
+                detail = f"手动选择 {_match_columns_display(match_columns)} 列；" + detail
             with connect(DB_PATH) as conn:
                 log_event(conn, "生成匹配结果", "inquiry", original_filename, detail, actor=actor_name())
                 conn.commit()
@@ -348,7 +400,7 @@ def register(app) -> None:
             flash("询价源文件不存在，请重新上传。", "error")
             return redirect(url_for("index"))
 
-        match_column = _optional_match_column()
+        match_columns = _optional_match_columns()
         original_filename = request.form.get("original_filename") or upload_path.name
         safe_original = clean_original_filename(original_filename, fallback_suffix=upload_path.suffix)
         source_stem = Path(safe_original).stem or "inquiry"
@@ -361,14 +413,14 @@ def register(app) -> None:
                 upload_path,
                 user_output_dir() / "__drawing-match-preview.xlsx",
                 catalog,
-                match_column=match_column,
+                match_column=_match_column_payload(match_columns),
                 write_output=False,
             )
             with connect(DB_PATH) as conn:
                 package = build_drawings_zip(conn, summary["rows"], zip_path)
                 detail = f"共 {summary['matched']} 行命中，打包 PDF {package['added']} 个，缺少 {package['missing']} 个"
-                if match_column is not None:
-                    detail = f"手动选择 {column_display(match_column)} 列；" + detail
+                if match_columns:
+                    detail = f"手动选择 {_match_columns_display(match_columns)} 列；" + detail
                 log_event(conn, "生成图纸压缩包", "drawing_zip", zip_path.name, detail, actor=actor_name())
                 conn.commit()
         except Exception as exc:

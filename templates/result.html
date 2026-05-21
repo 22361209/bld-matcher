@@ -25,7 +25,8 @@
 
       <section class="materials-table-section">
         {% set can_regenerate_download = upload_path is defined and upload_path %}
-        {% set has_manual_match_column = match_column is defined and match_column|string != "" %}
+        {% set selected_match_columns = match_columns if match_columns is defined else ([match_column] if match_column is defined and match_column|string != "" else []) %}
+        {% set has_manual_match_column = selected_match_columns|length > 0 %}
         <div class="materials-table-title">
           <div>
             <h2>匹配明细</h2>
@@ -35,11 +36,13 @@
             <span>{{ summary.rows|length }} 条</span>
             {% if output_pending %}
               <button class="linear-button primary" type="button" data-open-download-modal>下载 Excel</button>
-              <form action="{{ url_for('download_match_drawings') }}" method="post" class="inline-form">
+              <form action="{{ url_for('download_match_drawings') }}" method="post" class="inline-form" data-submit-wait data-submit-wait-text="正在打包图纸..." data-submit-wait-button-text="打包中..." data-submit-wait-reset="6000">
                 {{ csrf_field() }}
                 <input type="hidden" name="upload_path" value="{{ upload_path }}">
                 <input type="hidden" name="original_filename" value="{{ original_filename }}">
-                <input type="hidden" name="match_column" value="{{ match_column }}">
+                {% for column in selected_match_columns %}
+                  <input type="hidden" name="match_columns" value="{{ column }}">
+                {% endfor %}
                 <button class="linear-button subtle" type="submit">下载图纸包</button>
               </form>
               {% if has_manual_match_column %}
@@ -48,7 +51,10 @@
                   <input type="hidden" name="upload_path" value="{{ upload_path }}">
                   <input type="hidden" name="original_filename" value="{{ original_filename }}">
                   <input type="hidden" name="output_name" value="{{ output_name }}">
-                  <input type="hidden" name="match_column" value="{{ match_column }}">
+                  {% for column in selected_match_columns %}
+                    <input type="hidden" name="match_columns" value="{{ column }}">
+                  {% endfor %}
+                  <input type="hidden" name="cleanup_message" value="{{ cleanup_message|default('') }}">
                   <button class="linear-button subtle" type="submit">返回上一步</button>
                 </form>
               {% endif %}
@@ -59,11 +65,13 @@
                 <a class="linear-button primary" href="{{ url_for('download', name=download_name(output_path)) }}" download target="_blank" rel="noopener">下载 Excel</a>
               {% endif %}
               {% if upload_path %}
-                <form action="{{ url_for('download_match_drawings') }}" method="post" class="inline-form">
+                <form action="{{ url_for('download_match_drawings') }}" method="post" class="inline-form" data-submit-wait data-submit-wait-text="正在打包图纸..." data-submit-wait-button-text="打包中..." data-submit-wait-reset="6000">
                   {{ csrf_field() }}
                   <input type="hidden" name="upload_path" value="{{ upload_path }}">
                   <input type="hidden" name="original_filename" value="{{ original_filename }}">
-                  <input type="hidden" name="match_column" value="{{ match_column|default('') }}">
+                  {% for column in selected_match_columns %}
+                    <input type="hidden" name="match_columns" value="{{ column }}">
+                  {% endfor %}
                   <button class="linear-button subtle" type="submit">下载图纸包</button>
                 </form>
               {% endif %}
@@ -114,12 +122,14 @@
             <h2 id="download-excel-title">下载 Excel</h2>
             <p>选择这次导出的单价方式。</p>
           </div>
-          <form action="{{ url_for('download_match_result') }}" method="post" class="download-options-form">
+          <form action="{{ url_for('download_match_result') }}" method="post" class="download-options-form" data-submit-wait data-submit-wait-text="正在生成 Excel，浏览器会开始下载..." data-submit-wait-button-text="生成中..." data-submit-wait-reset="6000">
             {{ csrf_field() }}
             <input type="hidden" name="upload_path" value="{{ upload_path }}">
             <input type="hidden" name="original_filename" value="{{ original_filename }}">
             <input type="hidden" name="output_name" value="{{ output_name }}">
-            <input type="hidden" name="match_column" value="{{ match_column|default('') }}">
+            {% for column in selected_match_columns %}
+              <input type="hidden" name="match_columns" value="{{ column }}">
+            {% endfor %}
             <label>
               <span>单价</span>
               <select name="price_mode" data-price-mode>
@@ -133,6 +143,7 @@
               <span>汇率</span>
               <input name="exchange_rate" type="number" step="0.0001" min="0.0001" placeholder="例如 7.20" data-exchange-rate>
             </label>
+            <p class="submit-wait-message" data-submit-wait-message aria-live="polite"></p>
             <div class="download-modal-actions">
               <button class="download-cancel-button" type="button" data-close-download-modal>取消</button>
               <button class="download-confirm-button" type="submit">确认</button>

@@ -13,7 +13,7 @@ from openpyxl import Workbook
 
 from app.config import BASE_DIR, DB_PATH, INTERNAL_API_TOKEN, OUTPUT_DIR, UPLOAD_DIR
 from app.database import connect, log_event, verify_internal_api_token
-from app.excel_io import PRICE_EXPORT_MODES, generate_excel_with_bld, preview_inquiry_columns
+from app.excel_io import PRICE_EXPORT_MODES, generate_excel_with_bld, preview_inquiry_columns, sanitize_inquiry_workbook_if_needed
 from app.helpers import clean_original_filename, load_catalog, safe_upload_name, unique_prefixed_path
 from app.matcher import normalize_code
 
@@ -123,6 +123,27 @@ def _parse_match_column(value: object) -> int | None:
             index = index * 26 + (ord(char) - ord("A") + 1)
         return index - 1
     raise ValueError("match_column 需要传 0 起始列号，或 Excel 列字母，例如 A。")
+
+
+def _parse_match_columns(payload: dict) -> object:
+    raw_columns = _payload_value(payload, "match_columns", "columns")
+    if raw_columns not in (None, ""):
+        if isinstance(raw_columns, str):
+            values = [part.strip() for part in re.split(r"[,，;；\s]+", raw_columns) if part.strip()]
+        elif isinstance(raw_columns, (list, tuple)):
+            values = list(raw_columns)
+        else:
+            values = [raw_columns]
+        columns = []
+        seen = set()
+        for value in values:
+            column = _parse_match_column(value)
+            if column is None or column in seen:
+                continue
+            seen.add(column)
+            columns.append(column)
+        return columns
+    return _parse_match_column(_payload_value(payload, "match_column", "column"))
 
 
 def _parse_price_options(payload: dict) -> tuple[dict | None, str | None]:
@@ -339,6 +360,8 @@ def _response_payload(
     output_path: Path | None,
     invalid_items: list[str] | None = None,
     source_path: Path | None = None,
+    processed_source_path: Path | None = None,
+    cleanup_message: str = "",
     rows_limit: int = 200,
     unmatched_limit: int = 100,
 ) -> dict:
@@ -369,6 +392,8 @@ def _response_payload(
         "unmatched_list": unmatched_list,
         "invalid_items": invalid_items or [],
         "source_path": str(source_path.resolve()) if source_path else None,
+        "processed_source_path": str(processed_source_path.resolve()) if processed_source_path else None,
+        "cleanup_message": cleanup_message,
         "output_path": str(output_path.resolve()) if output_path else None,
         "output_name": output_path.name if output_path else None,
     }
@@ -465,17 +490,22 @@ def _run_file(payload: dict, *, export: bool):
         return _json_error(source_error or "客户原始文件无效。")
 
     try:
-        match_column = _parse_match_column(_payload_value(payload, "match_column", "column"))
+        match_column = _parse_match_columns(payload)
     except ValueError as exc:
         return _json_error(str(exc))
 
     rows_limit = _parse_int(_payload_value(payload, "rows_limit"), default=200, minimum=0, maximum=1000)
     unmatched_limit = _parse_int(_payload_value(payload, "unmatched_limit"), default=100, minimum=0, maximum=1000)
     output_path = _source_output_path(payload, original_filename, source_path.suffix.lower()) if export else None
+    cleanup = sanitize_inquiry_workbook_if_needed(
+        source_path,
+        _internal_upload_path(source_path.name, prefix="source-cleaned"),
+    )
+    processing_source_path = cleanup.path
 
     try:
         summary = generate_excel_with_bld(
-            source_path,
+            processing_source_path,
             output_path or (INTERNAL_OUTPUT_DIR / "__analysis.xlsx"),
             catalog,
             match_column=match_column,
@@ -487,12 +517,14 @@ def _run_file(payload: dict, *, export: bool):
         return _json_error(
             f"分析客户原始文件失败：{exc}",
             422,
-            column_preview=_preview_for_error(source_path),
+            column_preview=_preview_for_error(processing_source_path),
         )
 
     if export and output_path:
         with connect(DB_PATH) as conn:
             detail = f"OpenClaw 增强客户原始文件 {summary['total']} 行，命中 {summary['matched']} 行，未找到 {summary['unmatched']} 行"
+            if cleanup.cleaned:
+                detail = f"{detail}；{cleanup.message}"
             log_event(conn, "内部 API 生成增强询价文件", "internal_api", output_path.name, detail, actor="openclaw")
             conn.commit()
 
@@ -503,6 +535,8 @@ def _run_file(payload: dict, *, export: bool):
             price_options=price_options,
             output_path=output_path,
             source_path=source_path,
+            processed_source_path=processing_source_path if cleanup.cleaned else None,
+            cleanup_message=cleanup.message if cleanup.cleaned else "",
             rows_limit=rows_limit,
             unmatched_limit=unmatched_limit,
         )

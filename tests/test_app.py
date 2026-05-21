@@ -25,6 +25,22 @@ def load_web_module():
     return module
 
 
+def pollute_xlsx_tail(path: Path, *, declared_rows: int = 2000, after_row: int = 251) -> None:
+    temporary_path = path.with_suffix(".polluted.xlsx")
+    with zipfile.ZipFile(path, "r") as source, zipfile.ZipFile(temporary_path, "w") as target:
+        for entry in source.infolist():
+            data = source.read(entry.filename)
+            if entry.filename == "xl/worksheets/sheet1.xml":
+                data = re.sub(rb'<dimension ref="[^"]+"', f'<dimension ref="A1:A{declared_rows}"'.encode(), data, count=1)
+                empty_rows = b"".join(
+                    f'<row r="{row_index}" s="1" customFormat="1"/>'.encode()
+                    for row_index in range(after_row, declared_rows + 1)
+                )
+                data = data.replace(b"</sheetData>", empty_rows + b"</sheetData>")
+            target.writestr(entry, data)
+    temporary_path.replace(path)
+
+
 class WebAppTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -491,9 +507,40 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(sheet.cell(2, 4).value, 10)
         generated.close()
 
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-API-FILE-MULTI",
+                    "series": "HYUNDAI",
+                    "item": "API MULTI ARM",
+                    "oe_no_1": "API-FILE-REF",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+        multi_source = self.root / "uploads" / "api-file-multi-source.xlsx"
+        multi_workbook = Workbook()
+        multi_sheet = multi_workbook.active
+        multi_sheet.append(["客户号码", "参考号"])
+        multi_sheet.append(["NO-HIT-API", "API-FILE-REF"])
+        multi_workbook.save(multi_source)
+        multi_workbook.close()
+
+        multi_response = self.client.post(
+            "/api/internal/inquiry/analyze",
+            json={"file_path": str(multi_source), "match_columns": ["A", "B"], "rows_limit": 10},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        multi_payload = multi_response.get_json()
+        self.assertEqual(multi_response.status_code, 200)
+        self.assertEqual(multi_payload["matched_count"], 1)
+        self.assertEqual(multi_payload["rows"][0]["bld_no"], "K-API-FILE-MULTI")
+        self.assertIn("B列：API-FILE-REF", multi_payload["rows"][0]["match_note"])
+
     def test_internal_api_defaults_to_analysis_and_restricts_file_path(self):
         from app.database import upsert_product
-        from openpyxl import Workbook
+        from openpyxl import Workbook, load_workbook
 
         token = self.create_internal_api_token()
         with self.web.connect(self.web.DB_PATH) as conn:
@@ -2748,6 +2795,150 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(sheet.cell(2, 3).number_format, "0")
         generated.close()
 
+    def test_uploaded_polluted_xlsx_uses_cleaned_copy_without_skipping_late_rows(self):
+        from app.database import upsert_product
+        from openpyxl import Workbook, load_workbook
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            for bld_no, oe_no in [("KCLEAN01", "4806902180"), ("KCLEAN02", "CLEAN-250")]:
+                upsert_product(
+                    conn,
+                    {
+                        "bld_no": bld_no,
+                        "series": "HYUNDAI",
+                        "item": "CLEAN TEST ARM",
+                        "oe_no_1": oe_no,
+                        "active": "1",
+                    },
+                    actor="tester",
+                )
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["OE号"])
+        sheet.append(["4806902180"])
+        sheet.cell(250, 1).value = "CLEAN-250"
+        polluted_path = self.root / "uploads" / "polluted-inquiry.xlsx"
+        polluted_path.parent.mkdir(parents=True, exist_ok=True)
+        workbook.save(polluted_path)
+        workbook.close()
+        pollute_xlsx_tail(polluted_path, declared_rows=2000, after_row=251)
+
+        self.login()
+        with polluted_path.open("rb") as handle:
+            response = self.client.post(
+                "/match",
+                data={"inquiry": (io.BytesIO(handle.read()), "polluted-inquiry.xlsx")},
+                content_type="multipart/form-data",
+            )
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("已自动清理 Excel 尾部空白格式", html)
+        upload_match = re.search(r'name="upload_path" value="([^"]+)"', html)
+        output_match = re.search(r'name="output_name" value="([^"]+)"', html)
+        self.assertIsNotNone(upload_match)
+        self.assertIsNotNone(output_match)
+        self.assertIn("inquiry-cleaned", upload_match.group(1))
+        cleaned_workbook = load_workbook(Path(upload_match.group(1)), read_only=True, data_only=True)
+        self.assertEqual(cleaned_workbook.active.cell(2, 1).value, "4806902180")
+        cleaned_workbook.close()
+
+        result = self.client.post(
+            "/match/column",
+            data={
+                "upload_path": upload_match.group(1),
+                "original_filename": "polluted-inquiry.xlsx",
+                "output_name": output_match.group(1),
+                "match_column": "0",
+            },
+        )
+        result_html = result.get_data(as_text=True)
+
+        self.assertEqual(result.status_code, 200)
+        self.assertIn("共 2 行，命中 2 行，未找到 0 行", result_html)
+        self.assertIn("KCLEAN01", result_html)
+        self.assertIn("KCLEAN02", result_html)
+        self.assertIn("<td>250</td>", result_html)
+
+    def test_uploaded_inquiry_can_match_multiple_selected_columns(self):
+        from app.database import upsert_product
+        from openpyxl import Workbook, load_workbook
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "KMULTI02",
+                    "series": "HYUNDAI",
+                    "item": "MULTI COLUMN ARM",
+                    "oe_no_1": "REF-MULTI-002",
+                    "price_cny": "77",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["客户OE", "参考号"])
+        sheet.append(["NO-HIT-001", "REF-MULTI-002"])
+        buffer = io.BytesIO()
+        workbook.save(buffer)
+        buffer.seek(0)
+
+        self.login()
+        response = self.client.post(
+            "/match",
+            data={"inquiry": (buffer, "multi-column.xlsx")},
+            content_type="multipart/form-data",
+        )
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('name="match_columns" value="0"', html)
+        self.assertIn('name="match_columns" value="1"', html)
+        upload_match = re.search(r'name="upload_path" value="([^"]+)"', html)
+        output_match = re.search(r'name="output_name" value="([^"]+)"', html)
+        self.assertIsNotNone(upload_match)
+        self.assertIsNotNone(output_match)
+
+        result = self.client.post(
+            "/match/column",
+            data={
+                "upload_path": upload_match.group(1),
+                "original_filename": "multi-column.xlsx",
+                "output_name": output_match.group(1),
+                "match_columns": ["0", "1"],
+            },
+        )
+        result_html = result.get_data(as_text=True)
+
+        self.assertEqual(result.status_code, 200)
+        self.assertIn("KMULTI02", result_html)
+        self.assertIn("命中列：B列：REF-MULTI-002", result_html)
+
+        output_path = self.root / "outputs" / "u1-007" / output_match.group(1)
+        download = self.client.post(
+            "/match/download",
+            data={
+                "upload_path": upload_match.group(1),
+                "original_filename": "multi-column.xlsx",
+                "output_name": output_match.group(1),
+                "match_columns": ["0", "1"],
+                "price_mode": "tax",
+            },
+        )
+        self.assertEqual(download.status_code, 200)
+        download.close()
+
+        generated = load_workbook(output_path)
+        generated_sheet = generated.active
+        self.assertEqual(generated_sheet.cell(1, 3).value, "BLD NO.")
+        self.assertEqual(generated_sheet.cell(2, 3).value, "KMULTI02")
+        self.assertIn("命中列：B列：REF-MULTI-002", generated_sheet.cell(2, 5).value)
+        generated.close()
+
     def test_item_header_with_code_values_prompts_for_match_column(self):
         from app.database import upsert_product
         from openpyxl import Workbook
@@ -2941,7 +3132,7 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("选择匹配列", back_html)
         self.assertIn("返回上一步", back_html)
         self.assertNotIn("返回首页", back_html)
-        self.assertRegex(back_html, r'<option value="0"[^>]*selected')
+        self.assertRegex(back_html, r'name="match_columns" value="0"[^>]*checked')
 
         download = self.client.post(
             "/match/download",

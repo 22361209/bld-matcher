@@ -669,6 +669,49 @@ document.querySelectorAll("[data-price-mode]").forEach((select) => {
   syncRateField();
 });
 
+document.querySelectorAll("form[data-submit-wait]").forEach((form) => {
+  form.addEventListener("submit", (event) => {
+    if (form.dataset.submitInProgress === "true") {
+      event.preventDefault();
+      return;
+    }
+    form.dataset.submitInProgress = "true";
+
+    const waitText = form.dataset.submitWaitText || "正在处理，请稍候...";
+    const buttonText = form.dataset.submitWaitButtonText || waitText;
+    const buttons = Array.from(form.querySelectorAll("button[type='submit']"));
+    const message = form.querySelector("[data-submit-wait-message]");
+    buttons.forEach((button) => {
+      if (!(button instanceof HTMLButtonElement)) return;
+      button.dataset.originalText = button.dataset.originalText || button.textContent || "";
+      button.disabled = true;
+      button.textContent = buttonText;
+    });
+    if (message instanceof HTMLElement) {
+      message.textContent = waitText;
+      message.classList.add("active");
+      message.classList.remove("done", "error");
+    }
+
+    const resetAfter = Number.parseInt(form.dataset.submitWaitReset || "", 10);
+    if (Number.isFinite(resetAfter) && resetAfter > 0) {
+      window.setTimeout(() => {
+        form.dataset.submitInProgress = "false";
+        buttons.forEach((button) => {
+          if (!(button instanceof HTMLButtonElement)) return;
+          button.disabled = false;
+          button.textContent = button.dataset.originalText || button.textContent;
+        });
+        if (message instanceof HTMLElement) {
+          message.textContent = "已开始生成，请查看浏览器下载提示。";
+          message.classList.remove("active", "error");
+          message.classList.add("done");
+        }
+      }, resetAfter);
+    }
+  });
+});
+
 document.querySelectorAll("form[data-enter-navigation]").forEach((form) => {
   const focusableSelector = [
     "input:not([type='hidden']):not([type='checkbox']):not([disabled])",

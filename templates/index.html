@@ -43,7 +43,7 @@
           {% endif %}
         </div>
         {% if can("generate_match") %}
-          <form action="{{ url_for('match_inquiry') }}" method="post" enctype="multipart/form-data" class="inquiry-command-row inquiry-upload-form">
+          <form action="{{ url_for('match_inquiry') }}" method="post" enctype="multipart/form-data" class="inquiry-command-row inquiry-upload-form" data-submit-wait data-submit-wait-text="正在上传并分析，请稍候..." data-submit-wait-button-text="处理中...">
             {{ csrf_field() }}
             <div class="file-picker-field">
               <span>可拖入询价文件</span>
@@ -55,7 +55,7 @@
                   <button class="file-picker-clear" type="button" disabled>清除</button>
                   <button class="embedded-submit" type="submit">开始匹配</button>
                 </div>
-                <div class="file-picker-drop-hint" data-file-drop-status aria-live="polite"></div>
+                <div class="file-picker-drop-hint" data-file-drop-status data-submit-wait-message aria-live="polite"></div>
               </div>
             </div>
           </form>

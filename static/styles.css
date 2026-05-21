@@ -1730,6 +1730,15 @@ textarea {
   filter: none;
 }
 
+.embedded-submit:disabled,
+.linear-button:disabled,
+.download-confirm-button:disabled,
+.download-cancel-button:disabled {
+  cursor: progress;
+  opacity: 0.72;
+  filter: none;
+}
+
 .inquiry-history-search {
   grid-template-columns: minmax(0, 1fr) auto;
 }
@@ -2340,10 +2349,59 @@ textarea {
 .match-column-form {
   justify-content: flex-end;
   flex: 0 0 auto;
+  max-width: 420px;
 }
 
-.match-column-form label {
-  width: 150px;
+.match-column-picker {
+  display: grid;
+  gap: 8px;
+  width: 260px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.match-column-picker legend {
+  margin: 0 0 4px;
+  color: var(--linear-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.match-column-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.match-column-options label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 6px 8px;
+  border: 1px solid var(--linear-line-strong);
+  border-radius: 6px;
+  background: var(--linear-surface);
+  color: var(--linear-text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.match-column-options input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+}
+
+.match-column-picker p {
+  margin: 0;
+  color: var(--linear-muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 .match-preview-wrap {
@@ -2472,6 +2530,40 @@ textarea {
   border-top-color: #4f86c6;
   border-radius: 50%;
   animation: shipment-spin 0.8s linear infinite;
+}
+
+.submit-wait-message {
+  display: none;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--linear-muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  position: relative;
+}
+
+.submit-wait-message.active,
+.submit-wait-message.done,
+.submit-wait-message.error {
+  display: block;
+}
+
+.submit-wait-message.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 2px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #c9d5e3;
+  border-top-color: #4f86c6;
+  border-radius: 50%;
+  animation: shipment-spin 0.8s linear infinite;
+}
+
+.submit-wait-message.done {
+  padding-left: 0;
 }
 
 @keyframes shipment-spin {
@@ -3996,7 +4088,7 @@ textarea {
     margin-top: 8px;
   }
 
-  .match-column-form label {
+  .match-column-picker {
     width: 100%;
   }
 
