@@ -22,15 +22,40 @@ from app.database import (
     product_stats,
     upsert_product,
 )
-from app.drawings import product_drawing_path, save_product_drawing
+from app.drawings import product_drawing_path, save_product_drawing, validate_product_drawing_file
 from app.helpers import unique_prefixed_path, user_file_label, user_output_dir, user_upload_path
 from app.locks import ImportLockError, import_lock
 from app.price_import import decode_rows, encode_rows, parse_price_file
-from app.product_media import resolve_product_image_path, resolve_product_image_thumb_path, save_product_image
+from app.product_media import resolve_product_image_path, resolve_product_image_thumb_path, save_product_image, validate_product_image_file
 from app.security import actor_name, login_required, permission_required
 
 
 PRODUCT_PAGE_SIZE = 50
+
+
+def _validated_price_value(value: str | None) -> str:
+    text = (value or "").strip()
+    if not text:
+        return ""
+    try:
+        number = float(text)
+    except ValueError as exc:
+        raise ValueError("含税单价请输入数字，或留空。") from exc
+    if number < 0:
+        raise ValueError("含税单价不能小于 0。")
+    return str(round(number, 2))
+
+
+def _pending_product_images() -> list[tuple[int, object]]:
+    files = []
+    for image_slot in range(1, 6):
+        image_file = request.files.get(f"product_image_{image_slot}")
+        if not image_file and image_slot == 1:
+            image_file = request.files.get("product_image")
+        if image_file and image_file.filename:
+            validate_product_image_file(image_file)
+            files.append((image_slot, image_file))
+    return files
 
 
 def _product_query_args() -> dict[str, object]:
@@ -331,29 +356,28 @@ def register(app) -> None:
     @app.post("/products/save")
     @permission_required("edit_products")
     def save_product():
-        data = {
-            "bld_no": request.form.get("bld_no", ""),
-            "series": request.form.get("series", ""),
-            "item": request.form.get("item", ""),
-            "oe_no_1": request.form.get("oe_no_1", ""),
-            "oe_no_2": request.form.get("oe_no_2", ""),
-            "models": request.form.get("models", ""),
-            "price_cny": request.form.get("price_cny", ""),
-            "image_path": request.form.get("image_path", ""),
-            "active": request.form.get("active", "0"),
-        }
         try:
+            image_files = _pending_product_images()
+            drawing_file = request.files.get("drawing")
+            if drawing_file and drawing_file.filename:
+                validate_product_drawing_file(drawing_file)
+            data = {
+                "bld_no": request.form.get("bld_no", ""),
+                "series": request.form.get("series", ""),
+                "item": request.form.get("item", ""),
+                "oe_no_1": request.form.get("oe_no_1", ""),
+                "oe_no_2": request.form.get("oe_no_2", ""),
+                "models": request.form.get("models", ""),
+                "price_cny": _validated_price_value(request.form.get("price_cny", "")),
+                "image_path": request.form.get("image_path", ""),
+                "active": request.form.get("active", "0"),
+            }
             with connect(DB_PATH) as conn:
-                upsert_product(conn, data, source="web", actor=actor_name())
+                upsert_product(conn, data, source="web", actor=actor_name(), commit=False, preserve_blank_price=False)
                 product = conn.execute("SELECT * FROM products WHERE bld_no = ?", (data["bld_no"].strip(),)).fetchone()
                 if product:
-                    for image_slot in range(1, 6):
-                        image_file = request.files.get(f"product_image_{image_slot}")
-                        if not image_file and image_slot == 1:
-                            image_file = request.files.get("product_image")
-                        if not image_file or not image_file.filename:
-                            continue
-                        save_product_image(conn, product, image_file, slot=image_slot)
+                    for image_slot, image_file in image_files:
+                        save_product_image(conn, product, image_file, slot=image_slot, commit=False)
                         log_event(
                             conn,
                             "上传产品图片",
@@ -362,13 +386,11 @@ def register(app) -> None:
                             f"图片 {image_slot}: {image_file.filename or ''}",
                             actor=actor_name(),
                         )
-                        conn.commit()
                         product = conn.execute("SELECT * FROM products WHERE id = ?", (product["id"],)).fetchone()
-                    drawing_file = request.files.get("drawing")
                     if drawing_file and drawing_file.filename:
-                        save_product_drawing(conn, product, drawing_file)
+                        save_product_drawing(conn, product, drawing_file, commit=False)
                         log_event(conn, "上传图纸", "product", product["bld_no"], drawing_file.filename or "", actor=actor_name())
-                        conn.commit()
+                conn.commit()
         except Exception as exc:
             flash(f"保存失败：{exc}", "error")
             if request.form.get("embedded") == "1":

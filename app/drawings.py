@@ -27,6 +27,29 @@ def drawing_storage_name(bld_no: object) -> str:
     return f"{safe_filename_part(bld_no, 'drawing')}.pdf"
 
 
+def _rewind_file(file: FileStorage) -> None:
+    try:
+        file.stream.seek(0)
+    except (AttributeError, OSError):
+        pass
+
+
+def validate_product_drawing_file(file: FileStorage) -> None:
+    original_name = Path(file.filename or "").name.strip()
+    if not original_name:
+        raise ValueError("请选择 PDF 图纸文件。")
+    if Path(original_name).suffix.lower() != ".pdf":
+        raise ValueError("图纸文件目前只支持 PDF。")
+    try:
+        header = file.stream.read(5)
+    finally:
+        _rewind_file(file)
+    if not header:
+        raise ValueError("PDF 图纸文件为空。")
+    if header != b"%PDF-":
+        raise ValueError("文件内容不是有效的 PDF。")
+
+
 def _unique_path(path: Path) -> Path:
     if not path.exists():
         return path
@@ -67,7 +90,7 @@ def product_drawing_path(product: sqlite3.Row | dict) -> Path | None:
     return fallback if fallback.exists() and fallback.is_file() else None
 
 
-def save_product_drawing(conn: sqlite3.Connection, product: sqlite3.Row, file: FileStorage) -> Path:
+def save_product_drawing(conn: sqlite3.Connection, product: sqlite3.Row, file: FileStorage, *, commit: bool = True) -> Path:
     original_name = Path(file.filename or "").name.strip()
     if not original_name:
         raise ValueError("请选择 PDF 图纸文件。")
@@ -108,7 +131,8 @@ def save_product_drawing(conn: sqlite3.Connection, product: sqlite3.Row, file: F
         """,
         (_relative_to_data(destination), original_name, now_text(), now_text(), product["id"]),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
     return destination
 
 

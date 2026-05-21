@@ -64,7 +64,7 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 
 ## 数据归属
 
-运行数据不进 Git，且 NAS 版本通常更权威：
+运行数据不进 Git。NAS 和本机都可能是较新版本，数据同步前必须比较；只有用户明确说“以 NAS 覆盖本机”或“以本机覆盖 NAS”时，才按指定方向覆盖：
 
 - `data/products.sqlite3`：产品库、账号、日志、材料明细
 - `data/catalog.xlsx`：产品目录源表
@@ -75,7 +75,7 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 - `uploads/`：用户上传源文件
 - `outputs/`：用户导出结果
 
-不要用本机数据覆盖 NAS 数据，除非用户明确指定。
+不要自行决定运行数据的覆盖方向。
 
 ## 当前关键行为
 
@@ -95,7 +95,7 @@ OpenClaw 内部 API：
 - `/api/internal/*` 必须带 `Authorization: Bearer <key>`，不允许匿名调用；`.env` 的 `INTERNAL_API_TOKEN` 仅作为应急 fallback。
 - `/api/internal/inquiry/numbers`：号码数组或文字号码查询；默认仅分析，传 `export: true` 才生成新 Excel，输出到 `outputs/openclaw/`。
 - `/api/internal/inquiry/file`：传本机 Excel 路径或上传文件；默认仅分析，传 `export: true` 才在原文件基础上追加结果列。
-- `/api/internal/inquiry/analyze`：只返回命中摘要，不生成文件。
+- `/api/internal/inquiry/analyze`：只返回命中摘要，不生成文件；号码分析用临时工作簿，不长期写入 `uploads/openclaw/`。
 - API 导出文件名统一为 `reYYMMDD_源文件名称_openclaw.xls/xlsx`；号码数组/文字号码没有源文件，导出前必须由机器人询问并传 `source_name`；重名自动追加 `_2`、`_3`。
 - API 的 `file_path` 只允许读取项目目录、`uploads/`、`outputs/` 下的 `.xls/.xlsx`。
 - API 价格模式支持 `none`、`tax`、`net`、`usd`；`net` 为不含税价，`usd` 需要传汇率。
@@ -107,7 +107,7 @@ OpenClaw 内部 API：
 - 表格使用缩略图，点击图片浮层预览原图。
 - 有 PDF 图纸时点击 BLD 号预览图纸。
 - 导出目录只对管理员开放。
-- 产品编辑页可上传/替换单个 PDF 图纸和最多 5 张产品图片，也可删除产品。
+- 产品编辑页可上传/替换单个 PDF 图纸和最多 5 张产品图片，也可删除产品；手工清空含税单价会写入空值，图片/图纸格式校验失败时不会先更新产品文字资料。
 
 外部品牌号码审核工具：
 

@@ -31,6 +31,10 @@ def product_image_storage_name(bld_no: object, suffix: str, slot: int = 1) -> st
 def _is_supported_image(path: Path, suffix: str) -> bool:
     with path.open("rb") as handle:
         header = handle.read(16)
+    return _header_matches_image_suffix(header, suffix)
+
+
+def _header_matches_image_suffix(header: bytes, suffix: str) -> bool:
     if suffix in {".jpg", ".jpeg"}:
         return header.startswith(b"\xff\xd8\xff")
     if suffix == ".png":
@@ -38,6 +42,30 @@ def _is_supported_image(path: Path, suffix: str) -> bool:
     if suffix == ".webp":
         return len(header) >= 12 and header[:4] == b"RIFF" and header[8:12] == b"WEBP"
     return False
+
+
+def _rewind_file(file: FileStorage) -> None:
+    try:
+        file.stream.seek(0)
+    except (AttributeError, OSError):
+        pass
+
+
+def validate_product_image_file(file: FileStorage) -> None:
+    original_name = Path(file.filename or "").name.strip()
+    if not original_name:
+        raise ValueError("请选择产品图片文件。")
+    suffix = Path(original_name).suffix.lower()
+    if suffix not in IMAGE_SUFFIXES:
+        raise ValueError("产品图片支持 JPG、PNG、WEBP。")
+    try:
+        header = file.stream.read(16)
+    finally:
+        _rewind_file(file)
+    if not header:
+        raise ValueError("产品图片文件为空。")
+    if not _header_matches_image_suffix(header, suffix):
+        raise ValueError("文件内容不是支持的图片格式。")
 
 
 def _unique_path(path: Path) -> Path:
@@ -137,7 +165,7 @@ def resolve_product_image_thumb_path(name: str) -> Path | None:
     return generate_product_image_thumb(source) or source
 
 
-def save_product_image(conn: sqlite3.Connection, product: sqlite3.Row, file: FileStorage, slot: int = 1) -> Path:
+def save_product_image(conn: sqlite3.Connection, product: sqlite3.Row, file: FileStorage, slot: int = 1, *, commit: bool = True) -> Path:
     field = image_slot_field(slot)
     original_name = Path(file.filename or "").name.strip()
     if not original_name:
@@ -183,5 +211,6 @@ def save_product_image(conn: sqlite3.Connection, product: sqlite3.Row, file: Fil
         f"UPDATE products SET {field} = ?, updated_at = ? WHERE id = ?",
         (f"{PRODUCT_IMAGE_DATA_PREFIX}{destination.name}", now_text(), product["id"]),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
     return destination

@@ -517,6 +517,21 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(payload["matched_count"], 1)
         self.assertFalse(payload["summary"]["output_generated"])
         self.assertIsNone(payload["output_path"])
+        openclaw_upload_dir = self.root / "uploads" / "openclaw"
+        before_uploads = set(openclaw_upload_dir.glob("*")) if openclaw_upload_dir.exists() else set()
+
+        response = self.client.post(
+            "/api/internal/inquiry/numbers",
+            json={"numbers": ["API-DEFAULT-OE"], "export": False},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["matched_count"], 1)
+        self.assertFalse(payload["summary"]["output_generated"])
+        self.assertIsNone(payload["output_path"])
+        after_uploads = set(openclaw_upload_dir.glob("*")) if openclaw_upload_dir.exists() else set()
+        self.assertEqual(after_uploads, before_uploads)
 
         outside_path = self.root / "outside-api-source.xlsx"
         workbook = Workbook()
@@ -1343,6 +1358,111 @@ class WebAppTest(unittest.TestCase):
         batch = self.client.get("/products/drawings/batch")
         self.assertEqual(batch.status_code, 200)
         self.assertIn("暂未开放", batch.get_data(as_text=True))
+
+    def test_product_save_can_clear_price_and_reject_invalid_price(self):
+        from app.database import upsert_product
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-PRICE-CLEAR",
+                    "series": "OLD",
+                    "item": "PRICE TEST",
+                    "oe_no_1": "PRICE-CLEAR-OE",
+                    "models": "Tester",
+                    "price_cny": "88.5",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        self.login()
+        clear = self.client.post(
+            "/products/save",
+            data={
+                "bld_no": "K-PRICE-CLEAR",
+                "series": "CLEARED",
+                "item": "PRICE TEST",
+                "oe_no_1": "PRICE-CLEAR-OE",
+                "oe_no_2": "",
+                "models": "Tester",
+                "price_cny": "",
+                "active": "1",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(clear.status_code, 302)
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            product = conn.execute("SELECT * FROM products WHERE bld_no = ?", ("K-PRICE-CLEAR",)).fetchone()
+        self.assertEqual(product["series"], "CLEARED")
+        self.assertIsNone(product["price_cny"])
+
+        invalid = self.client.post(
+            "/products/save",
+            data={
+                "bld_no": "K-PRICE-CLEAR",
+                "series": "BAD",
+                "item": "PRICE TEST",
+                "oe_no_1": "PRICE-CLEAR-OE",
+                "oe_no_2": "",
+                "models": "Tester",
+                "price_cny": "abc",
+                "active": "1",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(invalid.status_code, 302)
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            product = conn.execute("SELECT * FROM products WHERE bld_no = ?", ("K-PRICE-CLEAR",)).fetchone()
+        self.assertEqual(product["series"], "CLEARED")
+        self.assertIsNone(product["price_cny"])
+
+    def test_product_save_rejects_invalid_image_before_updating_fields(self):
+        from app.database import upsert_product
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-IMAGE-FAIL",
+                    "series": "OLD",
+                    "item": "IMAGE TEST",
+                    "oe_no_1": "IMAGE-FAIL-OE",
+                    "models": "Tester",
+                    "price_cny": "55",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        self.login()
+        response = self.client.post(
+            "/products/save",
+            data={
+                "bld_no": "K-IMAGE-FAIL",
+                "series": "NEW",
+                "item": "IMAGE TEST UPDATED",
+                "oe_no_1": "IMAGE-FAIL-OE",
+                "oe_no_2": "",
+                "models": "Tester",
+                "price_cny": "66",
+                "active": "1",
+                "product_image_1": (io.BytesIO(b"not really a png"), "K-IMAGE-FAIL.png"),
+            },
+            content_type="multipart/form-data",
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 302)
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            product = conn.execute("SELECT * FROM products WHERE bld_no = ?", ("K-IMAGE-FAIL",)).fetchone()
+        self.assertEqual(product["series"], "OLD")
+        self.assertEqual(product["item"], "IMAGE TEST")
+        self.assertEqual(product["price_cny"], 55)
+        self.assertEqual(product["image_path"], "")
 
     def test_product_image_table_uses_generated_thumbnail(self):
         from PIL import Image

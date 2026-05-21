@@ -439,7 +439,16 @@ def _field_changes(before: sqlite3.Row | None, after: dict) -> list[str]:
     return changes
 
 
-def upsert_product(conn: sqlite3.Connection, data: dict, source: str = "manual", audit: bool = True, actor: str = "") -> None:
+def upsert_product(
+    conn: sqlite3.Connection,
+    data: dict,
+    source: str = "manual",
+    audit: bool = True,
+    actor: str = "",
+    *,
+    commit: bool = True,
+    preserve_blank_price: bool = True,
+) -> None:
     timestamp = now_text()
     bld_no = compact_text(data.get("bld_no") or data.get("BLD NO."))
     if not bld_no:
@@ -460,8 +469,9 @@ def upsert_product(conn: sqlite3.Connection, data: dict, source: str = "manual",
         "updated_at": timestamp,
     }
     before = conn.execute("SELECT * FROM products WHERE bld_no = ?", (bld_no,)).fetchone()
+    price_assignment = "price_cny=COALESCE(excluded.price_cny, products.price_cny)" if preserve_blank_price else "price_cny=excluded.price_cny"
     conn.execute(
-        """
+        f"""
         INSERT INTO products
           (bld_no, series, item, oe_no_1, oe_no_2, models, price_cny, image_path, active, source, created_at, updated_at)
         VALUES
@@ -472,7 +482,7 @@ def upsert_product(conn: sqlite3.Connection, data: dict, source: str = "manual",
           oe_no_1=excluded.oe_no_1,
           oe_no_2=excluded.oe_no_2,
           models=excluded.models,
-          price_cny=COALESCE(excluded.price_cny, products.price_cny),
+          {price_assignment},
           image_path=CASE WHEN excluded.image_path != '' THEN excluded.image_path ELSE products.image_path END,
           active=excluded.active,
           source=excluded.source,
@@ -480,12 +490,14 @@ def upsert_product(conn: sqlite3.Connection, data: dict, source: str = "manual",
         """,
         values,
     )
-    if audit:
-        changes = _field_changes(before, values)
+    after = conn.execute("SELECT * FROM products WHERE bld_no = ?", (bld_no,)).fetchone()
+    if audit and after:
+        changes = _field_changes(before, after)
         if changes:
             action = "新增产品" if before is None else "编辑产品"
             log_event(conn, action, "product", bld_no, "\n".join(changes[:20]), actor=actor)
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
 def import_catalog(conn: sqlite3.Connection, catalog_path: Path, replace: bool = False, actor: str = "") -> int:

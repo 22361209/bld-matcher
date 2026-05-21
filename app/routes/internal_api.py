@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hmac
 import re
+import tempfile
 from datetime import datetime
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from functools import wraps
@@ -220,7 +221,7 @@ def _internal_upload_path(filename: str, *, prefix: str) -> Path:
     return unique_prefixed_path(INTERNAL_UPLOAD_DIR, f"{prefix}-{timestamp}-{safe_name}")
 
 
-def _save_numbers_workbook(numbers: list[str]) -> Path:
+def _write_numbers_workbook(numbers: list[str], path: Path) -> Path:
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "OpenClaw号码"
@@ -229,10 +230,13 @@ def _save_numbers_workbook(numbers: list[str]) -> Path:
         sheet.append([number])
     sheet.column_dimensions["A"].width = 28
 
-    path = _internal_upload_path("numbers.xlsx", prefix="numbers")
     workbook.save(path)
     workbook.close()
     return path
+
+
+def _save_numbers_workbook(numbers: list[str]) -> Path:
+    return _write_numbers_workbook(numbers, _internal_upload_path("numbers.xlsx", prefix="numbers"))
 
 
 def _source_from_request(payload: dict) -> tuple[Path | None, str | None, str | None]:
@@ -402,16 +406,30 @@ def _run_numbers(payload: dict, *, export: bool):
     if export and not _payload_value(payload, "source_name", "source_filename", "original_filename", "output_name"):
         return _json_error("号码数组或文字号码生成 Excel 时必须传 source_name，作为文件名中间的“源文件名称”。")
 
-    source_path = _save_numbers_workbook(numbers)
     output_path = _number_output_path(payload) if export else None
-    summary = generate_excel_with_bld(
-        source_path,
-        output_path or (INTERNAL_OUTPUT_DIR / "__analysis.xlsx"),
-        catalog,
-        write_output=export,
-        price_mode=price_options["price_mode"],
-        exchange_rate=price_options["exchange_rate"],
-    )
+    response_source_path = None
+    if export:
+        source_path = _save_numbers_workbook(numbers)
+        response_source_path = source_path
+        summary = generate_excel_with_bld(
+            source_path,
+            output_path or (INTERNAL_OUTPUT_DIR / "__analysis.xlsx"),
+            catalog,
+            write_output=True,
+            price_mode=price_options["price_mode"],
+            exchange_rate=price_options["exchange_rate"],
+        )
+    else:
+        with tempfile.TemporaryDirectory(prefix="bld-openclaw-analysis-") as temporary_dir:
+            source_path = _write_numbers_workbook(numbers, Path(temporary_dir) / "numbers.xlsx")
+            summary = generate_excel_with_bld(
+                source_path,
+                INTERNAL_OUTPUT_DIR / "__analysis.xlsx",
+                catalog,
+                write_output=False,
+                price_mode=price_options["price_mode"],
+                exchange_rate=price_options["exchange_rate"],
+            )
 
     if export and output_path:
         with connect(DB_PATH) as conn:
@@ -426,7 +444,7 @@ def _run_numbers(payload: dict, *, export: bool):
             price_options=price_options,
             output_path=output_path,
             invalid_items=invalid_items,
-            source_path=source_path,
+            source_path=response_source_path,
             rows_limit=rows_limit,
             unmatched_limit=unmatched_limit,
         )
