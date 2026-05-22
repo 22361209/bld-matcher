@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ "编辑材料明细" if item else "新增材料明细" }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
+  </head>
+  <body>
+    <main class="shell wide materials-linear">
+      {% set active_page = "materials" %}
+      {% include "_nav.html" %}
+
+      <header class="materials-hero">
+        <div>
+          <h1>{{ "编辑材料明细" if item else "新增材料明细" }}</h1>
+          <p>母件编码用于匹配生产计划；规格尺寸会自动识别厚度、宽度、长度。</p>
+        </div>
+        <div class="materials-actions">
+          <a class="linear-button subtle" href="{{ url_for('materials', q=item.model if item else '') }}">返回生产料单</a>
+        </div>
+      </header>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <section class="messages materials-messages">
+            {% for category, message in messages %}
+              <div class="message {{ category }}">{{ message }}</div>
+            {% endfor %}
+          </section>
+        {% endif %}
+      {% endwith %}
+
+      <section class="workbench-form-section">
+        <form action="{{ url_for('save_material_item') }}" method="post" class="product-form" data-enter-navigation>
+          {{ csrf_field() }}
+          {% if item %}<input type="hidden" name="id" value="{{ item.id }}">{% endif %}
+          <label>
+            母件编码
+            <input name="model" value="{{ item.model if item else '' }}" required>
+          </label>
+          <label>
+            零件编码
+            <input name="code" value="{{ item.code if item else '' }}" placeholder="例如 KA8234" required>
+          </label>
+          <label>
+            零件名称
+            <input name="part" value="{{ item.part if item else '' }}" placeholder="例如 主板" required>
+          </label>
+          <label>
+            下料只数
+            <input name="pieces" type="number" step="0.01" min="0.01" value="{{ item.pieces if item else '' }}" required>
+          </label>
+          <label>
+            规格尺寸
+            <input name="spec_text" value="{{ item.spec_text if item else '' }}" placeholder="例如 2.5 357 1260 / 2.5*357*1260" required>
+          </label>
+          <label>
+            类别
+            <input name="category" value="{{ item.category if item else '' }}" placeholder="例如 前下摆臂">
+          </label>
+          <label>
+            车型
+            <input name="car" value="{{ item.car if item else '' }}" placeholder="例如 雅尊">
+          </label>
+          <label class="check">
+            <input type="checkbox" name="active" value="1" {% if not item or item.active %}checked{% endif %}>
+            启用
+          </label>
+          <div class="form-actions">
+            <button class="linear-button primary" type="submit">保存材料明细</button>
+            <a class="linear-button subtle" href="{{ url_for('materials', q=item.model if item else '') }}">取消</a>
+          </div>
+        </form>
+      </section>
+    </main>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+  </body>
+</html>

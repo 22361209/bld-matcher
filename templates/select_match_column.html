@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>选择匹配列</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
+  </head>
+  <body>
+    <main class="shell wide materials-linear">
+      {% set active_page = "match" %}
+      {% include "_nav.html" %}
+
+      <header class="materials-hero">
+        <div>
+          <h1>选择匹配列</h1>
+          <p>没有识别到明确的 OE 号码表头，请选择客户号码所在的列。</p>
+        </div>
+      </header>
+
+      <section class="materials-table-section">
+        <div class="materials-table-title">
+          <div>
+            <h2>文件预览：{{ preview.sheet }}</h2>
+            <p>请选择客户号码所在列后继续生成。</p>
+            {% if cleanup_message %}
+              <p class="note">{{ cleanup_message }}</p>
+            {% endif %}
+          </div>
+          <form action="{{ url_for('match_inquiry_with_column') }}" method="post" class="materials-search-form match-column-form" data-submit-wait data-submit-wait-text="正在匹配，请稍候...">
+            {{ csrf_field() }}
+            <input type="hidden" name="upload_path" value="{{ upload_path }}">
+            <input type="hidden" name="original_filename" value="{{ original_filename }}">
+            <input type="hidden" name="output_name" value="{{ output_name }}">
+            <input type="hidden" name="cleanup_message" value="{{ cleanup_message|default('') }}">
+            <fieldset class="match-column-picker">
+              <legend>匹配列</legend>
+              {% set selected_columns = selected_columns|default([0]) %}
+              <div class="match-column-options">
+                {% for column in preview.columns %}
+                  <label>
+                    <input type="checkbox" name="match_columns" value="{{ column.index }}" {% if column.index in selected_columns %}checked{% endif %}>
+                    <span>{{ column.label }} 列</span>
+                  </label>
+                {% endfor %}
+              </div>
+              <p>可同时选择 OE 号、参考号等多个号码列。</p>
+            </fieldset>
+            <p class="submit-wait-message" data-submit-wait-message aria-live="polite"></p>
+            <button class="linear-button primary" type="submit">确认并查看结果</button>
+            <a class="linear-button subtle" href="{{ url_for('index') }}">返回上一步</a>
+          </form>
+        </div>
+        <div class="materials-table-wrap match-preview-wrap">
+        <table class="materials-grid-table match-preview-table">
+          <thead>
+            <tr>
+              <th>源行</th>
+              {% for column in preview.columns %}
+                <th>{{ column.label }} 列</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in preview.rows %}
+              <tr>
+                <td><div class="match-preview-cell">{{ loop.index }}</div></td>
+                {% for value in row %}
+                  <td><div class="match-preview-cell" title="{{ value }}">{{ value }}</div></td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

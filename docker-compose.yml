@@ -1,0 +1,15 @@
+services:
+  bld-matcher:
+    build: .
+    container_name: bld-matcher
+    restart: unless-stopped
+    ports:
+      - "5055:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+      - ./outputs:/app/outputs
+    environment:
+      - TZ=Asia/Shanghai

@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ "编辑产品" if product else "新增产品" }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
+  </head>
+  <body class="{% if embedded %}embedded-product-form-page{% endif %}">
+    <main class="shell wide materials-linear {% if embedded %}embedded-product-form-shell{% endif %}">
+      {% if not embedded %}
+        {% set active_page = "products" %}
+        {% include "_nav.html" %}
+
+        <header class="materials-hero">
+          <div>
+            <h1>{{ "编辑产品" if product else "新增产品" }}</h1>
+            <p>一个 BLD NO. 可以维护多个 OE、多个品牌和多个车型；每行一个 OE 会更清楚。</p>
+          </div>
+          <div class="materials-actions">
+            <a class="linear-button subtle" href="{{ url_for('products') }}">返回目录</a>
+          </div>
+        </header>
+      {% endif %}
+
+      <section class="workbench-form-section">
+        <form action="{{ url_for('save_product') }}" method="post" enctype="multipart/form-data" class="product-form">
+          {{ csrf_field() }}
+          {% if embedded %}<input type="hidden" name="embedded" value="1">{% endif %}
+          <label>
+            BLD NO.
+            <input name="bld_no" value="{{ product.bld_no if product else '' }}" {% if product %}readonly{% endif %} required>
+          </label>
+          <label>
+            品牌 / SERIES
+            <textarea name="series" rows="3" placeholder="例如 HONDA / MAZDA">{{ product.series if product else '' }}</textarea>
+          </label>
+          <label class="full">
+            产品名称 / ITEM
+            <input name="item" value="{{ product.item if product else '' }}" placeholder="Front Left Lower Control Arm">
+          </label>
+          <label>
+            OE NO.1
+            <textarea name="oe_no_1" rows="9" placeholder="每行一个 OE">{{ product.oe_no_1 if product else '' }}</textarea>
+          </label>
+          <label>
+            OE NO.2
+            <textarea name="oe_no_2" rows="9" placeholder="补充 OE，每行一个">{{ product.oe_no_2 if product else '' }}</textarea>
+          </label>
+          <label class="full">
+            车型 / Models
+            <textarea name="models" rows="5" placeholder="可写多个车型">{{ product.models if product else '' }}</textarea>
+          </label>
+          <label>
+            含税单价（人民币）
+            <input name="price_cny" type="number" step="0.01" min="0" value="{{ '%.2f'|format(product.price_cny) if product and product.price_cny is not none else '' }}" placeholder="例如 68.50">
+          </label>
+          {% if product %}
+            <section class="product-media-edit full">
+              <div class="product-media-block product-media-images">
+                <h2>产品图片</h2>
+                <div class="product-image-slot-grid">
+                  {% for slot in range(1, 6) %}
+                    {% set slot_image_url = product_image_url(product, slot) %}
+                    <div class="product-image-slot">
+                      <div class="product-image-slot-head">
+                        <strong>图片 {{ slot }}</strong>
+                        {% if slot == 1 %}<span>主图</span>{% endif %}
+                      </div>
+                      {% if slot_image_url %}
+                        <a class="image-link product-media-preview" href="{{ slot_image_url }}" target="_blank" rel="noopener" title="打开 {{ product.bld_no }} 图片 {{ slot }}">
+                          <img class="product-thumb" src="{{ product_image_thumb_url(product, slot) or slot_image_url }}" alt="{{ product.bld_no }} 图片 {{ slot }}" loading="lazy" decoding="async">
+                        </a>
+                      {% else %}
+                        <p class="note product-slot-empty">当前为空</p>
+                      {% endif %}
+                      <label class="file-picker media-upload-field">
+                        <span>上传 / 替换</span>
+                        <input class="file-picker-input" type="file" name="product_image_{{ slot }}" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp">
+                        <span class="file-picker-control">
+                          <span class="file-picker-button">选择文件</span>
+                          <span class="file-picker-name">未选择任何文件</span>
+                          <button class="file-picker-clear" type="button" disabled>清除</button>
+                        </span>
+                      </label>
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+              <div class="product-media-block">
+                <h2>PDF 图纸</h2>
+                {% if product.drawing_path %}
+                  <p><a class="linear-button subtle" href="{{ url_for('product_drawing', product_id=product.id) }}" target="_blank" rel="noopener">预览当前图纸</a></p>
+                {% else %}
+                  <p class="note">当前没有 PDF 图纸。</p>
+                {% endif %}
+                <label class="file-picker media-upload-field">
+                  <span>上传 / 替换 PDF 图纸</span>
+                  <input class="file-picker-input" type="file" name="drawing" accept="application/pdf,.pdf">
+                  <span class="file-picker-control">
+                    <span class="file-picker-button">选择文件</span>
+                    <span class="file-picker-name">未选择任何文件</span>
+                    <button class="file-picker-clear" type="button" disabled>清除</button>
+                  </span>
+                </label>
+              </div>
+            </section>
+          {% endif %}
+          <label class="check">
+            <input type="checkbox" name="active" value="1" {% if not product or product.active %}checked{% endif %}>
+            启用
+          </label>
+          <div class="form-actions">
+            <button class="linear-button primary" type="submit">保存产品</button>
+            {% if product %}
+              <button
+                class="linear-button danger"
+                type="submit"
+                formaction="{{ url_for('remove_product', product_id=product.id) }}"
+                formmethod="post"
+                formnovalidate
+                {% if embedded %}name="embedded" value="1"{% endif %}
+                onclick="return confirm('确认删除 {{ product.bld_no }}？删除后产品目录中将不再显示该条目，相关人工映射也会停用。');"
+              >删除产品</button>
+            {% endif %}
+          </div>
+        </form>
+      </section>
+    </main>
+    <script src="{{ url_for('static', filename='app.js', v=static_version('app.js')) }}"></script>
+  </body>
+</html>

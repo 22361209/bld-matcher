@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>批量维护单价</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
+  </head>
+  <body>
+    <main class="shell wide materials-linear">
+      {% set active_page = "products" %}
+      {% include "_nav.html" %}
+
+      <header class="materials-hero">
+        <div>
+          <h1>批量维护单价</h1>
+          <p>上传包含 BLD NO. 和 Unit Price/含税单价 的 Excel，确认预览后批量更新。</p>
+        </div>
+        <div class="materials-actions">
+          <a class="linear-button subtle" href="{{ url_for('products') }}">返回产品目录</a>
+        </div>
+      </header>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <section class="messages materials-messages">
+            {% for category, message in messages %}
+              <div class="message {{ category }}">{{ message }}</div>
+            {% endfor %}
+          </section>
+        {% endif %}
+      {% endwith %}
+
+      <section class="materials-flow">
+        <form action="{{ url_for('price_import_preview') }}" method="post" enctype="multipart/form-data" class="materials-generate-form">
+          {{ csrf_field() }}
+          <label class="file-picker">
+            <span>单价 Excel 文件</span>
+            <input class="file-picker-input" type="file" name="price_file" accept=".xls,.xlsx" required>
+            <span class="file-picker-control">
+              <span class="file-picker-button">选择文件</span>
+              <span class="file-picker-name">未选择任何文件</span>
+              <button class="embedded-submit" type="submit">上传并预览</button>
+            </span>
+          </label>
+        </form>
+        <p class="note">表头示例：BLD NO. / Unit Price。价格会按人民币保留两位小数。</p>
+      </section>
+
+      {% if preview %}
+        <section class="materials-metrics" aria-label="单价导入统计">
+          <div><span>总行数</span><strong>{{ preview.counts.total }}</strong></div>
+          <div><span>可更新</span><strong>{{ preview.counts.matched }}</strong></div>
+          <div><span>未找到</span><strong>{{ preview.counts.missing }}</strong></div>
+          <div><span>价格错误</span><strong>{{ preview.counts.invalid_price }}</strong></div>
+        </section>
+
+        <section class="materials-command">
+          <div>
+            <h2>导入预览</h2>
+            <p class="note">确认后会批量更新匹配到的产品单价。</p>
+          </div>
+          <form action="{{ url_for('price_import_apply') }}" method="post" class="materials-actions">
+            {{ csrf_field() }}
+            <input type="hidden" name="payload" value="{{ payload }}">
+            <button class="linear-button primary" type="submit">确认批量更新单价</button>
+          </form>
+        </section>
+
+        <section class="materials-table-section">
+          <div class="materials-table-title">
+            <div>
+              <h2>预览明细</h2>
+              <p>只会更新状态为可更新的行。</p>
+            </div>
+            <span>{{ preview.rows|length }} 条</span>
+          </div>
+          <div class="materials-table-wrap">
+          <table class="materials-grid-table">
+            <thead>
+              <tr>
+                <th>Excel 行</th>
+                <th>BLD NO.</th>
+                <th>新单价</th>
+                <th>原单价</th>
+                <th>状态</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in preview.rows %}
+                <tr>
+                  <td>{{ row.row }}</td>
+                  <td><strong>{{ row.bld_no }}</strong></td>
+                  <td>{% if row.price is not none %}¥{{ "%.2f"|format(row.price) }}{% endif %}</td>
+                  <td>{% if row.old_price is not none %}¥{{ "%.2f"|format(row.old_price) }}{% endif %}</td>
+                  <td>
+                    {% if row.status == "matched" %}可更新{% elif row.status == "missing" %}未找到 BLD{% else %}价格错误{% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          </div>
+        </section>
+      {% endif %}
+    </main>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+  </body>
+</html>

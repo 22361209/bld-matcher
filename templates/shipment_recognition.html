@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>货物识别</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
+  </head>
+  <body>
+    <main class="shell wide materials-linear inquiry-search-page shipment-recognition-page">
+      {% include "_nav.html" %}
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <section class="messages materials-messages">
+            {% for category, message in messages %}
+              <div class="message {{ category }}">{{ message }}</div>
+            {% endfor %}
+          </section>
+        {% endif %}
+      {% endwith %}
+
+      <header class="inquiry-landing shipment-landing">
+        <h1><span>BLD</span> 货物识别</h1>
+        <p>选择发货照片或整个照片文件夹，识别标签并生成汇总 Excel。</p>
+      </header>
+
+      <section class="inquiry-command-center shipment-command-center">
+        <form action="{{ url_for('run_shipment_recognition') }}" method="post" enctype="multipart/form-data" class="inquiry-command-row inquiry-upload-form shipment-single-form" data-shipment-form>
+          {{ csrf_field() }}
+          <input type="hidden" name="shipment_date" value="{{ default_date }}">
+          <input type="hidden" name="limit" value="{{ default_limit }}">
+          <input type="hidden" name="provider" value="openai-compatible">
+          <div class="file-picker-field">
+            <span>发货照片</span>
+            <div class="file-picker inquiry-file-oe-picker shipment-folder-picker">
+              <input id="shipment-photo-input" class="shipment-hidden-input shipment-file-input" type="file" name="shipment_photos" accept="image/*,.heic,.tif,.tiff" multiple>
+              <div class="file-picker-control">
+                <label class="file-picker-button" for="shipment-photo-input">选择照片</label>
+                <span class="file-picker-oe-input shipment-file-status" data-shipment-file-status>可多选照片，也可拖入整个文件夹</span>
+                <button class="file-picker-clear" type="button" data-clear-shipment-files disabled>清除</button>
+                <button class="embedded-submit" type="submit" data-shipment-submit>开始识别</button>
+              </div>
+              <div class="file-picker-drop-hint" data-file-drop-status aria-live="polite"></div>
+              <div class="shipment-run-status" data-shipment-run-status aria-live="polite"></div>
+              <div class="shipment-progress-panel" data-shipment-progress hidden>
+                <div class="shipment-progress-meta">
+                  <span data-shipment-progress-text>等待开始</span>
+                  <strong data-shipment-progress-percent>0%</strong>
+                </div>
+                <div class="shipment-progress-track">
+                  <div class="shipment-progress-bar" data-shipment-progress-bar></div>
+                </div>
+                <div class="shipment-progress-detail" data-shipment-progress-detail></div>
+              </div>
+            </div>
+          </div>
+        </form>
+      </section>
+
+      <details class="shipment-result-drawer" data-shipment-live-result hidden>
+        <summary>
+          <span>识别进度</span>
+          <strong data-shipment-live-summary>等待开始</strong>
+        </summary>
+        <section class="quick-oe-results shipment-result-compact" aria-label="货物识别实时结果">
+          <div class="quick-oe-heading">
+            <div>
+              <h2>实时进度</h2>
+              <p data-shipment-live-message>照片上传后会逐张识别。</p>
+            </div>
+            <a class="linear-button primary" data-shipment-live-download href="#" hidden>下载 Excel</a>
+          </div>
+          <dl class="shipment-usage-grid" data-shipment-live-stats hidden>
+            <div><dt>识别耗时</dt><dd data-shipment-live-seconds>0 秒</dd></div>
+            <div><dt>输入 Token</dt><dd data-shipment-live-prompt>0</dd></div>
+            <div><dt>输出 Token</dt><dd data-shipment-live-completion>0</dd></div>
+            <div><dt>总 Token</dt><dd data-shipment-live-total>0</dd></div>
+          </dl>
+          <div class="shipment-result-links" data-shipment-live-links hidden>
+            <a data-shipment-live-excel href="#"></a>
+            <a data-shipment-live-json href="#"></a>
+          </div>
+        </section>
+      </details>
+
+      {% if result %}
+        <details class="shipment-result-drawer" open>
+          <summary>
+            <span>本次结果</span>
+            <strong>照片 {{ result.photos }} 张 · 标签 {{ result.labels }} 张 · 失败 {{ result.failed }} 张 · Token {{ result.total_tokens }}</strong>
+          </summary>
+          <section class="quick-oe-results shipment-result-compact" aria-label="货物识别结果">
+            <div class="quick-oe-heading">
+              <div>
+                <h2>识别结果文件</h2>
+                <p>结果需要人工复核后使用。</p>
+              </div>
+              <a class="linear-button primary" href="{{ url_for('download', name=result.excel_name) }}">下载 Excel</a>
+            </div>
+            <div class="shipment-result-links">
+              <a href="{{ url_for('download', name=result.excel_name) }}">{{ result.excel_path.name }}</a>
+              <a href="{{ url_for('download', name=result.json_name) }}">{{ result.json_path.name }}</a>
+            </div>
+            <dl class="shipment-usage-grid">
+              <div><dt>识别耗时</dt><dd>{{ result.seconds }} 秒</dd></div>
+              <div><dt>输入 Token</dt><dd>{{ result.prompt_tokens }}</dd></div>
+              <div><dt>输出 Token</dt><dd>{{ result.completion_tokens }}</dd></div>
+              <div><dt>总 Token</dt><dd>{{ result.total_tokens }}</dd></div>
+            </dl>
+          </section>
+        </details>
+      {% endif %}
+
+      <details class="shipment-result-drawer" {% if latest_outputs %}open{% endif %}>
+        <summary>
+          <span>最近识别文件</span>
+          <strong>{{ latest_outputs|length }} 个</strong>
+        </summary>
+        <section class="materials-recent shipment-history-panel">
+          <div class="materials-table-title">
+            <div>
+              <h2>最近识别文件</h2>
+              <p>只显示当前账号生成的货物识别 Excel。</p>
+            </div>
+            <span>{{ latest_outputs|length }} 个</span>
+          </div>
+          {% if latest_outputs %}
+            <div class="materials-table-wrap">
+              <table class="materials-grid-table">
+                <thead>
+                  <tr>
+                    <th>文件名</th>
+                    <th>生成时间</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for file in latest_outputs %}
+                    <tr>
+                      <td>{{ file.name }}</td>
+                      <td>{{ file.updated_at }}</td>
+                      <td><a href="{{ url_for('download', name=file.download_name) }}">下载</a></td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <p class="materials-empty">还没有货物识别输出。</p>
+          {% endif %}
+        </section>
+      </details>
+    </main>
+    <script src="{{ url_for('static', filename='app.js', v=static_version('app.js')) }}"></script>
+  </body>
+</html>
