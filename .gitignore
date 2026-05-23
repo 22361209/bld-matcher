@@ -23,13 +23,16 @@ data/*.sqlite3-*
 data/*.sqlite3.backup-*
 data/catalog.xlsx
 data/stamping_materials.xlsx
+data/production_plan_template.xlsx
 data/*-backup-*.sqlite3
 data/*-backup-*.xlsx
 data/product_images-backup-*/
 data/manual_map.json
 data/drawings/
 data/product_images/
+data/deploy-backups/
 data/locks/
+static/product_images/
 
 # Local source/input workbooks kept outside the app baseline
 产品目录/

@@ -19,10 +19,11 @@ BLD 是一个局域网内部使用的 Flask 业务系统，主要用于：
 
 ## 位置和访问
 
-本机项目：
+常用本机项目路径：
 
 ```text
-/Users/linzhenyue/Documents/New project 5
+MacBook Air: /Users/linzhenyue/Project5inMBA
+Mac mini: /Users/linzhenyue/Documents/New project 5
 ```
 
 本机访问：
@@ -48,7 +49,7 @@ NAS 信息：
 ## 本机启动
 
 ```bash
-cd "/Users/linzhenyue/Documents/New project 5"
+cd "/Users/linzhenyue/Project5inMBA"
 APP_DEBUG=0 SECRET_KEY=local-dev-bld-matcher .venv/bin/python app.py
 ```
 
@@ -156,9 +157,12 @@ OpenClaw 内部 API：
 
 本机完成改动后：
 
+首次在 MacBook Air 上通过 GitHub 中转到 NAS 前，先按 `NAS_DEPLOY.md` 的“MacBook Air 中转前检查”确认 Git 历史和 NAS 运行数据状态；检查未通过时不要执行 NAS `reset --hard`。
+
 ```bash
 git status --short
 .venv/bin/python -m unittest tests.test_app -v
+git pull --ff-only origin main
 git add ...
 git commit -m "..."
 git push nas main

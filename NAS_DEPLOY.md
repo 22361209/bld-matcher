@@ -98,13 +98,28 @@ http://192.168.1.20:5055
 3. NAS 运行目录从 Git 更新
 4. 重新构建并启动项目
 
+### MacBook Air 中转前检查
+
+第一次在 MacBook Air 上接入 GitHub -> NAS 流程时，先确认本机代码历史和 NAS 历史已经连上，且 NAS Git 仓库不再跟踪运行数据：
+
+```bash
+git fetch nas main
+git merge-base main nas/main >/dev/null || echo "STOP: GitHub 和 NAS Git 历史尚未打通，不能直接 push/reset"
+git ls-tree -r --name-only nas/main -- data static/product_images | sed -n '1,40p'
+```
+
+如果第二行输出 `STOP`，或第三行列出 `data/products.sqlite3`、`data/catalog.xlsx`、产品图片等运行数据，先做一次专门的 NAS Git 清理迁移；不要继续执行下面的 `git push nas main` 和 NAS `git reset --hard`。
+
 本机：
 
 ```bash
-cd "/Users/linzhenyue/Documents/New project 5"
+cd "/Users/linzhenyue/Project5inMBA"
+git pull --ff-only origin main
 git status -sb
 git push nas main
 ```
+
+如果是在 Mac mini 上开发，先 `cd` 到 Mac mini 的实际项目目录；如果是在 MacBook Air 上做公司内网中转，使用 `/Users/linzhenyue/Project5inMBA`。
 
 NAS：
 
