@@ -38,3 +38,6 @@ data/locks/
 
 # Generated local launcher build artifacts
 tools/icon_build/
+data/production_plan_template.xlsx
+data/deploy-backups/
+static/product_images/

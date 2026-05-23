@@ -15,3 +15,9 @@ data/*-backup-*.sqlite3
 data/*-backup-*.xlsx
 data/manual_map.json
 data/locks/
+logs/
+data/production_plan_template.xlsx
+data/drawings/
+data/product_images/
+data/deploy-backups/
+static/product_images/
