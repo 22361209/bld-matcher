@@ -88,7 +88,7 @@ Content-Type: application/json
 
 ```json
 {
-  "file_path": "/Users/linzhenyue/Documents/New project 5/uploads/customer.xlsx",
+  "file_path": "/Users/linzhenyue/Projects/bld-matcher/uploads/customer.xlsx",
   "match_column": "A",
   "price_mode": "tax",
   "export": true
@@ -142,7 +142,17 @@ Content-Type: application/json
       "score": 95,
       "price_cny": 88.8,
       "export_price": 81,
-      "export_price_label": "不含税单价"
+      "export_price_label": "不含税单价",
+      "product": {
+        "bld_no": "K6004LB",
+        "series": "HYUNDAI",
+        "item": "Rear Left Lower Control Arm",
+        "oe_no_1": "55270-2Z000",
+        "oe_no_2": "品牌交叉号",
+        "models": "车型信息",
+        "price_cny": 88.8,
+        "image_paths": ["data_product_images/K6004LB.png"]
+      }
     }
   ],
   "unmatched_list": ["NO-MATCH"],

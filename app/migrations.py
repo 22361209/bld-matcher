@@ -78,6 +78,12 @@ def _add_shipment_recognition_jobs(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_shipment_recognition_jobs_updated ON shipment_recognition_jobs(updated_at)")
 
 
+def _add_product_status(conn: sqlite3.Connection) -> None:
+    product_columns = _columns(conn, "products")
+    if "product_status" not in product_columns:
+        conn.execute("ALTER TABLE products ADD COLUMN product_status TEXT DEFAULT ''")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -85,6 +91,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("004_product_image_slots", _add_product_image_slots),
     ("005_internal_api_keys", _add_internal_api_keys),
     ("006_shipment_recognition_jobs", _add_shipment_recognition_jobs),
+    ("007_product_status", _add_product_status),
 )
 
 

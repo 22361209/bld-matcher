@@ -19,8 +19,8 @@
       </header>
 
       <section class="materials-table-section">
-        <div class="materials-table-title">
-          <div>
+        <div class="match-column-command">
+          <div class="match-column-summary">
             <h2>文件预览：{{ preview.sheet }}</h2>
             <p>请选择客户号码所在列后继续生成。</p>
             {% if cleanup_message %}
@@ -38,7 +38,7 @@
               {% set selected_columns = selected_columns|default([0]) %}
               <div class="match-column-options">
                 {% for column in preview.columns %}
-                  <label>
+                  <label class="match-column-choice">
                     <input type="checkbox" name="match_columns" value="{{ column.index }}" {% if column.index in selected_columns %}checked{% endif %}>
                     <span>{{ column.label }} 列</span>
                   </label>
@@ -47,8 +47,10 @@
               <p>可同时选择 OE 号、参考号等多个号码列。</p>
             </fieldset>
             <p class="submit-wait-message" data-submit-wait-message aria-live="polite"></p>
-            <button class="linear-button primary" type="submit">确认并查看结果</button>
-            <a class="linear-button subtle" href="{{ url_for('index') }}">返回上一步</a>
+            <div class="match-column-actions">
+              <button class="linear-button primary" type="submit">确认并查看结果</button>
+              <a class="linear-button subtle" href="{{ url_for('index') }}">返回上一步</a>
+            </div>
           </form>
         </div>
         <div class="materials-table-wrap match-preview-wrap">
@@ -66,7 +68,8 @@
               <tr>
                 <td><div class="match-preview-cell">{{ loop.index }}</div></td>
                 {% for value in row %}
-                  <td><div class="match-preview-cell" title="{{ value }}">{{ value }}</div></td>
+                  {% set display_value = "" if value is none else value %}
+                  <td><div class="match-preview-cell" title="{{ display_value }}">{{ display_value }}</div></td>
                 {% endfor %}
               </tr>
             {% endfor %}

@@ -32,6 +32,7 @@ data/drawings/
 data/product_images/
 data/deploy-backups/
 data/locks/
+data/local-backups/
 static/product_images/
 
 # Local source/input workbooks kept outside the app baseline

@@ -50,7 +50,25 @@ MANUAL_HEADER_ALIASES = {
     for alias in aliases
 } | {
     _norm_header(alias)
-    for alias in {"SN", "NO", "NO.", "序号", "客户号码", "客户编码", "号码", "料号", "ITEM NO", "ITEM NO.", "PART NO", "PART NO."}
+    for alias in {
+        "SN",
+        "NO",
+        "NO.",
+        "序号",
+        "数量",
+        "客户号码",
+        "客户编码",
+        "号码",
+        "料号",
+        "ITEM NO",
+        "ITEM NO.",
+        "PART NO",
+        "PART NO.",
+        "QTY",
+        "QUANTITY",
+        "رقم",
+        "كمية",
+    }
 }
 
 
@@ -124,10 +142,11 @@ def preview_inquiry_columns(inquiry_path: Path, max_rows: int = 8, max_cols: int
     workbook = load_workbook(inquiry_path, read_only=True, data_only=True)
     try:
         sheet = workbook.worksheets[0]
-        cols = min(sheet.max_column, max_cols)
         rows = []
-        for row_index in range(1, min(sheet.max_row, max_rows) + 1):
-            rows.append([sheet.cell(row_index, col_index).value for col_index in range(1, cols + 1)])
+        for values in sheet.iter_rows(min_row=1, max_row=max_rows, values_only=True):
+            rows.append(list(values[:max_cols]))
+        cols = min(max((len(row) for row in rows), default=0), max_cols)
+        rows = [row + [None] * (cols - len(row)) for row in rows]
         return {
             "sheet": sheet.title,
             "columns": [{"index": i, "label": _column_label(i)} for i in range(cols)],
@@ -187,6 +206,13 @@ def _manual_match_columns(match_column: object) -> list[int]:
 
 def _combined_match_text(match_values: list[tuple[str, object]]) -> str:
     return "\n".join(str(value).strip() for _, value in match_values if str(value or "").strip())
+
+
+def _selected_match_row_is_header(match_values: list[tuple[str, object]]) -> bool:
+    values = [value for _, value in match_values if str(value or "").strip()]
+    if not values:
+        return False
+    return all(_norm_header(value) in MANUAL_HEADER_ALIASES for value in values)
 
 
 def _annotate_row_summary_with_match_columns(row_summary: dict, match_values: list[tuple[str, object]], match) -> dict:
@@ -590,6 +616,8 @@ def generate_xls_with_bld(
         for row_index in range(header_row + 1, source_sheet.nrows):
             inquiry_name = source_sheet.cell_value(row_index, columns["name"]) if "name" in columns else ""
             match_values = _xls_match_values(source_sheet, row_index, selected_match_columns)
+            if _selected_match_row_is_header(match_values):
+                continue
             inquiry_oe = _combined_match_text(match_values)
             inquiry_desc = source_sheet.cell_value(row_index, columns["description"]) if "description" in columns else ""
             if not str(inquiry_name).strip() and not str(inquiry_oe).strip():
@@ -676,6 +704,8 @@ def generate_xlsx_with_bld(
             for row_index in range(header_row + 1, sheet.max_row + 1):
                 inquiry_name = sheet.cell(row_index, columns["name"]).value if "name" in columns else ""
                 match_values = _xlsx_match_values(sheet, row_index, selected_match_columns)
+                if _selected_match_row_is_header(match_values):
+                    continue
                 inquiry_oe = _combined_match_text(match_values)
                 inquiry_desc = sheet.cell(row_index, columns["description"]).value if "description" in columns else ""
                 if not str(inquiry_name or "").strip() and not str(inquiry_oe or "").strip():
@@ -749,6 +779,8 @@ def analyze_xlsx_with_bld(
             for row_index, values in enumerate(sheet.iter_rows(min_row=header_row + 1, values_only=True), start=header_row + 1):
                 inquiry_name = _cell_from_values(values, columns["name"]) if "name" in columns else ""
                 match_values = _row_match_values(values, selected_match_columns)
+                if _selected_match_row_is_header(match_values):
+                    continue
                 inquiry_oe = _combined_match_text(match_values)
                 inquiry_desc = _cell_from_values(values, columns["description"]) if "description" in columns else ""
                 if not str(inquiry_name or "").strip() and not str(inquiry_oe or "").strip():

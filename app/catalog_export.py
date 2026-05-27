@@ -12,8 +12,8 @@ from openpyxl.utils import get_column_letter
 from app.config import BASE_DIR, PRODUCT_IMAGE_DATA_PREFIX, PRODUCT_IMAGE_DIR
 
 
-BLD_HEADERS = ["BLD NO.", "品牌", "产品名称", "OE Reference", "Other Reference", "车型", "Product Image", "Unit Price", "状态", "更新时间"]
-BRAND_HEADERS = ["NO.", "SERIES", "BLD NO.", "ITEM", "OE Reference", "Other Reference", "Models", "Product Image", "Unit Price", "状态", "更新时间"]
+BLD_HEADERS = ["BLD NO.", "品牌", "产品名称", "OE Reference", "Other Reference", "车型", "Product Image", "Unit Price", "产品状态", "启用状态", "更新时间"]
+BRAND_HEADERS = ["NO.", "SERIES", "BLD NO.", "ITEM", "OE Reference", "Other Reference", "Models", "Product Image", "Unit Price", "产品状态", "启用状态", "更新时间"]
 CHINESE_RE = re.compile(r"[\u4e00-\u9fff]")
 IMAGE_MAX_WIDTH = 112
 IMAGE_MAX_HEIGHT = 72
@@ -172,6 +172,7 @@ def export_products_xlsx(
                     row["models"],
                     "",
                     row["price_cny"],
+                    row["product_status"] if "product_status" in row.keys() else "",
                     "启用" if row["active"] else "停用",
                     row["updated_at"],
                 ]
@@ -187,6 +188,7 @@ def export_products_xlsx(
                     row["models"],
                     "",
                     row["price_cny"],
+                    row["product_status"] if "product_status" in row.keys() else "",
                     "启用" if row["active"] else "停用",
                     row["updated_at"],
                 ]
@@ -195,7 +197,7 @@ def export_products_xlsx(
             image_refs.append((sheet.max_row, image_col, image_path))
             image_rows.add(sheet.max_row)
 
-    widths = [10, 18, 16, 28, 34, 28, 34, 22, 12, 10, 20] if export_format == "brand" else [14, 18, 28, 34, 28, 34, 22, 12, 10, 20]
+    widths = [10, 18, 16, 28, 34, 28, 34, 22, 12, 14, 10, 20] if export_format == "brand" else [14, 18, 28, 34, 28, 34, 22, 12, 14, 10, 20]
     _finish_sheet(sheet, widths, image_rows)
     _add_sheet_images(sheet, image_refs)
     price_col = 9 if export_format == "brand" else 8

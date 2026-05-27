@@ -388,6 +388,11 @@ class ProductCatalog:
                 matches.append((part, CatalogMatch(compact_text(row.get("BLD NO.")), 95, self._multi_exact_reason(part_key), row)))
                 continue
 
+            suffix_variant_match = self._match_oe_suffix_variant(part_key, part)
+            if suffix_variant_match:
+                matches.append((part, suffix_variant_match))
+                continue
+
             part_zero_o_key = zero_o_key(part)
             if part_zero_o_key and part_zero_o_key != part_key and part_zero_o_key in self.by_oe_zero_o:
                 rows = self._unique_rows(self.by_oe_zero_o[part_zero_o_key])

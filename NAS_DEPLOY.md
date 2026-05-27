@@ -113,8 +113,9 @@ git ls-tree -r --name-only nas/main -- data static/product_images | sed -n '1,40
 本机：
 
 ```bash
-cd "/Users/linzhenyue/Project5inMBA"
-git pull --ff-only origin main
+# Mac mini 本机开发目录
+cd "/Users/linzhenyue/Projects/bld-matcher"
+# MacBook Air 中转目录为 /Users/linzhenyue/Project5inMBA；中转前先 git pull --ff-only github main
 git status -sb
 git push nas main
 ```

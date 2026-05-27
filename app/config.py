@@ -50,7 +50,8 @@ MATERIAL_TEMPLATE_PATH = DATA_DIR / "production_plan_template.xlsx"
 DEFAULT_SECRET_KEY = "local-product-matcher"
 SECRET_KEY = os.environ.get("SECRET_KEY", DEFAULT_SECRET_KEY)
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "20"))
-MAX_CONTENT_LENGTH = MAX_UPLOAD_MB * 1024 * 1024
+PRODUCT_SYNC_MAX_UPLOAD_MB = int(os.environ.get("PRODUCT_SYNC_MAX_UPLOAD_MB", "512"))
+MAX_CONTENT_LENGTH = max(MAX_UPLOAD_MB, PRODUCT_SYNC_MAX_UPLOAD_MB) * 1024 * 1024
 
 APP_HOST = os.environ.get("APP_HOST", "127.0.0.1")
 APP_PORT = int(os.environ.get("APP_PORT", "5055"))

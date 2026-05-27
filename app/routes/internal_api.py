@@ -15,7 +15,7 @@ from app.config import BASE_DIR, DB_PATH, INTERNAL_API_TOKEN, OUTPUT_DIR, UPLOAD
 from app.database import connect, log_event, verify_internal_api_token
 from app.excel_io import PRICE_EXPORT_MODES, generate_excel_with_bld, preview_inquiry_columns, sanitize_inquiry_workbook_if_needed
 from app.helpers import clean_original_filename, load_catalog, safe_upload_name, unique_prefixed_path
-from app.matcher import normalize_code
+from app.matcher import compact_text, normalize_code
 
 
 INTERNAL_OUTPUT_DIR = OUTPUT_DIR / "openclaw"
@@ -28,6 +28,8 @@ PRICE_LABELS = {
     "net": "不含税单价",
     "usd": "美金价",
 }
+BLD_FRAGMENT_MIN_LENGTH = 4
+BLD_FRAGMENT_LIMIT = 80
 
 
 def _json_error(message: str, status: int = 400, **extra):
@@ -260,6 +262,38 @@ def _save_numbers_workbook(numbers: list[str]) -> Path:
     return _write_numbers_workbook(numbers, _internal_upload_path("numbers.xlsx", prefix="numbers"))
 
 
+def _write_numbers_summary_workbook(summary: dict, output_path: Path, price_options: dict) -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "OpenClaw号码"
+    headers = ["OE号", "BLD NO."]
+    price_label = PRICE_LABELS.get(price_options["price_mode"], "")
+    if price_label:
+        headers.append(price_label)
+    headers.extend(["匹配说明", "产品名称", "车型"])
+    sheet.append(headers)
+
+    for row in summary.get("rows", []):
+        values = [row.get("oe") or row.get("name") or "", row.get("bld_no") or ""]
+        if price_label:
+            values.append(_export_price(row.get("price_cny"), price_options))
+        product = row.get("product") or {}
+        values.extend(
+            [
+                row.get("match_note") or row.get("reason") or "",
+                product.get("item", "") if isinstance(product, dict) else "",
+                product.get("models", "") if isinstance(product, dict) else "",
+            ]
+        )
+        sheet.append(values)
+
+    for letter, width in {"A": 28, "B": 18, "C": 14, "D": 34, "E": 26, "F": 34}.items():
+        sheet.column_dimensions[letter].width = width
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    workbook.save(output_path)
+    workbook.close()
+
+
 def _source_from_request(payload: dict) -> tuple[Path | None, str | None, str | None]:
     file = request.files.get("file") or request.files.get("inquiry")
     if file and file.filename:
@@ -345,6 +379,7 @@ def _format_rows(summary: dict, price_options: dict, *, rows_limit: int, unmatch
                 "export_price_label": PRICE_LABELS.get(price_options["price_mode"], ""),
                 "matched_oe_codes": row.get("matched_oe_codes") or [],
                 "unmatched_oe_codes": row.get("unmatched_oe_codes") or [],
+                "product": row.get("product") or None,
             }
         )
 
@@ -399,6 +434,142 @@ def _response_payload(
     }
 
 
+def _product_payload(row: dict | None) -> dict | None:
+    if not row:
+        return None
+    image_paths = [
+        compact_text(row.get(key))
+        for key in ("image_path", "image_path_2", "image_path_3", "image_path_4", "image_path_5")
+        if compact_text(row.get(key))
+    ]
+    return {
+        "bld_no": compact_text(row.get("BLD NO.")),
+        "series": row.get("SERIES") or "",
+        "item": row.get("ITEM") or "",
+        "oe_no_1": row.get("OE NO.1") or "",
+        "oe_no_2": row.get("OE NO.2") or "",
+        "models": row.get("Models") or "",
+        "price_cny": row.get("price_cny"),
+        "image_paths": image_paths,
+    }
+
+
+def _attach_product_details(summary: dict, catalog) -> dict:
+    rows = []
+    for row in summary.get("rows", []):
+        if row.get("product") or not row.get("bld_no"):
+            rows.append(row)
+            continue
+        if " / " in str(row.get("bld_no") or ""):
+            rows.append(row)
+            continue
+        product_row = catalog.by_bld.get(normalize_code(row.get("bld_no")))
+        if product_row:
+            row = dict(row)
+            row["product"] = _product_payload(product_row)
+        rows.append(row)
+
+    detailed = dict(summary)
+    detailed["rows"] = rows
+    return detailed
+
+
+def _bld_fragment_matches(catalog, query: object) -> list[dict]:
+    key = normalize_code(query)
+    if len(key) < BLD_FRAGMENT_MIN_LENGTH:
+        return []
+
+    matches = []
+    for row in catalog.rows:
+        bld_no = compact_text(row.get("BLD NO."))
+        bld_key = normalize_code(bld_no)
+        if not bld_key or key not in bld_key:
+            continue
+        matches.append(
+            {
+                "row": None,
+                "oe": query,
+                "name": "",
+                "bld_no": bld_no,
+                "price_cny": row.get("price_cny"),
+                "reason": "BLD NO. 精准命中" if key == bld_key else "BLD NO. 片段命中",
+                "score": 96 if key == bld_key else 86,
+                "match_note": f"命中 BLD号：{bld_no}",
+                "matched_oe_codes": [],
+                "unmatched_oe_codes": [],
+                "product": _product_payload(row),
+            }
+        )
+
+    return sorted(matches, key=lambda item: normalize_code(item["bld_no"]))[:BLD_FRAGMENT_LIMIT]
+
+
+def _looks_like_bld_shorthand(query: object) -> bool:
+    key = normalize_code(query)
+    if len(key) < BLD_FRAGMENT_MIN_LENGTH:
+        return False
+    return bool(re.fullmatch(r"\d{4}", key) or re.fullmatch(r"K\d{3,}[A-Z]*", key))
+
+
+def _bld_fragment_summary(catalog, query: object) -> dict:
+    rows = _bld_fragment_matches(catalog, query)
+    if not rows:
+        return {
+            "total": 1,
+            "matched": 0,
+            "unmatched": 1,
+            "rows": [
+                {
+                    "row": 2,
+                    "oe": query,
+                    "name": "",
+                    "bld_no": "",
+                    "price_cny": None,
+                    "reason": "未找到",
+                    "score": 0,
+                    "match_note": "",
+                    "matched_oe_codes": [],
+                    "unmatched_oe_codes": [],
+                }
+            ],
+        }
+
+    for row in rows:
+        row["row"] = 2
+    return {"total": len(rows), "matched": len(rows), "unmatched": 0, "rows": rows}
+
+
+def _augment_summary_with_bld_fragments(summary: dict, catalog) -> dict:
+    rows = []
+    matched = 0
+    unmatched = 0
+
+    for row in summary.get("rows", []):
+        if row.get("bld_no"):
+            rows.append(row)
+            matched += 1
+            continue
+
+        query = row.get("oe") or row.get("name") or ""
+        fragment_rows = _bld_fragment_matches(catalog, query)
+        if not fragment_rows:
+            rows.append(row)
+            unmatched += 1
+            continue
+
+        for fragment_row in fragment_rows:
+            fragment_row["row"] = row.get("row")
+            rows.append(fragment_row)
+            matched += 1
+
+    augmented = dict(summary)
+    augmented["rows"] = rows
+    augmented["matched"] = matched
+    augmented["unmatched"] = unmatched
+    augmented["total"] = matched + unmatched
+    return augmented
+
+
 def _preview_for_error(path: Path) -> dict | None:
     try:
         return preview_inquiry_columns(path, max_rows=5, max_cols=8)
@@ -436,17 +607,9 @@ def _run_numbers(payload: dict, *, export: bool):
     if export:
         source_path = _save_numbers_workbook(numbers)
         response_source_path = source_path
-        summary = generate_excel_with_bld(
-            source_path,
-            output_path or (INTERNAL_OUTPUT_DIR / "__analysis.xlsx"),
-            catalog,
-            write_output=True,
-            price_mode=price_options["price_mode"],
-            exchange_rate=price_options["exchange_rate"],
-        )
-    else:
-        with tempfile.TemporaryDirectory(prefix="bld-openclaw-analysis-") as temporary_dir:
-            source_path = _write_numbers_workbook(numbers, Path(temporary_dir) / "numbers.xlsx")
+        if len(numbers) == 1 and _looks_like_bld_shorthand(numbers[0]):
+            summary = _bld_fragment_summary(catalog, numbers[0])
+        else:
             summary = generate_excel_with_bld(
                 source_path,
                 INTERNAL_OUTPUT_DIR / "__analysis.xlsx",
@@ -455,6 +618,26 @@ def _run_numbers(payload: dict, *, export: bool):
                 price_mode=price_options["price_mode"],
                 exchange_rate=price_options["exchange_rate"],
             )
+            summary = _augment_summary_with_bld_fragments(summary, catalog)
+        summary = _attach_product_details(summary, catalog)
+        if output_path:
+            _write_numbers_summary_workbook(summary, output_path, price_options)
+    else:
+        if len(numbers) == 1 and _looks_like_bld_shorthand(numbers[0]):
+            summary = _bld_fragment_summary(catalog, numbers[0])
+        else:
+            with tempfile.TemporaryDirectory(prefix="bld-openclaw-analysis-") as temporary_dir:
+                source_path = _write_numbers_workbook(numbers, Path(temporary_dir) / "numbers.xlsx")
+                summary = generate_excel_with_bld(
+                    source_path,
+                    INTERNAL_OUTPUT_DIR / "__analysis.xlsx",
+                    catalog,
+                    write_output=False,
+                    price_mode=price_options["price_mode"],
+                    exchange_rate=price_options["exchange_rate"],
+                )
+            summary = _augment_summary_with_bld_fragments(summary, catalog)
+        summary = _attach_product_details(summary, catalog)
 
     if export and output_path:
         with connect(DB_PATH) as conn:

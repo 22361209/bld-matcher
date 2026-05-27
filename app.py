@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Flask, flash, g, jsonify, redirect, request, session, url_for
+from flask import Flask, abort, flash, g, jsonify, redirect, request, session, url_for
 from werkzeug.exceptions import RequestEntityTooLarge
 
-from app.config import APP_DEBUG, APP_HOST, APP_PORT, DB_PATH, MAX_CONTENT_LENGTH, MAX_UPLOAD_MB, SECRET_KEY, assert_production_secrets
+from app.config import APP_DEBUG, APP_HOST, APP_PORT, DB_PATH, MAX_CONTENT_LENGTH, MAX_UPLOAD_MB, PRODUCT_SYNC_MAX_UPLOAD_MB, SECRET_KEY, assert_production_secrets
 from app.database import connect, ensure_default_admin, get_user
-from app.helpers import download_name, product_image_thumb_url, product_image_url, product_image_urls
+from app.helpers import download_name, product_image_thumb_url, product_image_url, product_image_urls, product_item_display_lines
 from app.routes import register_routes
 from app.security import ROLE_LABELS, can, csrf_field, safe_referrer, validate_csrf_token, wants_json_response
 
@@ -22,6 +22,7 @@ def create_app() -> Flask:
     web_app.jinja_env.globals["product_image_url"] = product_image_url
     web_app.jinja_env.globals["product_image_thumb_url"] = product_image_thumb_url
     web_app.jinja_env.globals["product_image_urls"] = product_image_urls
+    web_app.jinja_env.globals["product_item_display_lines"] = product_item_display_lines
     web_app.jinja_env.globals["download_name"] = download_name
     web_app.jinja_env.globals["csrf_field"] = csrf_field
 
@@ -40,6 +41,10 @@ def create_app() -> Flask:
 
     @web_app.before_request
     def load_current_user():
+        if request.method == "POST" and request.content_length:
+            limit_mb = PRODUCT_SYNC_MAX_UPLOAD_MB if request.endpoint == "preview_product_data_package" else MAX_UPLOAD_MB
+            if request.content_length > limit_mb * 1024 * 1024:
+                abort(413)
         if request.path.startswith("/api/internal/"):
             g.user = None
             return
@@ -74,9 +79,12 @@ def create_app() -> Flask:
 
     @web_app.errorhandler(RequestEntityTooLarge)
     def upload_too_large(_error):
+        limit_mb = PRODUCT_SYNC_MAX_UPLOAD_MB if request.endpoint == "preview_product_data_package" else MAX_UPLOAD_MB
         if request.path.startswith("/api/internal/") or wants_json_response():
-            return jsonify({"ok": False, "error": f"上传文件不能超过 {MAX_UPLOAD_MB}MB。"}), 413
-        flash(f"上传文件不能超过 {MAX_UPLOAD_MB}MB。", "error")
+            return jsonify({"ok": False, "error": f"上传文件不能超过 {limit_mb}MB。"}), 413
+        flash(f"上传文件不能超过 {limit_mb}MB。", "error")
+        if request.path.startswith("/product-data-sync"):
+            return redirect(url_for("product_data_sync"))
         if request.path.startswith("/materials"):
             return redirect(url_for("materials"))
         if request.path.startswith("/prices"):

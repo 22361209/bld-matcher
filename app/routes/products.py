@@ -369,6 +369,7 @@ def register(app) -> None:
                 "oe_no_2": request.form.get("oe_no_2", ""),
                 "models": request.form.get("models", ""),
                 "price_cny": _validated_price_value(request.form.get("price_cny", "")),
+                "product_status": request.form.get("product_status", ""),
                 "image_path": request.form.get("image_path", ""),
                 "active": request.form.get("active", "0"),
             }

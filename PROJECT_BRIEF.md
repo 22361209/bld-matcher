@@ -1,6 +1,6 @@
 # BLD Project Brief
 
-更新时间：2026-05-19
+更新时间：2026-05-27
 
 这是给新接手 Codex 或开发者的短版项目说明。先读 `AGENTS.md`，再读本文件。详细历史在 `项目交接说明.md`，需要查旧决策时用 `rg` 搜索，不要默认整篇读取。
 
@@ -10,7 +10,8 @@ BLD 是一个局域网内部使用的 Flask 业务系统，主要用于：
 
 - 客户询价 Excel/OE/品牌号码/BLD 号匹配
 - OpenClaw 机器人内部 API 查询和生成结果文件
-- 产品目录、OE、车型、图片、PDF 图纸、含税单价维护
+- 产品目录、OE、车型、图片、PDF 图纸、含税单价和产品状态维护
+- 本机和办公室 NAS 之间产品数据包导入/导出与增量同步
 - 询价结果 Excel 和图纸压缩包下载
 - 生产料单生成和冲压材料明细维护
 - 发货照片标签识别和 Excel 汇总草稿
@@ -23,7 +24,7 @@ BLD 是一个局域网内部使用的 Flask 业务系统，主要用于：
 
 ```text
 MacBook Air: /Users/linzhenyue/Project5inMBA
-Mac mini: /Users/linzhenyue/Documents/New project 5
+Mac mini: /Users/linzhenyue/Projects/bld-matcher
 ```
 
 本机访问：
@@ -49,7 +50,7 @@ NAS 信息：
 ## 本机启动
 
 ```bash
-cd "/Users/linzhenyue/Project5inMBA"
+cd "/Users/linzhenyue/Projects/bld-matcher"
 APP_DEBUG=0 SECRET_KEY=local-dev-bld-matcher .venv/bin/python app.py
 ```
 
@@ -107,7 +108,10 @@ OpenClaw 内部 API：
 - 产品目录每页 50 条，避免大量产品和图片导致滚动卡顿。
 - 表格使用缩略图，点击图片浮层预览原图。
 - 有 PDF 图纸时点击 BLD 号预览图纸。
+- 表格在含税单价后显示“产品状态”，用于记录球头/衬套配置，例如“1 个球头 2 个衬套”；编辑产品时可维护该字段。
 - 导出目录只对管理员开放。
+- 管理员菜单有“产品数据同步”入口，可导出产品数据包；导出包包含 `products` 表和 `manifest.json`，可选带 `data/drawings/` 和 `data/product_images/`。
+- “产品数据同步”导入会先预览新增/更新/包内旧数据/无变化/本机独有数量，再增量合并 `products` 表；包内更新时间早于当前系统的同 BLD 产品会跳过，避免旧包覆盖新数据；不会覆盖本机账号、内部 API Key、操作日志或其他运行状态；勾选时才复制包内图纸/图片，导入前会备份本机 `products.sqlite3` 和被覆盖的媒体文件。
 - 产品编辑页可上传/替换单个 PDF 图纸和最多 5 张产品图片，也可删除产品；手工清空含税单价会写入空值，图片/图纸格式校验失败时不会先更新产品文字资料。
 
 外部品牌号码审核工具：
@@ -188,6 +192,7 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 - `app/routes/inquiry.py`：询价上传、匹配、下载 Excel、图纸包
 - `app/routes/internal_api.py`：OpenClaw 内部 API
 - `app/routes/products.py`：产品目录、图片、图纸、单价导入、目录导入导出
+- `app/routes/product_sync.py`：本机/NAS 产品数据包导入导出和增量同步
 - `app/routes/materials.py`：生产料单和材料明细
 - `app/routes/shipment_recognition.py`：货物识别页面，触发发货照片标签识别批处理
 - `app/routes/purchase_contracts.py`：合同管理、采购/销售合同生成和 PDF 下载

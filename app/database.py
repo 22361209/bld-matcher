@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS products (
   oe_no_2 TEXT DEFAULT '',
   models TEXT DEFAULT '',
   price_cny REAL,
+  product_status TEXT DEFAULT '',
   image_path TEXT DEFAULT '',
   image_path_2 TEXT DEFAULT '',
   image_path_3 TEXT DEFAULT '',
@@ -425,6 +426,7 @@ def _field_changes(before: sqlite3.Row | None, after: dict) -> list[str]:
         "oe_no_2": "品牌号码",
         "models": "车型",
         "price_cny": "含税单价",
+        "product_status": "产品状态",
         "image_path": "产品图片",
         "active": "状态",
     }
@@ -462,6 +464,7 @@ def upsert_product(
         "oe_no_2": clean_oe_list(data.get("oe_no_2") or data.get("OE NO.2")),
         "models": clean_multiline(data.get("models") or data.get("Models")),
         "price_cny": _parse_price(data.get("price_cny")),
+        "product_status": clean_multiline(data.get("product_status") or data.get("产品状态")),
         "image_path": compact_text(data.get("image_path")),
         "active": 1 if str(data.get("active", "1")) != "0" else 0,
         "source": source,
@@ -473,9 +476,9 @@ def upsert_product(
     conn.execute(
         f"""
         INSERT INTO products
-          (bld_no, series, item, oe_no_1, oe_no_2, models, price_cny, image_path, active, source, created_at, updated_at)
+          (bld_no, series, item, oe_no_1, oe_no_2, models, price_cny, product_status, image_path, active, source, created_at, updated_at)
         VALUES
-          (:bld_no, :series, :item, :oe_no_1, :oe_no_2, :models, :price_cny, :image_path, :active, :source, :created_at, :updated_at)
+          (:bld_no, :series, :item, :oe_no_1, :oe_no_2, :models, :price_cny, :product_status, :image_path, :active, :source, :created_at, :updated_at)
         ON CONFLICT(bld_no) DO UPDATE SET
           series=excluded.series,
           item=excluded.item,
@@ -483,6 +486,7 @@ def upsert_product(
           oe_no_2=excluded.oe_no_2,
           models=excluded.models,
           {price_assignment},
+          product_status=excluded.product_status,
           image_path=CASE WHEN excluded.image_path != '' THEN excluded.image_path ELSE products.image_path END,
           active=excluded.active,
           source=excluded.source,
@@ -519,6 +523,7 @@ def import_catalog(conn: sqlite3.Connection, catalog_path: Path, replace: bool =
             "OE NO.2": merge_unique_lines([row.get("OE NO.2") for row in rows], oe=True),
             "Models": merge_unique_lines([row.get("Models") for row in rows]),
             "price_cny": None,
+            "product_status": "",
             "image_path": "",
         }
         upsert_product(conn, merged, source=catalog_path.name, audit=False)
@@ -1074,6 +1079,7 @@ def rows_for_catalog(conn: sqlite3.Connection) -> tuple[list[dict], dict[str, st
                 "OE NO.2": row["oe_no_2"],
                 "Models": row["models"],
                 "price_cny": row["price_cny"],
+                "product_status": row["product_status"] if "product_status" in row.keys() else "",
                 "image_path": row["image_path"],
                 "image_path_2": row["image_path_2"] if "image_path_2" in row.keys() else "",
                 "image_path_3": row["image_path_3"] if "image_path_3" in row.keys() else "",

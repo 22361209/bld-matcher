@@ -3,7 +3,10 @@ from __future__ import annotations
 import io
 import os
 import re
+import shutil
+import sqlite3
 import sys
+import tarfile
 import tempfile
 import time
 import unittest
@@ -41,6 +44,17 @@ def pollute_xlsx_tail(path: Path, *, declared_rows: int = 2000, after_row: int =
     temporary_path.replace(path)
 
 
+def strip_xlsx_dimension(path: Path) -> None:
+    temporary_path = path.with_suffix(".no-dimension.xlsx")
+    with zipfile.ZipFile(path, "r") as source, zipfile.ZipFile(temporary_path, "w") as target:
+        for entry in source.infolist():
+            data = source.read(entry.filename)
+            if entry.filename == "xl/worksheets/sheet1.xml":
+                data = re.sub(rb"<dimension\b[^>]*/>", b"", data, count=1)
+            target.writestr(entry, data)
+    temporary_path.replace(path)
+
+
 class WebAppTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -49,6 +63,7 @@ class WebAppTest(unittest.TestCase):
         cls.root = root
         os.environ["SECRET_KEY"] = "test-secret"
         os.environ["MAX_UPLOAD_MB"] = "20"
+        os.environ["PRODUCT_SYNC_MAX_UPLOAD_MB"] = "512"
         os.environ["BLD_DATA_DIR"] = str(root / "data")
         os.environ["BLD_UPLOAD_DIR"] = str(root / "uploads")
         os.environ["BLD_OUTPUT_DIR"] = str(root / "outputs")
@@ -194,10 +209,233 @@ class WebAppTest(unittest.TestCase):
 
     def test_core_admin_pages_load(self):
         self.login()
-        for path in ["/customer-prices", "/contracts", "/contracts/sales", "/products", "/materials", "/shipment-recognition", "/purchase-contracts", "/users", "/internal-api-key", "/logs", "/system-updates"]:
+        for path in ["/customer-prices", "/contracts", "/contracts/sales", "/products", "/materials", "/shipment-recognition", "/purchase-contracts", "/users", "/internal-api-key", "/logs", "/system-updates", "/product-data-sync"]:
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
+
+    def _build_product_sync_package(self, rows: list[dict], *, media: bool = False) -> Path:
+        package_path = self.root / "incoming-product-sync.tar.gz"
+        work_dir = self.root / "incoming-product-sync"
+        if work_dir.exists():
+            shutil.rmtree(work_dir)
+        if package_path.exists():
+            package_path.unlink()
+        data_dir = work_dir / "data"
+        data_dir.mkdir(parents=True, exist_ok=True)
+        product_db = data_dir / "products.sqlite3"
+        with self.web.connect(self.web.DB_PATH) as source, sqlite3.connect(product_db) as target:
+            target.row_factory = sqlite3.Row
+            schema = source.execute(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'products'"
+            ).fetchone()["sql"]
+            target.execute(schema)
+            columns = [row["name"] for row in source.execute("PRAGMA table_info(products)")]
+            insert_columns = ", ".join(columns)
+            placeholders = ", ".join("?" for _ in columns)
+            for index, row in enumerate(rows, start=1):
+                values = []
+                for column in columns:
+                    if column == "id":
+                        values.append(index)
+                    else:
+                        values.append(row.get(column, "" if column != "price_cny" else None))
+                target.execute(f"INSERT INTO products ({insert_columns}) VALUES ({placeholders})", values)
+            target.commit()
+        (work_dir / "manifest.json").write_text(
+            '{"package_type":"bld_product_data","version":1}',
+            encoding="utf-8",
+        )
+        if media:
+            image_dir = data_dir / "product_images"
+            image_dir.mkdir(parents=True, exist_ok=True)
+            (image_dir / "SYNC001.png").write_bytes(b"fake-image")
+        with tarfile.open(package_path, "w:gz") as archive:
+            archive.add(product_db, arcname="data/products.sqlite3")
+            archive.add(work_dir / "manifest.json", arcname="manifest.json")
+            if media:
+                archive.add(data_dir / "product_images" / "SYNC001.png", arcname="data/product_images/SYNC001.png")
+        return package_path
+
+    def test_product_data_sync_exports_products_without_api_keys(self):
+        from app.database import upsert_product
+
+        self.login()
+        self.create_internal_api_token()
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "SYNC-EXPORT",
+                    "series": "SYNC",
+                    "item": "Export Test",
+                    "oe_no_1": "SYNC-EXPORT-OE",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        response = self.client.post("/product-data-sync/export")
+        self.assertEqual(response.status_code, 200)
+        package_path = self.root / "exported-product-data.tar.gz"
+        package_path.write_bytes(response.data)
+        response.close()
+        with tarfile.open(package_path, "r:gz") as archive:
+            names = set(archive.getnames())
+            self.assertIn("data/products.sqlite3", names)
+            self.assertIn("manifest.json", names)
+            archive.extract("data/products.sqlite3", self.root / "export-check")
+
+        exported_db = self.root / "export-check" / "data" / "products.sqlite3"
+        with sqlite3.connect(exported_db) as conn:
+            tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+            count = conn.execute("SELECT COUNT(*) FROM products WHERE bld_no = 'SYNC-EXPORT'").fetchone()[0]
+        self.assertEqual(tables, {"products", "sqlite_sequence"})
+        self.assertEqual(count, 1)
+
+    def test_product_data_sync_imports_incrementally_and_preserves_api_key(self):
+        from app.database import internal_api_key_status, upsert_product
+
+        self.login()
+        token = self.create_internal_api_token()
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "SYNC001",
+                    "series": "LOCAL",
+                    "item": "Local Item",
+                    "oe_no_1": "OLD-OE",
+                    "price_cny": "10",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        package_path = self._build_product_sync_package(
+            [
+                {
+                    "bld_no": "SYNC001",
+                    "series": "NAS",
+                    "item": "NAS Item",
+                    "oe_no_1": "NEW-OE",
+                    "price_cny": 12.5,
+                    "image_path": "data_product_images/SYNC001.png",
+                    "active": 1,
+                    "source": "nas",
+                    "created_at": "2026-05-01 00:00:00",
+                    "updated_at": "2099-05-27 10:00:00",
+                },
+                {
+                    "bld_no": "SYNC002",
+                    "series": "NAS",
+                    "item": "New Product",
+                    "oe_no_1": "NEW-ONLY",
+                    "price_cny": 20,
+                    "active": 1,
+                    "source": "nas",
+                    "created_at": "2026-05-27 10:00:00",
+                    "updated_at": "2099-05-27 10:00:00",
+                },
+            ],
+            media=True,
+        )
+        response = self.client.post(
+            "/product-data-sync/import/preview",
+            data={
+                "include_images": "1",
+                "package": (package_path.open("rb"), package_path.name),
+            },
+            content_type="multipart/form-data",
+        )
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("新增产品", html)
+        self.assertIn("SYNC001", html)
+        self.assertIn("SYNC002", html)
+        path_match = re.search(r'name="package_path" value="([^"]+)"', html)
+        self.assertIsNotNone(path_match)
+
+        response = self.client.post(
+            "/product-data-sync/import/apply",
+            data={"include_images": "1", "package_path": path_match.group(1)},
+            follow_redirects=True,
+        )
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("产品数据导入完成：新增 1 条，更新 1 条", html)
+        with self.web.connect(self.web.DB_PATH) as conn:
+            row = conn.execute("SELECT * FROM products WHERE bld_no = 'SYNC001'").fetchone()
+            new_row = conn.execute("SELECT * FROM products WHERE bld_no = 'SYNC002'").fetchone()
+            status = internal_api_key_status(conn)
+        self.assertEqual(row["series"], "NAS")
+        self.assertEqual(row["oe_no_1"], "NEW-OE")
+        self.assertEqual(new_row["item"], "New Product")
+        self.assertTrue(status["enabled"])
+        self.assertTrue(token.endswith(status["preview"][-6:]))
+        self.assertTrue((self.root / "data" / "product_images" / "SYNC001.png").exists())
+
+    def test_product_data_sync_skips_older_package_rows(self):
+        from app.database import upsert_product
+
+        self.login()
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "SYNC-STALE",
+                    "series": "LOCAL",
+                    "item": "Local Newer",
+                    "oe_no_1": "LOCAL-OE",
+                    "price_cny": "30",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            conn.execute(
+                "UPDATE products SET updated_at = ? WHERE bld_no = ?",
+                ("2099-01-01 00:00:00", "SYNC-STALE"),
+            )
+            conn.commit()
+
+        package_path = self._build_product_sync_package(
+            [
+                {
+                    "bld_no": "SYNC-STALE",
+                    "series": "OLD-PACKAGE",
+                    "item": "Should Not Overwrite",
+                    "oe_no_1": "OLD-OE",
+                    "price_cny": 1,
+                    "active": 1,
+                    "source": "old-package",
+                    "created_at": "2020-01-01 00:00:00",
+                    "updated_at": "2020-01-01 00:00:00",
+                }
+            ],
+        )
+        preview = self.client.post(
+            "/product-data-sync/import/preview",
+            data={"package": (package_path.open("rb"), package_path.name)},
+            content_type="multipart/form-data",
+        )
+        preview_html = preview.get_data(as_text=True)
+        self.assertEqual(preview.status_code, 200)
+        self.assertIn("包内旧数据", preview_html)
+        path_match = re.search(r'name="package_path" value="([^"]+)"', preview_html)
+        self.assertIsNotNone(path_match)
+
+        applied = self.client.post(
+            "/product-data-sync/import/apply",
+            data={"package_path": path_match.group(1)},
+            follow_redirects=True,
+        )
+        applied_html = applied.get_data(as_text=True)
+        self.assertEqual(applied.status_code, 200)
+        self.assertIn("跳过包内旧数据 1 条", applied_html)
+        with self.web.connect(self.web.DB_PATH) as conn:
+            row = conn.execute("SELECT * FROM products WHERE bld_no = ?", ("SYNC-STALE",)).fetchone()
+        self.assertEqual(row["series"], "LOCAL")
+        self.assertEqual(row["oe_no_1"], "LOCAL-OE")
 
     def test_shipment_recognition_requires_photos(self):
         self.login()
@@ -393,6 +631,100 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(payload["unmatched_count"], 0)
         self.assertEqual(payload["rows"][0]["bld_no"], "K8041LB")
         self.assertEqual(payload["rows"][0]["match_reason"], "OE 尾字母容错命中")
+
+    def test_internal_api_numbers_use_bld_fragment_lookup(self):
+        from app.database import upsert_product
+        from openpyxl import load_workbook
+
+        token = self.create_internal_api_token()
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K8072LA",
+                    "series": "NISSAN",
+                    "item": "Front Left Lower Control Arm",
+                    "oe_no_1": "54501-TEST-LA",
+                    "oe_no_2": "Moog: TEST-LA",
+                    "models": "VERSA TEST",
+                    "price_cny": "43",
+                    "image_path": "data_product_images/K8072LA.png",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K8072RA",
+                    "series": "NISSAN",
+                    "item": "Front Right Lower Control Arm",
+                    "price_cny": "43",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-OE-ONLY",
+                    "series": "TEST",
+                    "item": "OE SHOULD NOT WIN BLD SHORTHAND",
+                    "oe_no_1": "8072",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        response = self.client.post(
+            "/api/internal/inquiry/numbers",
+            json={"numbers": ["8072"], "rows_limit": 10},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        payload = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["matched_count"], 2)
+        self.assertEqual(payload["unmatched_count"], 0)
+        self.assertEqual([row["bld_no"] for row in payload["rows"]], ["K8072LA", "K8072RA"])
+        self.assertEqual(payload["rows"][0]["original_number"], "8072")
+        self.assertEqual(payload["rows"][0]["match_reason"], "BLD NO. 片段命中")
+        self.assertEqual(payload["rows"][0]["price_cny"], 43.0)
+        self.assertEqual(payload["rows"][0]["product"]["item"], "Front Left Lower Control Arm")
+        self.assertEqual(payload["rows"][0]["product"]["oe_no_1"], "54501-TEST-LA")
+        self.assertEqual(payload["rows"][0]["product"]["oe_no_2"], "Moog: TEST-LA")
+        self.assertEqual(payload["rows"][0]["product"]["models"], "VERSA TEST")
+        self.assertEqual(payload["rows"][0]["product"]["image_paths"], ["data_product_images/K8072LA.png"])
+
+        k_response = self.client.post(
+            "/api/internal/inquiry/numbers",
+            json={"numbers": ["K8072"], "rows_limit": 10},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        k_payload = k_response.get_json()
+        self.assertEqual(k_response.status_code, 200)
+        self.assertEqual(k_payload["matched_count"], 2)
+        self.assertEqual([row["bld_no"] for row in k_payload["rows"]], ["K8072LA", "K8072RA"])
+
+        export_response = self.client.post(
+            "/api/internal/inquiry/numbers",
+            json={"numbers": ["8072"], "source_name": "片段查询", "export": True, "rows_limit": 10},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        export_payload = export_response.get_json()
+        self.assertEqual(export_response.status_code, 200)
+        self.assertEqual(export_payload["matched_count"], 2)
+        self.assertEqual([row["bld_no"] for row in export_payload["rows"]], ["K8072LA", "K8072RA"])
+        generated = load_workbook(Path(export_payload["output_path"]), read_only=True, data_only=True)
+        try:
+            sheet = generated.active
+            self.assertEqual(sheet.cell(2, 1).value, "8072")
+            self.assertEqual(sheet.cell(2, 2).value, "K8072LA")
+            self.assertEqual(sheet.cell(3, 1).value, "8072")
+            self.assertEqual(sheet.cell(3, 2).value, "K8072RA")
+        finally:
+            generated.close()
 
     def test_internal_api_numbers_use_psa_352x_dot_rule(self):
         from app.database import upsert_product
@@ -1467,6 +1799,60 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(product["series"], "CLEARED")
         self.assertIsNone(product["price_cny"])
 
+    def test_product_status_can_be_edited_and_shown_in_catalog(self):
+        from app.database import upsert_product
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-STATUS-001",
+                    "series": "TEST",
+                    "item": "Front Left Lower Control Arm",
+                    "oe_no_1": "STATUS-OE-001",
+                    "models": "Tester",
+                    "price_cny": "45",
+                    "product_status": "1 个球头 2 个衬套",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            product = conn.execute("SELECT * FROM products WHERE bld_no = ?", ("K-STATUS-001",)).fetchone()
+
+        self.login()
+        page = self.client.get("/products", query_string={"bld": "K-STATUS-001"})
+        html = page.get_data(as_text=True)
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("<th>产品状态</th>", html)
+        self.assertIn("1 个球头 2 个衬套", html)
+
+        edit = self.client.get(f"/products/{product['id']}/edit")
+        edit_html = edit.get_data(as_text=True)
+        self.assertEqual(edit.status_code, 200)
+        self.assertIn('name="product_status"', edit_html)
+        self.assertIn("1 个球头 2 个衬套", edit_html)
+
+        save = self.client.post(
+            "/products/save",
+            data={
+                "bld_no": "K-STATUS-001",
+                "series": "TEST",
+                "item": "Front Left Lower Control Arm",
+                "oe_no_1": "STATUS-OE-001",
+                "oe_no_2": "",
+                "models": "Tester",
+                "price_cny": "45",
+                "product_status": "0 个球头 1 个衬套",
+                "active": "1",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(save.status_code, 302)
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            updated = conn.execute("SELECT * FROM products WHERE bld_no = ?", ("K-STATUS-001",)).fetchone()
+        self.assertEqual(updated["product_status"], "0 个球头 1 个衬套")
+
     def test_product_save_rejects_invalid_image_before_updating_fields(self):
         from app.database import upsert_product
 
@@ -1768,8 +2154,10 @@ class WebAppTest(unittest.TestCase):
         finally:
             synced.close()
 
-    def test_upload_limit_is_20mb(self):
-        self.assertEqual(self.web.app.config["MAX_CONTENT_LENGTH"], 20 * 1024 * 1024)
+    def test_upload_limits_keep_product_sync_headroom(self):
+        self.assertEqual(self.web.MAX_UPLOAD_MB, 20)
+        self.assertEqual(self.web.PRODUCT_SYNC_MAX_UPLOAD_MB, 512)
+        self.assertEqual(self.web.app.config["MAX_CONTENT_LENGTH"], 512 * 1024 * 1024)
 
     def test_oversized_upload_redirects(self):
         self.login()
@@ -1824,6 +2212,7 @@ class WebAppTest(unittest.TestCase):
                 "004_product_image_slots",
                 "005_internal_api_keys",
                 "006_shipment_recognition_jobs",
+                "007_product_status",
             ],
         )
 
@@ -2533,6 +2922,48 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(summary["rows"][0]["bld_no"], "K8041LB")
         self.assertEqual(summary["rows"][0]["reason"], "OE 尾字母容错命中")
 
+    def test_uploaded_inquiry_split_oe_suffix_variants_match_same_product(self):
+        from app.database import upsert_product
+        from app.excel_io import generate_excel_with_bld
+        from app.helpers import load_catalog
+        from openpyxl import Workbook
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K8321LB",
+                    "series": "VW",
+                    "item": "Front Left Lower Control Arm",
+                    "oe_no_1": "2QD407151",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        inquiry_path = self.root / "uploads" / "split-oe-suffix-variants.xlsx"
+        inquiry_path.parent.mkdir(parents=True, exist_ok=True)
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["OE号"])
+        sheet.append(["2QD407151A;2QD407151C"])
+        workbook.save(inquiry_path)
+        workbook.close()
+
+        summary = generate_excel_with_bld(
+            inquiry_path,
+            self.root / "outputs" / "split-oe-suffix-variants-result.xlsx",
+            load_catalog(),
+            write_output=False,
+        )
+
+        self.assertEqual(summary["total"], 1)
+        self.assertEqual(summary["matched"], 1)
+        self.assertEqual(summary["rows"][0]["bld_no"], "K8321LB")
+        self.assertEqual(summary["rows"][0]["reason"], "OE 尾字母容错命中")
+        self.assertEqual(summary["rows"][0]["matched_oe_codes"], ["2QD407151A", "2QD407151C"])
+        self.assertIn("命中号码：2QD407151A, 2QD407151C", summary["rows"][0]["match_note"])
+
     def test_psa_352x_dot_matches_psa_before_gm_exact(self):
         from app.matcher import ProductCatalog
 
@@ -2800,7 +3231,7 @@ class WebAppTest(unittest.TestCase):
         from openpyxl import Workbook, load_workbook
 
         with self.web.connect(self.web.DB_PATH) as conn:
-            for bld_no, oe_no in [("KCLEAN01", "4806902180"), ("KCLEAN02", "CLEAN-250")]:
+            for bld_no, oe_no in [("KCLEAN01", "CLEAN-002"), ("KCLEAN02", "CLEAN-250")]:
                 upsert_product(
                     conn,
                     {
@@ -2816,7 +3247,7 @@ class WebAppTest(unittest.TestCase):
         workbook = Workbook()
         sheet = workbook.active
         sheet.append(["OE号"])
-        sheet.append(["4806902180"])
+        sheet.append(["CLEAN-002"])
         sheet.cell(250, 1).value = "CLEAN-250"
         polluted_path = self.root / "uploads" / "polluted-inquiry.xlsx"
         polluted_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2841,7 +3272,7 @@ class WebAppTest(unittest.TestCase):
         self.assertIsNotNone(output_match)
         self.assertIn("inquiry-cleaned", upload_match.group(1))
         cleaned_workbook = load_workbook(Path(upload_match.group(1)), read_only=True, data_only=True)
-        self.assertEqual(cleaned_workbook.active.cell(2, 1).value, "4806902180")
+        self.assertEqual(cleaned_workbook.active.cell(2, 1).value, "CLEAN-002")
         cleaned_workbook.close()
 
         result = self.client.post(
@@ -3005,6 +3436,127 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("¥66.00", result_html)
         self.assertIn("<td>4</td>", result_html)
         self.assertNotIn("<td>3</td>", result_html)
+
+    def test_xlsx_without_dimension_can_preview_match_columns(self):
+        from openpyxl import Workbook
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["فحمات", None])
+        sheet.append(["رقم", "كمية"])
+        sheet.append([446633220, 300])
+        sheet.append(["58101F2A00", 300])
+        inquiry_path = self.root / "uploads" / "arabic-no-dimension.xlsx"
+        inquiry_path.parent.mkdir(parents=True, exist_ok=True)
+        workbook.save(inquiry_path)
+        workbook.close()
+        strip_xlsx_dimension(inquiry_path)
+
+        self.login()
+        with inquiry_path.open("rb") as handle:
+            response = self.client.post(
+                "/match",
+                data={"inquiry": (handle, "هونداي و تويوتا.xlsx")},
+                content_type="multipart/form-data",
+            )
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("选择匹配列", html)
+        self.assertIn("فحمات", html)
+        self.assertIn("رقم", html)
+        self.assertIn('name="match_columns" value="0"', html)
+        self.assertIn('name="match_columns" value="1"', html)
+        self.assertNotIn("生成失败", html)
+
+    def test_segmented_merged_headers_do_not_count_as_inquiry_rows(self):
+        from app.database import upsert_product
+        from openpyxl import Workbook, load_workbook
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            for index in range(1, 5):
+                upsert_product(
+                    conn,
+                    {
+                        "bld_no": f"KSEG{index:02d}",
+                        "series": "TEST",
+                        "item": "SEGMENTED ARM",
+                        "oe_no_1": f"SEG-OE-{index:03d}",
+                        "active": "1",
+                    },
+                    actor="tester",
+                )
+
+        workbook = Workbook()
+        sheet = workbook.active
+        row = 1
+        for section in range(2):
+            sheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=3)
+            sheet.cell(row, 1).value = f"分段 {section + 1}"
+            row += 1
+            sheet.append(["序号", "OE号", "数量"])
+            row += 1
+            for item in range(2):
+                number = section * 2 + item + 1
+                sheet.append([number, f"SEG-OE-{number:03d}", 10])
+                row += 1
+        buffer = io.BytesIO()
+        workbook.save(buffer)
+        workbook.close()
+        buffer.seek(0)
+
+        self.login()
+        response = self.client.post(
+            "/match",
+            data={"inquiry": (buffer, "segmented-merged.xlsx")},
+            content_type="multipart/form-data",
+        )
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        upload_match = re.search(r'name="upload_path" value="([^"]+)"', html)
+        output_match = re.search(r'name="output_name" value="([^"]+)"', html)
+        self.assertIsNotNone(upload_match)
+        self.assertIsNotNone(output_match)
+
+        result = self.client.post(
+            "/match/column",
+            data={
+                "upload_path": upload_match.group(1),
+                "original_filename": "segmented-merged.xlsx",
+                "output_name": output_match.group(1),
+                "match_column": "1",
+            },
+        )
+        result_html = result.get_data(as_text=True)
+
+        self.assertEqual(result.status_code, 200)
+        self.assertIn("共 4 行，命中 4 行，未找到 0 行", result_html)
+        self.assertNotIn("<td>2</td>", result_html)
+        self.assertNotIn("<td>6</td>", result_html)
+        for index in range(1, 5):
+            self.assertIn(f"KSEG{index:02d}", result_html)
+
+        download = self.client.post(
+            "/match/download",
+            data={
+                "upload_path": upload_match.group(1),
+                "original_filename": "segmented-merged.xlsx",
+                "output_name": output_match.group(1),
+                "match_column": "1",
+            },
+        )
+        self.assertEqual(download.status_code, 200)
+        download.close()
+        generated = load_workbook(self.root / "outputs" / "u1-007" / output_match.group(1), data_only=True)
+        generated_sheet = generated.active
+        self.assertEqual(generated_sheet.cell(2, 4).value, "BLD NO.")
+        self.assertEqual(generated_sheet.cell(3, 4).value, "KSEG01")
+        self.assertEqual(generated_sheet.cell(4, 4).value, "KSEG02")
+        self.assertIsNone(generated_sheet.cell(6, 4).value)
+        self.assertEqual(generated_sheet.cell(7, 4).value, "KSEG03")
+        self.assertEqual(generated_sheet.cell(8, 4).value, "KSEG04")
+        generated.close()
 
     def test_catalog_import_recognizes_chinese_brand_number_header(self):
         from app.matcher import ProductCatalog

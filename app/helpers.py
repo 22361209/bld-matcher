@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import shutil
 from datetime import datetime
 from functools import lru_cache
@@ -23,6 +24,15 @@ from .matcher import ProductCatalog, load_manual_map
 
 
 PRODUCT_IMAGE_SLOT_FIELDS = ("image_path", "image_path_2", "image_path_3", "image_path_4", "image_path_5")
+PRODUCT_ITEM_SUFFIXES = (
+    "Wishbone Control Arm",
+    "Track Control Arm",
+    "Control Arm",
+    "Trailing Arm",
+    "Draft Arm",
+    "Arm",
+    "Axle",
+)
 
 
 @lru_cache(maxsize=2048)
@@ -98,6 +108,29 @@ def product_image_urls(product) -> list[dict[str, str]]:
             }
         )
     return images
+
+
+def product_item_display_lines(value: object) -> list[str]:
+    text = str(value or "").strip()
+    if not text:
+        return []
+
+    lines = [line.strip() for line in re.split(r"[\r\n]+", text) if line.strip()]
+    if len(lines) > 1:
+        return lines
+
+    normalized = re.sub(r"\s+", " ", text)
+    for suffix in PRODUCT_ITEM_SUFFIXES:
+        match = re.search(rf"\b{re.escape(suffix)}$", normalized, flags=re.IGNORECASE)
+        if not match:
+            continue
+        if match.start() == 0:
+            return [normalized]
+        prefix = normalized[: match.start()].strip(" ,-/")
+        tail = normalized[match.start() :].strip()
+        if prefix and tail:
+            return [prefix, tail]
+    return [normalized]
 
 
 def bootstrap_catalog() -> None:

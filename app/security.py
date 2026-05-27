@@ -34,6 +34,7 @@ ROLE_PERMISSIONS = {
         "view_customer_prices",
         "manage_customer_prices",
         "recognize_shipments",
+        "sync_product_data",
     },
     "editor": {"edit_products", "manage_aliases", "generate_match", "view_logs", "generate_material_sheet", "recognize_shipments"},
     "user": {"generate_match", "generate_material_sheet", "recognize_shipments"},
