@@ -14,6 +14,7 @@ BLD 是一个局域网内部使用的 Flask 业务系统，主要用于：
 - 本机和办公室 NAS 之间产品数据包导入/导出与增量同步
 - 询价结果 Excel 和图纸压缩包下载
 - 生产料单生成和冲压材料明细维护
+- 发货通知客户模板管理和发货数据 Excel 生成
 - 发货照片标签识别和 Excel 汇总草稿
 - 合同管理和采购/销售合同 PDF 生成
 - 多用户账号、权限和操作日志
@@ -127,6 +128,14 @@ OpenClaw 内部 API：
 - 材料规格尺寸由规格输入解析生成。
 - 材料明细搜索支持母件编码、零件编码、规格尺寸等。
 
+发货通知：
+
+- 导航栏“发货通知”用于按客户模板生成发货通知 Excel。
+- 支持单个模板上传和 zip 批量模板上传。
+- 模板按客户分组选择，允许同一个客户维护多个模板。
+- 模板 Excel 需要包含商品编码和数量列，或使用 `{{商品编码}}`、`{{数量}}` 占位符。
+- 选择模板后可预览模板前几行；上传发货数据后先预览商品编码和数量，再确认生成 Excel。
+
 发货照片识别：
 
 - `tools/shipment_photo_recognition.py` 可读取 NAS 挂载目录或本机照片文件夹，识别货物白色标签并生成 Excel 和 JSON。
@@ -194,6 +203,7 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 - `app/routes/products.py`：产品目录、图片、图纸、单价导入、目录导入导出
 - `app/routes/product_sync.py`：本机/NAS 产品数据包导入导出和增量同步
 - `app/routes/materials.py`：生产料单和材料明细
+- `app/routes/shipment_notice.py`：发货通知模板管理、发货数据预览和 Excel 生成
 - `app/routes/shipment_recognition.py`：货物识别页面，触发发货照片标签识别批处理
 - `app/routes/purchase_contracts.py`：合同管理、采购/销售合同生成和 PDF 下载
 - `app/routes/admin.py`：用户、日志、系统更新页面

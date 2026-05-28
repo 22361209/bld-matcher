@@ -34,10 +34,11 @@ ROLE_PERMISSIONS = {
         "view_customer_prices",
         "manage_customer_prices",
         "recognize_shipments",
+        "generate_shipping_notice",
         "sync_product_data",
     },
-    "editor": {"edit_products", "manage_aliases", "generate_match", "view_logs", "generate_material_sheet", "recognize_shipments"},
-    "user": {"generate_match", "generate_material_sheet", "recognize_shipments"},
+    "editor": {"edit_products", "manage_aliases", "generate_match", "view_logs", "generate_material_sheet", "recognize_shipments", "generate_shipping_notice"},
+    "user": {"generate_match", "generate_material_sheet", "recognize_shipments", "generate_shipping_notice"},
     "viewer": set(),
 }
 

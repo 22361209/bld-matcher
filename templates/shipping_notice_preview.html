@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>发货通知预览</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
+  </head>
+  <body>
+    <main class="shell wide materials-linear shipping-notice-page">
+      {% set active_page = "shipping_notice" %}
+      {% include "_nav.html" %}
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <section class="messages materials-messages">
+            {% for category, message in messages %}
+              <div class="message {{ category }}">{{ message }}</div>
+            {% endfor %}
+          </section>
+        {% endif %}
+      {% endwith %}
+
+      <header class="materials-hero">
+        <div>
+          <h1>发货通知预览</h1>
+          <p>确认商品编码和数量无误后再生成客户模板 Excel。</p>
+        </div>
+        <a class="linear-button subtle" href="{{ url_for('shipping_notice') }}">返回上传</a>
+      </header>
+
+      <section class="materials-metrics">
+        <div><span>客户</span><strong>{{ generate_preview.template.customer }}</strong></div>
+        <div><span>模板</span><strong>{{ generate_preview.template.name }}</strong></div>
+        <div><span>数据行</span><strong>{{ generate_preview.row_count }}</strong></div>
+        <div><span>来源表</span><strong>{{ generate_preview.source.sheet }}</strong></div>
+      </section>
+
+      <section class="materials-command">
+        <div>
+          <h2>生成前预览</h2>
+          <p class="note">当前显示前 20 行，生成时会处理全部 {{ generate_preview.row_count }} 行。</p>
+        </div>
+        <form action="{{ url_for('generate_shipping_notice') }}" method="post" class="materials-actions">
+          {{ csrf_field() }}
+          <input type="hidden" name="template_id" value="{{ selected_template_id }}">
+          <input type="hidden" name="upload_path" value="{{ generate_preview.upload_path }}">
+          <button class="linear-button primary" type="submit">确认生成 Excel</button>
+        </form>
+      </section>
+
+      <section class="materials-table-section">
+        <div class="materials-table-title">
+          <div>
+            <h2>发货数据明细</h2>
+            <p>按源表行号显示商品编码和数量。</p>
+          </div>
+          <span>{{ generate_preview.row_count }} 行</span>
+        </div>
+        <div class="materials-table-wrap">
+          <table class="materials-grid-table">
+            <thead>
+              <tr>
+                <th>源行</th>
+                <th>商品编码</th>
+                <th>数量</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in generate_preview.rows %}
+                <tr>
+                  <td>{{ row.row }}</td>
+                  <td><strong>{{ row.code }}</strong></td>
+                  <td>{{ row.quantity }}</td>
+                </tr>
+              {% endfor %}
+              {% if not generate_preview.rows %}
+                <tr><td colspan="3">没有可生成的数据行。</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+    <script src="{{ url_for('static', filename='app.js', v=static_version('app.js')) }}"></script>
+  </body>
+</html>

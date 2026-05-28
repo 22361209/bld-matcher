@@ -61,6 +61,7 @@ document.querySelectorAll(".file-picker-input").forEach((input) => {
     .split(",")
     .map((item) => item.trim().toLowerCase())
     .filter((item) => item.startsWith("."));
+  const acceptedExtLabel = acceptedExts.length ? acceptedExts.join(" / ") : "文件";
   const acceptsFile = (file) => {
     if (!acceptedExts.length) return true;
     return acceptedExts.some((ext) => file.name.toLowerCase().endsWith(ext));
@@ -72,7 +73,7 @@ document.querySelectorAll(".file-picker-input").forEach((input) => {
     event.preventDefault();
     dragDepth += 1;
     picker.classList.add("drag-over");
-    setDropStatus("松开即可导入 Excel 文件");
+    setDropStatus(`松开即可导入 ${acceptedExtLabel} 文件`);
   });
 
   picker.addEventListener("dragover", (event) => {
@@ -100,7 +101,7 @@ document.querySelectorAll(".file-picker-input").forEach((input) => {
     const files = event.dataTransfer ? Array.from(event.dataTransfer.files || []) : [];
     const file = files.find(acceptsFile);
     if (!file) {
-      setDropStatus("仅支持 .xls / .xlsx 文件", true);
+      setDropStatus(`仅支持 ${acceptedExtLabel} 文件`, true);
       return;
     }
     if (typeof DataTransfer === "undefined") {
@@ -113,7 +114,7 @@ document.querySelectorAll(".file-picker-input").forEach((input) => {
     input.files = transfer.files;
     input.dispatchEvent(new Event("change", { bubbles: true }));
     if (files.length > 1) {
-      setDropStatus(`已选择：${file.name}（多个文件时仅使用第一个 Excel）`);
+      setDropStatus(`已选择：${file.name}（多个文件时仅使用第一个可用文件）`);
     }
   });
 });
@@ -805,12 +806,66 @@ document.querySelectorAll("[data-close-download-modal]").forEach((element) => {
   element.addEventListener("click", closeDownloadModal);
 });
 
+const shippingModals = Array.from(document.querySelectorAll("#shipping-template-select-modal, #shipping-template-menu-modal, #shipping-template-upload-modal, #shipping-template-batch-modal"));
+
+const closeShippingModals = () => {
+  shippingModals.forEach((modal) => {
+    modal.classList.remove("open");
+    modal.setAttribute("aria-hidden", "true");
+  });
+  document.body.classList.remove("modal-open");
+};
+
+const openShippingModal = (modal) => {
+  if (!(modal instanceof HTMLElement)) return;
+  closeShippingModals();
+  modal.classList.add("open");
+  modal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+  const focusTarget = modal.querySelector("select, input, textarea, button:not([data-close-shipping-modal])");
+  if (focusTarget instanceof HTMLElement) {
+    focusTarget.focus();
+  }
+};
+
+document.querySelector("[data-open-shipping-template-select-modal]")?.addEventListener("click", () => {
+  const fileInput = document.querySelector("#shipping-data-input");
+  if (fileInput instanceof HTMLInputElement && (!fileInput.files || fileInput.files.length === 0)) {
+    const picker = fileInput.closest(".file-picker");
+    const dropStatus = picker?.querySelector("[data-file-drop-status]");
+    if (dropStatus instanceof HTMLElement) {
+      dropStatus.textContent = "请先选择或拖入发货数据文件。";
+      dropStatus.classList.add("error");
+    }
+    return;
+  }
+  openShippingModal(document.querySelector("#shipping-template-select-modal"));
+});
+
+document.querySelector("[data-open-shipping-template-menu-modal]")?.addEventListener("click", () => {
+  openShippingModal(document.querySelector("#shipping-template-menu-modal"));
+});
+
+document.querySelectorAll("[data-open-shipping-template-action-modal]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const target = button.dataset.openShippingTemplateActionModal;
+    openShippingModal(document.querySelector(`#shipping-template-${target}-modal`));
+  });
+});
+
+document.querySelectorAll("[data-close-shipping-modal]").forEach((element) => {
+  element.addEventListener("click", closeShippingModals);
+});
+
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && quickOeImageModal?.classList.contains("open")) {
     closeQuickOeImageModal();
   }
   if (event.key === "Escape" && downloadModal?.classList.contains("open")) {
     closeDownloadModal();
+  }
+  if (event.key === "Escape" && shippingModals.some((modal) => modal.classList.contains("open"))) {
+    closeShippingModals();
   }
 });
 

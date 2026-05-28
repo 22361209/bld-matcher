@@ -13,6 +13,7 @@ import unittest
 import zipfile
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
+from urllib.parse import unquote
 from unittest.mock import patch
 
 
@@ -209,7 +210,7 @@ class WebAppTest(unittest.TestCase):
 
     def test_core_admin_pages_load(self):
         self.login()
-        for path in ["/customer-prices", "/contracts", "/contracts/sales", "/products", "/materials", "/shipment-recognition", "/purchase-contracts", "/users", "/internal-api-key", "/logs", "/system-updates", "/product-data-sync"]:
+        for path in ["/customer-prices", "/contracts", "/contracts/sales", "/products", "/materials", "/shipping-notices", "/shipment-recognition", "/purchase-contracts", "/users", "/internal-api-key", "/logs", "/system-updates", "/product-data-sync"]:
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
@@ -447,6 +448,115 @@ class WebAppTest(unittest.TestCase):
         html = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
         self.assertIn("请选择 jpg、png、webp、bmp、tif、heic 或 heif 照片", html)
+
+    def test_shipping_notice_template_preview_and_generate(self):
+        from openpyxl import Workbook, load_workbook
+
+        template_book = Workbook()
+        template_sheet = template_book.active
+        template_sheet.title = "通知模板"
+        template_sheet.append(["客户", "商品编码", "数量", "备注"])
+        template_sheet.append(["ABC", "", "", "固定"])
+        template_buffer = io.BytesIO()
+        template_book.save(template_buffer)
+        template_book.close()
+        template_buffer.seek(0)
+
+        self.login()
+        upload = self.client.post(
+            "/shipping-notices/templates/upload",
+            data={
+                "customer": "ABC客户",
+                "template_name": "标准模板",
+                "template": (template_buffer, "abc-template.xlsx"),
+            },
+            content_type="multipart/form-data",
+            follow_redirects=False,
+        )
+        self.assertEqual(upload.status_code, 302)
+        template_id = re.search(r"template_id=([^&]+)", upload.headers["Location"]).group(1)
+
+        page = self.client.get(f"/shipping-notices?template_id={template_id}")
+        html = page.get_data(as_text=True)
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("发货通知", html)
+        self.assertIn("选择客户模板", html)
+        self.assertIn("模板管理", html)
+        self.assertIn("data-open-shipping-template-action-modal", html)
+        self.assertIn("ABC客户", html)
+        self.assertIn("data-file-drop-zone", html)
+        self.assertIn("shipping-history-drawer", html)
+
+        data_book = Workbook()
+        data_sheet = data_book.active
+        data_sheet.title = "发货数据"
+        data_sheet.append(["商品编码", "数量"])
+        data_sheet.append(["K8001LA", 12])
+        data_sheet.append(["K8001RA", 8])
+        data_buffer = io.BytesIO()
+        data_book.save(data_buffer)
+        data_book.close()
+        data_buffer.seek(0)
+
+        preview = self.client.post(
+            "/shipping-notices/preview",
+            data={
+                "template_id": template_id,
+                "shipment_data": (data_buffer, "shipment.xlsx"),
+            },
+            content_type="multipart/form-data",
+        )
+        preview_html = preview.get_data(as_text=True)
+        self.assertEqual(preview.status_code, 200)
+        self.assertIn("发货通知预览", preview_html)
+        self.assertIn("生成前预览", preview_html)
+        self.assertIn("K8001LA", preview_html)
+        upload_match = re.search(r'name="upload_path" value="([^"]+)"', preview_html)
+        self.assertIsNotNone(upload_match)
+
+        generated = self.client.post(
+            "/shipping-notices/generate",
+            data={"template_id": template_id, "upload_path": upload_match.group(1)},
+            follow_redirects=False,
+        )
+        self.assertEqual(generated.status_code, 302)
+        output_name = unquote(re.search(r"generated=([^&]+)", generated.headers["Location"]).group(1))
+        output_path = self.root / "outputs" / output_name
+        self.assertTrue(output_path.exists())
+        workbook = load_workbook(output_path, data_only=True)
+        sheet = workbook.active
+        self.assertEqual(sheet.cell(2, 2).value, "K8001LA")
+        self.assertEqual(sheet.cell(2, 3).value, 12)
+        self.assertEqual(sheet.cell(3, 2).value, "K8001RA")
+        self.assertEqual(sheet.cell(3, 3).value, 8)
+        workbook.close()
+
+    def test_shipping_notice_batch_template_upload(self):
+        from openpyxl import Workbook
+
+        self.login()
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["商品编码", "数量"])
+        sheet.append(["", ""])
+        template_buffer = io.BytesIO()
+        workbook.save(template_buffer)
+        workbook.close()
+
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w") as archive:
+            archive.writestr("批量客户-发货模板.xlsx", template_buffer.getvalue())
+        zip_buffer.seek(0)
+        batch = self.client.post(
+            "/shipping-notices/templates/batch",
+            data={"template_zip": (zip_buffer, "templates.zip")},
+            content_type="multipart/form-data",
+            follow_redirects=True,
+        )
+        batch_html = batch.get_data(as_text=True)
+        self.assertEqual(batch.status_code, 200)
+        self.assertIn("已导入 1 个模板", batch_html)
+        self.assertIn("批量客户", batch_html)
 
     def test_shipment_recognition_async_job_completes(self):
         self.login()

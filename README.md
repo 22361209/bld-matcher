@@ -70,6 +70,7 @@ bash tools/install_bld_launcher.sh
 - `app/database.py`：数据库访问和业务数据写入
 - `app/migrations.py`：数据库结构迁移
 - `app/excel_io.py`：询价 Excel 读写
+- `app/routes/shipment_notice.py`：发货通知模板管理和客户模板 Excel 生成
 - `app/drawings.py`：PDF 图纸上传、替换归档和询价图纸包
 - `app/material_sheet.py`：生产料单生成
 - `templates/`：页面模板

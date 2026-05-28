@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>发货通知</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
+  </head>
+  <body>
+    <main class="shell wide materials-linear inquiry-search-page shipping-notice-page">
+      {% set active_page = "shipping_notice" %}
+      {% include "_nav.html" %}
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <section class="messages materials-messages">
+            {% for category, message in messages %}
+              <div class="message {{ category }}">{{ message }}</div>
+            {% endfor %}
+          </section>
+        {% endif %}
+      {% endwith %}
+
+      {% if request.args.get("generated") %}
+        <section class="materials-command">
+          <div>
+            <h2>发货通知已生成</h2>
+            <p class="note">{{ request.args.get("generated") }}</p>
+          </div>
+          <a class="linear-button primary" href="{{ url_for('download', name=request.args.get('generated')) }}">下载 Excel</a>
+        </section>
+      {% endif %}
+
+      <header class="inquiry-landing shipping-landing">
+        <h1>发货通知</h1>
+        <p>上传发货数据，选择客户模板后预览生成 Excel。</p>
+      </header>
+
+      <section class="inquiry-command-center shipping-command-center">
+        <div class="inquiry-directory-note">先上传发货数据，下一步选择客户模板。</div>
+        <form id="shipping-upload-form" action="{{ url_for('preview_shipping_notice') }}" method="post" enctype="multipart/form-data" class="inquiry-command-row inquiry-upload-form" data-submit-wait data-submit-wait-text="正在上传并生成预览，请稍候..." data-submit-wait-button-text="处理中...">
+          {{ csrf_field() }}
+          <div class="file-picker-field">
+            <span>可拖入发货数据</span>
+            <div class="file-picker inquiry-file-oe-picker" data-file-drop-zone data-file-drop-accept=".xlsx,.csv">
+              <input id="shipping-data-input" class="file-picker-input" type="file" name="shipment_data" accept=".xlsx,.csv" required>
+              <div class="file-picker-control">
+                <label class="file-picker-button" for="shipping-data-input">选择文件</label>
+                <input class="file-picker-oe-input shipping-file-placeholder" tabindex="-1" placeholder="Excel / CSV 发货数据" readonly>
+                <button class="file-picker-clear" type="button" disabled>清除</button>
+                <button class="embedded-submit" type="button" data-open-shipping-template-select-modal>下一步</button>
+              </div>
+              <div class="file-picker-drop-hint" data-file-drop-status data-submit-wait-message aria-live="polite"></div>
+            </div>
+          </div>
+        </form>
+        <div class="shipping-secondary-actions">
+          <button class="linear-button" type="button" data-open-shipping-template-menu-modal>模板管理</button>
+        </div>
+      </section>
+
+      <details class="shipment-result-drawer shipping-history-drawer">
+        <summary>
+          <span>最近发货通知</span>
+          <strong>{{ latest_outputs|length }} 个</strong>
+        </summary>
+        <section class="materials-table-section shipping-history-panel">
+          <div class="materials-table-title">
+            <div>
+              <h2>最近发货通知</h2>
+              <p>显示当前账号最近生成的发货通知 Excel。</p>
+            </div>
+          </div>
+          <div class="materials-table-wrap">
+            <table class="materials-grid-table">
+              <thead>
+                <tr>
+                  <th>文件名</th>
+                  <th>生成时间</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for file in latest_outputs %}
+                  <tr>
+                    <td>{{ file.name }}</td>
+                    <td>{{ file.updated_at }}</td>
+                    <td><a href="{{ url_for('download', name=file.download_name) }}">下载</a></td>
+                  </tr>
+                {% endfor %}
+                {% if not latest_outputs %}
+                  <tr><td colspan="3">还没有生成发货通知。</td></tr>
+                {% endif %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </details>
+    </main>
+
+    <div class="download-modal shipping-template-select-modal" id="shipping-template-select-modal" aria-hidden="true">
+      <div class="download-modal-backdrop" data-close-shipping-modal></div>
+      <div class="download-modal-panel shipping-select-panel" role="dialog" aria-modal="true" aria-labelledby="shipping-template-select-title">
+        <button class="download-modal-close" type="button" data-close-shipping-modal aria-label="关闭选择模板">×</button>
+        <div class="modal-heading">
+          <h2 id="shipping-template-select-title">选择客户模板</h2>
+          <p>选择后进入预览页，确认无误再生成文件。</p>
+        </div>
+        <div class="download-options-form">
+          <label>
+            <span>客户模板</span>
+            <select name="template_id" form="shipping-upload-form" required>
+              <option value="">请选择模板</option>
+              {% for customer in customers %}
+                <optgroup label="{{ customer }}">
+                  {% for template in templates if template.customer == customer and template.status == "ready" %}
+                    <option value="{{ template.id }}">
+                      {{ template.name }}
+                    </option>
+                  {% endfor %}
+                </optgroup>
+              {% endfor %}
+            </select>
+          </label>
+          <div class="download-modal-actions">
+            <button class="download-cancel-button" type="button" data-close-shipping-modal>取消</button>
+            <button class="download-confirm-button" type="submit" form="shipping-upload-form">生成预览</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="download-modal" id="shipping-template-menu-modal" aria-hidden="true">
+      <div class="download-modal-backdrop" data-close-shipping-modal></div>
+      <div class="download-modal-panel shipping-menu-panel" role="dialog" aria-modal="true" aria-labelledby="shipping-template-menu-title">
+        <button class="download-modal-close" type="button" data-close-shipping-modal aria-label="关闭模板管理">×</button>
+        <div class="modal-heading">
+          <h2 id="shipping-template-menu-title">模板管理</h2>
+        </div>
+        <div class="shipping-template-options">
+          <button type="button" data-open-shipping-template-action-modal="upload">
+            <strong>单个模板上传</strong>
+          </button>
+          <button type="button" data-open-shipping-template-action-modal="batch">
+            <strong>批量模板上传</strong>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="download-modal" id="shipping-template-upload-modal" aria-hidden="true">
+      <div class="download-modal-backdrop" data-close-shipping-modal></div>
+      <div class="download-modal-panel shipping-action-panel" role="dialog" aria-modal="true" aria-labelledby="shipping-template-upload-title">
+        <button class="download-modal-close" type="button" data-close-shipping-modal aria-label="关闭单个模板上传">×</button>
+        <div class="modal-heading">
+          <h2 id="shipping-template-upload-title">单个模板上传</h2>
+          <p>为指定客户上传一个 Excel 模板。</p>
+        </div>
+        <form action="{{ url_for('upload_shipping_notice_template') }}" method="post" enctype="multipart/form-data" class="download-options-form shipping-action-form">
+          {{ csrf_field() }}
+          <div class="shipping-form-grid">
+            <label>
+              <span>客户</span>
+              <input name="customer" placeholder="例如 ABC 客户" required>
+            </label>
+            <label>
+              <span>模板名称</span>
+              <input name="template_name" placeholder="例如 标准发货通知" required>
+            </label>
+          </div>
+          <label class="file-picker shipping-file-picker" data-file-drop-zone data-file-drop-accept=".xlsx,.xlsm">
+            <span>模板 Excel</span>
+            <input class="file-picker-input" type="file" name="template" accept=".xlsx,.xlsm" required>
+            <span class="file-picker-control">
+              <span class="file-picker-button">选择文件</span>
+              <span class="file-picker-name">未选择任何文件</span>
+            </span>
+            <span class="file-picker-drop-hint" data-file-drop-status aria-live="polite">模板需包含商品编码和数量列，或使用 {{ "{{商品编码}}" }} / {{ "{{数量}}" }} 占位符。</span>
+          </label>
+          <div class="download-modal-actions">
+            <button class="download-cancel-button" type="button" data-close-shipping-modal>取消</button>
+            <button class="download-confirm-button" type="submit">上传模板</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="download-modal" id="shipping-template-batch-modal" aria-hidden="true">
+      <div class="download-modal-backdrop" data-close-shipping-modal></div>
+      <div class="download-modal-panel shipping-action-panel" role="dialog" aria-modal="true" aria-labelledby="shipping-template-batch-title">
+        <button class="download-modal-close" type="button" data-close-shipping-modal aria-label="关闭批量模板上传">×</button>
+        <div class="modal-heading">
+          <h2 id="shipping-template-batch-title">批量模板上传</h2>
+          <p>上传 zip 包，一次导入多个客户模板。</p>
+        </div>
+        <form action="{{ url_for('batch_upload_shipping_notice_templates') }}" method="post" enctype="multipart/form-data" class="download-options-form shipping-action-form">
+          {{ csrf_field() }}
+          <label class="file-picker shipping-file-picker" data-file-drop-zone data-file-drop-accept=".zip">
+            <span>模板压缩包</span>
+            <input class="file-picker-input" type="file" name="template_zip" accept=".zip" required>
+            <span class="file-picker-control">
+              <span class="file-picker-button">选择文件</span>
+              <span class="file-picker-name">未选择任何文件</span>
+            </span>
+            <span class="file-picker-drop-hint" data-file-drop-status aria-live="polite">推荐命名“客户-模板名称.xlsx”，只导入 zip 中的 .xlsx / .xlsm 文件。</span>
+          </label>
+          <div class="download-modal-actions">
+            <button class="download-cancel-button" type="button" data-close-shipping-modal>取消</button>
+            <button class="download-confirm-button" type="submit">批量导入</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js', v=static_version('app.js')) }}"></script>
+  </body>
+</html>
