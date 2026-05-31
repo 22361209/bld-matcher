@@ -8,6 +8,7 @@ from werkzeug.exceptions import RequestEntityTooLarge
 from app.config import APP_DEBUG, APP_HOST, APP_PORT, DB_PATH, MAX_CONTENT_LENGTH, MAX_UPLOAD_MB, PRODUCT_SYNC_MAX_UPLOAD_MB, SECRET_KEY, assert_production_secrets
 from app.database import connect, ensure_default_admin, get_user
 from app.helpers import download_name, product_image_thumb_url, product_image_url, product_image_urls, product_item_display_lines
+from app.product_status import format_product_status
 from app.routes import register_routes
 from app.security import ROLE_LABELS, can, csrf_field, safe_referrer, validate_csrf_token, wants_json_response
 
@@ -23,6 +24,7 @@ def create_app() -> Flask:
     web_app.jinja_env.globals["product_image_thumb_url"] = product_image_thumb_url
     web_app.jinja_env.globals["product_image_urls"] = product_image_urls
     web_app.jinja_env.globals["product_item_display_lines"] = product_item_display_lines
+    web_app.jinja_env.globals["format_product_status"] = format_product_status
     web_app.jinja_env.globals["download_name"] = download_name
     web_app.jinja_env.globals["csrf_field"] = csrf_field
 

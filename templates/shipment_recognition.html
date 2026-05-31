@@ -112,12 +112,12 @@
         </details>
       {% endif %}
 
-      <details class="shipment-result-drawer" {% if latest_outputs %}open{% endif %}>
+      <details class="shipment-result-drawer shipment-history-drawer" {% if latest_outputs %}open{% endif %}>
         <summary>
           <span>最近识别文件</span>
           <strong>{{ latest_outputs|length }} 个</strong>
         </summary>
-        <section class="materials-recent shipment-history-panel">
+        <section class="materials-table-section shipment-history-panel">
           <div class="materials-table-title">
             <div>
               <h2>最近识别文件</h2>

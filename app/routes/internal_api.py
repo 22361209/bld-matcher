@@ -16,6 +16,11 @@ from app.database import connect, log_event, verify_internal_api_token
 from app.excel_io import PRICE_EXPORT_MODES, generate_excel_with_bld, preview_inquiry_columns, sanitize_inquiry_workbook_if_needed
 from app.helpers import clean_original_filename, load_catalog, safe_upload_name, unique_prefixed_path
 from app.matcher import compact_text, normalize_code
+from app.product_status import (
+    format_product_status,
+    product_status_header_for_price_mode,
+    product_status_language_for_price_mode,
+)
 
 
 INTERNAL_OUTPUT_DIR = OUTPUT_DIR / "openclaw"
@@ -270,6 +275,7 @@ def _write_numbers_summary_workbook(summary: dict, output_path: Path, price_opti
     price_label = PRICE_LABELS.get(price_options["price_mode"], "")
     if price_label:
         headers.append(price_label)
+        headers.append(product_status_header_for_price_mode(price_options["price_mode"]))
     headers.extend(["匹配说明", "产品名称", "车型"])
     sheet.append(headers)
 
@@ -277,6 +283,7 @@ def _write_numbers_summary_workbook(summary: dict, output_path: Path, price_opti
         values = [row.get("oe") or row.get("name") or "", row.get("bld_no") or ""]
         if price_label:
             values.append(_export_price(row.get("price_cny"), price_options))
+            values.append(format_product_status(row.get("product_status"), product_status_language_for_price_mode(price_options["price_mode"])))
         product = row.get("product") or {}
         values.extend(
             [
@@ -287,7 +294,7 @@ def _write_numbers_summary_workbook(summary: dict, output_path: Path, price_opti
         )
         sheet.append(values)
 
-    for letter, width in {"A": 28, "B": 18, "C": 14, "D": 34, "E": 26, "F": 34}.items():
+    for letter, width in {"A": 28, "B": 18, "C": 14, "D": 18, "E": 34, "F": 26, "G": 34}.items():
         sheet.column_dimensions[letter].width = width
     output_path.parent.mkdir(parents=True, exist_ok=True)
     workbook.save(output_path)
@@ -375,6 +382,10 @@ def _format_rows(summary: dict, price_options: dict, *, rows_limit: int, unmatch
                 "match_note": row.get("match_note") or row.get("reason") or "",
                 "score": row.get("score", 0),
                 "price_cny": row.get("price_cny"),
+                "product_status": format_product_status(
+                    row.get("product_status"),
+                    product_status_language_for_price_mode(price_options["price_mode"]),
+                ),
                 "export_price": export_price,
                 "export_price_label": PRICE_LABELS.get(price_options["price_mode"], ""),
                 "matched_oe_codes": row.get("matched_oe_codes") or [],
@@ -450,6 +461,7 @@ def _product_payload(row: dict | None) -> dict | None:
         "oe_no_2": row.get("OE NO.2") or "",
         "models": row.get("Models") or "",
         "price_cny": row.get("price_cny"),
+        "product_status": row.get("product_status") or "",
         "image_paths": image_paths,
     }
 
@@ -492,6 +504,7 @@ def _bld_fragment_matches(catalog, query: object) -> list[dict]:
                 "name": "",
                 "bld_no": bld_no,
                 "price_cny": row.get("price_cny"),
+                "product_status": row.get("product_status") or "",
                 "reason": "BLD NO. 精准命中" if key == bld_key else "BLD NO. 片段命中",
                 "score": 96 if key == bld_key else 86,
                 "match_note": f"命中 BLD号：{bld_no}",

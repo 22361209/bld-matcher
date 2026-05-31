@@ -944,7 +944,8 @@ class WebAppTest(unittest.TestCase):
         sheet = generated.active
         self.assertEqual(sheet.cell(1, 3).value, "BLD NO.")
         self.assertEqual(sheet.cell(1, 4).value, "美金价")
-        self.assertEqual(sheet.cell(1, 5).value, "匹配说明")
+        self.assertEqual(sheet.cell(1, 5).value, "Product Status")
+        self.assertEqual(sheet.cell(1, 6).value, "匹配说明")
         self.assertEqual(sheet.cell(2, 3).value, "K-API-FILE")
         self.assertEqual(sheet.cell(2, 4).value, 10)
         generated.close()
@@ -1934,7 +1935,7 @@ class WebAppTest(unittest.TestCase):
         html = page.get_data(as_text=True)
         self.assertEqual(page.status_code, 200)
         self.assertIn("<th>产品状态</th>", html)
-        self.assertIn("1 个球头 2 个衬套", html)
+        self.assertIn("1 ball joint 2 bushings", html)
 
         edit = self.client.get(f"/products/{product['id']}/edit")
         edit_html = edit.get_data(as_text=True)
@@ -2852,7 +2853,8 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(sheet.cell(1, 1).value, "OE号")
         self.assertEqual(sheet.cell(1, 2).value, "BLD NO.")
         self.assertEqual(sheet.cell(1, 3).value, "美金价")
-        self.assertEqual(sheet.cell(1, 4).value, "匹配说明")
+        self.assertEqual(sheet.cell(1, 4).value, "Product Status")
+        self.assertEqual(sheet.cell(1, 5).value, "匹配说明")
         self.assertEqual(sheet.cell(2, 1).value, "54500-2d000")
         self.assertEqual(sheet.cell(2, 2).value, "K54500L")
         self.assertEqual(sheet.cell(2, 3).value, 10)
@@ -3311,7 +3313,8 @@ class WebAppTest(unittest.TestCase):
         sheet = generated.active
         self.assertEqual(sheet.cell(1, 2).value, "BLD NO.")
         self.assertEqual(sheet.cell(1, 3).value, "含税单价")
-        self.assertEqual(sheet.cell(1, 4).value, "匹配说明")
+        self.assertEqual(sheet.cell(1, 4).value, "产品状态")
+        self.assertEqual(sheet.cell(1, 5).value, "匹配说明")
         self.assertEqual(sheet.cell(2, 2).value, "KPRICE01")
         self.assertEqual(sheet.cell(2, 3).value, 88.8)
         generated.close()
@@ -3477,7 +3480,7 @@ class WebAppTest(unittest.TestCase):
         generated_sheet = generated.active
         self.assertEqual(generated_sheet.cell(1, 3).value, "BLD NO.")
         self.assertEqual(generated_sheet.cell(2, 3).value, "KMULTI02")
-        self.assertIn("命中列：B列：REF-MULTI-002", generated_sheet.cell(2, 5).value)
+        self.assertIn("命中列：B列：REF-MULTI-002", generated_sheet.cell(2, 6).value)
         generated.close()
 
     def test_item_header_with_code_values_prompts_for_match_column(self):
@@ -3814,7 +3817,8 @@ class WebAppTest(unittest.TestCase):
         generated_sheet = generated.active
         self.assertEqual(generated_sheet.cell(1, 3).value, "BLD NO.")
         self.assertEqual(generated_sheet.cell(1, 4).value, "含税单价")
-        self.assertEqual(generated_sheet.cell(1, 5).value, "匹配说明")
+        self.assertEqual(generated_sheet.cell(1, 5).value, "产品状态")
+        self.assertEqual(generated_sheet.cell(1, 6).value, "匹配说明")
         self.assertEqual(generated_sheet.cell(2, 3).value, "K6004LC")
         self.assertEqual(generated_sheet.cell(2, 4).value, 55)
         generated.close()

@@ -35,7 +35,7 @@
       {% endif %}
     </td>
     <td class="price-cell">{% if product.price_cny is not none %}¥{{ "%.2f"|format(product.price_cny) }}{% endif %}</td>
-    <td class="product-status-cell">{{ product.product_status if "product_status" in product.keys() else "" }}</td>
+    <td class="product-status-cell">{{ format_product_status(product.product_status if "product_status" in product.keys() else "", "en") }}</td>
     <td class="row-actions sticky-actions">
       {% if can("edit_products") %}
         <a href="{{ url_for('edit_product', product_id=product.id) }}" data-open-edit-product-modal>编辑</a>

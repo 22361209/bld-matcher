@@ -12,6 +12,11 @@ import xlrd
 from xlutils.copy import copy as copy_xls
 
 from .matcher import ProductCatalog, normalize_code, split_codes
+from .product_status import (
+    format_product_status,
+    product_status_header_for_price_mode,
+    product_status_language_for_price_mode,
+)
 
 
 INQUIRY_HEADERS = {
@@ -497,8 +502,10 @@ def _summary_row(row_number: int, inquiry_oe: object, inquiry_name: object, matc
     parts = split_codes(inquiry_oe)
     match_note = ""
     price_cny = None
+    product_status = ""
     if match and " / " not in (match.bld_no or ""):
         price_cny = _numeric_price(match.row.get("price_cny"))
+        product_status = str(match.row.get("product_status") or "").strip()
 
     if len(parts) > 1:
         if match and match.matched_codes:
@@ -517,6 +524,7 @@ def _summary_row(row_number: int, inquiry_oe: object, inquiry_name: object, matc
         "name": inquiry_name,
         "bld_no": match.bld_no if match else "",
         "price_cny": price_cny,
+        "product_status": product_status,
         "reason": match.reason if match else "未找到",
         "score": match.score if match else 0,
         "match_note": match_note,
@@ -577,6 +585,15 @@ def _match_export_price(match, price_mode: str, exchange_rate: float | None) -> 
     return round(price / 1.1 / exchange_rate, 2)
 
 
+def _match_export_status(match, price_mode: str) -> str:
+    if price_mode not in {"tax", "net", "usd"} or not match or " / " in (match.bld_no or ""):
+        return ""
+    return format_product_status(
+        match.row.get("product_status"),
+        product_status_language_for_price_mode(price_mode),
+    )
+
+
 def generate_xls_with_bld(
     inquiry_path: Path,
     output_path: Path,
@@ -606,11 +623,15 @@ def generate_xls_with_bld(
             selected_match_columns = manual_match_columns
         output_col = source_sheet.ncols
         price_header = _price_export_header(price_mode)
-        note_col = output_col + 2 if price_header else output_col + 1
+        status_header = product_status_header_for_price_mode(price_mode) if price_header else ""
+        status_col = output_col + 2 if price_header else None
+        note_col = output_col + 3 if status_header else (output_col + 2 if price_header else output_col + 1)
         if target_sheet:
             target_sheet.write(header_row, output_col, "BLD NO.")
             if price_header:
                 target_sheet.write(header_row, output_col + 1, price_header)
+            if status_header and status_col is not None:
+                target_sheet.write(header_row, status_col, status_header)
             target_sheet.write(header_row, note_col, "匹配说明")
 
         for row_index in range(header_row + 1, source_sheet.nrows):
@@ -631,6 +652,8 @@ def generate_xls_with_bld(
                     if price_header:
                         price = _match_export_price(match, price_mode, exchange_rate)
                         target_sheet.write(row_index, output_col + 1, "" if price is None else price)
+                    if status_header and status_col is not None:
+                        target_sheet.write(row_index, status_col, _match_export_status(match, price_mode))
                 summary["matched"] += 1
                 row_summary = _annotate_row_summary_with_match_columns(
                     _summary_row(row_index + 1, inquiry_oe, inquiry_name, match),
@@ -645,6 +668,8 @@ def generate_xls_with_bld(
                     target_sheet.write(row_index, output_col, "")
                     if price_header:
                         target_sheet.write(row_index, output_col + 1, "")
+                    if status_header and status_col is not None:
+                        target_sheet.write(row_index, status_col, "")
                 summary["unmatched"] += 1
                 row_summary = _summary_row(row_index + 1, inquiry_oe, inquiry_name, None)
                 if target_sheet:
@@ -694,11 +719,15 @@ def generate_xlsx_with_bld(
                 columns = {}
             output_col = sheet.max_column + 1
             price_header = _price_export_header(price_mode)
-            note_col = output_col + 2 if price_header else output_col + 1
+            status_header = product_status_header_for_price_mode(price_mode) if price_header else ""
+            status_col = output_col + 2 if price_header else None
+            note_col = output_col + 3 if status_header else (output_col + 2 if price_header else output_col + 1)
             if write_output:
                 sheet.cell(header_row, output_col).value = "BLD NO."
                 if price_header:
                     sheet.cell(header_row, output_col + 1).value = price_header
+                if status_header and status_col is not None:
+                    sheet.cell(header_row, status_col).value = status_header
                 sheet.cell(header_row, note_col).value = "匹配说明"
 
             for row_index in range(header_row + 1, sheet.max_row + 1):
@@ -721,6 +750,8 @@ def generate_xlsx_with_bld(
                             price_cell = sheet.cell(row_index, output_col + 1)
                             price_cell.value = price
                             price_cell.number_format = "0" if price_mode == "net" else "0.00"
+                        if status_header and status_col is not None:
+                            sheet.cell(row_index, status_col).value = _match_export_status(match, price_mode)
                     summary["matched"] += 1
                     row_summary = _annotate_row_summary_with_match_columns(
                         _summary_row(row_index, inquiry_oe, inquiry_name, match),
@@ -735,6 +766,8 @@ def generate_xlsx_with_bld(
                         sheet.cell(row_index, output_col).value = ""
                         if price_header:
                             sheet.cell(row_index, output_col + 1).value = None
+                        if status_header and status_col is not None:
+                            sheet.cell(row_index, status_col).value = ""
                     summary["unmatched"] += 1
                     row_summary = _summary_row(row_index, inquiry_oe, inquiry_name, None)
                     if write_output:

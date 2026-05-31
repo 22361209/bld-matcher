@@ -808,7 +808,6 @@ textarea {
 
 .product-status-cell {
   color: var(--linear-text);
-  font-weight: 700;
   white-space: pre-line;
 }
 
@@ -2751,7 +2750,8 @@ textarea {
 }
 
 .shipment-result-drawer > summary {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: auto minmax(34px, auto) 10px;
   justify-self: center;
   align-items: center;
   gap: 8px;
@@ -2776,6 +2776,7 @@ textarea {
   height: 7px;
   border-right: 2px solid currentColor;
   border-bottom: 2px solid currentColor;
+  justify-self: center;
   transform: translateY(-2px) rotate(45deg);
 }
 
@@ -2798,10 +2799,17 @@ textarea {
 .shipment-result-drawer > summary strong {
   color: var(--linear-text);
   font-weight: 800;
+  text-align: right;
 }
 
 .shipment-history-panel {
+  width: 100%;
   margin-top: 10px;
+}
+
+.shipment-history-panel .materials-grid-table,
+.shipping-history-panel .materials-grid-table {
+  min-width: 100%;
 }
 
 .materials-flow > p {
@@ -3475,6 +3483,7 @@ textarea {
 }
 
 .shipping-history-panel {
+  width: 100%;
   margin-top: 8px;
 }
 
@@ -4545,6 +4554,10 @@ textarea {
   .materials-table-title-actions {
     justify-content: flex-start;
     margin-top: 8px;
+  }
+
+  .products-sticky-command + .materials-table-section .materials-table-wrap {
+    overflow-x: auto;
   }
 
   .purchase-contract-form {
