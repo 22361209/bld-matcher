@@ -210,7 +210,7 @@ class WebAppTest(unittest.TestCase):
 
     def test_core_admin_pages_load(self):
         self.login()
-        for path in ["/customer-prices", "/contracts", "/contracts/sales", "/products", "/materials", "/shipping-notices", "/shipment-recognition", "/purchase-contracts", "/users", "/internal-api-key", "/logs", "/system-updates", "/product-data-sync"]:
+        for path in ["/customer-prices", "/contracts", "/contracts/sales", "/products", "/materials", "/material-drawings", "/shipping-notices", "/shipment-recognition", "/purchase-contracts", "/users", "/internal-api-key", "/logs", "/system-updates", "/product-data-sync"]:
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)

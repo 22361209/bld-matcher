@@ -82,7 +82,7 @@ bash tools/install_bld_launcher.sh
 
 ## 数据库
 
-默认数据库是 `data/products.sqlite3`。这个文件是业务数据，不进入 Git。产品目录 `data/catalog.xlsx`、材料明细 `data/stamping_materials.xlsx`、PDF 图纸目录 `data/drawings/` 和上传产品图片目录 `data/product_images/` 也按运行数据处理，不进入 Git。每个产品可维护含税单价、产品状态和最多 5 张产品图片；产品状态用于记录球头/衬套配置，例如“1 个球头 2 个衬套”。网页编辑上传的图片文件保存在 `data/product_images/`。产品目录列表使用 `data/product_images/thumbs/` 下的运行时缩略图，点击预览时才加载原图。NAS 上的 `data/` 目录要按 NAS 备份策略保护，更新代码时不要用本机数据覆盖 NAS 数据。
+默认数据库是 `data/products.sqlite3`。这个文件是业务数据，不进入 Git。产品目录 `data/catalog.xlsx`、材料明细 `data/stamping_materials.xlsx`、PDF 图纸目录 `data/drawings/`、物料图纸目录 `data/material_drawings/` 和上传产品图片目录 `data/product_images/` 也按运行数据处理，不进入 Git。每个产品可维护含税单价、产品状态和最多 5 张产品图片；产品状态用于记录球头/衬套配置，例如“1 个球头 2 个衬套”。网页编辑上传的图片文件保存在 `data/product_images/`。产品目录列表使用 `data/product_images/thumbs/` 下的运行时缩略图，点击预览时才加载原图。NAS 上的 `data/` 目录要按 NAS 备份策略保护，更新代码时不要用本机数据覆盖 NAS 数据。
 
 管理员菜单里的“产品数据同步”用于两端系统之间交换产品数据包。导出包只包含 `products` 表和 `manifest.json`，可选包含 `data/drawings/`、`data/product_images/`；导入时先预览差异，再增量合并 `products` 表，不覆盖本机账号、内部 API Key 或操作日志。包内更新时间早于当前系统的同 BLD 产品会标记为“包内旧数据”并跳过，避免旧包覆盖新数据；勾选图纸/图片时才复制包内媒体文件，覆盖前会把本机对应文件备份到 `data/local-backups/`。
 

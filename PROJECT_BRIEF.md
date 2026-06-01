@@ -73,6 +73,7 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 - `data/catalog.xlsx`：产品目录源表
 - `data/stamping_materials.xlsx`：冲压材料明细源表
 - `data/drawings/`：PDF 图纸和归档
+- `data/material_drawings/`：零配件和物料 PDF 图纸
 - `data/product_images/`：产品图片
 - `data/product_images/thumbs/`：产品列表缩略图
 - `uploads/`：用户上传源文件

@@ -9,6 +9,7 @@
     {% endif %}
     <a class="{% if active_page == 'products' %}active{% endif %}" href="{{ url_for('products') }}">产品目录</a>
     <a class="{% if active_page == 'materials' %}active{% endif %}" href="{{ url_for('materials') }}">生产料单</a>
+    <a class="{% if active_page == 'material_drawings' %}active{% endif %}" href="{{ url_for('material_drawings') }}">物料图纸</a>
     {% if can("generate_shipping_notice") %}
       <a class="{% if active_page == 'shipping_notice' %}active{% endif %}" href="{{ url_for('shipping_notice') }}">发货通知</a>
     {% endif %}
