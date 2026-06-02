@@ -7,14 +7,14 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
   </head>
   <body>
-    <main class="shell wide materials-linear">
+    <main class="shell wide materials-linear material-drawing-workspace">
       {% set active_page = "material_drawings" %}
       {% include "_nav.html" %}
 
       <header class="materials-hero">
         <div>
           <h1>物料图纸</h1>
-          <p>集中保存零配件和物料相关 PDF 图纸，便于生产和采购查找。</p>
+          <p>按产品编码查找并连续查看物料 PDF 图纸。</p>
         </div>
       </header>
 
@@ -28,19 +28,30 @@
         {% endif %}
       {% endwith %}
 
-      <section class="materials-command">
+      {%- macro pdf_preview_src(name) -%}{{ url_for('preview_material_drawing', name=name) }}#page=1&zoom=100{%- endmacro %}
+
+      <section class="materials-command material-drawings-command">
         <form class="materials-search-form" method="get" action="{{ url_for('material_drawings') }}">
           <label>
-            <span>搜索图纸</span>
-            <input name="q" value="{{ query }}" placeholder="输入物料名称、规格或文件名">
+            <span>产品编码</span>
+            <input name="q" value="{{ query }}" placeholder="例如 QD1000">
+          </label>
+          <label>
+            <span>物料类别</span>
+            <select name="category">
+              <option value="">全部类别</option>
+              {% for option in categories %}
+                <option value="{{ option }}" {% if category == option %}selected{% endif %}>{{ option }}</option>
+              {% endfor %}
+            </select>
           </label>
           <button class="linear-button primary" type="submit">搜索</button>
-          {% if query %}
+          {% if query or category %}
             <a class="linear-button subtle" href="{{ url_for('material_drawings') }}">清除</a>
           {% endif %}
         </form>
         {% if can("manage_materials") %}
-          <form class="materials-search-form" action="{{ url_for('upload_material_drawing') }}" method="post" enctype="multipart/form-data">
+          <form class="materials-search-form material-drawing-upload-form" action="{{ url_for('upload_material_drawing') }}" method="post" enctype="multipart/form-data">
             {{ csrf_field() }}
             <label class="file-picker">
               <span>上传 PDF 图纸</span>
@@ -55,42 +66,88 @@
         {% endif %}
       </section>
 
-      <section class="materials-table-section" id="material-drawings-results">
-        <div class="section-heading-row">
-          <h2>图纸列表</h2>
-          <span class="note">共 {{ drawings|length }} 个文件</span>
-        </div>
-        {% if drawings %}
-          <div class="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>文件名</th>
-                  <th>大小</th>
-                  <th>更新时间</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for drawing in drawings %}
-                  <tr>
-                    <td>{{ drawing.name }}</td>
-                    <td>{{ drawing.size_kb }} KB</td>
-                    <td>{{ drawing.updated_at }}</td>
-                    <td>
-                      <a class="linear-button subtle compact" href="{{ url_for('download_material_drawing', name=drawing.name) }}">下载</a>
-                    </td>
-                  </tr>
-                {% endfor %}
-              </tbody>
-            </table>
+      <section class="material-drawing-browser" id="material-drawings-results">
+        <aside class="material-drawing-list-panel" aria-label="图纸编码列表">
+          <div class="material-drawing-list-heading">
+            <div>
+              <h2>图纸列表</h2>
+              <p>当前 {{ drawings|length }} 个 / 共 {{ total_drawings }} 个</p>
+            </div>
           </div>
-        {% else %}
-          <div class="empty-state">
-            <p>{{ "没有找到匹配的物料图纸。" if query else "还没有上传物料图纸。" }}</p>
-          </div>
-        {% endif %}
+          {% if drawings %}
+            <div class="material-drawing-list">
+              {% for drawing in drawings %}
+                {% set preview_url = url_for('preview_material_drawing', name=drawing.name) %}
+                {% set drawing_url = url_for('material_drawings', q=query, category=category, selected=drawing.name) %}
+                <a class="material-drawing-list-item {% if selected_drawing and selected_drawing.name == drawing.name %}active{% endif %}" href="{{ drawing_url }}" data-material-drawing-select data-preview-url="{{ preview_url }}" data-preview-src="{{ pdf_preview_src(drawing.name) }}" data-download-url="{{ url_for('download_material_drawing', name=drawing.name) }}" data-code="{{ drawing.code }}" data-category="{{ drawing.category }}" data-updated-at="{{ drawing.updated_at }}">
+                  <strong>{{ drawing.code }}</strong>
+                  <span>{{ drawing.category }}</span>
+                </a>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="empty-state material-drawing-empty">
+              <p>{{ "没有找到匹配的物料图纸。" if query else "还没有上传物料图纸。" }}</p>
+            </div>
+          {% endif %}
+        </aside>
+
+        <section class="material-drawing-viewer-panel" aria-label="图纸预览">
+          {% if selected_drawing %}
+            <div class="material-drawing-viewer-heading">
+              <div>
+                <h2 data-material-drawing-current-code>{{ selected_drawing.code }}</h2>
+                <p><span data-material-drawing-current-category>{{ selected_drawing.category }}</span> · 更新于 <span data-material-drawing-current-updated>{{ selected_drawing.updated_at }}</span></p>
+              </div>
+              <a class="linear-button subtle compact" data-material-drawing-current-download href="{{ url_for('download_material_drawing', name=selected_drawing.name) }}">下载</a>
+            </div>
+            <iframe class="material-drawing-inline-frame" data-material-drawing-frame src="{{ pdf_preview_src(selected_drawing.name) }}" title="物料图纸 PDF 预览"></iframe>
+          {% else %}
+            <div class="empty-state material-drawing-viewer-empty">
+              <p>选择左侧产品编码后预览图纸。</p>
+            </div>
+          {% endif %}
+        </section>
       </section>
     </main>
+
+    <script>
+      (() => {
+        let frame = document.querySelector("[data-material-drawing-frame]");
+        const code = document.querySelector("[data-material-drawing-current-code]");
+        const category = document.querySelector("[data-material-drawing-current-category]");
+        const updated = document.querySelector("[data-material-drawing-current-updated]");
+        const download = document.querySelector("[data-material-drawing-current-download]");
+        const browser = document.querySelector(".material-drawing-browser");
+        if (!frame || !code || !category || !updated || !download) return;
+
+        const replaceFrame = (src) => {
+          const nextFrame = frame.cloneNode(false);
+          nextFrame.src = src;
+          frame.replaceWith(nextFrame);
+          frame = nextFrame;
+        };
+
+        document.querySelectorAll("[data-material-drawing-select]").forEach((item) => {
+          item.addEventListener("click", (event) => {
+            event.preventDefault();
+            document.querySelectorAll("[data-material-drawing-select].active").forEach((activeItem) => {
+              activeItem.classList.remove("active");
+            });
+            item.classList.add("active");
+            replaceFrame(item.dataset.previewSrc || `${item.dataset.previewUrl}#page=1&zoom=100`);
+            code.textContent = item.dataset.code || "";
+            category.textContent = item.dataset.category || "";
+            updated.textContent = item.dataset.updatedAt || "";
+            const downloadUrl = item.dataset.downloadUrl || "#";
+            download.href = downloadUrl;
+            download.setAttribute("href", downloadUrl);
+            browser?.scrollIntoView({ block: "start" });
+            window.history.replaceState(null, "", item.href);
+          });
+        });
+      })();
+    </script>
+    <script src="{{ url_for('static', filename='app.js', v=static_version('app.js')) }}"></script>
   </body>
 </html>

@@ -215,6 +215,37 @@ class WebAppTest(unittest.TestCase):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
 
+    def test_material_drawings_page_lists_codes_and_previews_pdf(self):
+        self.login()
+        drawing_dir = self.root / "data" / "material_drawings"
+        drawing_dir.mkdir(parents=True, exist_ok=True)
+        (drawing_dir / "QD1000.pdf").write_bytes(b"%PDF-1.4\n% test drawing\n")
+        (drawing_dir / "QD999.pdf").write_bytes(b"%PDF-1.4\n% test drawing\n")
+
+        response = self.client.get("/material-drawings?q=1000&category=%E7%90%83%E9%94%80")
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("当前 1 个 / 共 2 个", html)
+        self.assertIn("<strong>QD1000</strong>", html)
+        self.assertIn("球销", html)
+        self.assertIn('data-material-drawing-select', html)
+        self.assertIn('data-material-drawing-frame', html)
+        self.assertIn("/material-drawings/preview/QD1000.pdf", html)
+        self.assertIn("/material-drawings/preview/QD1000.pdf#page=1&zoom=100", html)
+        self.assertNotIn("<strong>QD999</strong>", html)
+
+        selected_page = self.client.get("/material-drawings?selected=QD999.pdf")
+        selected_html = selected_page.get_data(as_text=True)
+        self.assertEqual(selected_page.status_code, 200)
+        self.assertIn('data-material-drawing-current-code>QD999</h2>', selected_html)
+        self.assertIn('data-material-drawing-current-download href="/material-drawings/QD999.pdf"', selected_html)
+
+        preview = self.client.get("/material-drawings/preview/QD1000.pdf")
+        self.assertEqual(preview.status_code, 200)
+        self.assertEqual(preview.mimetype, "application/pdf")
+        self.assertIn("inline", preview.headers.get("Content-Disposition", ""))
+        preview.close()
+
     def _build_product_sync_package(self, rows: list[dict], *, media: bool = False) -> Path:
         package_path = self.root / "incoming-product-sync.tar.gz"
         work_dir = self.root / "incoming-product-sync"
@@ -437,6 +468,76 @@ class WebAppTest(unittest.TestCase):
             row = conn.execute("SELECT * FROM products WHERE bld_no = ?", ("SYNC-STALE",)).fetchone()
         self.assertEqual(row["series"], "LOCAL")
         self.assertEqual(row["oe_no_1"], "LOCAL-OE")
+
+    def test_product_data_sync_can_deactivate_local_only_rows_after_preview(self):
+        from app.database import upsert_product
+
+        self.login()
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "SYNC-LOCAL-ONLY",
+                    "series": "LOCAL",
+                    "item": "Only On This Machine",
+                    "oe_no_1": "LOCAL-ONLY-OE",
+                    "price_cny": "30",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        package_path = self._build_product_sync_package(
+            [
+                {
+                    "bld_no": "SYNC-PACKAGE-ONLY",
+                    "series": "NAS",
+                    "item": "Package Product",
+                    "oe_no_1": "PACKAGE-OE",
+                    "price_cny": 20,
+                    "active": 1,
+                    "source": "nas",
+                    "created_at": "2026-06-01 00:00:00",
+                    "updated_at": "2099-06-01 00:00:00",
+                }
+            ],
+        )
+        preview = self.client.post(
+            "/product-data-sync/import/preview",
+            data={"package": (package_path.open("rb"), package_path.name)},
+            content_type="multipart/form-data",
+        )
+        html = preview.get_data(as_text=True)
+        self.assertEqual(preview.status_code, 200)
+        self.assertIn("当前系统独有", html)
+        self.assertIn("SYNC-LOCAL-ONLY", html)
+        self.assertIn("deactivate_local_only", html)
+        path_match = re.search(r'name="package_path" value="([^"]+)"', html)
+        self.assertIsNotNone(path_match)
+
+        response = self.client.post(
+            "/product-data-sync/import/apply",
+            data={"package_path": path_match.group(1)},
+            follow_redirects=True,
+        )
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("停用本机独有 0 条", html)
+        with self.web.connect(self.web.DB_PATH) as conn:
+            row = conn.execute("SELECT active FROM products WHERE bld_no = ?", ("SYNC-LOCAL-ONLY",)).fetchone()
+        self.assertEqual(row["active"], 1)
+
+        response = self.client.post(
+            "/product-data-sync/import/apply",
+            data={"package_path": path_match.group(1), "deactivate_local_only": "1"},
+            follow_redirects=True,
+        )
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("停用本机独有", html)
+        with self.web.connect(self.web.DB_PATH) as conn:
+            row = conn.execute("SELECT active FROM products WHERE bld_no = ?", ("SYNC-LOCAL-ONLY",)).fetchone()
+        self.assertEqual(row["active"], 0)
 
     def test_shipment_recognition_requires_photos(self):
         self.login()
@@ -687,7 +788,7 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(payload["rows"][0]["export_price"], 81)
         self.assertIn("NO-MATCH-001", payload["unmatched_list"])
         self.assertTrue(payload["output_path"].endswith(payload["output_name"]))
-        self.assertRegex(payload["output_name"], r"^re\d{6}_机器人询价结果_openclaw\.xlsx$")
+        self.assertRegex(payload["output_name"], r"^re\d{6}_机器人询价结果\.xlsx$")
         output_path = Path(payload["output_path"])
         self.assertEqual(output_path.parent.resolve(), (self.root / "outputs" / "openclaw").resolve())
         self.assertTrue(output_path.exists())
@@ -937,7 +1038,7 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(payload["rows"][0]["export_price"], 10)
         output_path = Path(payload["output_path"])
         self.assertEqual(output_path.parent.resolve(), (self.root / "outputs" / "openclaw").resolve())
-        self.assertRegex(payload["output_name"], r"^re\d{6}_api-file-source_openclaw\.xlsx$")
+        self.assertRegex(payload["output_name"], r"^re\d{6}_api-file-source\.xlsx$")
         self.assertTrue(output_path.exists())
 
         generated = load_workbook(output_path)

@@ -193,8 +193,6 @@ def _diff_products(package_db: Path, *, limit: int = 50) -> ProductDiff:
             row["bld_no"]: row
             for row in conn.execute("SELECT * FROM main.products")
         }
-        incoming_blds = {row["bld_no"] for row in incoming_rows}
-        local_blds = set(local_by_bld)
         rows: list[dict[str, object]] = []
         new_count = updated_count = conflict_count = unchanged_count = 0
         for row in incoming_rows:
@@ -222,12 +220,33 @@ def _diff_products(package_db: Path, *, limit: int = 50) -> ProductDiff:
                         "incoming_price": row["price_cny"],
                     }
                 )
+        local_only_rows = conn.execute(
+            """
+            SELECT *
+            FROM main.products
+            WHERE bld_no NOT IN (SELECT bld_no FROM incoming.products)
+            ORDER BY bld_no COLLATE BLD_NATURAL
+            """
+        ).fetchall()
+        for local_row in local_only_rows:
+            if len(rows) >= limit:
+                break
+            rows.append(
+                {
+                    "status": "local_only",
+                    "bld_no": local_row["bld_no"],
+                    "local_updated_at": local_row["updated_at"],
+                    "incoming_updated_at": "",
+                    "local_price": local_row["price_cny"],
+                    "incoming_price": None,
+                }
+            )
         return ProductDiff(
             new_count=new_count,
             updated_count=updated_count,
             conflict_count=conflict_count,
             unchanged_count=unchanged_count,
-            local_only_count=len(local_blds - incoming_blds),
+            local_only_count=len(local_only_rows),
             rows=rows,
         )
 
@@ -253,7 +272,7 @@ def _package_upload_path() -> Path | None:
     return path
 
 
-def _apply_products(package_db: Path) -> tuple[int, int, int, int]:
+def _apply_products(package_db: Path, *, deactivate_local_only: bool = False) -> tuple[int, int, int, int, int]:
     with connect(DB_PATH) as conn:
         conn.execute(f"ATTACH {str(package_db)!r} AS incoming")
         columns = _product_columns(conn, "main")
@@ -265,6 +284,7 @@ def _apply_products(package_db: Path) -> tuple[int, int, int, int]:
         placeholders = ", ".join("?" for _ in insert_columns)
         assignments = ", ".join(f"{column} = excluded.{column}" for column in insert_columns if column != "bld_no")
         new_count = updated_count = conflict_count = unchanged_count = 0
+        deactivated_count = 0
         rows = conn.execute(f"SELECT {', '.join(columns)} FROM incoming.products ORDER BY bld_no COLLATE BLD_NATURAL").fetchall()
         with conn:
             for row in rows:
@@ -287,15 +307,26 @@ def _apply_products(package_db: Path) -> tuple[int, int, int, int]:
                     """,
                     [row[column] for column in insert_columns],
                 )
+            if deactivate_local_only:
+                result = conn.execute(
+                    """
+                    UPDATE main.products
+                    SET active = 0, updated_at = ?
+                    WHERE active = 1
+                      AND bld_no NOT IN (SELECT bld_no FROM incoming.products)
+                    """,
+                    (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),),
+                )
+                deactivated_count = result.rowcount
             log_event(
                 conn,
                 "导入产品数据包",
                 "product_sync",
                 "products.sqlite3",
-                f"新增 {new_count} 条，更新 {updated_count} 条，跳过无变化 {unchanged_count} 条，跳过包内旧数据 {conflict_count} 条；保留当前系统账号、API Key 和日志。",
+                f"新增 {new_count} 条，更新 {updated_count} 条，跳过无变化 {unchanged_count} 条，跳过包内旧数据 {conflict_count} 条，停用本机独有 {deactivated_count} 条；保留当前系统账号、API Key 和日志。",
                 actor=actor_name(),
             )
-    return new_count, updated_count, conflict_count, unchanged_count
+    return new_count, updated_count, conflict_count, unchanged_count, deactivated_count
 
 
 def _copy_media_dir(extracted_dir: Path, key: str, backup_dir: Path) -> int:
@@ -407,6 +438,7 @@ def register(app) -> None:
             return redirect(url_for("product_data_sync"))
         include_drawings = request.form.get("include_drawings") == "1"
         include_images = request.form.get("include_images") == "1"
+        deactivate_local_only = request.form.get("deactivate_local_only") == "1"
         backup_dir = DATA_DIR / "local-backups" / f"before-product-data-sync-{_now_label()}"
         try:
             with import_lock(actor_name(), "产品数据包导入"):
@@ -416,7 +448,10 @@ def register(app) -> None:
                         shutil.copy2(path, backup_dir / path.name)
                 temporary, product_db, _manifest = _prepare_package(package_path)
                 try:
-                    new_count, updated_count, conflict_count, unchanged_count = _apply_products(product_db)
+                    new_count, updated_count, conflict_count, unchanged_count, deactivated_count = _apply_products(
+                        product_db,
+                        deactivate_local_only=deactivate_local_only,
+                    )
                     copied_drawings = _copy_media_dir(Path(temporary.name), "drawings", backup_dir) if include_drawings else 0
                     copied_images = _copy_media_dir(Path(temporary.name), "product_images", backup_dir) if include_images else 0
                     with connect(DB_PATH) as conn:
@@ -438,7 +473,7 @@ def register(app) -> None:
             flash(f"产品数据包导入失败：{exc}", "error")
             return redirect(url_for("product_data_sync"))
         flash(
-            f"产品数据导入完成：新增 {new_count} 条，更新 {updated_count} 条，跳过无变化 {unchanged_count} 条，跳过包内旧数据 {conflict_count} 条。",
+            f"产品数据导入完成：新增 {new_count} 条，更新 {updated_count} 条，跳过无变化 {unchanged_count} 条，跳过包内旧数据 {conflict_count} 条，停用本机独有 {deactivated_count} 条。",
             "success",
         )
         return redirect(url_for("product_data_sync"))

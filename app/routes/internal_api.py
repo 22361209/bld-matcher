@@ -347,7 +347,7 @@ def _output_source_stem(value: object, *, fallback: str) -> str:
 
 def _openclaw_output_name(source_name: object, *, suffix: str, fallback: str) -> str:
     stem = _output_source_stem(source_name, fallback=fallback)
-    return f"re{_date_label()}_{stem}_openclaw{suffix}"
+    return f"re{_date_label()}_{stem}{suffix}"
 
 
 def _number_output_path(payload: dict) -> Path:

@@ -132,6 +132,12 @@
             <input type="hidden" name="package_path" value="{{ preview.package_path }}">
             {% if preview.include_drawings %}<input type="hidden" name="include_drawings" value="1">{% endif %}
             {% if preview.include_images %}<input type="hidden" name="include_images" value="1">{% endif %}
+            {% if preview.diff.local_only_count %}
+              <label class="sync-compact-check">
+                <input type="checkbox" name="deactivate_local_only" value="1">
+                <span>停用包内不存在的产品</span>
+              </label>
+            {% endif %}
             <button class="linear-button primary" type="submit">确认增量导入</button>
           </form>
         </section>
@@ -140,7 +146,7 @@
           <div class="materials-table-title">
             <div>
               <h2>差异明细</h2>
-              <p>最多显示前 50 条新增或更新的产品。</p>
+              <p>最多显示前 50 条新增、更新、包内旧数据或当前系统独有产品。</p>
             </div>
             <span>{{ preview.diff.rows|length }} 条</span>
           </div>
@@ -159,7 +165,9 @@
               <tbody>
                 {% for row in preview.diff.rows %}
                   <tr>
-                    <td>{% if row.status == "new" %}新增{% elif row.status == "conflict" %}包内旧数据{% else %}更新{% endif %}</td>
+                    <td>
+                      {% if row.status == "new" %}新增{% elif row.status == "conflict" %}包内旧数据{% elif row.status == "local_only" %}当前系统独有{% else %}更新{% endif %}
+                    </td>
                     <td><strong>{{ row.bld_no }}</strong></td>
                     <td>{{ row.local_updated_at }}</td>
                     <td>{{ row.incoming_updated_at }}</td>
@@ -168,7 +176,7 @@
                   </tr>
                 {% endfor %}
                 {% if not preview.diff.rows %}
-                  <tr><td colspan="6">产品表没有新增或更新。</td></tr>
+                  <tr><td colspan="6">产品表没有新增、更新或当前系统独有产品。</td></tr>
                 {% endif %}
               </tbody>
             </table>
