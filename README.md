@@ -61,7 +61,7 @@ bash tools/install_bld_launcher.sh
 - `BLD_DATA_DIR`：数据目录，默认 `data`
 - `BLD_UPLOAD_DIR`：上传目录，默认 `uploads`
 - `BLD_OUTPUT_DIR`：输出目录，默认 `outputs`
-- `INTERNAL_API_TOKEN`：可选应急 fallback；日常在网页“内部 API Key”页面生成 Key。`/api/internal/*` 始终需要 `Authorization: Bearer <token>`
+- `INTERNAL_API_TOKEN`：可选应急 fallback；日常在网页“内部 API Key”页面生成 Key。页面支持多条 Key、完整显示和单条停用；`/api/internal/*` 始终需要 `Authorization: Bearer <token>`
 
 ## 目录说明
 

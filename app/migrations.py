@@ -49,6 +49,7 @@ def _add_internal_api_keys(conn: sqlite3.Connection) -> None:
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL DEFAULT 'OpenClaw',
           token_hash TEXT NOT NULL UNIQUE,
+          token_plain TEXT DEFAULT '',
           token_prefix TEXT DEFAULT '',
           token_suffix TEXT DEFAULT '',
           active INTEGER NOT NULL DEFAULT 1,
@@ -60,6 +61,11 @@ def _add_internal_api_keys(conn: sqlite3.Connection) -> None:
         """
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_internal_api_keys_active ON internal_api_keys(active)")
+
+
+def _add_internal_api_key_plaintext(conn: sqlite3.Connection) -> None:
+    if "token_plain" not in _columns(conn, "internal_api_keys"):
+        conn.execute("ALTER TABLE internal_api_keys ADD COLUMN token_plain TEXT DEFAULT ''")
 
 
 def _add_shipment_recognition_jobs(conn: sqlite3.Connection) -> None:
@@ -92,6 +98,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("005_internal_api_keys", _add_internal_api_keys),
     ("006_shipment_recognition_jobs", _add_shipment_recognition_jobs),
     ("007_product_status", _add_product_status),
+    ("008_internal_api_key_plaintext", _add_internal_api_key_plaintext),
 )
 
 

@@ -95,7 +95,7 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 OpenClaw 内部 API：
 
 - 文档在 `OPENCLAW_API.md`，接口前缀为 `/api/internal/`。
-- 管理员菜单里有“内部 API Key”页面，可生成、重新生成、停用 Key；完整 Key 只显示一次。
+- 管理员菜单里有“内部 API Key”页面，可生成多条 Key、查看完整 Key，并按条停用；旧版未保存明文的历史 Key 只能显示遮罩标识。
 - `/api/internal/*` 必须带 `Authorization: Bearer <key>`，不允许匿名调用；`.env` 的 `INTERNAL_API_TOKEN` 仅作为应急 fallback。
 - `/api/internal/inquiry/numbers`：号码数组或文字号码查询；默认仅分析，传 `export: true` 才生成新 Excel，输出到 `outputs/openclaw/`。
 - `/api/internal/inquiry/file`：传本机 Excel 路径或上传文件；默认仅分析，传 `export: true` 才在原文件基础上追加结果列。

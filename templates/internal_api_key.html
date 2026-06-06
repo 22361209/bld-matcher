@@ -14,7 +14,7 @@
       <header class="materials-hero">
         <div>
           <h1>内部 API Key</h1>
-          <p>供 OpenClaw 机器人调用内部 API。API 必须带 Key，不能匿名调用。</p>
+          <p>供 OpenClaw 或其他内部工具调用 API。可以同时保留多条 Key，并按需单独停用。</p>
         </div>
         <div class="materials-file-meta">
           <span>状态</span>
@@ -36,8 +36,8 @@
       {% if generated_token %}
         <section class="api-key-reveal" aria-label="新生成的 API Key">
           <div>
-            <h2>请立即复制保存</h2>
-            <p>完整 Key 只显示这一次。离开页面后只能重新生成，不能查看旧 Key 明文。</p>
+            <h2>新 Key 已生成</h2>
+            <p>完整 Key 已保存到列表中，后续也可以在本页查看和复制。</p>
           </div>
           <div class="api-key-copy-row">
             <code id="generated-api-key">{{ generated_token }}</code>
@@ -48,30 +48,29 @@
 
       <section class="workbench-split">
         <article class="workbench-section">
-          <h2>{{ "重新生成 API Key" if status.enabled else "生成 API Key" }}</h2>
-          <p class="note">生成新 Key 会自动停用旧 Key。OpenClaw 调用时使用 <code>Authorization: Bearer &lt;key&gt;</code>。</p>
+          <h2>生成 API Key</h2>
+          <p class="note">生成新 Key 不会停用旧 Key。调用时使用 <code>Authorization: Bearer &lt;key&gt;</code>。</p>
           <form action="{{ url_for('generate_internal_api_key_route') }}" method="post" class="workbench-form">
             {{ csrf_field() }}
             <label>
               <span>Key 名称</span>
               <input name="name" value="{{ status.name or 'OpenClaw' }}" placeholder="例如 OpenClaw">
             </label>
-            <button class="linear-button primary" type="submit">{{ "重新生成" if status.enabled else "生成 API Key" }}</button>
+            <button class="linear-button primary" type="submit">生成 API Key</button>
           </form>
         </article>
 
         <article class="workbench-section">
-          <h2>当前 Key</h2>
+          <h2>当前状态</h2>
           <dl class="api-key-status">
             <div><dt>启用状态</dt><dd>{{ "已启用" if status.enabled else "未启用" }}</dd></div>
-            <div><dt>Key 标识</dt><dd>{{ status.preview or "暂无" }}</dd></div>
-            <div><dt>创建人</dt><dd>{{ status.created_by or "暂无" }}</dd></div>
-            <div><dt>创建时间</dt><dd>{{ status.created_at or "暂无" }}</dd></div>
+            <div><dt>活跃 Key</dt><dd>{{ keys|selectattr("active")|list|length }}</dd></div>
+            <div><dt>最近创建</dt><dd>{{ status.created_at or "暂无" }}</dd></div>
             <div><dt>最近使用</dt><dd>{{ status.last_used_at or "暂无" }}</dd></div>
           </dl>
           <form action="{{ url_for('disable_internal_api_key_route') }}" method="post" class="materials-actions">
             {{ csrf_field() }}
-            <button class="linear-button subtle" type="submit" {% if not status.enabled %}disabled{% endif %}>停用 API Key</button>
+            <button class="linear-button subtle" type="submit" {% if not status.enabled %}disabled{% endif %}>停用全部活跃 Key</button>
           </form>
         </article>
       </section>
@@ -79,8 +78,64 @@
       <section class="materials-table-section">
         <div class="materials-table-title">
           <div>
+            <h2>API Key 列表</h2>
+            <p>新生成的 Key 会完整显示；历史旧 Key 如果没有保存明文，只显示遮罩标识。</p>
+          </div>
+        </div>
+        {% if keys %}
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th>Key</th>
+                  <th>状态</th>
+                  <th>创建人</th>
+                  <th>创建时间</th>
+                  <th>最近使用</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for key in keys %}
+                  <tr>
+                    <td>{{ key.name }}</td>
+                    <td>
+                      <code{% if key.visible %} class="api-key-visible"{% endif %}>{{ key.preview }}</code>
+                    </td>
+                    <td>{{ "启用" if key.active else "停用" }}</td>
+                    <td>{{ key.created_by or "暂无" }}</td>
+                    <td>{{ key.created_at or "暂无" }}</td>
+                    <td>{{ key.last_used_at or "暂无" }}</td>
+                    <td>
+                      <div class="materials-actions">
+                        {% if key.visible %}
+                          <button class="linear-button subtle compact" type="button" data-copy-value="{{ key.token }}">复制</button>
+                        {% endif %}
+                        <form action="{{ url_for('disable_internal_api_key_route') }}" method="post">
+                          {{ csrf_field() }}
+                          <input type="hidden" name="key_id" value="{{ key.id }}">
+                          <button class="linear-button subtle compact" type="submit" {% if not key.active %}disabled{% endif %}>停用</button>
+                        </form>
+                      </div>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="empty-state">
+            <p>还没有生成内部 API Key。</p>
+          </div>
+        {% endif %}
+      </section>
+
+      <section class="materials-table-section">
+        <div class="materials-table-title">
+          <div>
             <h2>调用格式</h2>
-            <p>机器人只需要带上 Key，然后调用内部 API 获取结构化摘要和文件路径。</p>
+            <p>工具只需要带一个启用中的 Key，即可调用内部 API。</p>
           </div>
         </div>
         <pre class="api-key-example">Authorization: Bearer bld_sk_xxxxx
@@ -91,16 +146,23 @@ POST /api/internal/inquiry/analyze</pre>
     </main>
     <script>
       (() => {
-        const button = document.querySelector("[data-copy-api-key]");
-        const key = document.querySelector("#generated-api-key");
-        if (!button || !key) return;
-        button.addEventListener("click", async () => {
+        const copyText = async (value, button) => {
           try {
-            await navigator.clipboard.writeText(key.textContent.trim());
+            await navigator.clipboard.writeText(value.trim());
             button.textContent = "已复制";
           } catch (_error) {
             button.textContent = "请手动复制";
           }
+        };
+
+        const generatedButton = document.querySelector("[data-copy-api-key]");
+        const generatedKey = document.querySelector("#generated-api-key");
+        if (generatedButton && generatedKey) {
+          generatedButton.addEventListener("click", () => copyText(generatedKey.textContent, generatedButton));
+        }
+
+        document.querySelectorAll("[data-copy-value]").forEach((button) => {
+          button.addEventListener("click", () => copyText(button.dataset.copyValue || "", button));
         });
       })();
     </script>

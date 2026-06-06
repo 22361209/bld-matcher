@@ -1188,7 +1188,18 @@ class WebAppTest(unittest.TestCase):
         self.assertIsNotNone(token_match)
         token = token_match.group(1)
         self.assertIn("OpenClaw Visual", html)
-        self.assertIn(token[-6:], html)
+        self.assertIn(token, html)
+
+        generated_second = self.client.post(
+            "/internal-api-key/generate",
+            data={"name": "OpenClaw Backup"},
+        )
+        html = generated_second.get_data(as_text=True)
+        second_match = re.search(r'id="generated-api-key">(bld_sk_[^<]+)</code>', html)
+        self.assertIsNotNone(second_match)
+        second_token = second_match.group(1)
+        self.assertIn(token, html)
+        self.assertIn(second_token, html)
 
         from app.database import upsert_product
 
@@ -1208,8 +1219,16 @@ class WebAppTest(unittest.TestCase):
             headers={"Authorization": f"Bearer {token}"},
         )
         self.assertEqual(api_response.status_code, 200)
+        second_api_response = self.client.post(
+            "/api/internal/inquiry/analyze",
+            json={"numbers": ["API-VISUAL-OE"]},
+            headers={"Authorization": f"Bearer {second_token}"},
+        )
+        self.assertEqual(second_api_response.status_code, 200)
 
-        disabled = self.client.post("/internal-api-key/disable")
+        first_key_id_match = re.search(rf"{re.escape(token)}.*?name=\"key_id\" value=\"([^\"]+)\"", html, flags=re.S)
+        self.assertIsNotNone(first_key_id_match)
+        disabled = self.client.post("/internal-api-key/disable", data={"key_id": first_key_id_match.group(1)})
         self.assertEqual(disabled.status_code, 302)
         rejected = self.client.post(
             "/api/internal/inquiry/analyze",
@@ -1217,6 +1236,12 @@ class WebAppTest(unittest.TestCase):
             headers={"Authorization": f"Bearer {token}"},
         )
         self.assertEqual(rejected.status_code, 401)
+        still_accepted = self.client.post(
+            "/api/internal/inquiry/analyze",
+            json={"numbers": ["API-VISUAL-OE"]},
+            headers={"Authorization": f"Bearer {second_token}"},
+        )
+        self.assertEqual(still_accepted.status_code, 200)
 
     def test_purchase_contract_can_generate_pdf(self):
         from PIL import Image

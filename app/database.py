@@ -134,6 +134,7 @@ CREATE TABLE IF NOT EXISTS internal_api_keys (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL DEFAULT 'OpenClaw',
   token_hash TEXT NOT NULL UNIQUE,
+  token_plain TEXT DEFAULT '',
   token_prefix TEXT DEFAULT '',
   token_suffix TEXT DEFAULT '',
   active INTEGER NOT NULL DEFAULT 1,
@@ -371,33 +372,68 @@ def internal_api_key_status(conn: sqlite3.Connection) -> dict:
     }
 
 
+def list_internal_api_keys(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT * FROM internal_api_keys
+        ORDER BY active DESC, id DESC
+        """
+    ).fetchall()
+    keys = []
+    for row in rows:
+        token_plain = str(row["token_plain"] or "") if "token_plain" in row.keys() else ""
+        keys.append(
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "token": token_plain,
+                "preview": token_plain or _api_key_preview(row),
+                "active": bool(row["active"]),
+                "created_by": row["created_by"],
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+                "last_used_at": row["last_used_at"],
+                "visible": bool(token_plain),
+            }
+        )
+    return keys
+
+
 def create_internal_api_key(conn: sqlite3.Connection, *, actor: str = "", name: str = "OpenClaw") -> str:
     token = _new_api_token()
     timestamp = now_text()
     label = compact_text(name) or "OpenClaw"
-    conn.execute("UPDATE internal_api_keys SET active = 0, updated_at = ? WHERE active = 1", (timestamp,))
     conn.execute(
         """
         INSERT INTO internal_api_keys
-          (name, token_hash, token_prefix, token_suffix, active, created_by, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 1, ?, ?, ?)
+          (name, token_hash, token_plain, token_prefix, token_suffix, active, created_by, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)
         """,
-        (label, _hash_api_token(token), "bld_sk_", token[-6:], actor, timestamp, timestamp),
+        (label, _hash_api_token(token), token, "bld_sk_", token[-6:], actor, timestamp, timestamp),
     )
-    log_event(conn, "生成内部 API Key", "internal_api_key", label, "旧 Key 已自动停用，新 Key 只在生成页面显示一次。", actor=actor)
+    log_event(conn, "Create internal API key", "internal_api_key", label, "New key created; existing keys remain unchanged.", actor=actor)
     conn.commit()
     return token
 
 
-def disable_internal_api_key(conn: sqlite3.Connection, *, actor: str = "") -> bool:
+def disable_internal_api_key(conn: sqlite3.Connection, *, actor: str = "", key_id: int | None = None) -> bool:
     timestamp = now_text()
-    cursor = conn.execute(
-        "UPDATE internal_api_keys SET active = 0, updated_at = ? WHERE active = 1",
-        (timestamp,),
-    )
+    if key_id is None:
+        cursor = conn.execute(
+            "UPDATE internal_api_keys SET active = 0, updated_at = ? WHERE active = 1",
+            (timestamp,),
+        )
+        target_key = "OpenClaw"
+    else:
+        row = conn.execute("SELECT name FROM internal_api_keys WHERE id = ?", (key_id,)).fetchone()
+        cursor = conn.execute(
+            "UPDATE internal_api_keys SET active = 0, updated_at = ? WHERE id = ? AND active = 1",
+            (timestamp, key_id),
+        )
+        target_key = row["name"] if row else str(key_id)
     changed = cursor.rowcount > 0
     if changed:
-        log_event(conn, "停用内部 API Key", "internal_api_key", "OpenClaw", "内部 API 已停用。", actor=actor)
+        log_event(conn, "Disable internal API key", "internal_api_key", target_key, "Internal API key disabled.", actor=actor)
         conn.commit()
     return changed
 

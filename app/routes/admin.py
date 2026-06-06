@@ -9,6 +9,7 @@ from app.database import (
     disable_internal_api_key,
     get_user,
     internal_api_key_status,
+    list_internal_api_keys,
     list_audit_logs,
     list_log_actors,
     list_users,
@@ -98,7 +99,8 @@ def register(app) -> None:
     def internal_api_key():
         with connect(DB_PATH) as conn:
             status = internal_api_key_status(conn)
-        return render_template("internal_api_key.html", status=status, generated_token="")
+            keys = list_internal_api_keys(conn)
+        return render_template("internal_api_key.html", status=status, keys=keys, generated_token="")
 
     @app.post("/internal-api-key/generate")
     @permission_required("manage_users")
@@ -107,16 +109,20 @@ def register(app) -> None:
         with connect(DB_PATH) as conn:
             token = create_internal_api_key(conn, actor=actor_name(), name=name)
             status = internal_api_key_status(conn)
-        flash("内部 API Key 已生成。请立即复制保存，离开页面后不会再次显示完整 Key。", "success")
-        return render_template("internal_api_key.html", status=status, generated_token=token)
+            keys = list_internal_api_keys(conn)
+        flash("Internal API Key 已生成。新旧 Key 可同时使用，可在列表中查看和停用。", "success")
+        return render_template("internal_api_key.html", status=status, keys=keys, generated_token=token)
 
     @app.post("/internal-api-key/disable")
     @permission_required("manage_users")
     def disable_internal_api_key_route():
+        key_id_text = request.form.get("key_id", "").strip()
+        key_id = int(key_id_text) if key_id_text.isdigit() else None
         with connect(DB_PATH) as conn:
-            changed = disable_internal_api_key(conn, actor=actor_name())
-        flash("内部 API Key 已停用。" if changed else "当前没有启用中的内部 API Key。", "success")
+            changed = disable_internal_api_key(conn, actor=actor_name(), key_id=key_id)
+        flash("Internal API Key 已停用。" if changed else "当前没有可停用的 Internal API Key。", "success")
         return redirect(url_for("internal_api_key"))
+
 
     @app.get("/logs")
     @permission_required("view_logs")
