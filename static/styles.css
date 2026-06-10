@@ -3760,6 +3760,45 @@ textarea {
   justify-content: flex-end;
 }
 
+.quote-command {
+  align-items: flex-start;
+}
+
+.quote-search {
+  grid-template-columns: repeat(6, minmax(130px, 1fr)) auto auto;
+}
+
+.quote-search label {
+  min-width: 130px;
+}
+
+.materials-linear .quote-form {
+  width: min(760px, calc(100vw - 48px));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.quote-new {
+  flex: 0 0 auto;
+}
+
+.quote-edit {
+  margin-top: 8px;
+}
+
+.quote-edit .toolbar-popover-form {
+  right: 0;
+}
+
+.quote-table td:nth-child(9),
+.quote-table td:nth-child(10) {
+  max-width: 220px;
+  white-space: normal;
+}
+
+.quote-latest strong {
+  color: var(--linear-accent);
+}
+
 .muted-cell {
   color: var(--linear-muted);
 }

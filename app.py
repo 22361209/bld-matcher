@@ -47,7 +47,7 @@ def create_app() -> Flask:
             limit_mb = PRODUCT_SYNC_MAX_UPLOAD_MB if request.endpoint == "preview_product_data_package" else MAX_UPLOAD_MB
             if request.content_length > limit_mb * 1024 * 1024:
                 abort(413)
-        if request.path.startswith("/api/internal/"):
+        if request.path.startswith("/api/internal/") or request.path.startswith("/api/quotes"):
             g.user = None
             return
         if request.endpoint in {"login", "do_login", "static"}:
@@ -82,7 +82,7 @@ def create_app() -> Flask:
     @web_app.errorhandler(RequestEntityTooLarge)
     def upload_too_large(_error):
         limit_mb = PRODUCT_SYNC_MAX_UPLOAD_MB if request.endpoint == "preview_product_data_package" else MAX_UPLOAD_MB
-        if request.path.startswith("/api/internal/") or wants_json_response():
+        if request.path.startswith("/api/internal/") or request.path.startswith("/api/quotes") or wants_json_response():
             return jsonify({"ok": False, "error": f"上传文件不能超过 {limit_mb}MB。"}), 413
         flash(f"上传文件不能超过 {limit_mb}MB。", "error")
         if request.path.startswith("/product-data-sync"):
@@ -91,8 +91,10 @@ def create_app() -> Flask:
             return redirect(url_for("materials"))
         if request.path.startswith("/prices"):
             return redirect(url_for("price_import"))
+        if request.path.startswith("/quotes"):
+            return redirect(url_for("quotes"))
         if request.path.startswith("/customer-prices"):
-            return redirect(url_for("customer_prices"))
+            return redirect(url_for("quotes"))
         if request.path.startswith("/catalog"):
             return redirect(url_for("products"))
         return redirect(url_for("index"))

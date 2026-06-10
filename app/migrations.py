@@ -90,6 +90,47 @@ def _add_product_status(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE products ADD COLUMN product_status TEXT DEFAULT ''")
 
 
+def _add_quote_records(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS quote_records (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          customer_name TEXT NOT NULL,
+          product_model TEXT NOT NULL,
+          price REAL NOT NULL,
+          currency TEXT NOT NULL,
+          moq INTEGER,
+          quote_date TEXT NOT NULL,
+          quoted_by TEXT DEFAULT '',
+          source_type TEXT NOT NULL DEFAULT 'manual',
+          source_text TEXT DEFAULT '',
+          attachment_path TEXT DEFAULT '',
+          remark TEXT DEFAULT '',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_quote_records_customer_model ON quote_records(customer_name, product_model)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_quote_records_date ON quote_records(quote_date)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_quote_records_currency ON quote_records(currency)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_quote_records_quoted_by ON quote_records(quoted_by)")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS quote_record_revisions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          quote_id INTEGER NOT NULL,
+          changed_by TEXT DEFAULT '',
+          before_json TEXT NOT NULL,
+          after_json TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (quote_id) REFERENCES quote_records(id)
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_quote_record_revisions_quote ON quote_record_revisions(quote_id)")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -99,6 +140,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("006_shipment_recognition_jobs", _add_shipment_recognition_jobs),
     ("007_product_status", _add_product_status),
     ("008_internal_api_key_plaintext", _add_internal_api_key_plaintext),
+    ("009_quote_records", _add_quote_records),
 )
 
 

@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>报价记录</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
+  </head>
+  <body>
+    <main class="shell wide materials-linear">
+      {% set active_page = "quotes" %}
+      {% include "_nav.html" %}
+
+      <header class="materials-hero">
+        <div>
+          <h1>报价记录</h1>
+          <p>集中保存人工和 Hermes 录入的客户报价，按客户、型号、日期、币种和报价人查询。</p>
+        </div>
+      </header>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <section class="messages materials-messages">
+            {% for category, message in messages %}
+              <div class="message {{ category }}">{{ message }}</div>
+            {% endfor %}
+          </section>
+        {% endif %}
+      {% endwith %}
+
+      <section class="materials-metrics" aria-label="报价记录统计">
+        <div><span>总记录</span><strong>{{ stats.total }}</strong></div>
+        <div><span>客户数</span><strong>{{ stats.customers }}</strong></div>
+        <div><span>型号数</span><strong>{{ stats.models }}</strong></div>
+        <div><span>当前结果</span><strong>{{ total_records }}</strong></div>
+      </section>
+
+      <section class="materials-command quote-command">
+        <form class="materials-search-form quote-search" method="get" action="{{ url_for('quotes') }}#quote-results">
+          <label>
+            <span>客户</span>
+            <input name="customer_name" value="{{ filters.customer_name }}" placeholder="例如 博世">
+          </label>
+          <label>
+            <span>型号</span>
+            <input name="product_model" value="{{ filters.product_model }}" placeholder="例如 48620-0K040">
+          </label>
+          <label>
+            <span>开始日期</span>
+            <input type="date" name="date_from" value="{{ filters.date_from }}">
+          </label>
+          <label>
+            <span>结束日期</span>
+            <input type="date" name="date_to" value="{{ filters.date_to }}">
+          </label>
+          <label>
+            <span>币种</span>
+            <select name="currency">
+              <option value="" {% if not filters.currency %}selected{% endif %}>全部</option>
+              {% for item in ["CNY", "USD", "EUR"] %}
+                <option value="{{ item }}" {% if filters.currency == item %}selected{% endif %}>{{ item }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>
+            <span>报价人</span>
+            <input name="quoted_by" value="{{ filters.quoted_by }}" placeholder="例如 007">
+          </label>
+          <button class="linear-button primary" type="submit">搜索</button>
+          <a class="linear-button subtle" href="{{ url_for('quotes') }}">重置</a>
+        </form>
+
+        {% if can("manage_customer_prices") %}
+          <details class="toolbar-popover linear-popover quote-new">
+            <summary>新增报价</summary>
+            <form action="{{ url_for('save_quote') }}" method="post" class="toolbar-popover-form quote-form">
+              {{ csrf_field() }}
+              <label>
+                <span>客户</span>
+                <input name="customer_name" required>
+              </label>
+              <label>
+                <span>型号</span>
+                <input name="product_model" required>
+              </label>
+              <label>
+                <span>价格</span>
+                <input type="number" step="0.0001" name="price" required>
+              </label>
+              <label>
+                <span>币种</span>
+                <select name="currency" required>
+                  <option value="CNY">CNY</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                </select>
+              </label>
+              <label>
+                <span>MOQ</span>
+                <input type="number" min="0" step="1" name="moq">
+              </label>
+              <label>
+                <span>报价日期</span>
+                <input type="date" name="quote_date">
+              </label>
+              <label>
+                <span>报价人</span>
+                <input name="quoted_by" value="{{ g.user.username }}">
+              </label>
+              <label>
+                <span>来源</span>
+                <select name="source_type">
+                  <option value="manual">manual</option>
+                  <option value="wechat">wechat</option>
+                  <option value="excel">excel</option>
+                  <option value="pdf">pdf</option>
+                  <option value="image">image</option>
+                </select>
+              </label>
+              <label class="span-2">
+                <span>原文</span>
+                <textarea name="source_text" rows="2" placeholder="例如 博世 48620-0K040 USD 5.35 MOQ300"></textarea>
+              </label>
+              <label class="span-2">
+                <span>附件路径</span>
+                <input name="attachment_path">
+              </label>
+              <label class="span-2">
+                <span>备注</span>
+                <textarea name="remark" rows="2"></textarea>
+              </label>
+              <div class="form-actions span-2">
+                <button class="linear-button primary" type="submit">保存</button>
+              </div>
+            </form>
+          </details>
+        {% endif %}
+      </section>
+
+      {% if latest %}
+        <section class="materials-flow quote-latest">
+          <h2>最近一次报价</h2>
+          <p>
+            {{ latest.customer_name }} / {{ latest.product_model }}：
+            <strong>{{ latest.currency }} {{ "%.4f"|format(latest.price) }}</strong>
+            {% if latest.moq is not none %} MOQ {{ latest.moq }}{% endif %}
+            ，{{ latest.quote_date }}，{{ latest.quoted_by or "-" }}
+          </p>
+        </section>
+      {% endif %}
+
+      <section class="materials-table-section" id="quote-results">
+        <div class="materials-table-title">
+          <div>
+            <h2>报价列表</h2>
+            <p>当前筛选 {{ total_records }} 条；输入客户和型号可查看某个型号的历史报价和最近一次报价。</p>
+          </div>
+        </div>
+        <div class="materials-table-wrap">
+          <table class="materials-grid-table quote-table">
+            <colgroup>
+              <col style="width: 92px">
+              <col style="width: 128px">
+              <col style="width: 142px">
+              <col style="width: 86px">
+              <col style="width: 70px">
+              <col style="width: 72px">
+              <col style="width: 92px">
+              <col style="width: 90px">
+              <col style="width: 190px">
+              <col style="width: 150px">
+              <col style="width: 86px">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>日期</th>
+                <th>客户</th>
+                <th>型号</th>
+                <th>价格</th>
+                <th>币种</th>
+                <th>MOQ</th>
+                <th>报价人</th>
+                <th>来源</th>
+                <th>原文</th>
+                <th>备注</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for record in records %}
+                <tr>
+                  <td>{{ record.quote_date }}</td>
+                  <td><strong>{{ record.customer_name }}</strong></td>
+                  <td>{{ record.product_model }}</td>
+                  <td>{{ "%.4f"|format(record.price) }}</td>
+                  <td>{{ record.currency }}</td>
+                  <td>{% if record.moq is not none %}{{ record.moq }}{% endif %}</td>
+                  <td>{{ record.quoted_by }}</td>
+                  <td>{{ record.source_type }}</td>
+                  <td>{{ record.source_text }}</td>
+                  <td>
+                    {% if record.remark %}<div>{{ record.remark }}</div>{% endif %}
+                    {% if record.attachment_path %}<div class="muted-cell">{{ record.attachment_path }}</div>{% endif %}
+                  </td>
+                  <td>
+                    <a href="{{ url_for('quotes', customer_name=record.customer_name, product_model=record.product_model) }}#quote-results">历史</a>
+                    {% if can("manage_customer_prices") %}
+                      <details class="linear-popover quote-edit">
+                        <summary>修正</summary>
+                        <form action="{{ url_for('edit_quote', quote_id=record.id) }}" method="post" class="toolbar-popover-form quote-form">
+                          {{ csrf_field() }}
+                          <label><span>客户</span><input name="customer_name" value="{{ record.customer_name }}" required></label>
+                          <label><span>型号</span><input name="product_model" value="{{ record.product_model }}" required></label>
+                          <label><span>价格</span><input type="number" step="0.0001" name="price" value="{{ record.price }}" required></label>
+                          <label>
+                            <span>币种</span>
+                            <select name="currency">
+                              {% for item in ["CNY", "USD", "EUR"] %}
+                                <option value="{{ item }}" {% if record.currency == item %}selected{% endif %}>{{ item }}</option>
+                              {% endfor %}
+                            </select>
+                          </label>
+                          <label><span>MOQ</span><input type="number" min="0" step="1" name="moq" value="{{ record.moq if record.moq is not none else '' }}"></label>
+                          <label><span>报价日期</span><input type="date" name="quote_date" value="{{ record.quote_date }}"></label>
+                          <label><span>报价人</span><input name="quoted_by" value="{{ record.quoted_by }}"></label>
+                          <label>
+                            <span>来源</span>
+                            <select name="source_type">
+                              {% for item in ["manual", "wechat", "excel", "pdf", "image"] %}
+                                <option value="{{ item }}" {% if record.source_type == item %}selected{% endif %}>{{ item }}</option>
+                              {% endfor %}
+                            </select>
+                          </label>
+                          <label class="span-2"><span>原文</span><textarea name="source_text" rows="2">{{ record.source_text }}</textarea></label>
+                          <label class="span-2"><span>附件路径</span><input name="attachment_path" value="{{ record.attachment_path }}"></label>
+                          <label class="span-2"><span>备注</span><textarea name="remark" rows="2">{{ record.remark }}</textarea></label>
+                          <div class="form-actions span-2">
+                            <button class="linear-button primary" type="submit">保存修正</button>
+                          </div>
+                        </form>
+                      </details>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+              {% if not records %}
+                <tr><td colspan="11">没有找到报价记录。</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+        {% if pagination.total_pages > 1 %}
+          <nav class="product-pagination bottom" aria-label="报价记录分页">
+            <div class="product-pagination-controls">
+              {% if pagination.has_prev %}<a class="linear-button subtle" href="{{ pagination.prev_url }}">上一页</a>{% endif %}
+              {% for link in pagination.links %}
+                {% if link.gap %}
+                  <span class="pagination-gap">...</span>
+                {% else %}
+                  <a class="pagination-page {% if link.current %}current{% endif %}" href="{{ link.url }}">{{ link.page }}</a>
+                {% endif %}
+              {% endfor %}
+              {% if pagination.has_next %}<a class="linear-button subtle" href="{{ pagination.next_url }}">下一页</a>{% endif %}
+            </div>
+          </nav>
+        {% endif %}
+      </section>
+    </main>
+  </body>
+</html>

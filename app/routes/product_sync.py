@@ -48,24 +48,28 @@ def _product_columns(conn: sqlite3.Connection, schema: str = "main") -> list[str
 
 def _create_products_only_db(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with connect(DB_PATH) as source, sqlite3.connect(path) as target:
-        target.row_factory = sqlite3.Row
-        schema_row = source.execute(
-            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
-            (PRODUCT_TABLE,),
-        ).fetchone()
-        if not schema_row or not schema_row["sql"]:
-            raise RuntimeError("当前数据库缺少 products 表。")
-        target.execute(schema_row["sql"])
-        columns = _product_columns(source)
-        column_sql = ", ".join(columns)
-        placeholders = ", ".join("?" for _ in columns)
-        rows = source.execute(f"SELECT {column_sql} FROM products ORDER BY bld_no COLLATE BLD_NATURAL").fetchall()
-        target.executemany(
-            f"INSERT INTO products ({column_sql}) VALUES ({placeholders})",
-            ([row[column] for column in columns] for row in rows),
-        )
-        target.commit()
+    target = sqlite3.connect(path)
+    try:
+        with connect(DB_PATH) as source:
+            target.row_factory = sqlite3.Row
+            schema_row = source.execute(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+                (PRODUCT_TABLE,),
+            ).fetchone()
+            if not schema_row or not schema_row["sql"]:
+                raise RuntimeError("当前数据库缺少 products 表。")
+            target.execute(schema_row["sql"])
+            columns = _product_columns(source)
+            column_sql = ", ".join(columns)
+            placeholders = ", ".join("?" for _ in columns)
+            rows = source.execute(f"SELECT {column_sql} FROM products ORDER BY bld_no COLLATE BLD_NATURAL").fetchall()
+            target.executemany(
+                f"INSERT INTO products ({column_sql}) VALUES ({placeholders})",
+                ([row[column] for column in columns] for row in rows),
+            )
+            target.commit()
+    finally:
+        target.close()
 
 
 def _add_directory_to_tar(archive: tarfile.TarFile, source: Path, arcname: str) -> int:
@@ -139,7 +143,8 @@ def _read_manifest(extracted_dir: Path) -> dict[str, object]:
 
 
 def _validate_product_db(path: Path) -> None:
-    with sqlite3.connect(path) as conn:
+    conn = sqlite3.connect(path)
+    try:
         ok = conn.execute("PRAGMA integrity_check").fetchone()[0]
         if ok != "ok":
             raise ValueError(f"products.sqlite3 完整性检查失败：{ok}")
@@ -149,6 +154,8 @@ def _validate_product_db(path: Path) -> None:
         ).fetchone()
         if not exists:
             raise ValueError("products.sqlite3 缺少 products 表。")
+    finally:
+        conn.close()
 
 
 def _row_changed(local_row: sqlite3.Row | None, incoming_row: sqlite3.Row, columns: list[str]) -> bool:
@@ -180,7 +187,8 @@ def _incoming_is_older(local_row: sqlite3.Row | None, incoming_row: sqlite3.Row)
 
 
 def _diff_products(package_db: Path, *, limit: int = 50) -> ProductDiff:
-    with connect(DB_PATH) as conn:
+    conn = connect(DB_PATH)
+    try:
         conn.execute(f"ATTACH {str(package_db)!r} AS incoming")
         local_columns = _product_columns(conn, "main")
         incoming_columns = _product_columns(conn, "incoming")
@@ -249,6 +257,12 @@ def _diff_products(package_db: Path, *, limit: int = 50) -> ProductDiff:
             local_only_count=len(local_only_rows),
             rows=rows,
         )
+    finally:
+        try:
+            conn.execute("DETACH incoming")
+        except sqlite3.Error:
+            pass
+        conn.close()
 
 
 def _media_file_count(extracted_dir: Path, key: str) -> int:
@@ -273,7 +287,8 @@ def _package_upload_path() -> Path | None:
 
 
 def _apply_products(package_db: Path, *, deactivate_local_only: bool = False) -> tuple[int, int, int, int, int]:
-    with connect(DB_PATH) as conn:
+    conn = connect(DB_PATH)
+    try:
         conn.execute(f"ATTACH {str(package_db)!r} AS incoming")
         columns = _product_columns(conn, "main")
         incoming_columns = _product_columns(conn, "incoming")
@@ -326,7 +341,13 @@ def _apply_products(package_db: Path, *, deactivate_local_only: bool = False) ->
                 f"新增 {new_count} 条，更新 {updated_count} 条，跳过无变化 {unchanged_count} 条，跳过包内旧数据 {conflict_count} 条，停用本机独有 {deactivated_count} 条；保留当前系统账号、API Key 和日志。",
                 actor=actor_name(),
             )
-    return new_count, updated_count, conflict_count, unchanged_count, deactivated_count
+        return new_count, updated_count, conflict_count, unchanged_count, deactivated_count
+    finally:
+        try:
+            conn.execute("DETACH incoming")
+        except sqlite3.Error:
+            pass
+        conn.close()
 
 
 def _copy_media_dir(extracted_dir: Path, key: str, backup_dir: Path) -> int:

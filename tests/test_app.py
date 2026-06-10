@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import gc
 import os
 import re
 import shutil
@@ -76,6 +77,9 @@ class WebAppTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        cls.client = None
+        cls.web = None
+        gc.collect()
         cls.tmp.cleanup()
 
     def login(self):
@@ -107,7 +111,7 @@ class WebAppTest(unittest.TestCase):
         self.assertIn('class="embedded-submit" type="submit">开始匹配', html)
         self.assertIn('class="embedded-input-control"', html)
         self.assertIn('class="embedded-submit" type="submit">搜索', html)
-        nav_order = ["询价处理", "价格维护", "合同管理", "产品目录", "生产料单", "货物识别"]
+        nav_order = ["询价处理", "报价记录", "合同管理", "产品目录", "生产料单", "货物识别"]
         nav_positions = [html.index(label) for label in nav_order]
         self.assertEqual(nav_positions, sorted(nav_positions))
 
@@ -210,7 +214,7 @@ class WebAppTest(unittest.TestCase):
 
     def test_core_admin_pages_load(self):
         self.login()
-        for path in ["/customer-prices", "/contracts", "/contracts/sales", "/products", "/materials", "/material-drawings", "/shipping-notices", "/shipment-recognition", "/purchase-contracts", "/users", "/internal-api-key", "/logs", "/system-updates", "/product-data-sync"]:
+        for path in ["/quotes", "/contracts", "/contracts/sales", "/products", "/materials", "/material-drawings", "/shipping-notices", "/shipment-recognition", "/purchase-contracts", "/users", "/internal-api-key", "/logs", "/system-updates", "/product-data-sync"]:
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
@@ -256,24 +260,28 @@ class WebAppTest(unittest.TestCase):
         data_dir = work_dir / "data"
         data_dir.mkdir(parents=True, exist_ok=True)
         product_db = data_dir / "products.sqlite3"
-        with self.web.connect(self.web.DB_PATH) as source, sqlite3.connect(product_db) as target:
-            target.row_factory = sqlite3.Row
-            schema = source.execute(
-                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'products'"
-            ).fetchone()["sql"]
-            target.execute(schema)
-            columns = [row["name"] for row in source.execute("PRAGMA table_info(products)")]
-            insert_columns = ", ".join(columns)
-            placeholders = ", ".join("?" for _ in columns)
-            for index, row in enumerate(rows, start=1):
-                values = []
-                for column in columns:
-                    if column == "id":
-                        values.append(index)
-                    else:
-                        values.append(row.get(column, "" if column != "price_cny" else None))
-                target.execute(f"INSERT INTO products ({insert_columns}) VALUES ({placeholders})", values)
-            target.commit()
+        target = sqlite3.connect(product_db)
+        try:
+            with self.web.connect(self.web.DB_PATH) as source:
+                target.row_factory = sqlite3.Row
+                schema = source.execute(
+                    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'products'"
+                ).fetchone()["sql"]
+                target.execute(schema)
+                columns = [row["name"] for row in source.execute("PRAGMA table_info(products)")]
+                insert_columns = ", ".join(columns)
+                placeholders = ", ".join("?" for _ in columns)
+                for index, row in enumerate(rows, start=1):
+                    values = []
+                    for column in columns:
+                        if column == "id":
+                            values.append(index)
+                        else:
+                            values.append(row.get(column, "" if column != "price_cny" else None))
+                    target.execute(f"INSERT INTO products ({insert_columns}) VALUES ({placeholders})", values)
+                target.commit()
+        finally:
+            target.close()
         (work_dir / "manifest.json").write_text(
             '{"package_type":"bld_product_data","version":1}',
             encoding="utf-8",
@@ -319,9 +327,12 @@ class WebAppTest(unittest.TestCase):
             archive.extract("data/products.sqlite3", self.root / "export-check")
 
         exported_db = self.root / "export-check" / "data" / "products.sqlite3"
-        with sqlite3.connect(exported_db) as conn:
+        conn = sqlite3.connect(exported_db)
+        try:
             tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
             count = conn.execute("SELECT COUNT(*) FROM products WHERE bld_no = 'SYNC-EXPORT'").fetchone()[0]
+        finally:
+            conn.close()
         self.assertEqual(tables, {"products", "sqlite_sequence"})
         self.assertEqual(count, 1)
 
@@ -1503,118 +1514,197 @@ class WebAppTest(unittest.TestCase):
                 self.assertTrue(response.headers["Location"].endswith("/"))
         self.client.post("/logout")
 
-    def test_customer_price_records_can_filter_and_import(self):
-        from openpyxl import Workbook
-
+    def test_quote_records_page_can_create_search_and_edit(self):
         self.login()
-        response = self.client.get("/customer-prices")
+        response = self.client.get("/quotes")
         html = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
-        self.assertIn("价格维护", html)
-        self.assertIn('action="/customer-prices#customer-price-results"', html)
-        self.assertIn("客户概览", html)
-        self.assertIn('name="customer_q"', html)
-        self.assertIn('name="bld_no"', html)
-        self.assertIn('name="source_code"', html)
-        self.assertNotIn('name="date_from"', html)
-        self.assertNotIn('name="date_to"', html)
-        self.assertNotIn("客户号码 / OE", html)
-        self.assertNotIn("<th>数量</th>", html)
+        self.assertIn("报价记录", html)
+        self.assertIn('action="/quotes#quote-results"', html)
+        self.assertIn('name="customer_name"', html)
+        self.assertIn('name="product_model"', html)
+        self.assertIn('name="date_from"', html)
+        self.assertIn('name="currency"', html)
+        self.assertNotIn("删除", html)
 
         response = self.client.post(
-            "/customer-prices/save",
+            "/quotes/save",
             data={
-                "record_type": "quote",
-                "customer_name": "ACME",
-                "record_date": "2026-05-05",
-                "source_code": "ACME-001",
-                "bld_no": "K-PRICE-001",
-                "item": "Control Arm",
-                "price_cny": "88.5",
+                "customer_name": "博世",
+                "product_model": "48620-0K040",
+                "price": "5.35",
+                "currency": "USD",
+                "moq": "300",
+                "quote_date": "2026-06-10",
+                "quoted_by": "007",
+                "source_type": "manual",
+                "source_text": "博世 48620-0K040 USD 5.35 MOQ300",
             },
             follow_redirects=False,
         )
         self.assertEqual(response.status_code, 302)
 
         response = self.client.post(
-            "/customer-prices/save",
+            "/quotes/save",
             data={
-                "record_type": "quote",
-                "customer_name": "OMEGA",
-                "record_date": "2026-05-05",
-                "source_code": "OMG-001",
-                "bld_no": "K-PRICE-001",
-                "item": "Control Arm",
-                "price_cny": "92",
+                "customer_name": "博世",
+                "product_model": "48620-0K040",
+                "price": "5.55",
+                "currency": "USD",
+                "moq": "200",
+                "quote_date": "2026-06-11",
+                "quoted_by": "sales",
+                "source_type": "wechat",
             },
             follow_redirects=False,
         )
         self.assertEqual(response.status_code, 302)
 
-        response = self.client.get("/customer-prices")
+        response = self.client.get("/quotes", query_string={"customer_name": "博世", "product_model": "48620-0K040"})
         html = response.get_data(as_text=True)
-        self.assertIn("客户概览", html)
-        self.assertIn("ACME", html)
-        self.assertIn('href="/customer-prices?customer=ACME#customer-price-results"', html)
-        self.assertIn("查看明细", html)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("最近一次报价", html)
+        self.assertIn("USD 5.5500", html)
+        self.assertIn("MOQ 200", html)
+        self.assertIn("博世 48620-0K040 USD 5.35 MOQ300", html)
+        self.assertIn("修正", html)
+        self.assertNotIn("data-open-customer-price-delete", html)
 
-        response = self.client.get("/customer-prices", query_string={"customer_q": "ACM"})
-        html = response.get_data(as_text=True)
-        self.assertIn("客户概览", html)
-        self.assertIn("ACME", html)
-        self.assertNotIn("价格明细", html)
-
-        response = self.client.get("/customer-prices", query_string={"customer": "ACME"})
-        html = response.get_data(as_text=True)
-        self.assertIn("价格明细", html)
-        self.assertIn("返回客户概览", html)
-
-        response = self.client.get("/customer-prices", query_string={"bld_no": "K-PRICE"})
-        html = response.get_data(as_text=True)
-        self.assertIn("价格明细", html)
-        self.assertIn("型号价格对比", html)
-        self.assertIn("<th>客户号码</th>", html)
-        self.assertIn("<th>OE 号</th>", html)
-        self.assertIn("K-PRICE-001", html)
-        self.assertIn("¥88.50", html)
-        self.assertIn("OMEGA", html)
-        self.assertIn("¥92.00", html)
-        self.assertIn("ACME-001", html)
-        self.assertIn('id="customer-price-delete-modal"', html)
-        self.assertIn("data-open-customer-price-delete", html)
-
-        response = self.client.get("/customer-prices", query_string={"source_code": "ACME-001"})
-        html = response.get_data(as_text=True)
-        self.assertIn("价格明细", html)
-        self.assertIn("ACME-001", html)
-
-        workbook = Workbook()
-        sheet = workbook.active
-        sheet.append(["客户", "日期", "BLD NO.", "OE号", "含税单价"])
-        sheet.append(["PIKA", "2026-05-05", "K-ORDER-001", "54500-2D000", 120])
-        payload = io.BytesIO()
-        workbook.save(payload)
-        workbook.close()
-        payload.seek(0)
+        with self.web.connect(self.web.DB_PATH) as conn:
+            quote_id = conn.execute(
+                "SELECT id FROM quote_records WHERE customer_name = ? AND product_model = ? ORDER BY quote_date DESC, id DESC",
+                ("博世", "48620-0K040"),
+            ).fetchone()["id"]
 
         response = self.client.post(
-            "/customer-prices/import",
+            f"/quotes/{quote_id}/edit",
             data={
-                "record_type": "order",
-                "price_file": (payload, "orders.xlsx"),
+                "customer_name": "博世",
+                "product_model": "48620-0K040",
+                "price": "5.65",
+                "currency": "USD",
+                "moq": "200",
+                "quote_date": "2026-06-11",
+                "quoted_by": "sales",
+                "source_type": "wechat",
+                "remark": "人工复核",
             },
-            content_type="multipart/form-data",
             follow_redirects=False,
         )
         self.assertEqual(response.status_code, 302)
+        with self.web.connect(self.web.DB_PATH) as conn:
+            revised = conn.execute("SELECT * FROM quote_records WHERE id = ?", (quote_id,)).fetchone()
+            revisions = conn.execute("SELECT COUNT(*) FROM quote_record_revisions WHERE quote_id = ?", (quote_id,)).fetchone()[0]
+        self.assertEqual(revised["price"], 5.65)
+        self.assertEqual(revisions, 1)
 
-        response = self.client.get("/customer-prices", query_string={"record_type": "order", "bld_no": "K-ORDER"})
-        html = response.get_data(as_text=True)
-        self.assertIn("PIKA", html)
-        self.assertIn("K-ORDER-001", html)
-        self.assertIn("成交", html)
+        response = self.client.post(
+            f"/quotes/{quote_id}/edit",
+            data={
+                "customer_name": "博世",
+                "product_model": "48620-0K040",
+                "price": "5.65",
+                "currency": "USD",
+                "moq": "",
+                "quote_date": "2026-06-11",
+                "quoted_by": "sales",
+                "source_type": "wechat",
+                "source_text": "",
+                "attachment_path": "",
+                "remark": "",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 302)
+        with self.web.connect(self.web.DB_PATH) as conn:
+            cleared = conn.execute("SELECT * FROM quote_records WHERE id = ?", (quote_id,)).fetchone()
+        self.assertIsNone(cleared["moq"])
+        self.assertEqual(cleared["remark"], "")
 
-    def test_customer_prices_are_admin_only(self):
+        old_path = self.client.get("/customer-prices", follow_redirects=False)
+        self.assertEqual(old_path.status_code, 302)
+        self.assertTrue(old_path.headers["Location"].endswith("/quotes"))
+
+    def test_quote_api_requires_key_validates_and_keeps_revision_log(self):
+        response = self.client.post("/api/quotes", json={"customer_name": "ACME"})
+        self.assertEqual(response.status_code, 401)
+
+        token = self.create_internal_api_token()
+        headers = {"Authorization": f"Bearer {token}", "X-Quote-Actor": "hermes"}
+        response = self.client.post(
+            "/api/quotes",
+            json={
+                "customer_name": "HermesBosch",
+                "product_model": "HERMES-48620",
+                "price": "bad",
+                "currency": "USD",
+            },
+            headers=headers,
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("price", response.get_json()["error"])
+
+        response = self.client.post(
+            "/api/quotes",
+            json={
+                "customer_name": "HermesBosch",
+                "product_model": "HERMES-48620",
+                "price": "5.35",
+                "currency": "USD",
+                "moq": 300,
+                "quote_date": "2026-06-10",
+                "quoted_by": "hermes",
+                "source_type": "wechat",
+                "source_text": "HermesBosch HERMES-48620 USD 5.35 MOQ300",
+            },
+            headers=headers,
+        )
+        self.assertEqual(response.status_code, 201)
+        quote = response.get_json()["quote"]
+        self.assertEqual(quote["customer_name"], "HermesBosch")
+        self.assertEqual(quote["price"], 5.35)
+
+        response = self.client.get(
+            "/api/quotes/latest",
+            query_string={"customer_name": "HermesBosch", "product_model": "HERMES-48620"},
+            headers=headers,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["quote"]["id"], quote["id"])
+
+        response = self.client.put(
+            f"/api/quotes/{quote['id']}",
+            json={"price": "5.45", "currency": "USD", "moq": "", "remark": ""},
+            headers=headers,
+        )
+        self.assertEqual(response.status_code, 200)
+        updated_quote = response.get_json()["quote"]
+        self.assertEqual(updated_quote["price"], 5.45)
+        self.assertIsNone(updated_quote["moq"])
+        self.assertEqual(updated_quote["remark"], "")
+        with self.web.connect(self.web.DB_PATH) as conn:
+            revisions = conn.execute("SELECT * FROM quote_record_revisions WHERE quote_id = ?", (quote["id"],)).fetchall()
+        self.assertEqual(len(revisions), 1)
+        self.assertIn('"price": 5.35', revisions[0]["before_json"])
+        self.assertIn('"price": 5.45', revisions[0]["after_json"])
+
+        response = self.client.get("/api/quotes", query_string={"customer_name": "Hermes", "currency": "USD"}, headers=headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.get_json()["quotes"]), 1)
+
+    def test_quote_api_oversized_request_returns_json(self):
+        response = self.client.post(
+            "/api/quotes",
+            data=b"x" * (21 * 1024 * 1024),
+            content_type="application/json",
+            follow_redirects=False,
+        )
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 413)
+        self.assertEqual(payload["ok"], False)
+        self.assertIn("上传文件不能超过", payload["error"])
+
+    def test_quotes_are_admin_only(self):
         from app.database import save_user
 
         with self.web.connect(self.web.DB_PATH) as conn:
@@ -1632,7 +1722,7 @@ class WebAppTest(unittest.TestCase):
 
         self.login()
         admin_page = self.client.get("/").get_data(as_text=True)
-        self.assertIn("价格维护", admin_page)
+        self.assertIn("报价记录", admin_page)
         self.client.post("/logout")
 
         login = self.client.post(
@@ -1643,8 +1733,8 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(login.status_code, 302)
 
         editor_page = self.client.get("/").get_data(as_text=True)
-        self.assertNotIn("价格维护", editor_page)
-        response = self.client.get("/customer-prices", follow_redirects=False)
+        self.assertNotIn("报价记录", editor_page)
+        response = self.client.get("/quotes", follow_redirects=False)
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.headers["Location"].endswith("/"))
         self.client.post("/logout")
@@ -2450,6 +2540,8 @@ class WebAppTest(unittest.TestCase):
                 "005_internal_api_keys",
                 "006_shipment_recognition_jobs",
                 "007_product_status",
+                "008_internal_api_key_plaintext",
+                "009_quote_records",
             ],
         )
 

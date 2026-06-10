@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 def register_routes(app) -> None:
-    from . import admin, auth, customer_prices, home, inquiry, internal_api, material_drawings, materials, product_sync, products, purchase_contracts, shipment_notice, shipment_recognition
+    from . import admin, auth, home, inquiry, internal_api, material_drawings, materials, product_sync, products, purchase_contracts, quotes, shipment_notice, shipment_recognition
 
     auth.register(app)
     internal_api.register(app)
@@ -10,7 +10,7 @@ def register_routes(app) -> None:
     materials.register(app)
     material_drawings.register(app)
     purchase_contracts.register(app)
-    customer_prices.register(app)
+    quotes.register(app)
     admin.register(app)
     product_sync.register(app)
     inquiry.register(app)

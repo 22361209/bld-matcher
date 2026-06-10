@@ -143,17 +143,25 @@ def _prepare_image(path: Path, max_side: int) -> tuple[bytes, str]:
                 image.thumbnail((max_side, max_side))
             if image.mode not in {"RGB", "L"}:
                 image = image.convert("RGB")
-            with tempfile.NamedTemporaryFile(suffix=".jpg") as handle:
-                image.save(handle.name, format="JPEG", quality=88, optimize=True)
-                return Path(handle.name).read_bytes(), "image/jpeg"
+            with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as handle:
+                temp_path = Path(handle.name)
+            try:
+                image.save(temp_path, format="JPEG", quality=88, optimize=True)
+                return temp_path.read_bytes(), "image/jpeg"
+            finally:
+                temp_path.unlink(missing_ok=True)
 
     with Image.open(path) as image:
         image = ImageOps.exif_transpose(image).convert("RGB")
         if max(image.size) > max_side:
             image.thumbnail((max_side, max_side))
-        with tempfile.NamedTemporaryFile(suffix=".jpg") as handle:
-            image.save(handle.name, format="JPEG", quality=88, optimize=True)
-            return Path(handle.name).read_bytes(), "image/jpeg"
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as handle:
+            temp_path = Path(handle.name)
+        try:
+            image.save(temp_path, format="JPEG", quality=88, optimize=True)
+            return temp_path.read_bytes(), "image/jpeg"
+        finally:
+            temp_path.unlink(missing_ok=True)
 
 
 def _data_url(path: Path, max_side: int) -> str:
