@@ -14,7 +14,7 @@
       <header class="materials-hero">
         <div>
           <h1>报价记录</h1>
-          <p>集中保存人工和 Hermes 录入的客户报价，按客户、型号、日期、币种和报价人查询。</p>
+          <p>集中保存人工和 Hermes 录入的客户报价，按客户、BLD号、日期、币种和报价人查询。</p>
         </div>
       </header>
 
@@ -31,7 +31,7 @@
       <section class="materials-metrics" aria-label="报价记录统计">
         <div><span>总记录</span><strong>{{ stats.total }}</strong></div>
         <div><span>客户数</span><strong>{{ stats.customers }}</strong></div>
-        <div><span>型号数</span><strong>{{ stats.models }}</strong></div>
+        <div><span>BLD号数</span><strong>{{ stats.models }}</strong></div>
         <div><span>当前结果</span><strong>{{ total_records }}</strong></div>
       </section>
 
@@ -42,8 +42,8 @@
             <input name="customer_name" value="{{ filters.customer_name }}" placeholder="例如 博世">
           </label>
           <label>
-            <span>型号</span>
-            <input name="product_model" value="{{ filters.product_model }}" placeholder="例如 48620-0K040">
+            <span>BLD号</span>
+            <input name="bld_no" value="{{ filters.bld_no }}" placeholder="例如 K48620">
           </label>
           <label>
             <span>开始日期</span>
@@ -80,12 +80,20 @@
                 <input name="customer_name" required>
               </label>
               <label>
-                <span>型号</span>
-                <input name="product_model" required>
+                <span>BLD号</span>
+                <input name="bld_no" required>
               </label>
               <label>
-                <span>价格</span>
-                <input type="number" step="0.0001" name="price" required>
+                <span>客户产品编码</span>
+                <input name="customer_product_code">
+              </label>
+              <label>
+                <span>含税单价</span>
+                <input type="number" step="0.0001" name="tax_price">
+              </label>
+              <label>
+                <span>不含税单价</span>
+                <input type="number" step="0.0001" name="net_price">
               </label>
               <label>
                 <span>币种</span>
@@ -94,10 +102,6 @@
                   <option value="USD">USD</option>
                   <option value="EUR">EUR</option>
                 </select>
-              </label>
-              <label>
-                <span>MOQ</span>
-                <input type="number" min="0" step="1" name="moq">
               </label>
               <label>
                 <span>报价日期</span>
@@ -119,7 +123,7 @@
               </label>
               <label class="span-2">
                 <span>原文</span>
-                <textarea name="source_text" rows="2" placeholder="例如 博世 48620-0K040 USD 5.35 MOQ300"></textarea>
+                <textarea name="source_text" rows="2" placeholder="例如 博世 K48620 USD 5.35"></textarea>
               </label>
               <label class="span-2">
                 <span>附件路径</span>
@@ -135,15 +139,45 @@
             </form>
           </details>
         {% endif %}
+        {% if can("manage_customer_prices") %}
+          <details class="toolbar-popover linear-popover">
+            <summary>导入报价记录</summary>
+            <form action="{{ url_for('quote_import_preview') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form price-import-form">
+              {{ csrf_field() }}
+              <label>
+                <span>客户</span>
+                <input name="customer_name" required>
+              </label>
+              <label>
+                <span>币种</span>
+                <select name="currency" required>
+                  <option value="CNY">CNY</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                </select>
+              </label>
+              <label class="file-picker">
+                <span>报价记录 Excel</span>
+                <input class="file-picker-input" type="file" name="quote_file" accept=".xls,.xlsx" required>
+                <span class="file-picker-control">
+                  <span class="file-picker-button">选择文件</span>
+                  <span class="file-picker-name">未选择任何文件</span>
+                  <button class="embedded-submit" type="submit">上传预览</button>
+                </span>
+              </label>
+              <span class="note">Excel 表头需包含 BLD号，以及含税单价/不含税单价至少一列；客户和币种以上方填写为准。</span>
+            </form>
+          </details>
+        {% endif %}
       </section>
 
       {% if latest %}
         <section class="materials-flow quote-latest">
           <h2>最近一次报价</h2>
           <p>
-            {{ latest.customer_name }} / {{ latest.product_model }}：
-            <strong>{{ latest.currency }} {{ "%.4f"|format(latest.price) }}</strong>
-            {% if latest.moq is not none %} MOQ {{ latest.moq }}{% endif %}
+            {{ latest.customer_name }} / {{ latest.bld_no or latest.product_model }}：
+            {% if latest.tax_price is not none %}<strong>含税 {{ latest.currency }} {{ "%.4f"|format(latest.tax_price) }}</strong>{% endif %}
+            {% if latest.net_price is not none %}<strong>不含税 {{ latest.currency }} {{ "%.4f"|format(latest.net_price) }}</strong>{% endif %}
             ，{{ latest.quote_date }}，{{ latest.quoted_by or "-" }}
           </p>
         </section>
@@ -153,7 +187,7 @@
         <div class="materials-table-title">
           <div>
             <h2>报价列表</h2>
-            <p>当前筛选 {{ total_records }} 条；输入客户和型号可查看某个型号的历史报价和最近一次报价。</p>
+            <p>当前筛选 {{ total_records }} 条；输入客户和BLD号可查看历史报价和最近一次报价。</p>
           </div>
         </div>
         <div class="materials-table-wrap">
@@ -162,9 +196,10 @@
               <col style="width: 92px">
               <col style="width: 128px">
               <col style="width: 142px">
-              <col style="width: 86px">
+              <col style="width: 130px">
+              <col style="width: 92px">
+              <col style="width: 92px">
               <col style="width: 70px">
-              <col style="width: 72px">
               <col style="width: 92px">
               <col style="width: 90px">
               <col style="width: 190px">
@@ -175,10 +210,11 @@
               <tr>
                 <th>日期</th>
                 <th>客户</th>
-                <th>型号</th>
-                <th>价格</th>
+                <th>BLD号</th>
+                <th>客户产品编码</th>
+                <th>含税单价</th>
+                <th>不含税单价</th>
                 <th>币种</th>
-                <th>MOQ</th>
                 <th>报价人</th>
                 <th>来源</th>
                 <th>原文</th>
@@ -191,10 +227,11 @@
                 <tr>
                   <td>{{ record.quote_date }}</td>
                   <td><strong>{{ record.customer_name }}</strong></td>
-                  <td>{{ record.product_model }}</td>
-                  <td>{{ "%.4f"|format(record.price) }}</td>
+                  <td>{{ record.bld_no or record.product_model }}</td>
+                  <td>{{ record.customer_product_code }}</td>
+                  <td>{% if record.tax_price is not none %}{{ "%.4f"|format(record.tax_price) }}{% endif %}</td>
+                  <td>{% if record.net_price is not none %}{{ "%.4f"|format(record.net_price) }}{% endif %}</td>
                   <td>{{ record.currency }}</td>
-                  <td>{% if record.moq is not none %}{{ record.moq }}{% endif %}</td>
                   <td>{{ record.quoted_by }}</td>
                   <td>{{ record.source_type }}</td>
                   <td>{{ record.source_text }}</td>
@@ -203,15 +240,17 @@
                     {% if record.attachment_path %}<div class="muted-cell">{{ record.attachment_path }}</div>{% endif %}
                   </td>
                   <td>
-                    <a href="{{ url_for('quotes', customer_name=record.customer_name, product_model=record.product_model) }}#quote-results">历史</a>
+                    <a href="{{ url_for('quotes', customer_name=record.customer_name, bld_no=record.bld_no or record.product_model) }}#quote-results">历史</a>
                     {% if can("manage_customer_prices") %}
                       <details class="linear-popover quote-edit">
                         <summary>修正</summary>
                         <form action="{{ url_for('edit_quote', quote_id=record.id) }}" method="post" class="toolbar-popover-form quote-form">
                           {{ csrf_field() }}
                           <label><span>客户</span><input name="customer_name" value="{{ record.customer_name }}" required></label>
-                          <label><span>型号</span><input name="product_model" value="{{ record.product_model }}" required></label>
-                          <label><span>价格</span><input type="number" step="0.0001" name="price" value="{{ record.price }}" required></label>
+                          <label><span>BLD号</span><input name="bld_no" value="{{ record.bld_no or record.product_model }}" required></label>
+                          <label><span>客户产品编码</span><input name="customer_product_code" value="{{ record.customer_product_code }}"></label>
+                          <label><span>含税单价</span><input type="number" step="0.0001" name="tax_price" value="{{ record.tax_price if record.tax_price is not none else '' }}"></label>
+                          <label><span>不含税单价</span><input type="number" step="0.0001" name="net_price" value="{{ record.net_price if record.net_price is not none else '' }}"></label>
                           <label>
                             <span>币种</span>
                             <select name="currency">
@@ -220,7 +259,6 @@
                               {% endfor %}
                             </select>
                           </label>
-                          <label><span>MOQ</span><input type="number" min="0" step="1" name="moq" value="{{ record.moq if record.moq is not none else '' }}"></label>
                           <label><span>报价日期</span><input type="date" name="quote_date" value="{{ record.quote_date }}"></label>
                           <label><span>报价人</span><input name="quoted_by" value="{{ record.quoted_by }}"></label>
                           <label>
@@ -244,7 +282,7 @@
                 </tr>
               {% endfor %}
               {% if not records %}
-                <tr><td colspan="11">没有找到报价记录。</td></tr>
+                <tr><td colspan="12">没有找到报价记录。</td></tr>
               {% endif %}
             </tbody>
           </table>
@@ -266,5 +304,6 @@
         {% endif %}
       </section>
     </main>
+    <script src="{{ url_for('static', filename='app.js', v=static_version('app.js')) }}"></script>
   </body>
 </html>

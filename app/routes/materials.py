@@ -34,6 +34,7 @@ from app.security import actor_name, can, login_required, permission_required
 
 
 MATERIAL_PAGE_SIZE = 50
+MATERIAL_HISTORY_LIMIT = 500
 
 
 def _request_page() -> int:
@@ -51,7 +52,7 @@ def _material_page_url(query: str, status: str, page: int) -> str:
         params["status"] = status
     if page > 1:
         params["page"] = page
-    return f"{url_for('materials', **params)}#materials-results"
+    return f"{url_for('material_items', **params)}#materials-results"
 
 
 def _material_pagination(query: str, status: str, page: int, total: int) -> dict[str, object]:
@@ -98,10 +99,61 @@ def _material_data_stats(path: Path) -> dict:
     return _cached_material_data_stats(str(path), _file_signature(path))
 
 
+def _operation_user(path: Path) -> str:
+    parent = path.parent.name
+    if not parent.startswith("u") or "-" not in parent:
+        return "历史文件"
+    return parent.split("-", 1)[1] or parent
+
+
+def _material_history_rows(paths: list[Path], query: str) -> list[dict]:
+    needle = query.strip().lower()
+    rows = []
+    for path in paths:
+        operator = _operation_user(path)
+        stat = path.stat()
+        updated_at = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
+        haystack = " ".join([path.name, path.suffix.lower().lstrip(".").upper(), operator, updated_at]).lower()
+        if needle and needle not in haystack:
+            continue
+        rows.append(
+            {
+                "path": path,
+                "name": path.name,
+                "kind": path.suffix.lower().lstrip(".").upper(),
+                "operator": operator,
+                "updated_at": updated_at,
+            }
+        )
+    return rows
+
+
 def register(app) -> None:
     @app.get("/materials")
     @login_required
     def materials():
+        bootstrap_materials_from_excel(DB_PATH, MATERIAL_DATA_PATH)
+        with connect(DB_PATH) as conn:
+            stats = material_item_stats(conn)
+        material_history_query = request.args.get("material_history_q", "").strip()
+        output_reader = all_recent_outputs if can("manage_users") else user_recent_outputs
+        material_history_files = _material_history_rows(
+            output_reader("*料单*.xlsx", limit=MATERIAL_HISTORY_LIMIT),
+            material_history_query,
+        )
+        return render_template(
+            "materials.html",
+            show_material_items=False,
+            material_file_stats=_material_data_stats(MATERIAL_DATA_PATH),
+            material_stats=stats,
+            material_path=MATERIAL_DATA_PATH if MATERIAL_DATA_PATH.exists() else None,
+            material_history_files=material_history_files,
+            material_history_query=material_history_query,
+        )
+
+    @app.get("/materials/items")
+    @login_required
+    def material_items():
         bootstrap_materials_from_excel(DB_PATH, MATERIAL_DATA_PATH)
         query = request.args.get("q", "")
         status = request.args.get("status", "active")
@@ -124,9 +176,9 @@ def register(app) -> None:
                 offset=(int(pagination["page"]) - 1) * MATERIAL_PAGE_SIZE,
             )
             stats = material_item_stats(conn)
-        latest_outputs = all_recent_outputs("*料单*.xlsx") if can("manage_users") else user_recent_outputs("*料单*.xlsx")
         return render_template(
             "materials.html",
+            show_material_items=True,
             material_file_stats=_material_data_stats(MATERIAL_DATA_PATH),
             material_stats=stats,
             material_items=items,
@@ -136,7 +188,6 @@ def register(app) -> None:
             material_path=MATERIAL_DATA_PATH if MATERIAL_DATA_PATH.exists() else None,
             query=query,
             status=status,
-            latest_outputs=latest_outputs,
         )
 
     @app.get("/materials/template")
@@ -194,10 +245,10 @@ def register(app) -> None:
         file = request.files.get("material_data")
         if not file or not file.filename:
             flash("请选择材料数据 Excel 文件。", "error")
-            return redirect(url_for("materials"))
+            return redirect(url_for("material_items"))
         if Path(file.filename).suffix.lower() != ".xlsx":
             flash("材料数据请使用 .xlsx 文件。", "error")
-            return redirect(url_for("materials"))
+            return redirect(url_for("material_items"))
 
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         upload_path = user_upload_path(file.filename, prefix="material-data")
@@ -205,7 +256,7 @@ def register(app) -> None:
         stats = material_data_stats(upload_path)
         if stats.get("invalid"):
             flash(f"材料数据读取失败：{stats.get('error') or '文件里必须包含“材料数据”工作表。'}", "error")
-            return redirect(url_for("materials"))
+            return redirect(url_for("material_items"))
 
         try:
             with import_lock(actor_name(), "材料数据导入"):
@@ -227,12 +278,12 @@ def register(app) -> None:
                     conn.commit()
         except ImportLockError as exc:
             flash(str(exc), "error")
-            return redirect(url_for("materials"))
+            return redirect(url_for("material_items"))
         except Exception as exc:
             flash(f"材料数据导入失败：{exc}", "error")
-            return redirect(url_for("materials"))
+            return redirect(url_for("material_items"))
         flash("材料数据已更新并导入数据库。", "success")
-        return redirect(url_for("materials"))
+        return redirect(url_for("material_items"))
 
     @app.get("/materials/items/new")
     @permission_required("manage_materials")
@@ -247,7 +298,7 @@ def register(app) -> None:
             item = get_material_item(conn, item_id)
         if not item:
             flash("材料明细不存在。", "error")
-            return redirect(url_for("materials"))
+            return redirect(url_for("material_items"))
         return render_template("material_item_form.html", item=item)
 
     @app.post("/materials/items/save")
@@ -272,9 +323,9 @@ def register(app) -> None:
                 upsert_material_item(conn, data, actor=actor_name())
         except Exception as exc:
             flash(f"保存失败：{exc}", "error")
-            return redirect(url_for("materials"))
+            return redirect(url_for("material_items"))
         flash("材料明细已保存。", "success")
-        return redirect(url_for("materials", q=data["model"]))
+        return redirect(url_for("material_items", q=data["model"]))
 
     @app.post("/materials/items/<int:item_id>/deactivate")
     @permission_required("manage_materials")
@@ -282,4 +333,4 @@ def register(app) -> None:
         with connect(DB_PATH) as conn:
             deactivate_material_item(conn, item_id, actor=actor_name())
         flash("材料明细已停用。", "success")
-        return redirect(url_for("materials"))
+        return redirect(url_for("material_items"))

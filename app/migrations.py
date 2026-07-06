@@ -96,8 +96,12 @@ def _add_quote_records(conn: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS quote_records (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           customer_name TEXT NOT NULL,
+          bld_no TEXT DEFAULT '',
+          customer_product_code TEXT DEFAULT '',
           product_model TEXT NOT NULL,
           price REAL NOT NULL,
+          tax_price REAL,
+          net_price REAL,
           currency TEXT NOT NULL,
           moq INTEGER,
           quote_date TEXT NOT NULL,
@@ -112,6 +116,7 @@ def _add_quote_records(conn: sqlite3.Connection) -> None:
         """
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_quote_records_customer_model ON quote_records(customer_name, product_model)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_quote_records_customer_bld ON quote_records(customer_name, bld_no)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_quote_records_date ON quote_records(quote_date)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_quote_records_currency ON quote_records(currency)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_quote_records_quoted_by ON quote_records(quoted_by)")
@@ -131,6 +136,21 @@ def _add_quote_records(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_quote_record_revisions_quote ON quote_record_revisions(quote_id)")
 
 
+def _add_quote_record_bld_prices(conn: sqlite3.Connection) -> None:
+    quote_columns = _columns(conn, "quote_records")
+    if "bld_no" not in quote_columns:
+        conn.execute("ALTER TABLE quote_records ADD COLUMN bld_no TEXT DEFAULT ''")
+    if "customer_product_code" not in quote_columns:
+        conn.execute("ALTER TABLE quote_records ADD COLUMN customer_product_code TEXT DEFAULT ''")
+    if "tax_price" not in quote_columns:
+        conn.execute("ALTER TABLE quote_records ADD COLUMN tax_price REAL")
+    if "net_price" not in quote_columns:
+        conn.execute("ALTER TABLE quote_records ADD COLUMN net_price REAL")
+    conn.execute("UPDATE quote_records SET bld_no = product_model WHERE COALESCE(bld_no, '') = ''")
+    conn.execute("UPDATE quote_records SET tax_price = price WHERE tax_price IS NULL")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_quote_records_customer_bld ON quote_records(customer_name, bld_no)")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -141,6 +161,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("007_product_status", _add_product_status),
     ("008_internal_api_key_plaintext", _add_internal_api_key_plaintext),
     ("009_quote_records", _add_quote_records),
+    ("010_quote_record_bld_prices", _add_quote_record_bld_prices),
 )
 
 

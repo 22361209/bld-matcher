@@ -8,7 +8,7 @@
   </head>
   <body>
     <main class="shell wide materials-linear">
-      {% set active_page = "materials" %}
+      {% set active_page = "material_items" %}
       {% include "_nav.html" %}
 
       <header class="materials-hero">
@@ -17,7 +17,7 @@
           <p>母件编码用于匹配生产计划；规格尺寸会自动识别厚度、宽度、长度。</p>
         </div>
         <div class="materials-actions">
-          <a class="linear-button subtle" href="{{ url_for('materials', q=item.model if item else '') }}">返回生产料单</a>
+          <a class="linear-button subtle" href="{{ url_for('material_items', q=item.model if item else '') }}">返回材料明细</a>
         </div>
       </header>
 
@@ -69,7 +69,7 @@
           </label>
           <div class="form-actions">
             <button class="linear-button primary" type="submit">保存材料明细</button>
-            <a class="linear-button subtle" href="{{ url_for('materials', q=item.model if item else '') }}">取消</a>
+            <a class="linear-button subtle" href="{{ url_for('material_items', q=item.model if item else '') }}">取消</a>
           </div>
         </form>
       </section>

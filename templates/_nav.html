@@ -8,7 +8,12 @@
       <a class="{% if active_page == 'contracts' %}active{% endif %}" href="{{ url_for('contracts') }}">合同管理</a>
     {% endif %}
     <a class="{% if active_page == 'products' %}active{% endif %}" href="{{ url_for('products') }}">产品目录</a>
-    <a class="{% if active_page == 'materials' %}active{% endif %}" href="{{ url_for('materials') }}">生产料单</a>
+    <div class="nav-menu">
+      <a class="{% if active_page in ['materials', 'material_items'] %}active{% endif %}" href="{{ url_for('materials') }}">生产料单</a>
+      <div class="nav-menu-panel">
+        <a class="{% if active_page == 'material_items' %}active{% endif %}" href="{{ url_for('material_items') }}">材料明细</a>
+      </div>
+    </div>
     <a class="{% if active_page == 'material_drawings' %}active{% endif %}" href="{{ url_for('material_drawings') }}">物料图纸</a>
     {% if can("generate_shipping_notice") %}
       <a class="{% if active_page == 'shipping_notice' %}active{% endif %}" href="{{ url_for('shipping_notice') }}">发货通知</a>

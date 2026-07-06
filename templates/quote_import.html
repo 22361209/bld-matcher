@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>导入报价记录</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
+  </head>
+  <body>
+    <main class="shell wide materials-linear">
+      {% set active_page = "quotes" %}
+      {% include "_nav.html" %}
+
+      <header class="materials-hero">
+        <div>
+          <h1>导入报价记录</h1>
+          <p>确认预览后写入报价记录表。</p>
+        </div>
+        <div class="materials-actions">
+          <a class="linear-button subtle" href="{{ url_for('quotes') }}">返回报价记录</a>
+        </div>
+      </header>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <section class="messages materials-messages">
+            {% for category, message in messages %}
+              <div class="message {{ category }}">{{ message }}</div>
+            {% endfor %}
+          </section>
+        {% endif %}
+      {% endwith %}
+
+      <section class="materials-metrics" aria-label="报价记录导入统计">
+        <div><span>总行数</span><strong>{{ preview.counts.total }}</strong></div>
+        <div><span>可导入</span><strong>{{ preview.counts.valid }}</strong></div>
+        <div><span>跳过</span><strong>{{ preview.counts.invalid }}</strong></div>
+      </section>
+
+      <section class="materials-command">
+        <div>
+          <h2>导入预览</h2>
+          <p class="note">只会导入状态为可导入的行。</p>
+        </div>
+        <form action="{{ url_for('quote_import_apply') }}" method="post" class="materials-actions">
+          {{ csrf_field() }}
+          <input type="hidden" name="payload" value="{{ payload }}">
+          <button class="linear-button primary" type="submit">确认导入报价记录</button>
+        </form>
+      </section>
+
+      <section class="materials-table-section">
+        <div class="materials-table-title">
+          <div>
+            <h2>预览明细</h2>
+            <p>检查客户、BLD号、客户产品编码和价格字段。</p>
+          </div>
+          <span>{{ preview.rows|length }} 条</span>
+        </div>
+        <div class="materials-table-wrap">
+          <table class="materials-grid-table quote-table">
+            <thead>
+              <tr>
+                <th>Excel行</th>
+                <th>状态</th>
+                <th>客户</th>
+                <th>BLD号</th>
+                <th>客户产品编码</th>
+                <th>含税单价</th>
+                <th>不含税单价</th>
+                <th>币种</th>
+                <th>报价日期</th>
+                <th>报价人</th>
+                <th>来源</th>
+                <th>错误</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in preview.rows %}
+                <tr class="{% if row.status != 'valid' %}muted-row{% endif %}">
+                  <td>{{ row.row }}</td>
+                  <td>{% if row.status == "valid" %}可导入{% else %}跳过{% endif %}</td>
+                  <td>{{ row.customer_name }}</td>
+                  <td>{{ row.bld_no }}</td>
+                  <td>{{ row.customer_product_code }}</td>
+                  <td>{% if row.tax_price is not none %}{{ "%.4f"|format(row.tax_price) }}{% endif %}</td>
+                  <td>{% if row.net_price is not none %}{{ "%.4f"|format(row.net_price) }}{% endif %}</td>
+                  <td>{{ row.currency }}</td>
+                  <td>{{ row.quote_date }}</td>
+                  <td>{{ row.quoted_by }}</td>
+                  <td>{{ row.source_type }}</td>
+                  <td>{{ row.error }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

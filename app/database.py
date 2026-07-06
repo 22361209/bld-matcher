@@ -134,8 +134,12 @@ CREATE INDEX IF NOT EXISTS idx_customer_price_records_date ON customer_price_rec
 CREATE TABLE IF NOT EXISTS quote_records (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   customer_name TEXT NOT NULL,
+  bld_no TEXT DEFAULT '',
+  customer_product_code TEXT DEFAULT '',
   product_model TEXT NOT NULL,
   price REAL NOT NULL,
+  tax_price REAL,
+  net_price REAL,
   currency TEXT NOT NULL,
   moq INTEGER,
   quote_date TEXT NOT NULL,
@@ -149,6 +153,7 @@ CREATE TABLE IF NOT EXISTS quote_records (
 );
 
 CREATE INDEX IF NOT EXISTS idx_quote_records_customer_model ON quote_records(customer_name, product_model);
+CREATE INDEX IF NOT EXISTS idx_quote_records_customer_bld ON quote_records(customer_name, bld_no);
 CREATE INDEX IF NOT EXISTS idx_quote_records_date ON quote_records(quote_date);
 CREATE INDEX IF NOT EXISTS idx_quote_records_currency ON quote_records(currency);
 CREATE INDEX IF NOT EXISTS idx_quote_records_quoted_by ON quote_records(quoted_by);
@@ -1080,14 +1085,12 @@ QUOTE_CURRENCIES = {"CNY", "USD", "EUR"}
 QUOTE_SOURCE_TYPES = {"manual", "wechat", "excel", "pdf", "image"}
 
 
-def _parse_quote_price(value: object) -> float:
+def _parse_optional_quote_price(value: object, field: str) -> float | None:
     try:
         price = _parse_optional_float(value)
     except ValueError as exc:
-        raise ValueError("price 必须是数字。") from exc
-    if price is None:
-        raise ValueError("price 必须是数字。")
-    return round(price, 4)
+        raise ValueError(f"{field} 必须是数字。") from exc
+    return round(price, 4) if price is not None else None
 
 
 def _parse_quote_moq(value: object) -> int | None:
@@ -1112,13 +1115,23 @@ def _quote_value(data: dict, field: str, existing: sqlite3.Row | None, default: 
 
 def _quote_values(data: dict, *, actor: str = "", existing: sqlite3.Row | None = None) -> dict:
     customer_name = clean_multiline(_quote_value(data, "customer_name", existing))
-    product_model = compact_text(_quote_value(data, "product_model", existing))
+    bld_default = _quote_value(data, "product_model", existing)
+    bld_no = compact_text(_quote_value(data, "bld_no", existing, bld_default))
     if not customer_name:
         raise ValueError("customer_name 不能为空。")
-    if not product_model:
-        raise ValueError("product_model 不能为空。")
+    if not bld_no:
+        raise ValueError("bld_no 不能为空。")
 
-    price_source = _quote_value(data, "price", existing, None)
+    explicit_price = data.get("price") if "price" in data else None
+    tax_price_source = _quote_value(data, "tax_price", existing, None)
+    net_price_source = _quote_value(data, "net_price", existing, None)
+    if explicit_price not in (None, "") and "tax_price" not in data and "net_price" not in data:
+        tax_price_source = explicit_price
+    tax_price = _parse_optional_quote_price(tax_price_source, "tax_price")
+    net_price = _parse_optional_quote_price(net_price_source, "net_price")
+    if tax_price is None and net_price is None:
+        raise ValueError("tax_price 或 net_price 至少填写一个。")
+    price = tax_price if tax_price is not None else net_price
     currency = compact_text(_quote_value(data, "currency", existing, "CNY")).upper()
     if currency not in QUOTE_CURRENCIES:
         raise ValueError("currency 只允许 CNY/USD/EUR。")
@@ -1131,8 +1144,12 @@ def _quote_values(data: dict, *, actor: str = "", existing: sqlite3.Row | None =
     created_at = existing["created_at"] if existing else timestamp
     return {
         "customer_name": customer_name,
-        "product_model": product_model,
-        "price": _parse_quote_price(price_source),
+        "bld_no": bld_no,
+        "customer_product_code": compact_text(_quote_value(data, "customer_product_code", existing)),
+        "product_model": bld_no,
+        "price": price,
+        "tax_price": tax_price,
+        "net_price": net_price,
         "currency": currency,
         "moq": _parse_quote_moq(_quote_value(data, "moq", existing, None)),
         "quote_date": _parse_record_date(_quote_value(data, "quote_date", existing, None)),
@@ -1152,8 +1169,12 @@ def quote_record_payload(row: sqlite3.Row | None) -> dict | None:
     return {
         "id": row["id"],
         "customer_name": row["customer_name"],
+        "bld_no": row["bld_no"],
+        "customer_product_code": row["customer_product_code"],
         "product_model": row["product_model"],
         "price": row["price"],
+        "tax_price": row["tax_price"],
+        "net_price": row["net_price"],
         "currency": row["currency"],
         "moq": row["moq"],
         "quote_date": row["quote_date"],
@@ -1172,16 +1193,18 @@ def create_quote_record(conn: sqlite3.Connection, data: dict, *, actor: str = ""
     cursor = conn.execute(
         """
         INSERT INTO quote_records
-          (customer_name, product_model, price, currency, moq, quote_date, quoted_by,
+          (customer_name, bld_no, customer_product_code, product_model, price, tax_price, net_price,
+           currency, moq, quote_date, quoted_by,
            source_type, source_text, attachment_path, remark, created_at, updated_at)
         VALUES
-          (:customer_name, :product_model, :price, :currency, :moq, :quote_date, :quoted_by,
+          (:customer_name, :bld_no, :customer_product_code, :product_model, :price, :tax_price, :net_price,
+           :currency, :moq, :quote_date, :quoted_by,
            :source_type, :source_text, :attachment_path, :remark, :created_at, :updated_at)
         """,
         values,
     )
     quote_id = int(cursor.lastrowid)
-    log_event(conn, "新增报价记录", "quote_record", str(quote_id), f"{values['customer_name']} {values['product_model']}", actor=actor)
+    log_event(conn, "新增报价记录", "quote_record", str(quote_id), f"{values['customer_name']} {values['bld_no']}", actor=actor)
     if commit:
         conn.commit()
     return quote_id
@@ -1190,6 +1213,7 @@ def create_quote_record(conn: sqlite3.Connection, data: dict, *, actor: str = ""
 def _quote_filter_clauses(
     *,
     customer_name: str = "",
+    bld_no: str = "",
     product_model: str = "",
     date_from: str = "",
     date_to: str = "",
@@ -1201,9 +1225,10 @@ def _quote_filter_clauses(
     if customer_name.strip():
         clauses.append("UPPER(customer_name) LIKE ?")
         params.append(f"%{customer_name.strip().upper()}%")
-    if product_model.strip():
-        clauses.append("UPPER(product_model) LIKE ?")
-        params.append(f"%{product_model.strip().upper()}%")
+    bld_filter = bld_no.strip() or product_model.strip()
+    if bld_filter:
+        clauses.append("UPPER(COALESCE(NULLIF(bld_no, ''), product_model)) LIKE ?")
+        params.append(f"%{bld_filter.upper()}%")
     if date_from.strip():
         clauses.append("quote_date >= ?")
         params.append(_parse_record_date(date_from))
@@ -1226,6 +1251,7 @@ def list_quote_records(
     conn: sqlite3.Connection,
     *,
     customer_name: str = "",
+    bld_no: str = "",
     product_model: str = "",
     date_from: str = "",
     date_to: str = "",
@@ -1237,6 +1263,7 @@ def list_quote_records(
     sql = "SELECT * FROM quote_records"
     clauses, params = _quote_filter_clauses(
         customer_name=customer_name,
+        bld_no=bld_no,
         product_model=product_model,
         date_from=date_from,
         date_to=date_to,
@@ -1262,15 +1289,15 @@ def get_quote_record(conn: sqlite3.Connection, quote_id: int) -> sqlite3.Row | N
     return conn.execute("SELECT * FROM quote_records WHERE id = ?", (quote_id,)).fetchone()
 
 
-def latest_quote_record(conn: sqlite3.Connection, *, customer_name: str, product_model: str) -> sqlite3.Row | None:
+def latest_quote_record(conn: sqlite3.Connection, *, customer_name: str, bld_no: str = "", product_model: str = "") -> sqlite3.Row | None:
     customer = clean_multiline(customer_name)
-    model = compact_text(product_model)
+    model = compact_text(bld_no or product_model)
     if not customer or not model:
-        raise ValueError("customer_name 和 product_model 不能为空。")
+        raise ValueError("customer_name 和 bld_no 不能为空。")
     return conn.execute(
         """
         SELECT * FROM quote_records
-        WHERE customer_name = ? AND product_model = ?
+        WHERE customer_name = ? AND COALESCE(NULLIF(bld_no, ''), product_model) = ?
         ORDER BY quote_date DESC, id DESC
         LIMIT 1
         """,
@@ -1287,7 +1314,8 @@ def update_quote_record(conn: sqlite3.Connection, quote_id: int, data: dict, *, 
     conn.execute(
         """
         UPDATE quote_records
-        SET customer_name=:customer_name, product_model=:product_model, price=:price,
+        SET customer_name=:customer_name, bld_no=:bld_no, customer_product_code=:customer_product_code,
+            product_model=:product_model, price=:price, tax_price=:tax_price, net_price=:net_price,
             currency=:currency, moq=:moq, quote_date=:quote_date, quoted_by=:quoted_by,
             source_type=:source_type, source_text=:source_text, attachment_path=:attachment_path,
             remark=:remark, updated_at=:updated_at
@@ -1312,7 +1340,7 @@ def update_quote_record(conn: sqlite3.Connection, quote_id: int, data: dict, *, 
                 now_text(),
             ),
         )
-        log_event(conn, "修正报价记录", "quote_record", str(quote_id), f"{before['customer_name']} {before['product_model']}", actor=actor)
+        log_event(conn, "修正报价记录", "quote_record", str(quote_id), f"{before['customer_name']} {before['bld_no'] or before['product_model']}", actor=actor)
     if commit:
         conn.commit()
     return after
@@ -1324,7 +1352,7 @@ def quote_record_stats(conn: sqlite3.Connection) -> dict[str, int]:
         SELECT
           COUNT(*) AS total,
           COUNT(DISTINCT customer_name) AS customers,
-          COUNT(DISTINCT product_model) AS models
+          COUNT(DISTINCT COALESCE(NULLIF(bld_no, ''), product_model)) AS models
         FROM quote_records
         """
     ).fetchone()

@@ -8,7 +8,7 @@
   </head>
   <body>
     <main class="shell wide materials-linear materials-clean-page">
-      {% set active_page = "materials" %}
+      {% set active_page = "material_items" if show_material_items else "materials" %}
       {% include "_nav.html" %}
 
       {% with messages = get_flashed_messages(with_categories=true) %}
@@ -22,14 +22,16 @@
       {% endwith %}
 
       <header class="material-landing">
-        <h1>生产料单</h1>
-        <p>上传生产计划，按启用材料明细生成采购和下料所需的料单。</p>
+        <h1>{% if show_material_items %}材料明细{% else %}生产料单{% endif %}</h1>
+        <p>{% if show_material_items %}维护生成生产料单时使用的材料明细。{% else %}上传生产计划，按启用材料明细生成采购和下料所需的料单。{% endif %}</p>
         <div class="inquiry-stat-strip material-stat-strip" aria-label="材料数据统计">
           <span>总明细 <strong>{{ material_stats["items"] }}</strong></span>
           <span>启用明细 <strong>{{ material_stats.active }}</strong></span>
           <span>停用明细 <strong>{{ material_stats.inactive }}</strong></span>
           <span>启用母件 <strong>{{ material_stats.models }}</strong></span>
-          <span>当前视图 <strong>{{ "全部" if status == "all" else ("停用" if status == "inactive" else "启用") }}</strong></span>
+          {% if show_material_items %}
+            <span>当前视图 <strong>{{ "全部" if status == "all" else ("停用" if status == "inactive" else "启用") }}</strong></span>
+          {% endif %}
         </div>
       </header>
 
@@ -39,6 +41,7 @@
         </section>
       {% endif %}
 
+      {% if not show_material_items %}
       <section class="material-command-center">
         <div class="inquiry-directory-note material-file-note">
           <span>材料文件：{{ material_path.name if material_path else "未上传" }}</span>
@@ -65,7 +68,9 @@
         {% endif %}
         <p class="materials-muted material-help-text">生产计划需包含型号和计划数/只；网页编辑、新增、停用后会影响下一次生成。</p>
       </section>
+      {% endif %}
 
+      {% if show_material_items %}
       {% set status_label = "包含停用" if status == "all" else ("只看停用" if status == "inactive" else "只看启用") %}
       <section class="materials-table-section" id="materials-results">
         <div class="materials-table-title">
@@ -104,7 +109,7 @@
         </div>
 
         <div class="material-table-toolbar">
-          <form class="materials-search-form material-table-search" method="get" action="{{ url_for('materials') }}#materials-results">
+          <form class="materials-search-form material-table-search" method="get" action="{{ url_for('material_items') }}#materials-results">
             <label>
               <span>搜索材料明细</span>
               <input name="q" value="{{ query }}" placeholder="母件编码、零件编码或规格，例如 8234 / 2.5 357 / 357*1260">
@@ -202,32 +207,71 @@
           </nav>
         {% endif %}
       </section>
+      {% endif %}
 
-      {% if latest_outputs %}
-        <details class="materials-history-drawer">
-          <summary>
-            <span>最近料单</span>
-            <strong>{{ latest_outputs|length }} 个</strong>
-          </summary>
-          <div class="materials-history-panel">
-            <section class="materials-recent">
-              <div class="materials-table-title">
-                <div>
-                  <h2>最近料单</h2>
-                  <p>最近生成的生产料单文件。</p>
-                </div>
+      {% if not show_material_items %}
+      <details class="materials-history-drawer" {% if material_history_query %}open{% endif %}>
+        <summary>
+          <span>最近料单</span>
+          <strong>{{ material_history_files|length }} 条</strong>
+        </summary>
+        <div class="materials-history-panel">
+          <form class="inquiry-command-row inquiry-history-search" method="get" action="{{ url_for('materials') }}#material-history">
+            <label class="embedded-search-field">
+              <span>搜索最近料单</span>
+              <span class="embedded-input-control">
+                <input name="material_history_q" value="{{ material_history_query }}" placeholder="文件名、日期、关键词或操作用户">
+                <button class="embedded-submit" type="submit">搜索</button>
+              </span>
+            </label>
+            {% if material_history_query %}
+              <a class="linear-button subtle" href="{{ url_for('materials') }}#material-history">清除</a>
+            {% endif %}
+          </form>
+          <section class="materials-recent" id="material-history">
+            <div class="materials-table-title">
+              <div>
+                <h2>最近料单</h2>
+                <p>按文件名搜索已经生成过的生产料单，方便重新下载。</p>
               </div>
-              <ul class="files">
-                {% for path in latest_outputs %}
-                  <li><a href="{{ url_for('download', name=download_name(path)) }}">{{ path.name }}</a></li>
-                {% endfor %}
-              </ul>
-            </section>
-          </div>
-        </details>
+              <span>{{ material_history_files|length }} 条</span>
+            </div>
+            {% if material_history_files %}
+              <div class="materials-table-wrap">
+                <table class="materials-grid-table inquiry-history-table">
+                  <thead>
+                    <tr>
+                      <th>文件名</th>
+                      <th>格式</th>
+                      <th>操作用户</th>
+                      <th>生成时间</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for file in material_history_files %}
+                      <tr>
+                        <td><a href="{{ url_for('download', name=download_name(file.path)) }}">{{ file.name }}</a></td>
+                        <td>{{ file.kind }}</td>
+                        <td>{{ file.operator }}</td>
+                        <td>{{ file.updated_at }}</td>
+                        <td><a href="{{ url_for('download', name=download_name(file.path)) }}">下载</a></td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <p class="materials-empty">
+                {% if material_history_query %}没有找到匹配的料单文件。{% else %}还没有最近料单文件。{% endif %}
+              </p>
+            {% endif %}
+          </section>
+        </div>
+      </details>
       {% endif %}
     </main>
-    {% if can("manage_materials") %}
+    {% if show_material_items and can("manage_materials") %}
       <div class="product-modal" id="material-modal" aria-hidden="true">
         <div class="product-modal-backdrop" data-close-material-modal></div>
         <div class="product-modal-panel material-modal-panel" role="dialog" aria-modal="true" aria-label="新增材料明细">
