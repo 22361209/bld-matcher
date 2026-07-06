@@ -2641,6 +2641,7 @@ class WebAppTest(unittest.TestCase):
                 "008_internal_api_key_plaintext",
                 "009_quote_records",
                 "010_quote_record_bld_prices",
+                "011_customer_price_bld_index",
             ],
         )
 

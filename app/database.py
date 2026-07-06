@@ -128,7 +128,6 @@ CREATE TABLE IF NOT EXISTS customer_price_records (
 );
 
 CREATE INDEX IF NOT EXISTS idx_customer_price_records_customer ON customer_price_records(customer_name);
-CREATE INDEX IF NOT EXISTS idx_customer_price_records_bld ON customer_price_records(bld_no);
 CREATE INDEX IF NOT EXISTS idx_customer_price_records_date ON customer_price_records(record_date);
 
 CREATE TABLE IF NOT EXISTS quote_records (
@@ -153,7 +152,6 @@ CREATE TABLE IF NOT EXISTS quote_records (
 );
 
 CREATE INDEX IF NOT EXISTS idx_quote_records_customer_model ON quote_records(customer_name, product_model);
-CREATE INDEX IF NOT EXISTS idx_quote_records_customer_bld ON quote_records(customer_name, bld_no);
 CREATE INDEX IF NOT EXISTS idx_quote_records_date ON quote_records(quote_date);
 CREATE INDEX IF NOT EXISTS idx_quote_records_currency ON quote_records(currency);
 CREATE INDEX IF NOT EXISTS idx_quote_records_quoted_by ON quote_records(quoted_by);

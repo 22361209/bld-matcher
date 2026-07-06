@@ -151,6 +151,13 @@ def _add_quote_record_bld_prices(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_quote_records_customer_bld ON quote_records(customer_name, bld_no)")
 
 
+def _add_customer_price_bld_index(conn: sqlite3.Connection) -> None:
+    price_columns = _columns(conn, "customer_price_records")
+    if "bld_no" not in price_columns:
+        conn.execute("ALTER TABLE customer_price_records ADD COLUMN bld_no TEXT DEFAULT ''")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_customer_price_records_bld ON customer_price_records(bld_no)")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -162,6 +169,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("008_internal_api_key_plaintext", _add_internal_api_key_plaintext),
     ("009_quote_records", _add_quote_records),
     ("010_quote_record_bld_prices", _add_quote_record_bld_prices),
+    ("011_customer_price_bld_index", _add_customer_price_bld_index),
 )
 
 
