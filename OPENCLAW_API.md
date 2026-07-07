@@ -27,7 +27,7 @@ outputs/openclaw/
 只有显式传 `export: true` 时才会生成 Excel。API 生成的询价文件名统一为：
 
 ```text
-reYYMMDD_源文件名称_openclaw.xls/xlsx
+reYYMMDD_源文件名称.xls/xlsx
 ```
 
 规则：
@@ -39,7 +39,7 @@ reYYMMDD_源文件名称_openclaw.xls/xlsx
 - 如果目标文件名已存在，系统自动追加 `_2`、`_3`，不会覆盖旧文件
 - 最终文件名以返回值里的 `output_name` 为准
 
-示例：`re260511_customer_openclaw.xlsx`、`re260511_上海客户询价_openclaw.xlsx`
+示例：`re260511_customer.xlsx`、`re260511_上海客户询价.xlsx`
 
 `file_path` 只允许读取项目目录、`uploads/`、`outputs/` 里的 `.xls/.xlsx` 文件。范围外的本机绝对路径会被拒绝，避免 API Key 变成任意本机文件读取权限。
 
@@ -156,8 +156,8 @@ Content-Type: application/json
     }
   ],
   "unmatched_list": ["NO-MATCH"],
-  "output_path": "/absolute/path/outputs/openclaw/re260511_上海客户询价_openclaw.xlsx",
-  "output_name": "re260511_上海客户询价_openclaw.xlsx"
+  "output_path": "/absolute/path/outputs/openclaw/re260511_上海客户询价.xlsx",
+  "output_name": "re260511_上海客户询价.xlsx"
 }
 ```
 

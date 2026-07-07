@@ -112,7 +112,7 @@ outputs/u用户ID-用户名/
 
 生成文件名会带用户名，例如 `re260429-007-客户询价.xlsx` 或 `catalog-export-bld-007-260429.xlsx`。普通用户只能看到和下载自己的输出文件，管理员可以在最近结果里看到所有用户和旧根目录输出。
 
-OpenClaw 内部 API 的询价导出固定写入 `outputs/openclaw/`，文件名统一为 `reYYMMDD_源文件名称_openclaw.xls/xlsx`。号码数组/文字号码没有源文件，导出前必须由机器人询问并传 `source_name`；重名时自动追加 `_2`、`_3`。
+OpenClaw 内部 API 的询价导出固定写入 `outputs/openclaw/`，文件名统一为 `reYYMMDD_源文件名称.xls/xlsx`。号码数组/文字号码没有源文件，导出前必须由机器人询问并传 `source_name`；重名时自动追加 `_2`、`_3`。
 
 会修改全局数据的导入操作使用导入锁，避免多人同时覆盖数据：
 
