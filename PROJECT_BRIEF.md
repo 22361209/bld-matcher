@@ -1,6 +1,6 @@
 # BLD Project Brief
 
-更新时间：2026-05-27
+更新时间：2026-07-10
 
 这是给新接手 Codex 或开发者的短版项目说明。先读 `AGENTS.md`，再读本文件。详细历史在 `项目交接说明.md`，需要查旧决策时用 `rg` 搜索，不要默认整篇读取。
 
@@ -234,3 +234,4 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 - `项目交接说明.md`：详细历史和系统更新来源，按需搜索。
 - `README.md`：安装、启动和通用说明。
 - `OPENCLAW_API.md`：机器人内部 API 调用说明。
+- 强制规则：每次修改任何 Git 跟踪文件，都必须在同一次提交中更新 `项目交接说明.md` 的“当前最近重要变更”；缺少更新日志时不得提交或部署。完整执行要求见 `AGENTS.md`。

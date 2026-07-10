@@ -80,6 +80,16 @@ Use visible Terminal for the NAS `sudo` commands.
 
 Keep `PROJECT_BRIEF.md` concise and current. Keep `项目交接说明.md` as detailed history; search it with `rg` or read small sections only.
 
+### Mandatory update log
+
+Every commit that changes tracked project files must add or update an entry under `项目交接说明.md` -> `## 当前最近重要变更`. This is a required completion condition, not an optional documentation follow-up.
+
+- Update the log in the same commit as the code, UI, database, configuration, deployment, or documentation change.
+- Use `### YYYY-MM-DD · commit · title`; use `本次提交` while preparing a new commit.
+- Describe the user-visible behavior and any operational, permission, data, or compatibility impact.
+- Before committing, confirm the staged diff includes `项目交接说明.md`. Do not commit or deploy when it is missing.
+- This rule also applies to small fixes and follow-up changes so the web “系统更新” page never silently falls behind.
+
 For important changes, update:
 
 - `PROJECT_BRIEF.md` if current behavior, deployment, data ownership, or key workflow changed

@@ -2378,6 +2378,10 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("系统更新", html)
         self.assertIn("当前最近重要变更", html)
         self.assertIn("项目交接说明.md", html)
+        self.assertIn("2026-07-10", html)
+        self.assertIn("补齐系统更新记录并设为强制提交要求", html)
+        self.assertIn("d1ab621", html)
+        self.assertIn("改进 OpenClaw 询价命令行启动和调用体验", html)
         self.assertIn("ac3aa1a", html)
         self.assertIn("新增系统更新页面", html)
 
