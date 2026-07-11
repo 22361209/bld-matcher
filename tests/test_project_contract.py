@@ -90,6 +90,36 @@ def dynamic_route():
         }
         self.assertEqual(actual, expected)
 
+    def test_page_behavior_stays_out_of_global_script(self):
+        global_script = (contract.ROOT / "static" / "app.js").read_text(encoding="utf-8")
+        page_only_markers = (
+            "data-quick-results",
+            "data-history-loader",
+            "data-quick-oe-image",
+            "shipment-folder-picker",
+            "data-price-mode",
+            "data-open-download-modal",
+            "data-open-shipping-template",
+            "data-purchase-contract-form",
+        )
+        for marker in page_only_markers:
+            self.assertNotIn(marker, global_script)
+
+    def test_split_page_assets_are_declared_by_owning_templates(self):
+        asset_owners = {
+            "index.html": ("pages/home.css", "pages/history.css", "pages/home.js"),
+            "materials.html": ("pages/history.css",),
+            "purchase_contracts.html": ("pages/contracts.css", "pages/contracts.js"),
+            "quotes.html": ("pages/quotes.css",),
+            "result.html": ("pages/inquiry_result.js",),
+            "shipment_recognition.html": ("pages/shipment_recognition.js",),
+            "shipping_notice.html": ("pages/shipping_notice.css", "pages/shipping_notice.js"),
+        }
+        for template_name, assets in asset_owners.items():
+            template = (contract.ROOT / "templates" / template_name).read_text(encoding="utf-8")
+            for asset in assets:
+                self.assertIn(asset, template, f"{template_name} must load {asset}")
+
     def test_route_snapshot_matches_runtime_contract(self):
         result = subprocess.run(
             [sys.executable, "scripts/route_snapshot.py", "--check"],

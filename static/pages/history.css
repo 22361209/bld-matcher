@@ -1,0 +1,64 @@
+.inquiry-history {
+  padding-top: 12px;
+}
+
+.history-command {
+  padding: 4px 0 12px;
+}
+
+.history-command .materials-search-form {
+  flex-basis: 560px;
+}
+
+.history-command .materials-search-form label {
+  flex: 1 1 360px;
+}
+
+.history-command .materials-search-form input {
+  width: min(520px, 100%);
+}
+
+.inquiry-history-wrap {
+  border-top: 1px solid var(--linear-line);
+}
+
+.inquiry-history-table {
+  min-width: 0;
+  width: 100%;
+  table-layout: fixed;
+}
+
+.inquiry-history-table th:first-child,
+.inquiry-history-table td:first-child {
+  width: auto;
+}
+
+.inquiry-history-table th:nth-child(2),
+.inquiry-history-table td:nth-child(2) {
+  width: 58px;
+}
+
+.inquiry-history-table th:nth-child(3),
+.inquiry-history-table td:nth-child(3) {
+  width: 88px;
+}
+
+.inquiry-history-table th:nth-child(4),
+.inquiry-history-table td:nth-child(4) {
+  width: 126px;
+  white-space: nowrap;
+}
+
+.inquiry-history-table th:nth-child(5),
+.inquiry-history-table td:nth-child(5) {
+  width: 54px;
+}
+
+.inquiry-history-table td:first-child a {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+  white-space: nowrap;
+}

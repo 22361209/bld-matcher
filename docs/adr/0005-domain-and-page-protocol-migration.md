@@ -16,6 +16,7 @@
 4. 所有完整页面继承 `templates/base.html`，声明唯一 `page_id` 和批准的 `page_type`。基础模板统一负责文档、导航、消息、公共 CSS/JavaScript 和页面弹窗挂载位置。
 5. 模板内联脚本、事件处理器和样式基线降为零。产品、材料和物料图纸脚本迁入按 `body[data-page]` 初始化的 ES Module；破坏性确认改用 `data-confirm` 和公共事件委托。
 6. `policy/legacy_allowlist.json` 不再允许独立页面或模板内联资源。项目合同和单元测试共同检查基础模板继承、有效类型、唯一页面 ID 与零内联资源。
+7. 页面专用 CSS 和 JavaScript 由所属模板通过 `page_head`、`page_scripts` 显式加载；全局资产只承载共享协议。保持浏览器原生 CSS 与 ES Module，不为文件拆分增加构建工具。
 
 ## Alternatives
 
@@ -35,5 +36,6 @@
 
 - `tests/test_domain_page_modules.py` 覆盖用户/API Key/日志事务、材料文件恢复、合同产品补全与失败补偿、发货模板/预览/生成和审计。
 - `tests/test_project_contract.py` 验证全部协议页面继承基础模板、页面 ID 唯一且模板内联资源为零。
+- 页面资产合同测试验证拆出资产由所属模板加载，且已拆页面行为不会重新进入全局脚本；聚集文件行数基线只减不增。
 - `tests/test_app.py` 继续覆盖旧 URL、合同 PDF、材料明细、发货通知、产品嵌入编辑和询价下载弹窗兼容行为。
 - `scripts/check_project_contract.py` 阻止独立 HTML、内联代码和已迁移路由数据库直连重新出现。

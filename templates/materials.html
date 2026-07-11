@@ -4,6 +4,9 @@
 {% block page_id %}materials.workspace{% endblock %}
 {% block page_type %}workbench{% endblock %}
 {% block page_class %}shell wide materials-linear materials-clean-page{% endblock %}
+{% block page_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='pages/history.css', v=static_version('pages/history.css')) }}">
+{% endblock %}
 
 {% block page_content %}
 <header class="material-landing">

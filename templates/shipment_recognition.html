@@ -138,3 +138,7 @@
         </section>
       </details>
 {% endblock %}
+
+{% block page_scripts %}
+  <script type="module" src="{{ url_for('static', filename='pages/shipment_recognition.js', v=static_version('pages/shipment_recognition.js')) }}"></script>
+{% endblock %}

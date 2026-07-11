@@ -111,6 +111,10 @@
       </section>
 {% endblock %}
 
+{% block page_scripts %}
+  <script type="module" src="{{ url_for('static', filename='pages/inquiry_result.js', v=static_version('pages/inquiry_result.js')) }}"></script>
+{% endblock %}
+
 {% block page_modals %}
 {% if can_regenerate_download %}
       <div class="download-modal" id="download-excel-modal" aria-hidden="true">

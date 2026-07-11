@@ -1,0 +1,14 @@
+{
+  "date": "2026-07-11",
+  "version": "unreleased",
+  "title": "按页面拆分前端资产",
+  "entries": [
+    "将首页、历史、询价结果、货物识别、发货通知、报价和合同的专用 CSS/JavaScript 从全局文件迁入 static/pages，由所属模板显式加载。",
+    "收紧全局 CSS/JavaScript 行数基线，并新增页面行为不得回流全局脚本的合同测试。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "unchanged",
+    "operations": "none"
+  }
+}

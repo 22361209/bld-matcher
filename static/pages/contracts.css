@@ -1,0 +1,536 @@
+.purchase-contract-page {
+  --purchase-paper-width: 210mm;
+  --purchase-paper-text: #111827;
+  --purchase-paper-muted: #4b5563;
+  --purchase-paper-line: #cbd5e1;
+  --purchase-edit-bg: #fff8e8;
+  --purchase-edit-line: #ead391;
+  --purchase-edit-text: #1f5f8b;
+  --purchase-edit-focus: #d5a62d;
+}
+
+.purchase-contract-form {
+  display: grid;
+  gap: 14px;
+  width: min(var(--purchase-paper-width), 100%);
+  margin: 0 auto;
+  padding: 28px 0 24px;
+}
+
+.contract-management-hero {
+  margin-bottom: 18px;
+}
+
+.contract-entry-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  width: min(var(--purchase-paper-width), 100%);
+  margin: 0 auto 22px;
+}
+
+.contract-history-section {
+  width: 100%;
+  margin: 12px 0 0;
+}
+
+.contract-history-drawer {
+  width: min(var(--purchase-paper-width), 100%);
+  margin: 0 auto 22px;
+}
+
+.contract-history-drawer > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 54px;
+  padding: 12px 14px;
+  border: 1px solid var(--linear-line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--linear-text);
+  cursor: pointer;
+  list-style: none;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.06);
+}
+
+.contract-history-drawer > summary::-webkit-details-marker {
+  display: none;
+}
+
+.contract-history-drawer > summary::after {
+  content: "";
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border-right: 2px solid var(--linear-muted);
+  border-bottom: 2px solid var(--linear-muted);
+  transform: rotate(45deg);
+  transition: transform 0.16s ease;
+}
+
+.contract-history-drawer[open] > summary::after {
+  transform: translateY(4px) rotate(225deg);
+}
+
+.contract-history-drawer > summary:hover,
+.contract-history-drawer > summary:focus-visible {
+  border-color: #b8c6d6;
+  background: #ffffff;
+}
+
+.contract-history-drawer > summary:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.18);
+  outline-offset: 2px;
+}
+
+.contract-history-drawer > summary span {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.contract-history-drawer > summary strong {
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.contract-history-drawer > summary small {
+  color: var(--linear-muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.contract-history-drawer > summary em {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--linear-muted);
+  font-style: normal;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.contract-history-search {
+  display: grid;
+  margin: 12px 0;
+  grid-template-columns: minmax(280px, 1fr) minmax(150px, 190px) auto auto;
+}
+
+.contract-history-search label {
+  display: grid;
+}
+
+.contract-history-search input {
+  width: 100%;
+}
+
+.contract-history-table th:nth-child(1),
+.contract-history-table td:nth-child(1) {
+  width: 90px;
+}
+
+.contract-history-table th:nth-child(2),
+.contract-history-table td:nth-child(2) {
+  width: 160px;
+}
+
+.contract-history-table th:nth-child(4),
+.contract-history-table td:nth-child(4),
+.contract-history-table th:nth-child(5),
+.contract-history-table td:nth-child(5),
+.contract-history-table th:nth-child(6),
+.contract-history-table td:nth-child(6) {
+  width: 110px;
+}
+
+.compact-select select {
+  width: 100%;
+}
+
+.contract-placeholder {
+  width: min(var(--purchase-paper-width), 100%);
+  margin: 28px auto 0;
+}
+
+.purchase-contract-action-bar {
+  position: sticky;
+  top: 8px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--linear-line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(12px);
+}
+
+.purchase-contract-action-bar h1 {
+  margin: 0;
+  color: var(--linear-text);
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.purchase-generate-feedback {
+  padding: 10px 12px;
+  border: 1px solid #b7d8c2;
+  border-radius: 8px;
+  background: #f0f9f3;
+  color: #166534;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.purchase-confirm-panel {
+  padding-bottom: 22px;
+}
+
+.purchase-confirm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 18px 22px 0;
+}
+
+.purchase-paper {
+  width: var(--purchase-paper-width);
+  min-height: 297mm;
+  padding: 11mm 8mm;
+  box-sizing: border-box;
+  background: #ffffff;
+  color: var(--purchase-paper-text);
+  box-shadow: 0 22px 70px rgba(15, 23, 42, 0.15);
+  font-family: "Songti SC", "STSong", "SimSun", serif;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.purchase-paper-title {
+  margin: 0 0 10mm;
+  color: var(--purchase-paper-text);
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 1;
+  text-align: center;
+  letter-spacing: 0;
+}
+
+.purchase-paper-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 24px;
+  margin-bottom: 10mm;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.purchase-paper-meta label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 30px;
+  margin: 0;
+  line-height: 30px;
+  white-space: nowrap;
+}
+
+.purchase-paper-meta .right {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.purchase-paper-meta .supplier-line {
+  text-align: left;
+}
+
+.purchase-paper-meta .supplier-detail-line {
+  text-align: left;
+}
+
+.paper-input,
+.paper-textarea,
+.purchase-contract-table input {
+  color: var(--purchase-edit-text);
+  font: inherit;
+  letter-spacing: 0;
+  border: 1px solid var(--purchase-edit-line);
+  border-radius: 4px;
+  background: var(--purchase-edit-bg);
+  box-shadow: none;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.paper-input::placeholder,
+.paper-textarea::placeholder,
+.purchase-contract-table input::placeholder {
+  color: rgba(31, 95, 139, 0.58);
+}
+
+.paper-input:focus,
+.paper-textarea:focus,
+.purchase-contract-table input:focus {
+  outline: none;
+  border-color: var(--purchase-edit-focus);
+  background: #fff8d6;
+  box-shadow: 0 0 0 2px rgba(213, 166, 45, 0.16);
+}
+
+.paper-input {
+  width: 215px;
+  min-width: 80px;
+  height: 28px;
+  min-height: 28px;
+  box-sizing: border-box;
+  padding: 2px 5px;
+  line-height: normal;
+  vertical-align: middle;
+}
+
+.purchase-paper-meta .paper-input {
+  height: 28px;
+  min-height: 28px;
+  max-height: 28px;
+  padding-block: 2px;
+}
+
+.paper-input.compact {
+  width: 155px;
+}
+
+.paper-input.date-input {
+  width: 128px;
+}
+
+.paper-input.inline-long {
+  width: 265px;
+}
+
+.paper-input.inline-medium {
+  width: 180px;
+}
+
+.paper-input.signature-input {
+  width: min(210px, 100%);
+}
+
+.paper-textarea {
+  display: block;
+  width: 100%;
+  min-height: 34px;
+  padding: 2px 3px;
+  overflow: hidden;
+  resize: vertical;
+}
+
+.purchase-body,
+.purchase-body-indent,
+.purchase-note,
+.purchase-remark {
+  margin: 0 0 8px;
+  line-height: 1.7;
+}
+
+.purchase-remark {
+  display: block;
+}
+
+.purchase-body-indent {
+  text-indent: 2em;
+}
+
+.purchase-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 5px;
+}
+
+.purchase-section-heading h2,
+.purchase-clause-title {
+  margin: 12px 0 6px;
+  color: var(--purchase-paper-text);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.purchase-section-heading h2 {
+  margin: 0;
+}
+
+.purchase-section-heading .linear-button {
+  flex: 0 0 auto;
+}
+
+.purchase-doc-table-wrap {
+  width: 100%;
+  margin-bottom: 8px;
+  overflow-x: auto;
+}
+
+.purchase-contract-table {
+  width: 100%;
+  min-width: 1360px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-family: Arial, "Songti SC", "STSong", "SimSun", serif;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.purchase-contract-table th,
+.purchase-contract-table td {
+  padding: 5px 6px;
+  border: 1px solid var(--purchase-paper-line);
+  vertical-align: middle;
+}
+
+.purchase-contract-table th {
+  background: #eef3f8;
+  font-weight: 700;
+  text-align: center;
+}
+
+.purchase-contract-table tfoot td {
+  background: #f7fafc;
+  font-weight: 700;
+  text-align: right;
+}
+
+.purchase-contract-table tfoot td:first-child,
+.purchase-row-index {
+  text-align: center;
+}
+
+.purchase-contract-table input {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 3px 4px;
+}
+
+.purchase-contract-table .link-button {
+  white-space: nowrap;
+}
+
+.purchase-amount-cell,
+.purchase-contract-table [data-purchase-total-amount],
+.purchase-contract-table [data-purchase-total-quantity] {
+  font-family: Arial, sans-serif;
+  text-align: right;
+}
+
+.purchase-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  text-indent: 0;
+}
+
+.note-input {
+  flex: 1 1 auto;
+  width: auto;
+}
+
+.clause-textarea {
+  min-height: 86px;
+  margin-bottom: 8px;
+  text-indent: 0;
+}
+
+.remark-textarea {
+  min-height: 42px;
+  margin-top: 4px;
+  text-indent: 0;
+}
+
+.purchase-signature {
+  margin-top: 18px;
+}
+
+.purchase-signature p {
+  min-height: 30px;
+  margin: 0;
+  line-height: 30px;
+}
+
+.purchase-signature-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 32px;
+}
+
+.purchase-signature-grid label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 30px;
+  margin: 0;
+  line-height: 30px;
+  font-weight: inherit;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .purchase-contract-form {
+    width: 100%;
+    padding-top: 16px;
+  }
+
+  .purchase-contract-action-bar {
+    display: block;
+  }
+
+  .purchase-contract-action-bar .linear-button {
+    width: 100%;
+    margin-top: 10px;
+  }
+
+  .purchase-paper {
+    width: calc(100vw - 32px);
+    min-height: 0;
+    padding: 18px 14px;
+  }
+
+  .purchase-paper-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .purchase-paper-meta .right {
+    text-align: left;
+  }
+
+  .purchase-paper-meta .supplier-detail-line {
+    padding-left: 0;
+  }
+
+  .paper-input,
+  .paper-input.compact,
+  .paper-input.date-input,
+  .paper-input.inline-long,
+  .paper-input.inline-medium,
+  .paper-input.signature-input {
+    width: min(100%, 260px);
+  }
+
+  .purchase-note,
+  .purchase-section-heading,
+  .purchase-signature-grid {
+    display: block;
+  }
+
+  .note-input {
+    margin-top: 4px;
+  }
+}

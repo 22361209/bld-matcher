@@ -70,6 +70,8 @@
 
 页面专用脚本放在 `static/pages/`，必须以 `body[data-page]` 作为初始化边界。公共交互放在 `static/app.js`；当前破坏性提交统一使用 `data-confirm`，不在模板写事件代码。
 
+页面资产按模板归属：页面 CSS 通过 `page_head` 引入，页面 JavaScript 通过 `page_scripts` 引入。`static/styles.css` 和 `static/app.js` 只保留跨页面共享规则与交互；禁止为了复用加载顺序，把单页选择器、弹窗或业务流程重新放回全局文件。项目继续使用浏览器原生 CSS 与 ES Module，不引入仅用于资产拆分的构建流水线。
+
 ## Acceptance
 
 每种页面类型至少维护一个桌面和移动端基准流程，验证正常、空、错误、无权限、提交中和长文本状态。静态协议、服务端渲染回归和真实浏览器验收缺一不可；页面协议变化需要 ADR 或 UI 协议版本说明。

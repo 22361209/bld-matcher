@@ -4,6 +4,9 @@
 {% block page_id %}quotes.list{% endblock %}
 {% block page_type %}list{% endblock %}
 {% block page_class %}shell wide materials-linear{% endblock %}
+{% block page_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='pages/quotes.css', v=static_version('pages/quotes.css')) }}">
+{% endblock %}
 
 {% block page_content %}
 <header class="materials-hero">

@@ -4,6 +4,9 @@
 {% block page_id %}contracts.workspace{% endblock %}
 {% block page_type %}workbench{% endblock %}
 {% block page_class %}shell wide materials-linear purchase-contract-page{% endblock %}
+{% block page_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='pages/contracts.css', v=static_version('pages/contracts.css')) }}">
+{% endblock %}
 
 {% block page_content %}
 {% set is_sales = contract_mode == "sales" %}
@@ -298,4 +301,8 @@
       {% else %}
         <p class="materials-muted">当前账号没有合同管理权限。</p>
       {% endif %}
+{% endblock %}
+
+{% block page_scripts %}
+  <script type="module" src="{{ url_for('static', filename='pages/contracts.js', v=static_version('pages/contracts.js')) }}"></script>
 {% endblock %}

@@ -4,6 +4,10 @@
 {% block page_id %}inquiry.home{% endblock %}
 {% block page_type %}workbench{% endblock %}
 {% block page_class %}shell wide materials-linear inquiry-search-page{% endblock %}
+{% block page_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='pages/home.css', v=static_version('pages/home.css')) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='pages/history.css', v=static_version('pages/history.css')) }}">
+{% endblock %}
 
 {% block page_content %}
 <header class="inquiry-landing">
@@ -179,6 +183,10 @@
           </section>
         </div>
       </details>
+{% endblock %}
+
+{% block page_scripts %}
+  <script type="module" src="{{ url_for('static', filename='pages/home.js', v=static_version('pages/home.js')) }}"></script>
 {% endblock %}
 
 {% block page_modals %}

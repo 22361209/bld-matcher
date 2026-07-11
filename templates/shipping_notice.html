@@ -4,6 +4,9 @@
 {% block page_id %}shipping.notice{% endblock %}
 {% block page_type %}workbench{% endblock %}
 {% block page_class %}shell wide materials-linear inquiry-search-page shipping-notice-page{% endblock %}
+{% block page_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='pages/shipping_notice.css', v=static_version('pages/shipping_notice.css')) }}">
+{% endblock %}
 
 {% block page_content %}
 {% if request.args.get("generated") %}
@@ -82,6 +85,10 @@
           </div>
         </section>
       </details>
+{% endblock %}
+
+{% block page_scripts %}
+  <script type="module" src="{{ url_for('static', filename='pages/shipping_notice.js', v=static_version('pages/shipping_notice.js')) }}"></script>
 {% endblock %}
 
 {% block page_modals %}
