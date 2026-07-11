@@ -7,6 +7,7 @@ import re
 import subprocess
 from collections import Counter
 from pathlib import Path
+from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,6 +50,7 @@ REQUIRED_DOCS = {
     "docs/operations/runtime.md",
     "docs/ui/page-protocol.md",
     "contracts/openapi-v1.json",
+    "contracts/routes.json",
     "pyproject.toml",
     "templates/base.html",
     "uv.lock",
@@ -86,11 +88,11 @@ def _run_git(*args: str) -> list[str]:
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
 
-def _load_policy() -> dict[str, list[str]]:
+def _load_policy() -> dict[str, Any]:
     return json.loads(POLICY_PATH.read_text(encoding="utf-8"))
 
 
-def _policy_at_ref(ref: str | None) -> dict[str, list[str]] | None:
+def _policy_at_ref(ref: str | None) -> dict[str, Any] | None:
     if not ref:
         return None
     result = subprocess.run(
@@ -514,9 +516,14 @@ def check(base_ref: str | None = None) -> list[str]:
         for key, values in policy.items():
             baseline_values = baseline_policy.get(key, {} if isinstance(values, dict) else [])
             if isinstance(values, dict):
+                compared_values = (
+                    {path: count for path, count in values.items() if path in baseline_values}
+                    if key == "legacy_file_line_counts"
+                    else values
+                )
                 increases = [
                     f"{path} ({baseline_values.get(path, 0)} -> {count})"
-                    for path, count in values.items()
+                    for path, count in compared_values.items()
                     if int(count) > int(baseline_values.get(path, 0))
                 ]
                 if increases:
@@ -632,6 +639,14 @@ def check(base_ref: str | None = None) -> list[str]:
         errors.append(f"page_id 必须全局唯一: {page_id} ({', '.join(owners)})")
     _check_count_policy("模板内联脚本或事件处理器", allowed_inline_counts, actual_inline_counts, errors)
     _check_count_policy("模板内联样式", allowed_style_counts, actual_style_counts, errors)
+
+    allowed_file_lines = policy["legacy_file_line_counts"]
+    actual_file_lines = {
+        relative: len((ROOT / relative).read_text(encoding="utf-8").splitlines())
+        for relative in allowed_file_lines
+        if (ROOT / relative).is_file()
+    }
+    _check_count_policy("聚集文件行数", allowed_file_lines, actual_file_lines, errors)
 
     legacy_database = set(policy["legacy_route_database_access"])
     legacy_route_imports = set(policy["legacy_route_imports"])

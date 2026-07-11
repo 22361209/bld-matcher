@@ -1,0 +1,14 @@
+{
+  "date": "2026-07-11",
+  "version": "unreleased",
+  "title": "冻结聚集文件并建立路由兼容快照",
+  "entries": [
+    "为全局 CSS、全局 JavaScript 和仍待拆分的遗留业务模块建立只减不增基线，阻止新功能继续堆入聚集文件。",
+    "新增隔离数据库生成的 Flask 路由快照，统一验收会精确比较 URL、HTTP 方法和 endpoint，模块移动不得改变页面协议。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "unchanged",
+    "operations": "none"
+  }
+}

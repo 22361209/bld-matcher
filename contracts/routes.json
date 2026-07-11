@@ -1,0 +1,705 @@
+{
+  "routes": [
+    {
+      "endpoint": "index",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/"
+    },
+    {
+      "endpoint": "inquiry_legacy_api.internal_inquiry_analyze",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/internal/inquiry/analyze"
+    },
+    {
+      "endpoint": "inquiry_legacy_api.internal_inquiry_file",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/internal/inquiry/file"
+    },
+    {
+      "endpoint": "inquiry_legacy_api.internal_inquiry_numbers",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/internal/inquiry/numbers"
+    },
+    {
+      "endpoint": "quote_legacy_api.api_list_quotes",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/api/quotes"
+    },
+    {
+      "endpoint": "quote_legacy_api.api_create_quote",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/quotes"
+    },
+    {
+      "endpoint": "quote_legacy_api.api_update_quote",
+      "methods": [
+        "PUT"
+      ],
+      "rule": "/api/quotes/<int:quote_id>"
+    },
+    {
+      "endpoint": "quote_legacy_api.api_latest_quote",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/api/quotes/latest"
+    },
+    {
+      "endpoint": "api_v1.api_index",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/api/v1"
+    },
+    {
+      "endpoint": "artifact_v1_api.download_artifact_v1",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/api/v1/artifacts/<string:artifact_id>"
+    },
+    {
+      "endpoint": "inquiry_v1_api.analyze_inquiry_v1",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/v1/inquiries/analyze"
+    },
+    {
+      "endpoint": "inquiry_v1_api.export_inquiry_v1",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/v1/inquiries/export"
+    },
+    {
+      "endpoint": "job_v1_api.get_job_v1",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/api/v1/jobs/<string:job_id>"
+    },
+    {
+      "endpoint": "job_v1_api.cancel_job_v1",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/v1/jobs/<string:job_id>/cancel"
+    },
+    {
+      "endpoint": "job_v1_api.get_job_result_v1",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/api/v1/jobs/<string:job_id>/result"
+    },
+    {
+      "endpoint": "api_v1.openapi_document",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/api/v1/openapi.json"
+    },
+    {
+      "endpoint": "product_v1_api.search_products_v1",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/api/v1/products/search"
+    },
+    {
+      "endpoint": "quote_v1_api.list_quotes_v1",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/api/v1/quotes"
+    },
+    {
+      "endpoint": "quote_v1_api.create_quote_v1",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/v1/quotes"
+    },
+    {
+      "endpoint": "quote_v1_api.get_quote_v1",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/api/v1/quotes/<int:quote_id>"
+    },
+    {
+      "endpoint": "quote_v1_api.update_quote_v1",
+      "methods": [
+        "PATCH"
+      ],
+      "rule": "/api/v1/quotes/<int:quote_id>"
+    },
+    {
+      "endpoint": "quote_v1_api.latest_quote_v1",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/api/v1/quotes/latest"
+    },
+    {
+      "endpoint": "upload_catalog",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/catalog"
+    },
+    {
+      "endpoint": "contracts",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/contracts"
+    },
+    {
+      "endpoint": "sales_contracts",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/contracts/sales"
+    },
+    {
+      "endpoint": "quote_web.old_customer_prices_redirect",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/customer-prices"
+    },
+    {
+      "endpoint": "download",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/download/<path:name>"
+    },
+    {
+      "endpoint": "health_live",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/health/live"
+    },
+    {
+      "endpoint": "health_ready",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/health/ready"
+    },
+    {
+      "endpoint": "inquiry_history_files",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/history-files"
+    },
+    {
+      "endpoint": "internal_api_key",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/internal-api-key"
+    },
+    {
+      "endpoint": "disable_internal_api_key_route",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/internal-api-key/disable"
+    },
+    {
+      "endpoint": "generate_internal_api_key_route",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/internal-api-key/generate"
+    },
+    {
+      "endpoint": "login",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/login"
+    },
+    {
+      "endpoint": "do_login",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/login"
+    },
+    {
+      "endpoint": "logout",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/logout"
+    },
+    {
+      "endpoint": "logs",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/logs"
+    },
+    {
+      "endpoint": "add_manual_map",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/manual-map"
+    },
+    {
+      "endpoint": "delete_manual_map",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/manual-map/delete"
+    },
+    {
+      "endpoint": "match_inquiry",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/match"
+    },
+    {
+      "endpoint": "match_inquiry_with_column",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/match/column"
+    },
+    {
+      "endpoint": "back_to_match_column",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/match/column/back"
+    },
+    {
+      "endpoint": "download_match_column_result",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/match/column/download"
+    },
+    {
+      "endpoint": "download_match_result",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/match/download"
+    },
+    {
+      "endpoint": "download_match_drawings",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/match/drawings/download"
+    },
+    {
+      "endpoint": "material_drawings",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/material-drawings"
+    },
+    {
+      "endpoint": "download_material_drawing",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/material-drawings/<path:name>"
+    },
+    {
+      "endpoint": "preview_material_drawing",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/material-drawings/preview/<path:name>"
+    },
+    {
+      "endpoint": "upload_material_drawing",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/material-drawings/upload"
+    },
+    {
+      "endpoint": "materials",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/materials"
+    },
+    {
+      "endpoint": "upload_material_data",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/materials/data"
+    },
+    {
+      "endpoint": "generate_materials",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/materials/generate"
+    },
+    {
+      "endpoint": "material_items",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/materials/items"
+    },
+    {
+      "endpoint": "stop_material_item",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/materials/items/<int:item_id>/deactivate"
+    },
+    {
+      "endpoint": "edit_material_item",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/materials/items/<int:item_id>/edit"
+    },
+    {
+      "endpoint": "new_material_item",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/materials/items/new"
+    },
+    {
+      "endpoint": "save_material_item",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/materials/items/save"
+    },
+    {
+      "endpoint": "download_material_template",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/materials/template"
+    },
+    {
+      "endpoint": "price_import",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/prices/import"
+    },
+    {
+      "endpoint": "price_import_apply",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/prices/import/apply"
+    },
+    {
+      "endpoint": "price_import_preview",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/prices/import/preview"
+    },
+    {
+      "endpoint": "product_data_sync",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/product-data-sync"
+    },
+    {
+      "endpoint": "export_product_data_package",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/product-data-sync/export"
+    },
+    {
+      "endpoint": "apply_product_data_package",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/product-data-sync/import/apply"
+    },
+    {
+      "endpoint": "preview_product_data_package",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/product-data-sync/import/preview"
+    },
+    {
+      "endpoint": "product_image_thumb_data",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/product-image-thumbs/<path:name>"
+    },
+    {
+      "endpoint": "product_image_data",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/product-images/<path:name>"
+    },
+    {
+      "endpoint": "products",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/products"
+    },
+    {
+      "endpoint": "stop_product",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/products/<int:product_id>/deactivate"
+    },
+    {
+      "endpoint": "remove_product",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/products/<int:product_id>/delete"
+    },
+    {
+      "endpoint": "product_drawing",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/products/<int:product_id>/drawing"
+    },
+    {
+      "endpoint": "upload_product_drawing",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/products/<int:product_id>/drawing"
+    },
+    {
+      "endpoint": "edit_product",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/products/<int:product_id>/edit"
+    },
+    {
+      "endpoint": "batch_drawings",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/products/drawings/batch"
+    },
+    {
+      "endpoint": "export_products_options",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/products/export"
+    },
+    {
+      "endpoint": "export_products",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/products/export"
+    },
+    {
+      "endpoint": "new_product",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/products/new"
+    },
+    {
+      "endpoint": "save_product",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/products/save"
+    },
+    {
+      "endpoint": "purchase_contracts",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/purchase-contracts"
+    },
+    {
+      "endpoint": "generate_purchase_contract",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/purchase-contracts/generate"
+    },
+    {
+      "endpoint": "purchase_contract_product_lookup",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/purchase-contracts/product-lookup"
+    },
+    {
+      "endpoint": "quote_web.quotes",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/quotes"
+    },
+    {
+      "endpoint": "quote_web.edit_quote",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/quotes/<int:quote_id>/edit"
+    },
+    {
+      "endpoint": "quote_web.quote_import_apply",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/quotes/import/apply"
+    },
+    {
+      "endpoint": "quote_web.quote_import_preview",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/quotes/import/preview"
+    },
+    {
+      "endpoint": "quote_web.save_quote",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/quotes/save"
+    },
+    {
+      "endpoint": "generate_sales_contract",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/sales-contracts/generate"
+    },
+    {
+      "endpoint": "shipment_recognition",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/shipment-recognition"
+    },
+    {
+      "endpoint": "cancel_shipment_recognition",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/shipment-recognition/jobs/<job_id>/cancel"
+    },
+    {
+      "endpoint": "run_shipment_recognition",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/shipment-recognition/run"
+    },
+    {
+      "endpoint": "shipment_recognition_status",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/shipment-recognition/status/<job_id>"
+    },
+    {
+      "endpoint": "shipping_notice",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/shipping-notices"
+    },
+    {
+      "endpoint": "generate_shipping_notice",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/shipping-notices/generate"
+    },
+    {
+      "endpoint": "preview_shipping_notice",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/shipping-notices/preview"
+    },
+    {
+      "endpoint": "batch_upload_shipping_notice_templates",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/shipping-notices/templates/batch"
+    },
+    {
+      "endpoint": "upload_shipping_notice_template",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/shipping-notices/templates/upload"
+    },
+    {
+      "endpoint": "system_updates",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/system-updates"
+    },
+    {
+      "endpoint": "users",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/users"
+    },
+    {
+      "endpoint": "edit_user",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/users/<int:user_id>/edit"
+    },
+    {
+      "endpoint": "save_user_route",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/users/save"
+    }
+  ],
+  "version": 1
+}

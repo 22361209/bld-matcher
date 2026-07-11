@@ -3,6 +3,8 @@ from __future__ import annotations
 import ast
 import json
 import re
+import subprocess
+import sys
 import unittest
 
 from scripts import check_project_contract as contract
@@ -78,6 +80,25 @@ def dynamic_route():
         self.assertEqual(len(errors), 2)
         self.assertIn("禁止增加", errors[0])
         self.assertIn("同步收紧白名单", errors[1])
+
+    def test_file_line_policy_tracks_exact_current_size(self):
+        policy = json.loads((contract.ROOT / "policy" / "legacy_allowlist.json").read_text(encoding="utf-8"))
+        expected = policy["legacy_file_line_counts"]
+        actual = {
+            relative: len((contract.ROOT / relative).read_text(encoding="utf-8").splitlines())
+            for relative in expected
+        }
+        self.assertEqual(actual, expected)
+
+    def test_route_snapshot_matches_runtime_contract(self):
+        result = subprocess.run(
+            [sys.executable, "scripts/route_snapshot.py", "--check"],
+            cwd=contract.ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_database_boundary_allows_connection_infrastructure_only(self):
         clean = ast.parse("def connect(path):\n    return path\n")

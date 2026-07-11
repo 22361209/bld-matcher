@@ -17,6 +17,15 @@
   "legacy_route_sql_call_counts": {},
   "legacy_exception_exposure_counts": {},
   "legacy_daemon_thread_counts": {},
+  "legacy_file_line_counts": {
+    "app/excel_io.py": 872,
+    "app/modules/materials/persistence.py": 429,
+    "app/purchase_contract.py": 871,
+    "app/routes/inquiry.py": 405,
+    "app/routes/products.py": 426,
+    "static/app.js": 1293,
+    "static/styles.css": 5002
+  },
   "public_write_endpoints": [
     "app/modules/admin/auth_web.py:do_login"
   ]

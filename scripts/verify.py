@@ -46,6 +46,7 @@ def main() -> int:
     run([sys.executable, "-m", "ruff", "check", "app", "scripts", "tests", "tools", "app.py", "wsgi.py"])
     run([sys.executable, "-m", "pyright", *TYPECHECK_PATHS])
     run([sys.executable, "-m", "compileall", "-q", "app", "tools", "scripts", "app.py", "wsgi.py"])
+    run([sys.executable, "scripts/route_snapshot.py", "--check"])
     run([sys.executable, "scripts/openapi_snapshot.py", "--check"])
     if not args.quick:
         run([sys.executable, "-m", "unittest", "discover", "-v"])
