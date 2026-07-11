@@ -1,17 +1,12 @@
-<!doctype html>
-<html lang="zh-CN">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>批量上传图纸</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
-  </head>
-  <body>
-    <main class="shell wide materials-linear">
-      {% set active_page = "products" %}
-      {% include "_nav.html" %}
+{% extends "base.html" %}
+{% set active_page = "products" %}
+{% block page_title %}批量上传图纸{% endblock %}
+{% block page_id %}products.drawings_batch{% endblock %}
+{% block page_type %}workbench{% endblock %}
+{% block page_class %}shell wide materials-linear{% endblock %}
 
-      <header class="materials-hero">
+{% block page_content %}
+<header class="materials-hero">
         <div>
           <h1>批量上传图纸</h1>
           <p>入口已预留，当前版本先支持在产品目录中按单个 BLD NO. 上传或替换 PDF 图纸。</p>
@@ -27,6 +22,4 @@
           </div>
         </div>
       </section>
-    </main>
-  </body>
-</html>
+{% endblock %}

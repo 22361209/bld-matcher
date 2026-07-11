@@ -1,33 +1,17 @@
-<!doctype html>
-<html lang="zh-CN">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>物料图纸</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
-  </head>
-  <body>
-    <main class="shell wide materials-linear material-drawing-workspace">
-      {% set active_page = "material_drawings" %}
-      {% include "_nav.html" %}
+{% extends "base.html" %}
+{% set active_page = "material_drawings" %}
+{% block page_title %}物料图纸{% endblock %}
+{% block page_id %}materials.drawings{% endblock %}
+{% block page_type %}workbench{% endblock %}
+{% block page_class %}shell wide materials-linear material-drawing-workspace{% endblock %}
 
-      <header class="materials-hero">
+{% block page_content %}
+<header class="materials-hero">
         <div>
           <h1>物料图纸</h1>
           <p>按产品编码查找并连续查看物料 PDF 图纸。</p>
         </div>
       </header>
-
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          <section class="messages materials-messages">
-            {% for category, message in messages %}
-              <div class="message {{ category }}">{{ message }}</div>
-            {% endfor %}
-          </section>
-        {% endif %}
-      {% endwith %}
-
       {%- macro pdf_preview_src(name) -%}{{ url_for('preview_material_drawing', name=name) }}#page=1&zoom=100{%- endmacro %}
 
       <section class="materials-command material-drawings-command">
@@ -109,45 +93,8 @@
           {% endif %}
         </section>
       </section>
-    </main>
+{% endblock %}
 
-    <script>
-      (() => {
-        let frame = document.querySelector("[data-material-drawing-frame]");
-        const code = document.querySelector("[data-material-drawing-current-code]");
-        const category = document.querySelector("[data-material-drawing-current-category]");
-        const updated = document.querySelector("[data-material-drawing-current-updated]");
-        const download = document.querySelector("[data-material-drawing-current-download]");
-        const browser = document.querySelector(".material-drawing-browser");
-        if (!frame || !code || !category || !updated || !download) return;
-
-        const replaceFrame = (src) => {
-          const nextFrame = frame.cloneNode(false);
-          nextFrame.src = src;
-          frame.replaceWith(nextFrame);
-          frame = nextFrame;
-        };
-
-        document.querySelectorAll("[data-material-drawing-select]").forEach((item) => {
-          item.addEventListener("click", (event) => {
-            event.preventDefault();
-            document.querySelectorAll("[data-material-drawing-select].active").forEach((activeItem) => {
-              activeItem.classList.remove("active");
-            });
-            item.classList.add("active");
-            replaceFrame(item.dataset.previewSrc || `${item.dataset.previewUrl}#page=1&zoom=100`);
-            code.textContent = item.dataset.code || "";
-            category.textContent = item.dataset.category || "";
-            updated.textContent = item.dataset.updatedAt || "";
-            const downloadUrl = item.dataset.downloadUrl || "#";
-            download.href = downloadUrl;
-            download.setAttribute("href", downloadUrl);
-            browser?.scrollIntoView({ block: "start" });
-            window.history.replaceState(null, "", item.href);
-          });
-        });
-      })();
-    </script>
-    <script src="{{ url_for('static', filename='app.js', v=static_version('app.js')) }}"></script>
-  </body>
-</html>
+{% block page_scripts %}
+  <script type="module" src="{{ url_for('static', filename='pages/material_drawings.js', v=static_version('pages/material_drawings.js')) }}"></script>
+{% endblock %}

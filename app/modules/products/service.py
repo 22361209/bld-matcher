@@ -53,6 +53,14 @@ class ProductService:
             raise ProductNotFoundError(product_id)
         return product
 
+    def find_by_bld(self, bld_no: str, *, active_only: bool = True) -> ProductRecord | None:
+        self.bootstrap_port()
+        with self.unit_of_work_factory() as unit_of_work:
+            product = unit_of_work.repository.get_by_bld(str(bld_no or "").strip())
+        if product is None or (active_only and not product.active):
+            return None
+        return product
+
     def stats(self) -> ProductStats:
         self.bootstrap_port()
         with self.unit_of_work_factory() as unit_of_work:

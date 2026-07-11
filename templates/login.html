@@ -1,14 +1,12 @@
-<!doctype html>
-<html lang="zh-CN">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>登录</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
-  </head>
-  <body>
-    <main class="login-shell">
-      <section class="panel login-panel">
+{% extends "base.html" %}
+{% block page_title %}登录{% endblock %}
+{% block page_id %}auth.login{% endblock %}
+{% block page_type %}edit{% endblock %}
+{% block page_class %}login-shell{% endblock %}
+{% block messages %}{% endblock %}
+
+{% block page_content %}
+<section class="panel login-panel">
         <div class="login-brand">
           <h1>BLD 工作台</h1>
           <p class="note">产品目录、询价、发货与业务协作系统</p>
@@ -36,6 +34,4 @@
           <button type="submit">登录</button>
         </form>
       </section>
-    </main>
-  </body>
-</html>
+{% endblock %}

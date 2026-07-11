@@ -182,6 +182,12 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 - 合同管理、报价记录和目录导出仅管理员可见可用。
 - 普通用户不能调用只开放给管理员的后端地址；权限由服务端装饰器拦截。
 
+页面与业务边界：
+
+- 所有完整页面继承 `templates/base.html`，以唯一 `page_id` 和六类 `page_type` 进入统一页面协议；模板禁止内联脚本、事件处理器和样式。
+- 合同、材料、发货通知和后台管理由各自 Application Service 负责事务、审计和文件补偿，Web 适配器不再直接访问 SQLite。
+- 材料 Excel 更新采用原子替换；数据库导入失败会恢复旧文件。合同、发货通知、模板和物料图纸若审计失败，会删除本次未完成输出。
+
 ## NAS 更新流程
 
 本机完成改动后：
@@ -224,11 +230,11 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 - `app/platform/artifacts.py`：Principal 所有权、校验值和保留期 artifact 存储
 - `app/routes/products.py`：产品目录页面、图片、图纸、单价和目录导入导出适配器
 - `app/routes/product_sync.py`：本机/NAS 产品数据包导入导出和增量同步
-- `app/routes/materials.py`：生产料单和材料明细
-- `app/routes/shipment_notice.py`：发货通知模板管理、发货数据预览和 Excel 生成
+- `app/modules/materials/`：生产料单、材料明细、物料图纸、原子文件更新和事务补偿
+- `app/modules/contracts/`：采购/销售合同产品补全、PDF 生成、历史和审计
+- `app/modules/shipping/`：发货通知模板、数据预览、Excel 生成和审计补偿
+- `app/modules/admin/`：账号、API Key、操作日志和系统更新
 - `app/routes/shipment_recognition.py`：货物识别页面，触发发货照片标签识别批处理
-- `app/routes/purchase_contracts.py`：合同管理、采购/销售合同生成和 PDF 下载
-- `app/routes/admin.py`：用户、日志、系统更新页面
 - `app/database.py`：SQLite 表结构、查询、写入、迁移调用
 - `app/matcher.py`：产品匹配逻辑
 - `app/product_media.py`：产品图片上传、缩略图生成和读取

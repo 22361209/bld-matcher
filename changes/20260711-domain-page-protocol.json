@@ -1,0 +1,17 @@
+{
+  "date": "2026-07-11",
+  "version": "unreleased",
+  "title": "统一其余业务边界与全部页面协议",
+  "entries": [
+    "合同、材料、发货通知和后台管理进入独立 Application Service 与 SQLite Repository，原 URL、权限和页面行为继续兼容。",
+    "全部完整页面统一继承 base.html，并声明稳定 page_id 和 page_type；导航、消息、公共资源和页面脚本由基础壳管理。",
+    "模板内联脚本、事件处理器和列宽样式全部清零，产品、材料和物料图纸交互迁入按 page_id 初始化的 ES Module。",
+    "材料数据文件采用原子替换，数据库导入失败时自动恢复旧文件；合同 PDF、发货通知、模板和物料图纸在审计失败时补偿删除。",
+    "legacy 页面与相关路由数据库直连白名单已删除，后续提交无法重新引入同类债务。"
+  ],
+  "impact": {
+    "data": "compatible-transaction-hardening",
+    "api": "unchanged",
+    "operations": "restart-required"
+  }
+}

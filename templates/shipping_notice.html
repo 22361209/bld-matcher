@@ -1,27 +1,12 @@
-<!doctype html>
-<html lang="zh-CN">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>发货通知</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
-  </head>
-  <body>
-    <main class="shell wide materials-linear inquiry-search-page shipping-notice-page">
-      {% set active_page = "shipping_notice" %}
-      {% include "_nav.html" %}
+{% extends "base.html" %}
+{% set active_page = "shipping_notice" %}
+{% block page_title %}发货通知{% endblock %}
+{% block page_id %}shipping.notice{% endblock %}
+{% block page_type %}workbench{% endblock %}
+{% block page_class %}shell wide materials-linear inquiry-search-page shipping-notice-page{% endblock %}
 
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          <section class="messages materials-messages">
-            {% for category, message in messages %}
-              <div class="message {{ category }}">{{ message }}</div>
-            {% endfor %}
-          </section>
-        {% endif %}
-      {% endwith %}
-
-      {% if request.args.get("generated") %}
+{% block page_content %}
+{% if request.args.get("generated") %}
         <section class="materials-command">
           <div>
             <h2>发货通知已生成</h2>
@@ -97,9 +82,10 @@
           </div>
         </section>
       </details>
-    </main>
+{% endblock %}
 
-    <div class="download-modal shipping-template-select-modal" id="shipping-template-select-modal" aria-hidden="true">
+{% block page_modals %}
+<div class="download-modal shipping-template-select-modal" id="shipping-template-select-modal" aria-hidden="true">
       <div class="download-modal-backdrop" data-close-shipping-modal></div>
       <div class="download-modal-panel shipping-select-panel" role="dialog" aria-modal="true" aria-labelledby="shipping-template-select-title">
         <button class="download-modal-close" type="button" data-close-shipping-modal aria-label="关闭选择模板">×</button>
@@ -212,7 +198,4 @@
         </form>
       </div>
     </div>
-
-    <script src="{{ url_for('static', filename='app.js', v=static_version('app.js')) }}"></script>
-  </body>
-</html>
+{% endblock %}

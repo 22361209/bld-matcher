@@ -38,6 +38,7 @@ REQUIRED_DOCS = {
     "docs/adr/0002-api-platform-foundation.md",
     "docs/adr/0003-quote-vertical-slice.md",
     "docs/adr/0004-product-inquiry-core-and-artifacts.md",
+    "docs/adr/0005-domain-and-page-protocol-migration.md",
     "docs/api/ai-contract.md",
     "docs/api/product-inquiry-v1.md",
     "docs/api/quote-v1.md",
@@ -55,6 +56,10 @@ INLINE_EVENT_RE = re.compile(r"\son[a-z]+\s*=", re.I)
 INLINE_STYLE_RE = re.compile(r"<style\b|\sstyle\s*=", re.I)
 PAGE_TYPE_RE = re.compile(
     r"{%\s*block\s+page_type\s*%}\s*([a-z-]+)\s*{%\s*endblock\s*%}",
+    re.I,
+)
+PAGE_ID_RE = re.compile(
+    r"{%\s*block\s+page_id\s*%}\s*([a-z0-9]+(?:[_.-][a-z0-9]+)+)\s*{%\s*endblock\s*%}",
     re.I,
 )
 ADR_REQUIRED_PATHS = {
@@ -550,6 +555,7 @@ def check(base_ref: str | None = None) -> list[str]:
     allowed_style_counts = policy["legacy_inline_style_counts"]
     actual_inline_counts: dict[str, int] = {}
     actual_style_counts: dict[str, int] = {}
+    page_id_owners: dict[str, list[str]] = {}
     for path in sorted((ROOT / "templates").rglob("*.html")):
         relative = path.relative_to(ROOT).as_posix()
         template = path.read_text(encoding="utf-8")
@@ -573,10 +579,18 @@ def check(base_ref: str | None = None) -> list[str]:
 
         if extends_base:
             page_type_match = PAGE_TYPE_RE.search(template)
-            if not re.search(r"{%\s*block\s+page_id\s*%}", template):
-                errors.append(f"协议页面必须声明 page_id: {relative}")
+            page_id_match = PAGE_ID_RE.search(template)
+            if not page_id_match:
+                errors.append(f"协议页面必须声明有效的字面量 page_id: {relative}")
+            else:
+                page_id_owners.setdefault(page_id_match.group(1).lower(), []).append(relative)
             if not page_type_match or page_type_match.group(1) not in PAGE_TYPES:
                 errors.append(f"协议页面必须声明有效 page_type: {relative}")
+    duplicate_page_ids = {
+        page_id: owners for page_id, owners in page_id_owners.items() if len(owners) > 1
+    }
+    for page_id, owners in sorted(duplicate_page_ids.items()):
+        errors.append(f"page_id 必须全局唯一: {page_id} ({', '.join(owners)})")
     _check_count_policy("模板内联脚本或事件处理器", allowed_inline_counts, actual_inline_counts, errors)
     _check_count_policy("模板内联样式", allowed_style_counts, actual_style_counts, errors)
 

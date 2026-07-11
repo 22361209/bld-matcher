@@ -48,4 +48,3 @@
     <form action="{{ url_for('logout') }}" method="post">{{ csrf_field() }}<button class="ghost compact" type="submit">退出</button></form>
   </div>
 </nav>
-<script type="module" src="{{ url_for('static', filename='nav.js', v=static_version('nav.js')) }}"></script>

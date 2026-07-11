@@ -1,3 +1,12 @@
+document.addEventListener("submit", (event) => {
+  const submitter = event.submitter;
+  if (!(submitter instanceof HTMLElement)) return;
+  const message = submitter.dataset.confirm;
+  if (message && !window.confirm(message)) {
+    event.preventDefault();
+  }
+});
+
 const hasFileDrag = (event) => {
   const types = event.dataTransfer ? Array.from(event.dataTransfer.types || []) : [];
   return types.includes("Files");

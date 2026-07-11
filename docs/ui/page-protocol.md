@@ -66,8 +66,10 @@
 - 模板禁止 `<script>`、`<style>`、`onclick`、`onchange`、`onsubmit`。
 - 页面根节点使用 `data-page="domain.view"`，只初始化当前页面模块。
 
-当前独立文档页面和内联资源登记在 `policy/legacy_allowlist.json`，只允许迁出，不允许新增。`system_updates.html` 已作为第一张页面迁入统一基础模板。
+当前所有完整页面均已迁入 `base.html`，`policy/legacy_allowlist.json` 中独立页面、内联脚本/事件和内联样式基线均为零。`scripts/check_project_contract.py` 阻止重新出现例外，`tests/test_project_contract.py` 额外验证 page ID 全局唯一。
+
+页面专用脚本放在 `static/pages/`，必须以 `body[data-page]` 作为初始化边界。公共交互放在 `static/app.js`；当前破坏性提交统一使用 `data-confirm`，不在模板写事件代码。
 
 ## Acceptance
 
-每种页面类型至少维护一个桌面和移动端基准流程，验证正常、空、错误、无权限、提交中和长文本状态。页面协议变化需要 ADR 或 UI 协议版本说明。
+每种页面类型至少维护一个桌面和移动端基准流程，验证正常、空、错误、无权限、提交中和长文本状态。静态协议、服务端渲染回归和真实浏览器验收缺一不可；页面协议变化需要 ADR 或 UI 协议版本说明。

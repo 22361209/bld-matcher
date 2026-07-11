@@ -133,6 +133,7 @@ def create_internal_api_key(
     name: str = "OpenClaw",
     scopes: Iterable[str] | None = None,
     expires_at: object = "",
+    commit: bool = True,
 ) -> str:
     token = _new_api_token()
     timestamp = now_text()
@@ -169,11 +170,18 @@ def create_internal_api_key(
         json.dumps({"scopes": sorted(selected_scopes), "expires_at": expiry_text}, ensure_ascii=False),
         actor=actor,
     )
-    conn.commit()
+    if commit:
+        conn.commit()
     return token
 
 
-def disable_internal_api_key(conn: sqlite3.Connection, *, actor: str = "", key_id: int | None = None) -> bool:
+def disable_internal_api_key(
+    conn: sqlite3.Connection,
+    *,
+    actor: str = "",
+    key_id: int | None = None,
+    commit: bool = True,
+) -> bool:
     timestamp = now_text()
     if key_id is None:
         cursor = conn.execute(
@@ -198,7 +206,8 @@ def disable_internal_api_key(conn: sqlite3.Connection, *, actor: str = "", key_i
             "Internal API key disabled.",
             actor=actor,
         )
-        conn.commit()
+        if commit:
+            conn.commit()
     return changed
 
 

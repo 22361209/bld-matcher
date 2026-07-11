@@ -1,17 +1,12 @@
-<!doctype html>
-<html lang="zh-CN">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>导入报价记录</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
-  </head>
-  <body>
-    <main class="shell wide materials-linear">
-      {% set active_page = "quotes" %}
-      {% include "_nav.html" %}
+{% extends "base.html" %}
+{% set active_page = "quotes" %}
+{% block page_title %}导入报价记录{% endblock %}
+{% block page_id %}quotes.import{% endblock %}
+{% block page_type %}import-preview{% endblock %}
+{% block page_class %}shell wide materials-linear{% endblock %}
 
-      <header class="materials-hero">
+{% block page_content %}
+<header class="materials-hero">
         <div>
           <h1>导入报价记录</h1>
           <p>确认预览后写入报价记录表。</p>
@@ -20,17 +15,6 @@
           <a class="linear-button subtle" href="{{ url_for('quote_web.quotes') }}">返回报价记录</a>
         </div>
       </header>
-
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          <section class="messages materials-messages">
-            {% for category, message in messages %}
-              <div class="message {{ category }}">{{ message }}</div>
-            {% endfor %}
-          </section>
-        {% endif %}
-      {% endwith %}
-
       <section class="materials-metrics" aria-label="报价记录导入统计">
         <div><span>总行数</span><strong>{{ preview.counts.total }}</strong></div>
         <div><span>可导入</span><strong>{{ preview.counts.valid }}</strong></div>
@@ -96,6 +80,4 @@
           </table>
         </div>
       </section>
-    </main>
-  </body>
-</html>
+{% endblock %}

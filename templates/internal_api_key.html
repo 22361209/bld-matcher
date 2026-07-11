@@ -1,17 +1,12 @@
-<!doctype html>
-<html lang="zh-CN">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>内部 API Key</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
-  </head>
-  <body>
-    <main class="shell wide materials-linear">
-      {% set active_page = "internal_api_key" %}
-      {% include "_nav.html" %}
+{% extends "base.html" %}
+{% set active_page = "internal_api_key" %}
+{% block page_title %}内部 API Key{% endblock %}
+{% block page_id %}admin.api_keys{% endblock %}
+{% block page_type %}system-admin{% endblock %}
+{% block page_class %}shell wide materials-linear{% endblock %}
 
-      <header class="materials-hero">
+{% block page_content %}
+<header class="materials-hero">
         <div>
           <h1>内部 API Key</h1>
           <p>供 OpenClaw 或其他内部工具调用 API。可以同时保留多条 Key，并按需单独停用。</p>
@@ -22,17 +17,6 @@
           {% if status.preview %}<span>{{ status.preview }}</span>{% endif %}
         </div>
       </header>
-
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          <section class="messages materials-messages">
-            {% for category, message in messages %}
-              <div class="message {{ category }}">{{ message }}</div>
-            {% endfor %}
-          </section>
-        {% endif %}
-      {% endwith %}
-
       {% if generated_token %}
         <section class="api-key-reveal" aria-label="新生成的 API Key">
           <div>
@@ -159,7 +143,8 @@ POST /api/internal/inquiry/file
 POST /api/internal/inquiry/analyze</pre>
         <p class="note">新应用从 <code>GET /api/v1</code> 和 <code>GET /api/v1/openapi.json</code> 开始接入。</p>
       </section>
-    </main>
-    <script type="module" src="{{ url_for('static', filename='internal_api_key.js', v=static_version('internal_api_key.js')) }}"></script>
-  </body>
-</html>
+{% endblock %}
+
+{% block page_scripts %}
+  <script type="module" src="{{ url_for('static', filename='internal_api_key.js', v=static_version('internal_api_key.js')) }}"></script>
+{% endblock %}

@@ -1151,7 +1151,14 @@ def _material_changes(before: sqlite3.Row | None, after: dict) -> list[str]:
     return changes
 
 
-def upsert_material_item(conn: sqlite3.Connection, data: dict, actor: str = "", source: str = "web") -> int:
+def upsert_material_item(
+    conn: sqlite3.Connection,
+    data: dict,
+    actor: str = "",
+    source: str = "web",
+    *,
+    commit: bool = True,
+) -> int:
     timestamp = now_text()
     item_id = data.get("id")
     before = get_material_item(conn, int(item_id)) if item_id else None
@@ -1191,11 +1198,19 @@ def upsert_material_item(conn: sqlite3.Connection, data: dict, actor: str = "", 
         saved_id = int(cursor.lastrowid)
         item_key = f"{values['model']}-{values['code'] or values['part'] or saved_id}"
         log_event(conn, "新增材料明细", "material_item", item_key, "新增材料明细", actor=actor)
-    conn.commit()
+    if commit:
+        conn.commit()
     return saved_id
 
 
-def import_materials_from_excel(conn: sqlite3.Connection, material_path: Path, replace: bool = True, actor: str = "") -> int:
+def import_materials_from_excel(
+    conn: sqlite3.Connection,
+    material_path: Path,
+    replace: bool = True,
+    actor: str = "",
+    *,
+    commit: bool = True,
+) -> int:
     from openpyxl import load_workbook
 
     wb = load_workbook(material_path, read_only=True, data_only=True)
@@ -1250,7 +1265,8 @@ def import_materials_from_excel(conn: sqlite3.Connection, material_path: Path, r
         rows,
     )
     log_event(conn, "导入材料数据", "material_data", material_path.name, f"导入 {len(rows)} 行材料明细", actor=actor)
-    conn.commit()
+    if commit:
+        conn.commit()
     return len(rows)
 
 
@@ -1339,13 +1355,20 @@ def get_material_item(conn: sqlite3.Connection, item_id: int) -> sqlite3.Row | N
     return conn.execute("SELECT * FROM material_items WHERE id = ?", (item_id,)).fetchone()
 
 
-def deactivate_material_item(conn: sqlite3.Connection, item_id: int, actor: str = "") -> None:
+def deactivate_material_item(
+    conn: sqlite3.Connection,
+    item_id: int,
+    actor: str = "",
+    *,
+    commit: bool = True,
+) -> None:
     row = get_material_item(conn, item_id)
     conn.execute("UPDATE material_items SET active = 0, updated_at = ? WHERE id = ?", (now_text(), item_id))
     if row:
         key = f"{row['model']}-{row['code'] or row['part'] or row['id']}"
         log_event(conn, "停用材料明细", "material_item", key, "状态: 启用 -> 停用", actor=actor)
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
 def material_item_stats(conn: sqlite3.Connection) -> dict[str, int]:
@@ -1452,7 +1475,13 @@ def list_users(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     return conn.execute("SELECT * FROM users ORDER BY active DESC, username").fetchall()
 
 
-def save_user(conn: sqlite3.Connection, data: dict, actor: str = "") -> None:
+def save_user(
+    conn: sqlite3.Connection,
+    data: dict,
+    actor: str = "",
+    *,
+    commit: bool = True,
+) -> None:
     timestamp = now_text()
     user_id = data.get("id")
     username = compact_text(data.get("username"))
@@ -1509,4 +1538,5 @@ def save_user(conn: sqlite3.Connection, data: dict, actor: str = "") -> None:
             (username, display_name, hash_password(password), role, active, timestamp, timestamp),
         )
         log_event(conn, "新增账号", "user", username, f"角色: {role}", actor=actor)
-    conn.commit()
+    if commit:
+        conn.commit()

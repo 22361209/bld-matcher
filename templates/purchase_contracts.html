@@ -1,30 +1,15 @@
-<!doctype html>
-<html lang="zh-CN">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>合同管理</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
-  </head>
-  <body>
-    <main class="shell wide materials-linear purchase-contract-page">
-      {% set active_page = "contracts" %}
-      {% set is_sales = contract_mode == "sales" %}
+{% extends "base.html" %}
+{% set active_page = "contracts" %}
+{% block page_title %}合同管理{% endblock %}
+{% block page_id %}contracts.workspace{% endblock %}
+{% block page_type %}workbench{% endblock %}
+{% block page_class %}shell wide materials-linear purchase-contract-page{% endblock %}
+
+{% block page_content %}
+{% set is_sales = contract_mode == "sales" %}
       {% set contract_label = "销售合同" if is_sales else "采购合同" %}
       {% set party_a_label = "供方（甲方）" if is_sales else "采购方（甲方）" %}
       {% set party_b_label = "需方（乙方）" if is_sales else "供应方（乙方）" %}
-      {% include "_nav.html" %}
-
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          <section class="messages materials-messages">
-            {% for category, message in messages %}
-              <div class="message {{ category }}">{{ message }}</div>
-            {% endfor %}
-          </section>
-        {% endif %}
-      {% endwith %}
-
       <header class="materials-hero contract-management-hero">
         <div>
           <h1>合同管理</h1>
@@ -144,18 +129,18 @@
             <div class="purchase-doc-table-wrap">
               <table class="purchase-contract-table purchase-doc-table">
                 <colgroup>
-                  <col style="width: 46px">
-                  <col style="width: 128px">
-                  {% if is_sales %}<col style="width: 132px">{% endif %}
-                  <col style="width: 142px">
-                  <col style="width: 170px">
-                  <col style="width: 250px">
-                  <col style="width: 90px">
-                  <col style="width: 110px">
-                  <col style="width: 120px">
-                  <col style="width: 140px">
-                  <col style="width: 132px">
-                  <col style="width: 70px">
+                  <col class="col-width-46">
+                  <col class="col-width-128">
+                  {% if is_sales %}<col class="col-width-132">{% endif %}
+                  <col class="col-width-142">
+                  <col class="col-width-170">
+                  <col class="col-width-250">
+                  <col class="col-width-90">
+                  <col class="col-width-110">
+                  <col class="col-width-120">
+                  <col class="col-width-140">
+                  <col class="col-width-132">
+                  <col class="col-width-70">
                 </colgroup>
                 <thead>
                   <tr>
@@ -313,7 +298,4 @@
       {% else %}
         <p class="materials-muted">当前账号没有合同管理权限。</p>
       {% endif %}
-    </main>
-    <script src="{{ url_for('static', filename='app.js', v=static_version('app.js')) }}"></script>
-  </body>
-</html>
+{% endblock %}

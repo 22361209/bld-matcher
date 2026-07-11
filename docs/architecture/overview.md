@@ -41,9 +41,9 @@ api.py                   # /api/v1 适配
 
 ## Current Debt And Ratchet
 
-当前路由仍直接访问 `app.database`，模板仍有独立完整文档。这些文件登记在 `policy/legacy_allowlist.json`。检查器允许债务继续存在，但禁止新增同类文件；每次迁移完成必须删除白名单项。跨路由导入已在 API 平台阶段清零，白名单不再允许任何路由适配器互相导入。
+合同、材料、发货通知和后台管理已经迁入各自模块，页面独立文档与模板内联资源债务清零。当前只剩登录、产品数据同步和货物识别三个运行/兼容适配器直接访问 `app.database`；它们登记在 `policy/legacy_allowlist.json`，检查器允许债务继续存在但禁止增长。跨路由导入已清零。
 
-`templates/base.html` 已建立，`system_updates.html` 是第一张完成迁移的协议页面。新增页面不能进入白名单。现有内联脚本、样式、旧 API、路由数据库导入/SQL、异常文本外泄和 daemon 线程按具体文件、端点或出现次数登记；新增一处也会失败，白名单只能实质缩小。
+全部完整页面继承 `templates/base.html` 并声明唯一 page ID 和 page type；独立页面、内联脚本/事件和内联样式白名单均为空。旧 API、剩余路由数据库导入/SQL、异常文本外泄和 daemon 线程仍按具体文件、端点或出现次数登记，新增一处即失败，白名单只能实质缩小。
 
 当前落地状态与迁移顺序：
 
@@ -51,8 +51,8 @@ api.py                   # /api/v1 适配
 2. 已完成：`app/modules/quotes/` 是首个 Domain/Service/Repository/Web/API 纵向切片；页面、导入、旧 API 和 v1 共用 Service，路由数据库直连已清零，修订使用整数版本和 If-Match。
 3. 已完成：`app/modules/products/` 和 `app/modules/inquiry/` 提供产品 Repository、目录快照、询价 Service、Excel 引擎和 v1/旧 API 适配；首页、产品页、网页询价与 AI 消费者共用业务内核。
 4. 已完成：Principal 所有权、24 小时到期和 SHA-256 校验的 artifact 下载边界；OpenAPI 提交快照进入统一验收。
-5. 下一步：迁移合同、材料、发货和管理模块，并将所有页面纳入基础模板协议。
-6. `app/database.py` 只保留连接基础设施，最终按领域拆除。
+5. 已完成：`app/modules/contracts/`、`materials/`、`shipping/` 和 `admin/` 负责事务、审计与文件补偿；全部页面纳入基础模板协议，模板内联资源清零。
+6. 下一步：完成持久任务、AI Provider 端口、运行治理和剩余历史债务清零，使 `app/database.py` 最终只保留连接与迁移基础设施。
 
 ## Technology Triggers
 
@@ -69,6 +69,7 @@ api.py                   # /api/v1 适配
 - `/api/v1` 写路由必须声明 Scope、Pydantic Schema、幂等保护和 OpenAPI 操作，平台层从服务端 Principal 生成审计身份。
 - 项目合同检查模块层依赖方向；报价模块是后续领域必须优先复用的实现模板。
 - 产品目录缓存同时观察 DB/WAL/SHM 签名，兼容尚未迁移的直接写入；新产品和询价适配器已无数据库导入。
+- 页面合同检查阻断独立 HTML、无效 page type、内联代码和重复 page ID；产品、材料和物料图纸脚本按 `data-page` 独立初始化。
 - `scripts/openapi_snapshot.py --check` 阻断未审查的 API 路径、Schema、Scope、参数和响应漂移。
 - Ruff 当前阻断语法错误、未使用导入和未使用变量。历史导入排序与全量类型检查暂不作为阻断项，完成基线清理后再通过 ADR/配置收紧。
 - 结构约束通过 `policy/legacy_allowlist.json` 做差异棘轮，不能用新增白名单项绕过检查。

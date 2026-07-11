@@ -1,17 +1,12 @@
-<!doctype html>
-<html lang="zh-CN">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>批量维护单价</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
-  </head>
-  <body>
-    <main class="shell wide materials-linear">
-      {% set active_page = "products" %}
-      {% include "_nav.html" %}
+{% extends "base.html" %}
+{% set active_page = "products" %}
+{% block page_title %}批量维护单价{% endblock %}
+{% block page_id %}products.price_import{% endblock %}
+{% block page_type %}import-preview{% endblock %}
+{% block page_class %}shell wide materials-linear{% endblock %}
 
-      <header class="materials-hero">
+{% block page_content %}
+<header class="materials-hero">
         <div>
           <h1>批量维护单价</h1>
           <p>上传包含 BLD NO. 和 Unit Price/含税单价 的 Excel，确认预览后批量更新。</p>
@@ -20,17 +15,6 @@
           <a class="linear-button subtle" href="{{ url_for('products') }}">返回产品目录</a>
         </div>
       </header>
-
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          <section class="messages materials-messages">
-            {% for category, message in messages %}
-              <div class="message {{ category }}">{{ message }}</div>
-            {% endfor %}
-          </section>
-        {% endif %}
-      {% endwith %}
-
       <section class="materials-flow">
         <form action="{{ url_for('price_import_preview') }}" method="post" enctype="multipart/form-data" class="materials-generate-form">
           {{ csrf_field() }}
@@ -103,7 +87,4 @@
           </div>
         </section>
       {% endif %}
-    </main>
-    <script src="{{ url_for('static', filename='app.js') }}"></script>
-  </body>
-</html>
+{% endblock %}

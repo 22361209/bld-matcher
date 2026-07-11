@@ -1,27 +1,12 @@
-<!doctype html>
-<html lang="zh-CN">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>BLD 询价处理</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
-  </head>
-  <body>
-    <main class="shell wide materials-linear inquiry-search-page">
-      {% set active_page = "match" %}
-      {% include "_nav.html" %}
+{% extends "base.html" %}
+{% set active_page = "match" %}
+{% block page_title %}BLD 询价处理{% endblock %}
+{% block page_id %}inquiry.home{% endblock %}
+{% block page_type %}workbench{% endblock %}
+{% block page_class %}shell wide materials-linear inquiry-search-page{% endblock %}
 
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          <section class="messages materials-messages">
-            {% for category, message in messages %}
-              <div class="message {{ category }}">{{ message }}</div>
-            {% endfor %}
-          </section>
-        {% endif %}
-      {% endwith %}
-
-      <header class="inquiry-landing">
+{% block page_content %}
+<header class="inquiry-landing">
         <h1><span>BLD</span> 询价处理</h1>
         <p>上传客户询价表，自动在产品目录中新增匹配的 BLD NO.</p>
         {% if catalog_summary %}
@@ -194,8 +179,10 @@
           </section>
         </div>
       </details>
-    </main>
-    <div class="image-modal" id="quick-oe-image-modal" aria-hidden="true">
+{% endblock %}
+
+{% block page_modals %}
+<div class="image-modal" id="quick-oe-image-modal" aria-hidden="true">
       <div class="image-modal-backdrop" data-close-quick-oe-image-modal></div>
       <div class="image-modal-panel" role="dialog" aria-modal="true" aria-label="产品图片预览">
         <button class="image-modal-close" type="button" data-close-quick-oe-image-modal aria-label="关闭图片预览">×</button>
@@ -203,6 +190,4 @@
         <div class="image-modal-caption" id="quick-oe-image-modal-caption"></div>
       </div>
     </div>
-    <script src="{{ url_for('static', filename='app.js', v=static_version('app.js')) }}"></script>
-  </body>
-</html>
+{% endblock %}

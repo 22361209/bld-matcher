@@ -1,17 +1,12 @@
-<!doctype html>
-<html lang="zh-CN">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ "编辑材料明细" if item else "新增材料明细" }}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
-  </head>
-  <body>
-    <main class="shell wide materials-linear">
-      {% set active_page = "material_items" %}
-      {% include "_nav.html" %}
+{% extends "base.html" %}
+{% set active_page = "material_items" %}
+{% block page_title %}{{ "编辑材料明细" if item else "新增材料明细" }}{% endblock %}
+{% block page_id %}materials.edit{% endblock %}
+{% block page_type %}edit{% endblock %}
+{% block page_class %}shell wide materials-linear{% endblock %}
 
-      <header class="materials-hero">
+{% block page_content %}
+<header class="materials-hero">
         <div>
           <h1>{{ "编辑材料明细" if item else "新增材料明细" }}</h1>
           <p>母件编码用于匹配生产计划；规格尺寸会自动识别厚度、宽度、长度。</p>
@@ -20,17 +15,6 @@
           <a class="linear-button subtle" href="{{ url_for('material_items', q=item.model if item else '') }}">返回材料明细</a>
         </div>
       </header>
-
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          <section class="messages materials-messages">
-            {% for category, message in messages %}
-              <div class="message {{ category }}">{{ message }}</div>
-            {% endfor %}
-          </section>
-        {% endif %}
-      {% endwith %}
-
       <section class="workbench-form-section">
         <form action="{{ url_for('save_material_item') }}" method="post" class="product-form" data-enter-navigation>
           {{ csrf_field() }}
@@ -73,7 +57,4 @@
           </div>
         </form>
       </section>
-    </main>
-    <script src="{{ url_for('static', filename='app.js') }}"></script>
-  </body>
-</html>
+{% endblock %}

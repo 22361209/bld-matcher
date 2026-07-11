@@ -1,33 +1,17 @@
-<!doctype html>
-<html lang="zh-CN">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>账号管理</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
-  </head>
-  <body>
-    <main class="shell wide materials-linear">
-      {% set active_page = "users" %}
-      {% include "_nav.html" %}
+{% extends "base.html" %}
+{% set active_page = "users" %}
+{% block page_title %}账号管理{% endblock %}
+{% block page_id %}admin.users{% endblock %}
+{% block page_type %}system-admin{% endblock %}
+{% block page_class %}shell wide materials-linear{% endblock %}
 
-      <header class="materials-hero">
+{% block page_content %}
+<header class="materials-hero">
         <div>
           <h1>账号管理</h1>
           <p>管理员可以新增账号、修改登录名、角色、启用状态，并重置密码。</p>
         </div>
       </header>
-
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          <section class="messages materials-messages">
-            {% for category, message in messages %}
-              <div class="message {{ category }}">{{ message }}</div>
-            {% endfor %}
-          </section>
-        {% endif %}
-      {% endwith %}
-
       <section class="workbench-split">
         <article class="workbench-section">
           <h2>{{ "编辑账号" if editing else "新增账号" }}</h2>
@@ -111,6 +95,4 @@
         </table>
         </div>
       </section>
-    </main>
-  </body>
-</html>
+{% endblock %}

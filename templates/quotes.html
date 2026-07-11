@@ -1,33 +1,17 @@
-<!doctype html>
-<html lang="zh-CN">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>报价记录</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
-  </head>
-  <body>
-    <main class="shell wide materials-linear">
-      {% set active_page = "quotes" %}
-      {% include "_nav.html" %}
+{% extends "base.html" %}
+{% set active_page = "quotes" %}
+{% block page_title %}报价记录{% endblock %}
+{% block page_id %}quotes.list{% endblock %}
+{% block page_type %}list{% endblock %}
+{% block page_class %}shell wide materials-linear{% endblock %}
 
-      <header class="materials-hero">
+{% block page_content %}
+<header class="materials-hero">
         <div>
           <h1>报价记录</h1>
           <p>集中保存人工和 Hermes 录入的客户报价，按客户、BLD号、日期、币种和报价人查询。</p>
         </div>
       </header>
-
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          <section class="messages materials-messages">
-            {% for category, message in messages %}
-              <div class="message {{ category }}">{{ message }}</div>
-            {% endfor %}
-          </section>
-        {% endif %}
-      {% endwith %}
-
       <section class="materials-metrics" aria-label="报价记录统计">
         <div><span>总记录</span><strong>{{ stats.total }}</strong></div>
         <div><span>客户数</span><strong>{{ stats.customers }}</strong></div>
@@ -193,18 +177,18 @@
         <div class="materials-table-wrap">
           <table class="materials-grid-table quote-table">
             <colgroup>
-              <col style="width: 92px">
-              <col style="width: 128px">
-              <col style="width: 142px">
-              <col style="width: 130px">
-              <col style="width: 92px">
-              <col style="width: 92px">
-              <col style="width: 70px">
-              <col style="width: 92px">
-              <col style="width: 90px">
-              <col style="width: 190px">
-              <col style="width: 150px">
-              <col style="width: 86px">
+              <col class="col-width-92">
+              <col class="col-width-128">
+              <col class="col-width-142">
+              <col class="col-width-130">
+              <col class="col-width-92">
+              <col class="col-width-92">
+              <col class="col-width-70">
+              <col class="col-width-92">
+              <col class="col-width-90">
+              <col class="col-width-190">
+              <col class="col-width-150">
+              <col class="col-width-86">
             </colgroup>
             <thead>
               <tr>
@@ -304,7 +288,4 @@
           </nav>
         {% endif %}
       </section>
-    </main>
-    <script src="{{ url_for('static', filename='app.js', v=static_version('app.js')) }}"></script>
-  </body>
-</html>
+{% endblock %}

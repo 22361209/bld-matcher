@@ -2732,7 +2732,7 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(edit.status_code, 200)
         self.assertIn("删除产品", edit_html)
         self.assertIn(f'formaction="/products/{product["id"]}/delete"', edit_html)
-        self.assertIn("confirm('确认删除 K-DELETE-001", edit_html)
+        self.assertIn('data-confirm="确认删除 K-DELETE-001', edit_html)
 
         delete = self.client.post(f"/products/{product['id']}/delete", follow_redirects=False)
         self.assertEqual(delete.status_code, 302)

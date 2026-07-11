@@ -1,12 +1,34 @@
 from __future__ import annotations
 
 import ast
+import json
+import re
 import unittest
 
 from scripts import check_project_contract as contract
 
 
 class ProjectContractTest(unittest.TestCase):
+    def test_all_complete_pages_share_shell_and_have_unique_protocol_ids(self):
+        policy = json.loads((contract.ROOT / "policy" / "legacy_allowlist.json").read_text(encoding="utf-8"))
+        self.assertEqual(policy["legacy_full_page_templates"], [])
+        self.assertEqual(policy["legacy_inline_script_counts"], {})
+        self.assertEqual(policy["legacy_inline_style_counts"], {})
+
+        page_ids = []
+        for path in sorted((contract.ROOT / "templates").glob("*.html")):
+            if path.name == "base.html" or path.name.startswith("_"):
+                continue
+            template = path.read_text(encoding="utf-8")
+            self.assertRegex(template, r'{%\s*extends\s+"base\.html"\s*%}', path.name)
+            self.assertIsNone(contract.INLINE_SCRIPT_RE.search(template), path.name)
+            self.assertIsNone(contract.INLINE_EVENT_RE.search(template), path.name)
+            self.assertIsNone(contract.INLINE_STYLE_RE.search(template), path.name)
+            page_id = re.search(r'{%\s*block\s+page_id\s*%}\s*([a-z0-9_.-]+)', template)
+            self.assertIsNotNone(page_id, path.name)
+            page_ids.append(page_id.group(1))
+        self.assertEqual(len(page_ids), len(set(page_ids)))
+
     def test_inline_script_rule_allows_external_module_only(self):
         self.assertIsNone(contract.INLINE_SCRIPT_RE.search('<script type="module" src="/static/page.js"></script>'))
         self.assertIsNotNone(contract.INLINE_SCRIPT_RE.search("<script>window.run()</script>"))

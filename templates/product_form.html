@@ -1,17 +1,15 @@
-<!doctype html>
-<html lang="zh-CN">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ "编辑产品" if product else "新增产品" }}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
-  </head>
-  <body class="{% if embedded %}embedded-product-form-page{% endif %}">
-    <main class="shell wide materials-linear {% if embedded %}embedded-product-form-shell{% endif %}">
-      {% if not embedded %}
-        {% set active_page = "products" %}
-        {% include "_nav.html" %}
+{% extends "base.html" %}
+{% set active_page = "products" %}
+{% block page_title %}{{ "编辑产品" if product else "新增产品" }}{% endblock %}
+{% block page_id %}products.edit{% endblock %}
+{% block page_type %}edit{% endblock %}
+{% block body_class %}{% if embedded %}embedded-product-form-page{% endif %}{% endblock %}
+{% block page_class %}shell wide materials-linear {% if embedded %}embedded-product-form-shell{% endif %}{% endblock %}
+{% block navigation %}{% if not embedded %}{{ super() }}{% endif %}{% endblock %}
+{% block messages %}{% if not embedded %}{{ super() }}{% endif %}{% endblock %}
 
+{% block page_content %}
+{% if not embedded %}
         <header class="materials-hero">
           <div>
             <h1>{{ "编辑产品" if product else "新增产品" }}</h1>
@@ -123,14 +121,10 @@
                 formaction="{{ url_for('remove_product', product_id=product.id) }}"
                 formmethod="post"
                 formnovalidate
-                {% if embedded %}name="embedded" value="1"{% endif %}
-                onclick="return confirm('确认删除 {{ product.bld_no }}？删除后产品目录中将不再显示该条目，相关人工映射也会停用。');"
+                {% if embedded %}name="embedded" value="1"{% endif %} data-confirm="确认删除 {{ product.bld_no }}？删除后产品目录中将不再显示该条目，相关人工映射也会停用。"
               >删除产品</button>
             {% endif %}
           </div>
         </form>
       </section>
-    </main>
-    <script src="{{ url_for('static', filename='app.js', v=static_version('app.js')) }}"></script>
-  </body>
-</html>
+{% endblock %}
