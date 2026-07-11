@@ -99,6 +99,7 @@ def _add_api_platform_tables(conn: sqlite3.Connection) -> None:
           response_status INTEGER,
           response_body TEXT DEFAULT '',
           response_content_type TEXT DEFAULT 'application/json',
+          response_headers TEXT DEFAULT '{}',
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL,
           expires_at TEXT NOT NULL,
@@ -151,6 +152,7 @@ def _add_quote_records(conn: sqlite3.Connection) -> None:
           source_text TEXT DEFAULT '',
           attachment_path TEXT DEFAULT '',
           remark TEXT DEFAULT '',
+          version INTEGER NOT NULL DEFAULT 1,
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
         )
@@ -199,6 +201,17 @@ def _add_customer_price_bld_index(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_customer_price_records_bld ON customer_price_records(bld_no)")
 
 
+def _add_quote_record_version(conn: sqlite3.Connection) -> None:
+    if "version" not in _columns(conn, "quote_records"):
+        conn.execute("ALTER TABLE quote_records ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
+    conn.execute("UPDATE quote_records SET version = 1 WHERE version IS NULL OR version < 1")
+
+
+def _add_idempotency_response_headers(conn: sqlite3.Connection) -> None:
+    if "response_headers" not in _columns(conn, "api_idempotency_keys"):
+        conn.execute("ALTER TABLE api_idempotency_keys ADD COLUMN response_headers TEXT DEFAULT '{}'")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -213,6 +226,8 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("011_customer_price_bld_index", _add_customer_price_bld_index),
     ("012_scrub_internal_api_key_plaintext", _scrub_internal_api_key_plaintext),
     ("013_api_principal_scopes_and_idempotency", _add_api_platform_tables),
+    ("014_quote_record_version", _add_quote_record_version),
+    ("015_idempotency_response_headers", _add_idempotency_response_headers),
 )
 
 

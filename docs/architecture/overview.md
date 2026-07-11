@@ -48,8 +48,8 @@ api.py                   # /api/v1 适配
 当前落地状态与迁移顺序：
 
 1. 已完成：`app/platform/` 提供 API Principal、Scope、请求 ID、稳定错误、Pydantic Schema、OpenAPI、幂等和审计上下文；`app/api/v1/` 已建立版本入口。
-2. 下一步：以报价模块作为首个完整纵向切片，建立 Domain/Service/Repository/Web/API，并让旧报价 API 成为兼容适配器。
-3. 抽出产品 Repository 和 Inquiry Service，Web 与 AI API 复用同一用例。
+2. 已完成：`app/modules/quotes/` 是首个 Domain/Service/Repository/Web/API 纵向切片；页面、导入、旧 API 和 v1 共用 Service，路由数据库直连已清零，修订使用整数版本和 If-Match。
+3. 下一步：抽出产品 Repository 和 Inquiry Service，Web 与 AI API 复用同一用例。
 4. 迁移合同、材料、发货和管理模块。
 5. `app/database.py` 只保留连接基础设施，最终按领域拆除。
 
@@ -66,6 +66,7 @@ api.py                   # /api/v1 适配
 - `uv run python scripts/verify.py` 是本机与 CI 共用入口。
 - Pydantic 2 是 `/api/v1` Schema 与 OpenAPI 的唯一模型工具；Flask 仍是唯一 Web 框架。
 - `/api/v1` 写路由必须声明 Scope、Pydantic Schema、幂等保护和 OpenAPI 操作，平台层从服务端 Principal 生成审计身份。
+- 项目合同检查模块层依赖方向；报价模块是后续领域必须优先复用的实现模板。
 - Ruff 当前阻断语法错误、未使用导入和未使用变量。历史导入排序与全量类型检查暂不作为阻断项，完成基线清理后再通过 ADR/配置收紧。
 - 结构约束通过 `policy/legacy_allowlist.json` 做差异棘轮，不能用新增白名单项绕过检查。
 - `docs/governance/enforcement-matrix.md` 为每条宪章规则登记当前门禁和下一步；检查器验证规则编号没有漏项。

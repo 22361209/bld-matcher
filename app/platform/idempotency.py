@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import re
 import sqlite3
 from dataclasses import dataclass
@@ -29,6 +30,7 @@ class IdempotencyClaim:
     status: int = 0
     body: str = ""
     content_type: str = "application/json"
+    headers: tuple[tuple[str, str], ...] = ()
 
 
 def _timestamp(value: datetime) -> str:
@@ -61,7 +63,7 @@ def _claim(
     conn.execute("DELETE FROM api_idempotency_keys WHERE expires_at <= ?", (_timestamp(now),))
     row = conn.execute(
         """
-        SELECT request_hash, state, response_status, response_body, response_content_type
+        SELECT request_hash, state, response_status, response_body, response_content_type, response_headers
         FROM api_idempotency_keys
         WHERE principal_id = ? AND method = ? AND endpoint = ? AND idempotency_key = ?
         """,
@@ -72,11 +74,20 @@ def _claim(
         if not hmac.compare_digest(str(row["request_hash"]), request_hash):
             return IdempotencyClaim("conflict")
         if row["state"] == "completed":
+            try:
+                stored_headers = json.loads(str(row["response_headers"] or "{}"))
+            except (TypeError, json.JSONDecodeError):
+                stored_headers = {}
             return IdempotencyClaim(
                 "replay",
                 int(row["response_status"]),
                 str(row["response_body"]),
                 str(row["response_content_type"] or "application/json"),
+                tuple(
+                    (str(name), str(value))
+                    for name, value in stored_headers.items()
+                    if name in {"ETag", "Location"}
+                ),
             )
         return IdempotencyClaim("in_progress")
     timestamp = _timestamp(now)
@@ -134,13 +145,21 @@ def _complete(
         """
         UPDATE api_idempotency_keys
         SET state = 'completed', response_status = ?, response_body = ?, response_content_type = ?,
-            updated_at = ?, expires_at = ?
+            response_headers = ?, updated_at = ?, expires_at = ?
         WHERE principal_id = ? AND method = ? AND endpoint = ? AND idempotency_key = ? AND state = 'pending'
         """,
         (
             response.status_code,
             response.get_data(as_text=True),
             response.content_type,
+            json.dumps(
+                {
+                    name: response.headers[name]
+                    for name in ("ETag", "Location")
+                    if name in response.headers
+                },
+                sort_keys=True,
+            ),
             now_text(),
             _timestamp(datetime.now() + IDEMPOTENCY_TTL),
             principal_id,
@@ -208,6 +227,8 @@ def idempotency_required(fn):
                 content_type=claim.content_type,
             )
             response.headers["Idempotency-Replayed"] = "true"
+            for name, value in claim.headers:
+                response.headers[name] = value
             return response
 
         try:

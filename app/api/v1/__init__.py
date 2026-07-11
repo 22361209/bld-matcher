@@ -19,7 +19,15 @@ def api_index():
         {
             "name": "bld-matcher",
             "api_version": "1",
-            "capabilities": ["principal", "scopes", "request-id", "stable-errors", "idempotency", "openapi"],
+            "capabilities": [
+                "principal",
+                "scopes",
+                "request-id",
+                "stable-errors",
+                "idempotency",
+                "openapi",
+                "quotes",
+            ],
         }
     )
 

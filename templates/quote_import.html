@@ -17,7 +17,7 @@
           <p>确认预览后写入报价记录表。</p>
         </div>
         <div class="materials-actions">
-          <a class="linear-button subtle" href="{{ url_for('quotes') }}">返回报价记录</a>
+          <a class="linear-button subtle" href="{{ url_for('quote_web.quotes') }}">返回报价记录</a>
         </div>
       </header>
 
@@ -42,7 +42,7 @@
           <h2>导入预览</h2>
           <p class="note">只会导入状态为可导入的行。</p>
         </div>
-        <form action="{{ url_for('quote_import_apply') }}" method="post" class="materials-actions">
+        <form action="{{ url_for('quote_web.quote_import_apply') }}" method="post" class="materials-actions">
           {{ csrf_field() }}
           <input type="hidden" name="payload" value="{{ payload }}">
           <button class="linear-button primary" type="submit">确认导入报价记录</button>

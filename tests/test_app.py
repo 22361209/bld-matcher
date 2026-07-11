@@ -94,11 +94,11 @@ class WebAppTest(unittest.TestCase):
             follow_redirects=False,
         )
 
-    def create_internal_api_token(self):
+    def create_internal_api_token(self, *, scopes=None, name="OpenClaw Test"):
         from app.platform.api_keys import create_internal_api_key
 
         with self.web.connect(self.web.DB_PATH) as conn:
-            return create_internal_api_key(conn, actor="tester", name="OpenClaw Test")
+            return create_internal_api_key(conn, actor="tester", name=name, scopes=scopes)
 
     def test_login_and_homepage(self):
         response = self.client.get("/login")
@@ -1817,9 +1817,156 @@ class WebAppTest(unittest.TestCase):
         self.assertIn('"tax_price": 5.35', revisions[0]["before_json"])
         self.assertIn('"tax_price": 5.45', revisions[0]["after_json"])
 
-        response = self.client.get("/api/quotes", query_string={"customer_name": "Hermes", "currency": "USD"}, headers=headers)
+        response = self.client.get(
+            "/api/quotes",
+            query_string={"customer_name": "Hermes", "currency": "USD"},
+            headers=headers,
+        )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.get_json()["quotes"]), 1)
+
+    def test_quote_v1_contract_idempotency_and_optimistic_concurrency(self):
+        token = self.create_internal_api_token(
+            scopes=["api:read", "quotes:read", "quotes:write"],
+            name="WorkBuddy Quote V1",
+        )
+        authorization = {"Authorization": f"Bearer {token}"}
+        create_headers = {**authorization, "Idempotency-Key": "quote-create-v1-001"}
+        invalid = self.client.post(
+            "/api/v1/quotes",
+            json={
+                "customer_name": "V1 Contract Customer",
+                "bld_no": "V1-BLD-001",
+                "tax_price": "12.34",
+                "currency": "USD",
+                "attachment_path": "/tmp/private-quote.pdf",
+            },
+            headers=create_headers,
+        )
+        self.assertEqual(invalid.status_code, 422)
+        self.assertEqual(invalid.get_json()["error"]["code"], "request.invalid")
+        self.assertNotIn("private-quote.pdf", invalid.get_data(as_text=True))
+
+        create_payload = {
+            "customer_name": "V1 Contract Customer",
+            "bld_no": "V1-BLD-001",
+            "customer_product_code": "V1-CUSTOMER-001",
+            "tax_price": "12.34",
+            "net_price": "11.22",
+            "currency": "USD",
+            "quote_date": "2026-07-11",
+            "source_type": "wechat",
+            "source_text": "V1 quote source",
+            "on_behalf_of": "sales-operator",
+        }
+        created = self.client.post(
+            "/api/v1/quotes",
+            json=create_payload,
+            headers=create_headers,
+        )
+        self.assertEqual(created.status_code, 201)
+        created_body = created.get_json()
+        quote = created_body["data"]["quote"]
+        self.assertEqual(quote["version"], 1)
+        self.assertEqual(created.headers["ETag"], '"1"')
+        self.assertNotIn("attachment_path", quote)
+        quote_id = quote["id"]
+
+        replayed = self.client.post(
+            "/api/v1/quotes",
+            json=create_payload,
+            headers=create_headers,
+        )
+        self.assertEqual(replayed.status_code, 201)
+        self.assertEqual(replayed.headers["Idempotency-Replayed"], "true")
+        self.assertEqual(replayed.headers["ETag"], '"1"')
+        self.assertEqual(replayed.get_json(), created_body)
+
+        fetched = self.client.get(f"/api/v1/quotes/{quote_id}", headers=authorization)
+        self.assertEqual(fetched.status_code, 200)
+        self.assertEqual(fetched.headers["ETag"], '"1"')
+        self.assertEqual(fetched.get_json()["data"]["quote"]["id"], quote_id)
+
+        listed = self.client.get(
+            "/api/v1/quotes?customer_name=V1%20Contract%20Customer&limit=10",
+            headers=authorization,
+        )
+        listed_data = listed.get_json()["data"]
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual(listed_data["total"], 1)
+        self.assertEqual([item["id"] for item in listed_data["quotes"]], [quote_id])
+
+        missing_precondition = self.client.patch(
+            f"/api/v1/quotes/{quote_id}",
+            json={"remark": "first revision"},
+            headers={**authorization, "Idempotency-Key": "quote-update-v1-missing"},
+        )
+        self.assertEqual(missing_precondition.status_code, 428)
+        self.assertEqual(missing_precondition.get_json()["error"]["code"], "precondition.required")
+
+        updated = self.client.patch(
+            f"/api/v1/quotes/{quote_id}",
+            json={"remark": "first revision", "on_behalf_of": "sales-operator"},
+            headers={
+                **authorization,
+                "Idempotency-Key": "quote-update-v1-001",
+                "If-Match": '"1"',
+            },
+        )
+        updated_quote = updated.get_json()["data"]["quote"]
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(updated_quote["version"], 2)
+        self.assertEqual(updated_quote["remark"], "first revision")
+        self.assertEqual(updated.headers["ETag"], '"2"')
+
+        stale = self.client.patch(
+            f"/api/v1/quotes/{quote_id}",
+            json={"remark": "stale revision"},
+            headers={
+                **authorization,
+                "Idempotency-Key": "quote-update-v1-stale",
+                "If-Match": '"1"',
+            },
+        )
+        stale_error = stale.get_json()["error"]
+        self.assertEqual(stale.status_code, 412)
+        self.assertEqual(stale_error["code"], "quote.version_conflict")
+        self.assertEqual(stale_error["details"]["current_version"], 2)
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            quote_count = conn.execute(
+                "SELECT COUNT(*) FROM quote_records WHERE customer_name = ?",
+                ("V1 Contract Customer",),
+            ).fetchone()[0]
+            revisions = conn.execute(
+                "SELECT changed_by, before_json, after_json FROM quote_record_revisions WHERE quote_id = ?",
+                (quote_id,),
+            ).fetchall()
+            audit = conn.execute(
+                "SELECT actor, detail FROM audit_logs WHERE action = 'API mutation' AND target_key = ? ORDER BY id",
+                ("quote_v1_api.update_quote_v1",),
+            ).fetchall()
+        self.assertEqual(quote_count, 1)
+        self.assertEqual(len(revisions), 1)
+        self.assertEqual(revisions[0]["changed_by"], "WorkBuddy Quote V1")
+        self.assertIn('"version": 1', revisions[0]["before_json"])
+        self.assertIn('"version": 2', revisions[0]["after_json"])
+        self.assertTrue(any(row["actor"] == "WorkBuddy Quote V1" for row in audit))
+
+        document = self.client.get("/api/v1/openapi.json", headers=authorization).get_json()
+        self.assertIn("/api/v1/quotes", document["paths"])
+        self.assertIn("/api/v1/quotes/{quote_id}", document["paths"])
+        create_operation = document["paths"]["/api/v1/quotes"]["post"]
+        patch_operation = document["paths"]["/api/v1/quotes/{quote_id}"]["patch"]
+        self.assertEqual(create_operation["x-required-scopes"], ["quotes:write"])
+        self.assertIn("requestBody", create_operation)
+        self.assertTrue(
+            any(parameter["name"] == "Idempotency-Key" for parameter in create_operation["parameters"])
+        )
+        self.assertTrue(
+            any(parameter["name"] == "If-Match" for parameter in patch_operation["parameters"])
+        )
+        self.assertIn("ETag", patch_operation["responses"]["200"]["headers"])
 
     def test_quote_records_can_import_excel_into_quote_table(self):
         from openpyxl import Workbook
@@ -2761,6 +2908,8 @@ class WebAppTest(unittest.TestCase):
                 "011_customer_price_bld_index",
                 "012_scrub_internal_api_key_plaintext",
                 "013_api_principal_scopes_and_idempotency",
+                "014_quote_record_version",
+                "015_idempotency_response_headers",
             ],
         )
 

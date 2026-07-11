@@ -1,0 +1,18 @@
+{
+  "date": "2026-07-11",
+  "version": "unreleased",
+  "title": "报价领域完成首个纵向架构切片",
+  "entries": [
+    "报价页面、Excel 导入、旧机器接口和 API v1 统一调用同一个领域 Service，路由不再直接访问 SQLite。",
+    "新增 /api/v1/quotes 创建、列表、最近报价、单条读取和修订接口，并提供 Pydantic/OpenAPI 机器合同。",
+    "API v1 报价写入强制 Idempotency-Key；重复请求重放原结果，不会重复创建报价。",
+    "报价修订新增整数版本和 ETag，PATCH 必须提供 If-Match，旧版本请求不会覆盖较新的修改。",
+    "API v1 不接受或返回本机附件路径；旧 /api/quotes 接口保持原 URL 和响应兼容。",
+    "新增模块依赖门禁、并发修订测试和历史报价数据库升级测试，报价领域成为后续模块迁移模板。"
+  ],
+  "impact": {
+    "data": "additive-version-migration",
+    "api": "compatible-new-v1-resources",
+    "operations": "restart-required"
+  }
+}

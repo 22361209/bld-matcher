@@ -36,7 +36,7 @@
       </section>
 
       <section class="materials-command quote-command">
-        <form class="materials-search-form quote-search" method="get" action="{{ url_for('quotes') }}#quote-results">
+        <form class="materials-search-form quote-search" method="get" action="{{ url_for('quote_web.quotes') }}#quote-results">
           <label>
             <span>客户</span>
             <input name="customer_name" value="{{ filters.customer_name }}" placeholder="例如 博世">
@@ -67,13 +67,13 @@
             <input name="quoted_by" value="{{ filters.quoted_by }}" placeholder="例如 007">
           </label>
           <button class="linear-button primary" type="submit">搜索</button>
-          <a class="linear-button subtle" href="{{ url_for('quotes') }}">重置</a>
+          <a class="linear-button subtle" href="{{ url_for('quote_web.quotes') }}">重置</a>
         </form>
 
         {% if can("manage_customer_prices") %}
           <details class="toolbar-popover linear-popover quote-new">
             <summary>新增报价</summary>
-            <form action="{{ url_for('save_quote') }}" method="post" class="toolbar-popover-form quote-form">
+            <form action="{{ url_for('quote_web.save_quote') }}" method="post" class="toolbar-popover-form quote-form">
               {{ csrf_field() }}
               <label>
                 <span>客户</span>
@@ -142,7 +142,7 @@
         {% if can("manage_customer_prices") %}
           <details class="toolbar-popover linear-popover">
             <summary>导入报价记录</summary>
-            <form action="{{ url_for('quote_import_preview') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form price-import-form">
+            <form action="{{ url_for('quote_web.quote_import_preview') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form price-import-form">
               {{ csrf_field() }}
               <label>
                 <span>客户</span>
@@ -240,12 +240,13 @@
                     {% if record.attachment_path %}<div class="muted-cell">{{ record.attachment_path }}</div>{% endif %}
                   </td>
                   <td>
-                    <a href="{{ url_for('quotes', customer_name=record.customer_name, bld_no=record.bld_no or record.product_model) }}#quote-results">历史</a>
+                    <a href="{{ url_for('quote_web.quotes', customer_name=record.customer_name, bld_no=record.bld_no or record.product_model) }}#quote-results">历史</a>
                     {% if can("manage_customer_prices") %}
                       <details class="linear-popover quote-edit">
                         <summary>修正</summary>
-                        <form action="{{ url_for('edit_quote', quote_id=record.id) }}" method="post" class="toolbar-popover-form quote-form">
+                        <form action="{{ url_for('quote_web.edit_quote', quote_id=record.id) }}" method="post" class="toolbar-popover-form quote-form">
                           {{ csrf_field() }}
+                          <input type="hidden" name="version" value="{{ record.version }}">
                           <label><span>客户</span><input name="customer_name" value="{{ record.customer_name }}" required></label>
                           <label><span>BLD号</span><input name="bld_no" value="{{ record.bld_no or record.product_model }}" required></label>
                           <label><span>客户产品编码</span><input name="customer_product_code" value="{{ record.customer_product_code }}"></label>

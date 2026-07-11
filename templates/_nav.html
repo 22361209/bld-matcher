@@ -2,7 +2,7 @@
   <div class="nav-links">
     <a class="{% if active_page == 'match' %}active{% endif %}" href="{{ url_for('index') }}">询价处理</a>
     {% if can("view_customer_prices") %}
-      <a class="{% if active_page == 'quotes' %}active{% endif %}" href="{{ url_for('quotes') }}">报价记录</a>
+      <a class="{% if active_page == 'quotes' %}active{% endif %}" href="{{ url_for('quote_web.quotes') }}">报价记录</a>
     {% endif %}
     {% if can("generate_purchase_contract") %}
       <a class="{% if active_page == 'contracts' %}active{% endif %}" href="{{ url_for('contracts') }}">合同管理</a>

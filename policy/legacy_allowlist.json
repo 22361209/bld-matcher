@@ -46,7 +46,6 @@
     "app/routes/product_sync.py",
     "app/routes/products.py",
     "app/routes/purchase_contracts.py",
-    "app/routes/quotes.py",
     "app/routes/shipment_notice.py",
     "app/routes/shipment_recognition.py"
   ],
@@ -55,10 +54,10 @@
     "app/routes/internal_api.py:internal_inquiry_analyze /api/internal/inquiry/analyze",
     "app/routes/internal_api.py:internal_inquiry_file /api/internal/inquiry/file",
     "app/routes/internal_api.py:internal_inquiry_numbers /api/internal/inquiry/numbers",
-    "app/routes/quotes.py:api_create_quote /api/quotes",
-    "app/routes/quotes.py:api_latest_quote /api/quotes/latest",
-    "app/routes/quotes.py:api_list_quotes /api/quotes",
-    "app/routes/quotes.py:api_update_quote /api/quotes/<int:quote_id>"
+    "app/modules/quotes/api.py:api_create_quote /api/quotes",
+    "app/modules/quotes/api.py:api_latest_quote /api/quotes/latest",
+    "app/modules/quotes/api.py:api_list_quotes /api/quotes",
+    "app/modules/quotes/api.py:api_update_quote /api/quotes/<int:quote_id>"
   ],
   "legacy_route_database_import_counts": {
     "app/routes/admin.py": 6,
@@ -71,7 +70,6 @@
     "app/routes/product_sync.py": 3,
     "app/routes/products.py": 11,
     "app/routes/purchase_contracts.py": 3,
-    "app/routes/quotes.py": 9,
     "app/routes/shipment_notice.py": 2,
     "app/routes/shipment_recognition.py": 2
   },
@@ -89,7 +87,6 @@
     "app/routes/product_sync.py": 3,
     "app/routes/products.py": 5,
     "app/routes/purchase_contracts.py": 2,
-    "app/routes/quotes.py": 10,
     "app/routes/shipment_notice.py": 4,
     "app/routes/shipment_recognition.py": 2
   },

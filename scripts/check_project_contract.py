@@ -5,6 +5,7 @@ import ast
 import json
 import re
 import subprocess
+from collections import Counter
 from pathlib import Path
 
 
@@ -34,7 +35,10 @@ REQUIRED_DOCKER_IGNORES = {".env*", "data/", "logs/", "outputs/", "uploads/"}
 REQUIRED_DOCS = {
     "PROJECT_CONSTITUTION.md",
     "docs/adr/0001-project-governance-and-stack-baseline.md",
+    "docs/adr/0002-api-platform-foundation.md",
+    "docs/adr/0003-quote-vertical-slice.md",
     "docs/api/ai-contract.md",
+    "docs/api/quote-v1.md",
     "docs/architecture/overview.md",
     "docs/governance/enforcement-matrix.md",
     "docs/ui/page-protocol.md",
@@ -91,6 +95,10 @@ def _policy_at_ref(ref: str | None) -> dict[str, list[str]] | None:
         return json.loads(result.stdout)
     except json.JSONDecodeError:
         return None
+
+
+def _legacy_api_path_counts(entries: list[str]) -> Counter[str]:
+    return Counter(entry.rsplit(" ", 1)[-1] for entry in entries)
 
 
 def _decorator_name(decorator: ast.expr) -> str:
@@ -205,6 +213,49 @@ def _openapi_request_model_operations(tree: ast.AST) -> set[tuple[str, str]]:
 
 def _imports_database(tree: ast.AST) -> bool:
     return _database_import_count(tree) > 0
+
+
+def _imported_modules(tree: ast.AST) -> set[str]:
+    modules: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            modules.add(node.module)
+        elif isinstance(node, ast.Import):
+            modules.update(alias.name for alias in node.names)
+    return modules
+
+
+def _check_module_layer(relative: str, tree: ast.AST, errors: list[str]) -> None:
+    match = re.fullmatch(r"app/modules/[^/]+/([^/]+)\.py", relative)
+    if not match:
+        return
+    filename = match.group(1)
+    imported = _imported_modules(tree)
+    forbidden_prefixes: tuple[str, ...] = ()
+    if filename == "domain":
+        forbidden_prefixes = (
+            "flask",
+            "sqlite3",
+            "pathlib",
+            "app.config",
+            "app.database",
+            "app.platform",
+            "app.routes",
+            "openai",
+            "httpx",
+            "requests",
+        )
+    elif filename == "service":
+        forbidden_prefixes = ("flask", "sqlite3", "app.config", "app.database", "app.routes")
+    elif filename in {"web", "api"}:
+        forbidden_prefixes = ("sqlite3", "app.database")
+    violations = sorted(
+        module
+        for module in imported
+        if any(module == prefix or module.startswith(prefix + ".") for prefix in forbidden_prefixes)
+    )
+    if violations:
+        errors.append(f"模块层依赖方向错误: {relative} 禁止导入 {', '.join(violations)}")
 
 
 def _database_import_count(tree: ast.AST) -> int:
@@ -357,6 +408,8 @@ def _check_route_contracts(
                         errors.append(f"/api/v1 写路由必须声明幂等保护: {endpoint} ({route})")
                     if methods.intersection(WRITE_METHODS) and "api_schema" not in guards:
                         errors.append(f"/api/v1 写路由必须声明 Pydantic Schema: {endpoint} ({route})")
+                    if "PATCH" in methods and "if_match_required" not in guards:
+                        errors.append(f"/api/v1 PATCH 路由必须声明 If-Match 保护: {endpoint} ({route})")
                 else:
                     legacy_key = f"{endpoint} {route}"
                     found_legacy_api_routes.add(legacy_key)
@@ -442,7 +495,16 @@ def check(base_ref: str | None = None) -> list[str]:
                 if increases:
                     errors.append(f"遗留计数白名单 {key} 禁止扩大: {', '.join(sorted(increases))}")
             else:
-                additions = set(values) - set(baseline_values)
+                if key == "legacy_api_routes":
+                    current_counts = _legacy_api_path_counts(values)
+                    baseline_counts = _legacy_api_path_counts(baseline_values)
+                    additions = [
+                        f"{path} ({baseline_counts[path]} -> {count})"
+                        for path, count in current_counts.items()
+                        if count > baseline_counts[path]
+                    ]
+                else:
+                    additions = sorted(set(values) - set(baseline_values))
                 if additions:
                     errors.append(f"遗留白名单 {key} 禁止扩大: {', '.join(sorted(additions))}")
 
@@ -531,6 +593,7 @@ def check(base_ref: str | None = None) -> list[str]:
     for path in sorted((ROOT / "app").rglob("*.py")):
         relative = path.relative_to(ROOT).as_posix()
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        _check_module_layer(relative, tree, errors)
         documented_v1_operations.update(_openapi_declarations(tree))
         documented_v1_request_models.update(_openapi_request_model_operations(tree))
         daemon_count = _daemon_thread_count(tree)

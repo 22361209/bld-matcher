@@ -16,6 +16,10 @@ class OpenApiOperation:
     scopes: tuple[str, ...]
     response_model: type[BaseModel] = ApiSuccessEnvelope
     request_model: type[BaseModel] | None = None
+    query_model: type[BaseModel] | None = None
+    path_parameters: tuple[tuple[str, str], ...] = ()
+    header_parameters: tuple[tuple[str, str, bool], ...] = ()
+    response_headers: tuple[tuple[str, str], ...] = ()
     success_status: int = 200
 
 
@@ -32,6 +36,21 @@ def _schema_for(model: type[BaseModel], components: dict[str, dict]) -> dict:
     components.update(definitions)
     components[model.__name__] = schema
     return {"$ref": f"#/components/schemas/{model.__name__}"}
+
+
+def _query_parameters(model: type[BaseModel], components: dict[str, dict]) -> list[dict]:
+    schema = model.model_json_schema(ref_template="#/components/schemas/{model}")
+    components.update(schema.pop("$defs", {}))
+    required = set(schema.get("required", []))
+    return [
+        {
+            "name": name,
+            "in": "query",
+            "required": name in required,
+            "schema": property_schema,
+        }
+        for name, property_schema in schema.get("properties", {}).items()
+    ]
 
 
 def build_openapi_document() -> dict:
@@ -56,12 +75,57 @@ def build_openapi_document() -> dict:
                 },
             },
         }
+        if operation.response_headers:
+            entry["responses"][str(operation.success_status)]["headers"] = {
+                name: {"schema": {"type": header_type}}
+                for name, header_type in operation.response_headers
+            }
         if operation.request_model is not None:
             request_ref = _schema_for(operation.request_model, components)
             entry["requestBody"] = {
                 "required": True,
                 "content": {"application/json": {"schema": request_ref}},
             }
+        parameters = [
+            {
+                "name": name,
+                "in": "path",
+                "required": True,
+                "schema": {"type": parameter_type},
+            }
+            for name, parameter_type in operation.path_parameters
+        ]
+        if operation.method.upper() in {"POST", "PUT", "PATCH", "DELETE"}:
+            parameters.append(
+                {
+                    "name": "Idempotency-Key",
+                    "in": "header",
+                    "required": True,
+                    "schema": {"type": "string", "minLength": 8, "maxLength": 128},
+                }
+            )
+        if operation.method.upper() == "PATCH":
+            parameters.append(
+                {
+                    "name": "If-Match",
+                    "in": "header",
+                    "required": True,
+                    "schema": {"type": "string"},
+                }
+            )
+        parameters.extend(
+            {
+                "name": name,
+                "in": "header",
+                "required": required,
+                "schema": {"type": parameter_type},
+            }
+            for name, parameter_type, required in operation.header_parameters
+        )
+        if operation.query_model is not None:
+            parameters.extend(_query_parameters(operation.query_model, components))
+        if parameters:
+            entry["parameters"] = parameters
         paths.setdefault(operation.path, {})[operation.method.lower()] = entry
     return {
         "openapi": "3.1.0",

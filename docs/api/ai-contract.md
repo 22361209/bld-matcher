@@ -8,7 +8,7 @@ SQLite 是内部实现，不是集成接口。OpenClaw、Hermes、WorkBuddy、MC
 
 当前兼容 Key 已执行安全基线：完整 Key 只在创建响应显示一次，响应禁止缓存；数据库只使用哈希校验并保留遮罩后缀，历史明文字段由迁移清空并删除。Key 已包含 Scopes 和可选到期时间，认证后生成不可伪造的 `ApiPrincipal`，审计身份取服务端 Key 名称，不接受客户端自报 actor。
 
-`GET /api/v1` 返回当前能力，`GET /api/v1/openapi.json` 提供 OpenAPI 3.1 唯一机器合同。阶段 2 已落地 Principal、Scope、请求 ID、稳定错误、Pydantic Schema、OpenAPI 注册和 SQLite 幂等存储；下面的领域资源按后续阶段逐项开放。
+`GET /api/v1` 返回当前能力，`GET /api/v1/openapi.json` 提供 OpenAPI 3.1 唯一机器合同。阶段 2 已落地 Principal、Scope、请求 ID、稳定错误、Pydantic Schema、OpenAPI 注册和 SQLite 幂等存储；报价资源已经开放，调用说明见 `docs/api/quote-v1.md`，其他领域按后续阶段逐项开放。
 
 ## Resource Model
 

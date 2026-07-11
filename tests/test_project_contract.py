@@ -57,6 +57,20 @@ def dynamic_route():
         self.assertIn("禁止增加", errors[0])
         self.assertIn("同步收紧白名单", errors[1])
 
+    def test_legacy_api_path_counts_allow_adapter_move_without_endpoint_growth(self):
+        before = [
+            "app/routes/quotes.py:create /api/quotes",
+            "app/routes/quotes.py:list /api/quotes",
+        ]
+        after = [
+            "app/modules/quotes/api.py:create /api/quotes",
+            "app/modules/quotes/api.py:list /api/quotes",
+        ]
+        self.assertEqual(
+            contract._legacy_api_path_counts(before),
+            contract._legacy_api_path_counts(after),
+        )
+
     def test_openapi_declaration_reads_path_method_and_scopes(self):
         tree = ast.parse(
             """
@@ -97,6 +111,45 @@ def create_quote():
         self.assertEqual(operations, {("/api/v1/quotes", "POST"): {"quotes:write"}})
         self.assertTrue(any("幂等保护" in error for error in errors))
         self.assertTrue(any("Pydantic Schema" in error for error in errors))
+
+        patch_tree = ast.parse(
+            """
+@app.patch("/api/v1/quotes/<int:quote_id>")
+@api_scope_required("quotes:write")
+@idempotency_required
+@api_schema(QuotePatchRequest)
+def update_quote(quote_id):
+    pass
+"""
+        )
+        patch_errors = []
+        contract._check_route_contracts(
+            contract.ROOT / "app" / "api" / "v1" / "quotes.py",
+            patch_tree,
+            patch_errors,
+            set(),
+            set(),
+        )
+        self.assertTrue(any("If-Match" in error for error in patch_errors))
+
+    def test_module_layer_rule_rejects_domain_and_adapter_infrastructure_imports(self):
+        domain_errors = []
+        contract._check_module_layer(
+            "app/modules/quotes/domain.py",
+            ast.parse("from flask import request\nimport sqlite3\n"),
+            domain_errors,
+        )
+        self.assertEqual(len(domain_errors), 1)
+        self.assertIn("flask", domain_errors[0])
+        self.assertIn("sqlite3", domain_errors[0])
+
+        api_errors = []
+        contract._check_module_layer(
+            "app/modules/quotes/api.py",
+            ast.parse("from app.database import connect\n"),
+            api_errors,
+        )
+        self.assertEqual(len(api_errors), 1)
 
 
 if __name__ == "__main__":

@@ -170,8 +170,9 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 报价记录：
 
 - `/quotes` 提供报价记录页面，可新增报价、按客户/型号/日期/币种/报价人筛选、查看同一客户和型号的历史报价，并显示最近一次报价。
-- Hermes/AI 不直接操作 SQLite；通过内部 API Key 调用 `/api/quotes`、`/api/quotes/latest` 和 `/api/quotes/<id>` 写入、查询、修正报价。
-- 报价数据写入 `quote_records`，修正记录写入 `quote_record_revisions`；报价不提供删除接口。
+- 新集成通过 `/api/v1/quotes` 调用报价；读取使用 `quotes:read`，写入使用 `quotes:write`，创建必须带 `Idempotency-Key`，修订还必须带当前 ETag 对应的 `If-Match`。
+- `/api/quotes`、`/api/quotes/latest` 和 `/api/quotes/<id>` 继续作为旧消费者兼容接口，所有入口与网页、Excel 导入共用 `QuoteService`。
+- 报价数据写入 `quote_records`，整数 `version` 防止并发覆盖；修订 before/after 写入 `quote_record_revisions`，报价不提供删除接口。
 
 权限：
 
@@ -214,7 +215,8 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 - `app/platform/`：API Principal、Key、Scope、错误、请求 ID、审计、Schema、OpenAPI 和幂等基础设施
 - `app/api/v1/`：稳定机器接口的版本入口与 OpenAPI 组装
 - `app/routes/inquiry.py`：询价上传、匹配、下载 Excel、图纸包
-- `app/routes/internal_api.py`：OpenClaw 内部 API
+- `app/routes/internal_api.py`：OpenClaw 询价兼容 API
+- `app/modules/quotes/`：报价 Domain、Service、Repository、Web、API v1 与旧 API 兼容适配器
 - `app/routes/products.py`：产品目录、图片、图纸、单价导入、目录导入导出
 - `app/routes/product_sync.py`：本机/NAS 产品数据包导入导出和增量同步
 - `app/routes/materials.py`：生产料单和材料明细

@@ -99,9 +99,9 @@ def create_app() -> Flask:
         if request.path.startswith("/prices"):
             return redirect(url_for("price_import"))
         if request.path.startswith("/quotes"):
-            return redirect(url_for("quotes"))
+            return redirect(url_for("quote_web.quotes"))
         if request.path.startswith("/customer-prices"):
-            return redirect(url_for("quotes"))
+            return redirect(url_for("quote_web.quotes"))
         if request.path.startswith("/catalog"):
             return redirect(url_for("products"))
         return redirect(url_for("index"))
