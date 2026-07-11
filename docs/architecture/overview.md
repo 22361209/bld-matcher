@@ -41,14 +41,14 @@ api.py                   # /api/v1 适配
 
 ## Current Debt And Ratchet
 
-当前路由仍直接访问 `app.database`，模板仍是独立完整文档。这些文件登记在 `policy/legacy_allowlist.json`。检查器允许债务继续存在，但禁止新增同类文件；每次迁移完成必须删除白名单项。
+当前路由仍直接访问 `app.database`，模板仍有独立完整文档。这些文件登记在 `policy/legacy_allowlist.json`。检查器允许债务继续存在，但禁止新增同类文件；每次迁移完成必须删除白名单项。跨路由导入已在 API 平台阶段清零，白名单不再允许任何路由适配器互相导入。
 
 `templates/base.html` 已建立，`system_updates.html` 是第一张完成迁移的协议页面。新增页面不能进入白名单。现有内联脚本、样式、旧 API、路由数据库导入/SQL、异常文本外泄和 daemon 线程按具体文件、端点或出现次数登记；新增一处也会失败，白名单只能实质缩小。
 
-建议迁移顺序：
+当前落地状态与迁移顺序：
 
-1. 抽出 API Principal、错误映射和审计上下文。
-2. 以报价模块作为首个完整纵向切片，移除 `quotes.py -> internal_api.py` 依赖。
+1. 已完成：`app/platform/` 提供 API Principal、Scope、请求 ID、稳定错误、Pydantic Schema、OpenAPI、幂等和审计上下文；`app/api/v1/` 已建立版本入口。
+2. 下一步：以报价模块作为首个完整纵向切片，建立 Domain/Service/Repository/Web/API，并让旧报价 API 成为兼容适配器。
 3. 抽出产品 Repository 和 Inquiry Service，Web 与 AI API 复用同一用例。
 4. 迁移合同、材料、发货和管理模块。
 5. `app/database.py` 只保留连接基础设施，最终按领域拆除。
@@ -64,6 +64,8 @@ api.py                   # /api/v1 适配
 
 - 容器先运行 `scripts/init_database.py`，成功后才启动 Gunicorn worker；迁移仍用 SQLite 写事务防止其他入口并发初始化。
 - `uv run python scripts/verify.py` 是本机与 CI 共用入口。
+- Pydantic 2 是 `/api/v1` Schema 与 OpenAPI 的唯一模型工具；Flask 仍是唯一 Web 框架。
+- `/api/v1` 写路由必须声明 Scope、Pydantic Schema、幂等保护和 OpenAPI 操作，平台层从服务端 Principal 生成审计身份。
 - Ruff 当前阻断语法错误、未使用导入和未使用变量。历史导入排序与全量类型检查暂不作为阻断项，完成基线清理后再通过 ADR/配置收紧。
 - 结构约束通过 `policy/legacy_allowlist.json` 做差异棘轮，不能用新增白名单项绕过检查。
 - `docs/governance/enforcement-matrix.md` 为每条宪章规则登记当前门禁和下一步；检查器验证规则编号没有漏项。

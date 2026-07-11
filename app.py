@@ -8,6 +8,8 @@ from werkzeug.exceptions import RequestEntityTooLarge
 from app.config import APP_DEBUG, APP_HOST, APP_PORT, DB_PATH, MAX_CONTENT_LENGTH, MAX_UPLOAD_MB, PRODUCT_SYNC_MAX_UPLOAD_MB, SECRET_KEY, assert_production_secrets
 from app.database import connect, ensure_default_admin, get_user
 from app.helpers import download_name, product_image_thumb_url, product_image_url, product_image_urls, product_item_display_lines
+from app.platform.api_errors import ApiError, error_response
+from app.platform.request_context import is_machine_api_path, register_request_context
 from app.product_status import format_product_status
 from app.routes import register_routes
 from app.security import ROLE_LABELS, can, csrf_field, safe_referrer, validate_csrf_token, wants_json_response
@@ -18,6 +20,7 @@ def create_app() -> Flask:
     web_app = Flask(__name__)
     web_app.secret_key = SECRET_KEY
     web_app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
+    register_request_context(web_app)
     web_app.jinja_env.globals["can"] = can
     web_app.jinja_env.globals["ROLE_LABELS"] = ROLE_LABELS
     web_app.jinja_env.globals["product_image_url"] = product_image_url
@@ -47,7 +50,7 @@ def create_app() -> Flask:
             limit_mb = PRODUCT_SYNC_MAX_UPLOAD_MB if request.endpoint == "preview_product_data_package" else MAX_UPLOAD_MB
             if request.content_length > limit_mb * 1024 * 1024:
                 abort(413)
-        if request.path.startswith("/api/internal/") or request.path.startswith("/api/quotes"):
+        if is_machine_api_path():
             g.user = None
             return
         if request.endpoint in {"login", "do_login", "static"}:
@@ -82,7 +85,11 @@ def create_app() -> Flask:
     @web_app.errorhandler(RequestEntityTooLarge)
     def upload_too_large(_error):
         limit_mb = PRODUCT_SYNC_MAX_UPLOAD_MB if request.endpoint == "preview_product_data_package" else MAX_UPLOAD_MB
-        if request.path.startswith("/api/internal/") or request.path.startswith("/api/quotes") or wants_json_response():
+        if request.path.startswith("/api/v1"):
+            return error_response(
+                ApiError("request.too_large", f"上传文件不能超过 {limit_mb}MB。", 413)
+            )
+        if is_machine_api_path() or wants_json_response():
             return jsonify({"ok": False, "error": f"上传文件不能超过 {limit_mb}MB。"}), 413
         flash(f"上传文件不能超过 {limit_mb}MB。", "error")
         if request.path.startswith("/product-data-sync"):

@@ -72,7 +72,11 @@ class WebAppTest(unittest.TestCase):
         os.environ["BLD_OUTPUT_DIR"] = str(root / "outputs")
         os.environ["DEFAULT_ADMIN_PASSWORD"] = "test-admin-pw"
         os.environ["INTERNAL_API_TOKEN"] = ""
+        for module_name in [name for name in sys.modules if name == "app" or name.startswith("app.")]:
+            sys.modules.pop(module_name, None)
         cls.web = load_web_module()
+        if not cls.web.DB_PATH.resolve().is_relative_to(root.resolve()):
+            raise RuntimeError(f"Tests must use the isolated database under {root}, got {cls.web.DB_PATH}")
         cls.web.app.config["TESTING"] = True
         cls.client = cls.web.app.test_client()
 
@@ -91,7 +95,7 @@ class WebAppTest(unittest.TestCase):
         )
 
     def create_internal_api_token(self):
-        from app.database import create_internal_api_key
+        from app.platform.api_keys import create_internal_api_key
 
         with self.web.connect(self.web.DB_PATH) as conn:
             return create_internal_api_key(conn, actor="tester", name="OpenClaw Test")
@@ -338,7 +342,8 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(count, 1)
 
     def test_product_data_sync_imports_incrementally_and_preserves_api_key(self):
-        from app.database import internal_api_key_status, upsert_product
+        from app.database import upsert_product
+        from app.platform.api_keys import internal_api_key_status
 
         self.login()
         token = self.create_internal_api_token()
@@ -1231,6 +1236,38 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.get_json()["ok"])
 
+    def test_v1_api_index_and_openapi_use_stable_contract(self):
+        unauthorized = self.client.get("/api/v1", headers={"X-Request-ID": "v1-unauthorized-1"})
+        unauthorized_payload = unauthorized.get_json()
+        self.assertEqual(unauthorized.status_code, 401)
+        self.assertEqual(unauthorized_payload["api_version"], "1")
+        self.assertEqual(unauthorized_payload["request_id"], "v1-unauthorized-1")
+        self.assertEqual(unauthorized_payload["error"]["code"], "auth.unauthorized")
+
+        token = self.create_internal_api_token()
+        headers = {"Authorization": f"Bearer {token}", "X-Request-ID": "v1-index-1"}
+        response = self.client.get("/api/v1", headers=headers)
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["X-Request-ID"], "v1-index-1")
+        self.assertEqual(response.headers["Cache-Control"], "no-store")
+        self.assertEqual(payload["api_version"], "1")
+        self.assertEqual(payload["request_id"], "v1-index-1")
+        self.assertEqual(payload["data"]["name"], "bld-matcher")
+        self.assertIn("openapi", payload["data"]["capabilities"])
+
+        document_response = self.client.get("/api/v1/openapi.json", headers=headers)
+        document = document_response.get_json()
+        self.assertEqual(document_response.status_code, 200)
+        self.assertEqual(document["openapi"], "3.1.0")
+        self.assertIn("/api/v1", document["paths"])
+        self.assertIn("/api/v1/openapi.json", document["paths"])
+        self.assertEqual(
+            document["paths"]["/api/v1"]["get"]["x-required-scopes"],
+            ["api:read"],
+        )
+        self.assertIn("PlatformInfoEnvelope", document["components"]["schemas"])
+
     def test_admin_can_generate_and_disable_internal_api_key(self):
         self.login()
         page = self.client.get("/internal-api-key")
@@ -1238,6 +1275,14 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertIn("内部 API Key", html)
         self.assertIn("生成 API Key", html)
+
+        no_scope = self.client.post(
+            "/internal-api-key/generate",
+            data={"name": "No Scope", "scope_selection_present": "1"},
+            follow_redirects=True,
+        )
+        self.assertEqual(no_scope.status_code, 200)
+        self.assertIn("API Key 至少需要一个 Scope", no_scope.get_data(as_text=True))
 
         generated = self.client.post(
             "/internal-api-key/generate",
@@ -1250,6 +1295,7 @@ class WebAppTest(unittest.TestCase):
         self.assertIsNotNone(token_match)
         token = token_match.group(1)
         self.assertIn("OpenClaw Visual", html)
+        self.assertIn("quotes:read", html)
         self.assertIn(token, html)
 
         generated_second = self.client.post(
@@ -1273,6 +1319,8 @@ class WebAppTest(unittest.TestCase):
             }
         self.assertIsNotNone(first_key)
         self.assertNotIn("token_plain", key_columns)
+        self.assertIn("scopes", key_columns)
+        self.assertIn("expires_at", key_columns)
 
         from app.database import upsert_product
 
@@ -2712,12 +2760,14 @@ class WebAppTest(unittest.TestCase):
                 "010_quote_record_bld_prices",
                 "011_customer_price_bld_index",
                 "012_scrub_internal_api_key_plaintext",
+                "013_api_principal_scopes_and_idempotency",
             ],
         )
 
     def test_migration_scrubs_historical_api_key_plaintext(self):
-        from app.database import verify_internal_api_token
         from app.migrations import run_migrations
+        from app.platform.api_keys import verify_internal_api_token
+        from app.platform.api_principal import LEGACY_COMPATIBILITY_SCOPES
 
         token = self.create_internal_api_token()
         with self.web.connect(self.web.DB_PATH) as conn:
@@ -2729,6 +2779,10 @@ class WebAppTest(unittest.TestCase):
             conn.execute(
                 "DELETE FROM schema_migrations WHERE id = '012_scrub_internal_api_key_plaintext'"
             )
+            conn.execute("UPDATE internal_api_keys SET scopes = '[]'")
+            conn.execute(
+                "DELETE FROM schema_migrations WHERE id = '013_api_principal_scopes_and_idempotency'"
+            )
             conn.commit()
             run_migrations(conn)
             columns = {
@@ -2736,7 +2790,8 @@ class WebAppTest(unittest.TestCase):
             }
             principal = verify_internal_api_token(conn, token)
         self.assertNotIn("token_plain", columns)
-        self.assertEqual(principal["integration_name"], "OpenClaw Test")
+        self.assertEqual(principal.integration_name, "OpenClaw Test")
+        self.assertEqual(principal.scopes, LEGACY_COMPATIBILITY_SCOPES)
 
     def test_concurrent_database_initialization_is_process_safe(self):
         database_path = self.root / "concurrent-init.sqlite3"

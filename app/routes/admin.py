@@ -7,16 +7,19 @@ from flask import flash, make_response, redirect, render_template, request, url_
 from app.config import BASE_DIR, DB_PATH
 from app.database import (
     connect,
-    create_internal_api_key,
-    disable_internal_api_key,
     get_user,
-    internal_api_key_status,
-    list_internal_api_keys,
     list_audit_logs,
     list_log_actors,
     list_users,
     save_user,
 )
+from app.platform.api_keys import (
+    create_internal_api_key,
+    disable_internal_api_key,
+    internal_api_key_status,
+    list_internal_api_keys,
+)
+from app.platform.api_principal import API_SCOPE_LABELS, DEFAULT_API_SCOPES
 from app.security import actor_name, permission_required
 
 
@@ -139,19 +142,49 @@ def register(app) -> None:
         with connect(DB_PATH) as conn:
             status = internal_api_key_status(conn)
             keys = list_internal_api_keys(conn)
-        return render_template("internal_api_key.html", status=status, keys=keys, generated_token="")
+        return render_template(
+            "internal_api_key.html",
+            status=status,
+            keys=keys,
+            generated_token="",
+            scope_labels=API_SCOPE_LABELS,
+            default_scopes=DEFAULT_API_SCOPES,
+        )
 
     @app.post("/internal-api-key/generate")
     @permission_required("manage_users")
     def generate_internal_api_key_route():
         name = request.form.get("name", "OpenClaw")
-        with connect(DB_PATH) as conn:
-            token = create_internal_api_key(conn, actor=actor_name(), name=name)
-            status = internal_api_key_status(conn)
-            keys = list_internal_api_keys(conn)
+        scopes = (
+            request.form.getlist("scopes")
+            if request.form.get("scope_selection_present") == "1"
+            else None
+        )
+        expires_at = request.form.get("expires_at", "").strip()
+        try:
+            with connect(DB_PATH) as conn:
+                token = create_internal_api_key(
+                    conn,
+                    actor=actor_name(),
+                    name=name,
+                    scopes=scopes,
+                    expires_at=expires_at,
+                )
+                status = internal_api_key_status(conn)
+                keys = list_internal_api_keys(conn)
+        except ValueError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("internal_api_key"))
         flash("Internal API Key 已生成。请立即复制；离开本页后无法再次查看完整 Key。", "success")
         response = make_response(
-            render_template("internal_api_key.html", status=status, keys=keys, generated_token=token)
+            render_template(
+                "internal_api_key.html",
+                status=status,
+                keys=keys,
+                generated_token=token,
+                scope_labels=API_SCOPE_LABELS,
+                default_scopes=DEFAULT_API_SCOPES,
+            )
         )
         response.headers["Cache-Control"] = "no-store"
         return response

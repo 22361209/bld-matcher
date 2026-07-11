@@ -3209,6 +3209,57 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.api-key-scope-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--linear-line-strong);
+  border-radius: 6px;
+}
+
+.api-key-scope-fieldset legend {
+  padding: 0 4px;
+  color: var(--linear-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.api-key-scope-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+}
+
+.api-key-scope-option {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.api-key-scope-option input {
+  margin-top: 3px;
+}
+
+.api-key-scope-option span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.api-key-scope-option code,
+.api-key-scope-list {
+  color: var(--linear-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .api-key-scope-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .linear-button,
 .materials-linear .linear-popover > summary {
   display: inline-flex;

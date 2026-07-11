@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import sqlite3
+import json
 from collections.abc import Callable
+
+from .platform.api_principal import LEGACY_COMPATIBILITY_SCOPES
 
 
 Migration = tuple[str, Callable[[sqlite3.Connection], None]]
@@ -71,6 +74,39 @@ def _scrub_internal_api_key_plaintext(conn: sqlite3.Connection) -> None:
     if "token_plain" in _columns(conn, "internal_api_keys"):
         conn.execute("UPDATE internal_api_keys SET token_plain = '' WHERE COALESCE(token_plain, '') != ''")
         conn.execute("ALTER TABLE internal_api_keys DROP COLUMN token_plain")
+
+
+def _add_api_platform_tables(conn: sqlite3.Connection) -> None:
+    key_columns = _columns(conn, "internal_api_keys")
+    if "scopes" not in key_columns:
+        conn.execute("ALTER TABLE internal_api_keys ADD COLUMN scopes TEXT NOT NULL DEFAULT '[]'")
+    if "expires_at" not in key_columns:
+        conn.execute("ALTER TABLE internal_api_keys ADD COLUMN expires_at TEXT DEFAULT ''")
+    conn.execute(
+        "UPDATE internal_api_keys SET scopes = ? WHERE scopes IS NULL OR scopes = '' OR scopes = '[]'",
+        (json.dumps(sorted(LEGACY_COMPATIBILITY_SCOPES)),),
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS api_idempotency_keys (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          principal_id TEXT NOT NULL,
+          method TEXT NOT NULL,
+          endpoint TEXT NOT NULL,
+          idempotency_key TEXT NOT NULL,
+          request_hash TEXT NOT NULL,
+          state TEXT NOT NULL,
+          response_status INTEGER,
+          response_body TEXT DEFAULT '',
+          response_content_type TEXT DEFAULT 'application/json',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          expires_at TEXT NOT NULL,
+          UNIQUE(principal_id, method, endpoint, idempotency_key)
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_api_idempotency_expires ON api_idempotency_keys(expires_at)")
 
 
 def _add_shipment_recognition_jobs(conn: sqlite3.Connection) -> None:
@@ -176,6 +212,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("010_quote_record_bld_prices", _add_quote_record_bld_prices),
     ("011_customer_price_bld_index", _add_customer_price_bld_index),
     ("012_scrub_internal_api_key_plaintext", _scrub_internal_api_key_plaintext),
+    ("013_api_principal_scopes_and_idempotency", _add_api_platform_tables),
 )
 
 

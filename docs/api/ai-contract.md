@@ -6,7 +6,9 @@ SQLite 是内部实现，不是集成接口。OpenClaw、Hermes、WorkBuddy、MC
 
 当前 `/api/internal/*` 和 `/api/quotes` 是兼容接口。新增能力进入 `/api/v1`，旧接口在消费者迁移完成前作为适配器保留。
 
-当前兼容 Key 已执行最低安全基线：完整 Key 只在创建响应显示一次，响应禁止缓存；数据库只使用哈希校验并保留遮罩后缀，历史明文字段由迁移清空并删除。认证后审计身份取服务端 Key 名称，不接受客户端自报 actor。细粒度 Scope 和 OpenAPI 在 `/api/v1` 建设时落地，不能通过扩展旧接口绕过。
+当前兼容 Key 已执行安全基线：完整 Key 只在创建响应显示一次，响应禁止缓存；数据库只使用哈希校验并保留遮罩后缀，历史明文字段由迁移清空并删除。Key 已包含 Scopes 和可选到期时间，认证后生成不可伪造的 `ApiPrincipal`，审计身份取服务端 Key 名称，不接受客户端自报 actor。
+
+`GET /api/v1` 返回当前能力，`GET /api/v1/openapi.json` 提供 OpenAPI 3.1 唯一机器合同。阶段 2 已落地 Principal、Scope、请求 ID、稳定错误、Pydantic Schema、OpenAPI 注册和 SQLite 幂等存储；下面的领域资源按后续阶段逐项开放。
 
 ## Resource Model
 
@@ -26,7 +28,7 @@ GET  /api/v1/artifacts/{id}
 
 ## Schemas And Errors
 
-请求和响应使用 Pydantic 模型，OpenAPI 是机器可读唯一事实来源。成功响应包含：
+请求和响应使用 Pydantic 2 模型，OpenAPI 是机器可读唯一事实来源。每个操作的 `x-required-scopes` 必须与路由装饰器一致。成功响应包含：
 
 ```json
 {"api_version":"1","request_id":"...","data":{},"warnings":[]}
@@ -42,7 +44,7 @@ GET  /api/v1/artifacts/{id}
 
 ## Authentication And Scopes
 
-API Key 创建时只显示一次，数据库保存哈希、名称、后缀、Scopes、创建者、到期时间和最近使用时间。认证后生成 `ApiPrincipal`，至少包含 `key_id`、`integration_name` 和 `scopes`。
+API Key 创建时只显示一次，数据库保存哈希、名称、后缀、Scopes、创建者、到期时间和最近使用时间。认证后生成强类型 `ApiPrincipal`，包含 `key_id`、`integration_name`、`scopes` 和到期信息。历史 Key 在迁移时获得兼容 Scope；新 Key 默认只读，写 Scope 必须由管理员明确选择。
 
 建议 Scopes：
 
@@ -63,6 +65,7 @@ API Key 创建时只显示一次，数据库保存哈希、名称、后缀、Sco
 - 财务、停用、覆盖和批量操作支持 `dry_run`；高风险动作需要短期确认令牌。
 - 所有修订保存 before/after、Principal、request ID、原因和时间。
 - Key 默认只读，写 Scope 单独授予和轮换。
+- 幂等记录默认保留 24 小时；相同 Principal、端点、方法和 Key 的同一请求重放原响应，不同请求返回稳定冲突错误。
 
 ## AI Provider Egress
 

@@ -50,9 +50,7 @@
     "app/routes/shipment_notice.py",
     "app/routes/shipment_recognition.py"
   ],
-  "legacy_route_imports": [
-    "app/routes/quotes.py"
-  ],
+  "legacy_route_imports": [],
   "legacy_api_routes": [
     "app/routes/internal_api.py:internal_inquiry_analyze /api/internal/inquiry/analyze",
     "app/routes/internal_api.py:internal_inquiry_file /api/internal/inquiry/file",
@@ -63,11 +61,11 @@
     "app/routes/quotes.py:api_update_quote /api/quotes/<int:quote_id>"
   ],
   "legacy_route_database_import_counts": {
-    "app/routes/admin.py": 10,
+    "app/routes/admin.py": 6,
     "app/routes/auth.py": 2,
     "app/routes/home.py": 2,
     "app/routes/inquiry.py": 5,
-    "app/routes/internal_api.py": 3,
+    "app/routes/internal_api.py": 2,
     "app/routes/material_drawings.py": 2,
     "app/routes/materials.py": 11,
     "app/routes/product_sync.py": 3,

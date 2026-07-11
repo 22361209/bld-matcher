@@ -3,7 +3,7 @@ from __future__ import annotations
 from math import ceil
 from pathlib import Path
 
-from flask import flash, g, jsonify, redirect, render_template, request, url_for
+from flask import flash, jsonify, redirect, render_template, request, url_for
 
 from app.config import DB_PATH
 from app.database import (
@@ -19,8 +19,8 @@ from app.database import (
 )
 from app.helpers import user_upload_path
 from app.locks import ImportLockError, import_lock
+from app.platform.api_auth import api_actor_name, internal_api_required
 from app.quote_import import decode_rows, encode_rows, parse_quote_import_file
-from app.routes.internal_api import internal_api_required
 from app.security import actor_name, permission_required, safe_referrer
 
 
@@ -100,12 +100,7 @@ def _pagination(filters: dict[str, str], page: int, total: int) -> dict[str, obj
 
 
 def _api_actor() -> str:
-    principal = getattr(g, "api_principal", None)
-    if isinstance(principal, dict):
-        name = str(principal.get("integration_name") or "").strip()
-        if name:
-            return name
-    return "internal-api"
+    return api_actor_name()
 
 
 def register(app) -> None:

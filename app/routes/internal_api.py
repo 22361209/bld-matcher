@@ -1,21 +1,20 @@
 from __future__ import annotations
 
-import hmac
 import re
 import tempfile
 from datetime import datetime
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from functools import wraps
 from pathlib import Path
 
-from flask import g, jsonify, request
+from flask import jsonify, request
 from openpyxl import Workbook
 
-from app.config import BASE_DIR, DB_PATH, INTERNAL_API_TOKEN, OUTPUT_DIR, UPLOAD_DIR
-from app.database import connect, log_event, verify_internal_api_token
+from app.config import BASE_DIR, DB_PATH, OUTPUT_DIR, UPLOAD_DIR
+from app.database import connect, log_event
 from app.excel_io import PRICE_EXPORT_MODES, generate_excel_with_bld, preview_inquiry_columns, sanitize_inquiry_workbook_if_needed
 from app.helpers import clean_original_filename, load_catalog, safe_upload_name, unique_prefixed_path
 from app.matcher import compact_text, normalize_code
+from app.platform.api_auth import api_actor_name, internal_api_required
 from app.product_status import (
     format_product_status,
     product_status_header_for_price_mode,
@@ -61,53 +60,6 @@ def _payload_value(payload: dict, *names: str, default=None):
         if value not in (None, ""):
             return value
     return default
-
-
-def _client_addr() -> str:
-    forwarded = (request.headers.get("X-Forwarded-For") or "").split(",", 1)[0].strip()
-    return forwarded or request.remote_addr or ""
-
-
-def _request_token() -> str:
-    auth = request.headers.get("Authorization", "").strip()
-    if auth.lower().startswith("bearer "):
-        return auth.split(None, 1)[1].strip()
-    return request.headers.get("X-Internal-API-Token", "").strip()
-
-
-def _authenticate() -> dict[str, object] | None:
-    token = _request_token()
-    if not token:
-        return None
-    if INTERNAL_API_TOKEN and hmac.compare_digest(token, INTERNAL_API_TOKEN):
-        return {
-            "key_id": None,
-            "integration_name": "environment-fallback",
-            "scopes": (),
-        }
-    with connect(DB_PATH) as conn:
-        return verify_internal_api_token(conn, token)
-
-
-def api_actor_name() -> str:
-    principal = getattr(g, "api_principal", None)
-    if isinstance(principal, dict):
-        name = str(principal.get("integration_name") or "").strip()
-        if name:
-            return name
-    return "internal-api"
-
-
-def internal_api_required(fn):
-    @wraps(fn)
-    def wrapper(*args, **kwargs):
-        principal = _authenticate()
-        if not principal:
-            return _json_error("内部 API 未授权，请先在后台生成 API Key，并用 Authorization: Bearer <key> 调用。", 401)
-        g.api_principal = principal
-        return fn(*args, **kwargs)
-
-    return wrapper
 
 
 def _parse_bool(value: object, *, default: bool) -> bool:

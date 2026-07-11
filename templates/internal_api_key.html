@@ -56,6 +56,22 @@
               <span>Key 名称</span>
               <input name="name" value="{{ status.name or 'OpenClaw' }}" placeholder="例如 OpenClaw">
             </label>
+            <fieldset class="api-key-scope-fieldset">
+              <legend>Scopes</legend>
+              <input type="hidden" name="scope_selection_present" value="1">
+              <div class="api-key-scope-grid">
+                {% for scope, label in scope_labels.items() %}
+                  <label class="api-key-scope-option">
+                    <input type="checkbox" name="scopes" value="{{ scope }}" {% if scope in default_scopes %}checked{% endif %}>
+                    <span><strong>{{ label }}</strong><code>{{ scope }}</code></span>
+                  </label>
+                {% endfor %}
+              </div>
+            </fieldset>
+            <label>
+              <span>到期日期（可选）</span>
+              <input type="date" name="expires_at">
+            </label>
             <button class="linear-button primary" type="submit">生成 API Key</button>
           </form>
         </article>
@@ -64,7 +80,7 @@
           <h2>当前状态</h2>
           <dl class="api-key-status">
             <div><dt>启用状态</dt><dd>{{ "已启用" if status.enabled else "未启用" }}</dd></div>
-            <div><dt>活跃 Key</dt><dd>{{ keys|selectattr("active")|list|length }}</dd></div>
+            <div><dt>活跃 Key</dt><dd>{{ keys|selectattr("usable")|list|length }}</dd></div>
             <div><dt>最近创建</dt><dd>{{ status.created_at or "暂无" }}</dd></div>
             <div><dt>最近使用</dt><dd>{{ status.last_used_at or "暂无" }}</dd></div>
           </dl>
@@ -90,6 +106,8 @@
                   <th>名称</th>
                   <th>Key</th>
                   <th>状态</th>
+                  <th>Scopes</th>
+                  <th>到期时间</th>
                   <th>创建人</th>
                   <th>创建时间</th>
                   <th>最近使用</th>
@@ -101,7 +119,9 @@
                   <tr>
                     <td>{{ key.name }}</td>
                     <td><code>{{ key.preview }}</code></td>
-                    <td>{{ "启用" if key.active else "停用" }}</td>
+                    <td>{% if key.expired %}已过期{% elif key.active %}启用{% else %}停用{% endif %}</td>
+                    <td><span class="api-key-scope-list">{{ key.scopes|join(", ") }}</span></td>
+                    <td>{{ key.expires_at or "长期有效" }}</td>
                     <td>{{ key.created_by or "暂无" }}</td>
                     <td>{{ key.created_at or "暂无" }}</td>
                     <td>{{ key.last_used_at or "暂无" }}</td>
@@ -137,6 +157,7 @@
 POST /api/internal/inquiry/numbers
 POST /api/internal/inquiry/file
 POST /api/internal/inquiry/analyze</pre>
+        <p class="note">新应用从 <code>GET /api/v1</code> 和 <code>GET /api/v1/openapi.json</code> 开始接入。</p>
       </section>
     </main>
     <script type="module" src="{{ url_for('static', filename='internal_api_key.js', v=static_version('internal_api_key.js')) }}"></script>

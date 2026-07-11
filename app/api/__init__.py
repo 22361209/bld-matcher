@@ -1,0 +1,1 @@
+"""Machine API adapters."""

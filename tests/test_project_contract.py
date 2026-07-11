@@ -12,6 +12,14 @@ class ProjectContractTest(unittest.TestCase):
         self.assertIsNotNone(contract.INLINE_SCRIPT_RE.search("<script>window.run()</script>"))
         self.assertIsNotNone(contract.INLINE_EVENT_RE.search('<button onclick="run()">Run</button>'))
 
+    def test_machine_api_path_matching_is_exact(self):
+        from app.platform.request_context import is_machine_api_path
+
+        self.assertTrue(is_machine_api_path("/api/v1"))
+        self.assertTrue(is_machine_api_path("/api/quotes/42"))
+        self.assertFalse(is_machine_api_path("/api/v10"))
+        self.assertFalse(is_machine_api_path("/api/quotes-preview"))
+
     def test_route_declaration_reads_route_methods_and_keyword_rule(self):
         tree = ast.parse(
             """
@@ -48,6 +56,47 @@ def dynamic_route():
         self.assertEqual(len(errors), 2)
         self.assertIn("禁止增加", errors[0])
         self.assertIn("同步收紧白名单", errors[1])
+
+    def test_openapi_declaration_reads_path_method_and_scopes(self):
+        tree = ast.parse(
+            """
+register_openapi_operation(
+    OpenApiOperation(
+        path="/api/v1/quotes/{quote_id}",
+        method="PATCH",
+        operation_id="updateQuote",
+        summary="Update quote",
+        scopes=("quotes:write",),
+    )
+)
+"""
+        )
+        self.assertEqual(
+            contract._openapi_declarations(tree),
+            {("/api/v1/quotes/{quote_id}", "PATCH"): {"quotes:write"}},
+        )
+        self.assertEqual(contract._openapi_request_model_operations(tree), set())
+
+    def test_route_contract_requires_v1_idempotency_and_static_scope(self):
+        tree = ast.parse(
+            """
+@app.post("/api/v1/quotes")
+@api_scope_required("quotes:write")
+def create_quote():
+    pass
+"""
+        )
+        errors = []
+        _has_routes, _legacy, operations = contract._check_route_contracts(
+            contract.ROOT / "app" / "api" / "v1" / "quotes.py",
+            tree,
+            errors,
+            set(),
+            set(),
+        )
+        self.assertEqual(operations, {("/api/v1/quotes", "POST"): {"quotes:write"}})
+        self.assertTrue(any("幂等保护" in error for error in errors))
+        self.assertTrue(any("Pydantic Schema" in error for error in errors))
 
 
 if __name__ == "__main__":

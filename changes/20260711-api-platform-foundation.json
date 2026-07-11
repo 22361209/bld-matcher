@@ -1,0 +1,18 @@
+{
+  "date": "2026-07-11",
+  "version": "unreleased",
+  "title": "建立 API v1 平台层与最小权限 Key",
+  "entries": [
+    "新增 /api/v1 能力入口和 OpenAPI 3.1 文档，供 OpenClaw、Hermes、WorkBuddy、MCP 和后续 AI 应用按稳定合同接入。",
+    "API Key 支持最小权限 Scopes 和可选到期日期；历史 Key 自动保留兼容权限，新 Key 默认只读，完整 Key 仍只显示一次。",
+    "API v1 统一返回 request_id 和稳定错误码，未处理异常不再向消费者暴露内部异常文本。",
+    "API v1 写接口具备 SQLite 持久幂等重放和服务端 Principal 审计基础，重复请求不会重复执行。",
+    "提交门禁会阻止缺少 Scope、幂等保护、OpenAPI 登记或 Scope 文档不一致的新 API v1 路由。",
+    "旧 /api/internal 和 /api/quotes 接口继续兼容，并已改用共享 Principal 鉴权，不再发生路由模块互相导入。"
+  ],
+  "impact": {
+    "data": "additive-migration",
+    "api": "compatible-new-version",
+    "operations": "restart-required"
+  }
+}

@@ -18,6 +18,16 @@ ROUTE_METHODS = {
     "delete": "DELETE",
 }
 WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+APPROVED_API_SCOPES = {
+    "api:read",
+    "products:read",
+    "inquiries:run",
+    "artifacts:read",
+    "quotes:read",
+    "quotes:write",
+    "contracts:generate",
+    "jobs:cancel",
+}
 UI_WRITE_GUARDS = {"login_required", "permission_required"}
 LEGACY_API_GUARDS = {"internal_api_required", "api_scope_required"}
 REQUIRED_DOCKER_IGNORES = {".env*", "data/", "logs/", "outputs/", "uploads/"}
@@ -142,6 +152,57 @@ def _is_v1_api_path(path: str) -> bool:
     return path == "/api/v1" or path.startswith("/api/v1/")
 
 
+def _normalize_api_path(path: str) -> str:
+    return re.sub(r"<(?:[^:>]+:)?([^>]+)>", r"{\1}", path)
+
+
+def _openapi_declarations(tree: ast.AST) -> dict[tuple[str, str], set[str]]:
+    declarations: dict[tuple[str, str], set[str]] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+            continue
+        if node.func.id != "OpenApiOperation":
+            continue
+        keywords = {keyword.arg: keyword.value for keyword in node.keywords if keyword.arg}
+        path_node = keywords.get("path")
+        method_node = keywords.get("method")
+        scopes_node = keywords.get("scopes")
+        if not (
+            isinstance(path_node, ast.Constant)
+            and isinstance(path_node.value, str)
+            and isinstance(method_node, ast.Constant)
+            and isinstance(method_node.value, str)
+        ):
+            continue
+        declarations[(_normalize_api_path(path_node.value), method_node.value.upper())] = (
+            _literal_strings(scopes_node) if scopes_node is not None else set()
+        )
+    return declarations
+
+
+def _openapi_request_model_operations(tree: ast.AST) -> set[tuple[str, str]]:
+    operations: set[tuple[str, str]] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+            continue
+        if node.func.id != "OpenApiOperation":
+            continue
+        keywords = {keyword.arg: keyword.value for keyword in node.keywords if keyword.arg}
+        path_node = keywords.get("path")
+        method_node = keywords.get("method")
+        request_model = keywords.get("request_model")
+        if (
+            isinstance(path_node, ast.Constant)
+            and isinstance(path_node.value, str)
+            and isinstance(method_node, ast.Constant)
+            and isinstance(method_node.value, str)
+            and request_model is not None
+            and not (isinstance(request_model, ast.Constant) and request_model.value is None)
+        ):
+            operations.add((_normalize_api_path(path_node.value), method_node.value.upper()))
+    return operations
+
+
 def _imports_database(tree: ast.AST) -> bool:
     return _database_import_count(tree) > 0
 
@@ -247,9 +308,10 @@ def _check_route_contracts(
     errors: list[str],
     public_endpoints: set[str],
     legacy_api_routes: set[str],
-) -> tuple[bool, set[str]]:
+) -> tuple[bool, set[str], dict[tuple[str, str], set[str]]]:
     relative = path.relative_to(ROOT).as_posix()
     found_legacy_api_routes: set[str] = set()
+    found_v1_operations: dict[tuple[str, str], set[str]] = {}
     has_routes = False
     for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -267,6 +329,14 @@ def _check_route_contracts(
                 continue
             declarations.append(declaration)
         guards = {_decorator_name(decorator) for decorator in node.decorator_list}
+        scope_decorator = next(
+            (decorator for decorator in node.decorator_list if _decorator_name(decorator) == "api_scope_required"),
+            None,
+        )
+        declared_scopes = set()
+        if isinstance(scope_decorator, ast.Call):
+            for argument in scope_decorator.args:
+                declared_scopes.update(_literal_strings(argument))
         for route, methods in declarations:
             if "UNKNOWN" in methods:
                 errors.append(f"路由 methods 必须使用静态字符串数组: {endpoint} ({route})")
@@ -274,6 +344,19 @@ def _check_route_contracts(
                 if _is_v1_api_path(route):
                     if "api_scope_required" not in guards:
                         errors.append(f"/api/v1 路由必须声明 Scope: {endpoint} ({route})")
+                    elif not declared_scopes:
+                        errors.append(f"/api/v1 Scope 必须使用静态字符串且不能为空: {endpoint} ({route})")
+                    unknown_scopes = declared_scopes - APPROVED_API_SCOPES
+                    if unknown_scopes:
+                        errors.append(
+                            f"/api/v1 路由使用未批准 Scope: {endpoint} ({', '.join(sorted(unknown_scopes))})"
+                        )
+                    for method in methods:
+                        found_v1_operations[(_normalize_api_path(route), method)] = declared_scopes
+                    if methods.intersection(WRITE_METHODS) and "idempotency_required" not in guards:
+                        errors.append(f"/api/v1 写路由必须声明幂等保护: {endpoint} ({route})")
+                    if methods.intersection(WRITE_METHODS) and "api_schema" not in guards:
+                        errors.append(f"/api/v1 写路由必须声明 Pydantic Schema: {endpoint} ({route})")
                 else:
                     legacy_key = f"{endpoint} {route}"
                     found_legacy_api_routes.add(legacy_key)
@@ -285,7 +368,7 @@ def _check_route_contracts(
             if methods.intersection(WRITE_METHODS) and endpoint not in public_endpoints:
                 if not guards.intersection(UI_WRITE_GUARDS):
                     errors.append(f"UI 写路由缺少鉴权装饰器: {endpoint} ({route})")
-    return has_routes, found_legacy_api_routes
+    return has_routes, found_legacy_api_routes, found_v1_operations
 
 
 def _changed_paths(base_ref: str | None) -> set[str]:
@@ -438,6 +521,9 @@ def check(base_ref: str | None = None) -> list[str]:
     found_database_access: set[str] = set()
     found_route_imports: set[str] = set()
     found_legacy_api_routes: set[str] = set()
+    found_v1_operations: dict[tuple[str, str], set[str]] = {}
+    documented_v1_operations: dict[tuple[str, str], set[str]] = {}
+    documented_v1_request_models: set[tuple[str, str]] = set()
     actual_sql_counts: dict[str, int] = {}
     actual_database_import_counts: dict[str, int] = {}
     actual_exception_counts: dict[str, int] = {}
@@ -445,10 +531,12 @@ def check(base_ref: str | None = None) -> list[str]:
     for path in sorted((ROOT / "app").rglob("*.py")):
         relative = path.relative_to(ROOT).as_posix()
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        documented_v1_operations.update(_openapi_declarations(tree))
+        documented_v1_request_models.update(_openapi_request_model_operations(tree))
         daemon_count = _daemon_thread_count(tree)
         if daemon_count:
             actual_daemon_counts[relative] = daemon_count
-        has_routes, found_api = _check_route_contracts(
+        has_routes, found_api, found_v1 = _check_route_contracts(
             path,
             tree,
             errors,
@@ -456,6 +544,7 @@ def check(base_ref: str | None = None) -> list[str]:
             legacy_api_routes,
         )
         found_legacy_api_routes.update(found_api)
+        found_v1_operations.update(found_v1)
         if not has_routes:
             continue
         database_import_count = _database_import_count(tree)
@@ -493,6 +582,38 @@ def check(base_ref: str | None = None) -> list[str]:
         errors.append(
             "兼容 API 已迁移，请从 legacy_api_routes 删除: "
             + ", ".join(sorted(stale_legacy_api_routes))
+        )
+
+    missing_openapi = set(found_v1_operations) - set(documented_v1_operations)
+    if missing_openapi:
+        errors.append(
+            "/api/v1 路由缺少 OpenAPI 登记: "
+            + ", ".join(f"{method} {path}" for path, method in sorted(missing_openapi))
+        )
+    stale_openapi = set(documented_v1_operations) - set(found_v1_operations)
+    if stale_openapi:
+        errors.append(
+            "OpenAPI 登记没有对应 /api/v1 路由: "
+            + ", ".join(f"{method} {path}" for path, method in sorted(stale_openapi))
+        )
+    for operation in sorted(set(found_v1_operations) & set(documented_v1_operations)):
+        route_scopes = found_v1_operations[operation]
+        documented_scopes = documented_v1_operations[operation]
+        if route_scopes != documented_scopes:
+            path, method = operation
+            errors.append(
+                f"OpenAPI Scope 与路由不一致: {method} {path} "
+                f"({sorted(route_scopes)} != {sorted(documented_scopes)})"
+            )
+    missing_request_models = {
+        operation
+        for operation in found_v1_operations
+        if operation[1] in WRITE_METHODS and operation not in documented_v1_request_models
+    }
+    if missing_request_models:
+        errors.append(
+            "/api/v1 写路由的 OpenAPI 登记缺少 request_model: "
+            + ", ".join(f"{method} {path}" for path, method in sorted(missing_request_models))
         )
 
     _check_count_policy(

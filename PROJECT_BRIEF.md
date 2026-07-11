@@ -92,7 +92,12 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 - 下载 Excel 时弹窗选择不带单价、含税单价、不含税单价或美金价；不含税单价为 `含税单价 / 1.1` 后四舍五入到整数，美金价为 `含税单价 / 1.1 / 汇率`。
 - 匹配结果可下载图纸包，按 BLD NO. 查找 PDF。
 
-OpenClaw 内部 API：
+机器与 AI API：
+
+- 新应用使用 `/api/v1`；`GET /api/v1` 返回平台能力，`GET /api/v1/openapi.json` 返回 OpenAPI 3.1 合同。
+- API v1 使用强类型 Principal、最小权限 Scope、Pydantic Schema、稳定错误码、请求 ID 和持久幂等记录；写操作由服务端 Key 身份审计。
+- API Key 可设置 Scopes 和到期日期；历史 Key 保留兼容权限，新 Key 默认只有读取和询价权限，写权限需要管理员明确选择。
+- `/api/internal/*` 与 `/api/quotes` 是兼容接口，继续可用但不再扩展新能力。
 
 - 文档在 `OPENCLAW_API.md`，接口前缀为 `/api/internal/`。
 - 管理员菜单里有“内部 API Key”页面，可生成多条 Key 并按条停用；完整 Key 只在创建响应显示一次，数据库只保留哈希和遮罩后缀，历史明文字段会在迁移时清空并删除。
@@ -206,6 +211,8 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 ## 重要代码入口
 
 - `app.py`：应用入口、全局 before_request、模板全局函数
+- `app/platform/`：API Principal、Key、Scope、错误、请求 ID、审计、Schema、OpenAPI 和幂等基础设施
+- `app/api/v1/`：稳定机器接口的版本入口与 OpenAPI 组装
 - `app/routes/inquiry.py`：询价上传、匹配、下载 Excel、图纸包
 - `app/routes/internal_api.py`：OpenClaw 内部 API
 - `app/routes/products.py`：产品目录、图片、图纸、单价导入、目录导入导出
