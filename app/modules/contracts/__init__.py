@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from .web import register
+
+def register(app) -> None:
+    from .web import register as register_web
+
+    register_web(app)
 
 
 __all__ = ["register"]

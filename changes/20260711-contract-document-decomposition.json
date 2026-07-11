@@ -1,0 +1,16 @@
+{
+  "date": "2026-07-11",
+  "version": "unreleased",
+  "title": "按职责拆分采购与销售合同文档",
+  "entries": [
+    "将合同默认条款、金额规则、表单解析、PDF 样式及采购/销售渲染拆入合同领域模块，旧 app.purchase_contract 导入继续兼容。",
+    "新增采购与销售表单金额、兼容入口和 PDF 两页结构回归，并将合同模块纳入 Pyright。",
+    "拆分前后 PDF 的逐页文本、A4 页面框和 100 DPI 渲染像素完全一致。",
+    "删除 purchase_contract 遗留行数白名单，继续执行 80 行兼容门面和 360 行职责模块硬上限。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "unchanged",
+    "operations": "restart-required"
+  }
+}

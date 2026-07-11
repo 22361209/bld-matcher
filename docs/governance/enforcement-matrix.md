@@ -44,7 +44,7 @@
 | `OPS-005` | 部分自动 | 可配置保留期、默认 dry-run、受控路径、活跃 artifact 与任务上传保护、应用清理审计与测试 | 在生产调度 maintenance profile 并监控执行结果 |
 | `GOV-001` | 自动 | 代码/配置/页面变化必须有 JSON change fragment | 发布汇总器 |
 | `GOV-002` | 部分自动 | 核心文件变化必须有 ADR | 扩大 ADR 触发器覆盖外部数据流 |
-| `GOV-003` | 自动 | 本机和 CI 共用 `scripts/verify.py`，阻断平台、询价 Excel 与运行边界类型漂移，并从隔离数据库精确比较 Flask 路由与 OpenAPI 提交快照 | 逐步把其余历史领域模块纳入 Pyright |
+| `GOV-003` | 自动 | 本机和 CI 共用 `scripts/verify.py`，阻断平台、合同、询价 Excel 与运行边界类型漂移，并从隔离数据库精确比较 Flask 路由与 OpenAPI 提交快照 | 逐步把其余历史领域模块纳入 Pyright |
 | `GOV-004` | 自动 | GitHub Actions 失败阻断检查 | 在 GitHub 开启 required check |
 | `GOV-005` | 人工/待建 | 短期分支规则 | GitHub branch protection 管理设置 |
 | `GOV-006` | 部分自动 | 宪章、矩阵、变更片段和运行测试同一验收入口 | 文档示例可执行检查 |

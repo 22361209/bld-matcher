@@ -82,8 +82,10 @@ COMPATIBILITY_FACADE_MAX_LINES = 80
 PROCESSING_MODULE_MAX_LINES = 360
 COMPATIBILITY_FACADES = {
     "app/excel_io.py",
+    "app/purchase_contract.py",
 }
 DECOMPOSED_PROCESSING_PACKAGES = {
+    "app/modules/contracts",
     "app/modules/inquiry/excel",
 }
 CSS_FOUNDATION_MAX_LINES = 1400

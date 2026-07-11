@@ -3,7 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.product_media import resolve_product_image_path, resolve_product_image_thumb_path
-from app.purchase_contract import generate_purchase_contract_pdf, generate_sales_contract_pdf
+
+from .purchase_pdf import generate_purchase_contract_pdf
+from .sales_pdf import generate_sales_contract_pdf
 
 
 class ContractPdfAdapter:

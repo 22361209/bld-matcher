@@ -3,10 +3,12 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import date, datetime
 from pathlib import Path
+from typing import cast
 
 from app.drawings import safe_filename_part
 from app.helpers import unique_prefixed_path
-from app.purchase_contract import (
+
+from .document_defaults import (
     DEFAULT_BUYER_NAME,
     DEFAULT_DELIVERY_ADDRESS,
     DEFAULT_PAYMENT_TERMS,
@@ -15,6 +17,8 @@ from app.purchase_contract import (
     DEFAULT_SALES_PAYMENT_TERMS,
     DEFAULT_SALES_PRICE_NOTE,
     DEFAULT_SALES_QUALITY_TERMS,
+)
+from .form_parser import (
     default_contract_no,
     default_sales_contract_no,
     purchase_contract_from_form,
@@ -121,7 +125,11 @@ class ContractService:
             rows.extend(self._history_rows(self._collect_outputs(output_reader, "采购合同/**/*.pdf"), "采购合同", query))
         if normalized_type in {"all", "sales"}:
             rows.extend(self._history_rows(self._collect_outputs(output_reader, "销售合同/**/*.pdf"), "销售合同", query))
-        return sorted(rows, key=lambda item: item["path"].stat().st_mtime, reverse=True)[:CONTRACT_HISTORY_LIMIT]
+        return sorted(
+            rows,
+            key=lambda item: cast(Path, item["path"]).stat().st_mtime,
+            reverse=True,
+        )[:CONTRACT_HISTORY_LIMIT]
 
     def _apply_catalog_values(self, contract: dict) -> None:
         for item in contract["items"]:
