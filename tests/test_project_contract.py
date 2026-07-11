@@ -110,6 +110,21 @@ def dynamic_route():
         )
         self.assertTrue(any("禁止 add_url_rule" in error for error in dynamic_errors))
 
+    def test_decomposed_processing_modules_have_hard_size_limits(self):
+        errors = []
+        contract._check_decomposed_processing_sizes(errors)
+        self.assertEqual(errors, [])
+
+        oversized_errors = []
+        contract._check_python_source_size(
+            "app/modules/example/oversized.py",
+            "\n".join(["# padding"] * (contract.PROCESSING_MODULE_MAX_LINES + 1)),
+            contract.PROCESSING_MODULE_MAX_LINES,
+            oversized_errors,
+            label="处理模块",
+        )
+        self.assertTrue(any("必须继续按职责拆分" in error for error in oversized_errors))
+
     def test_count_policy_rejects_growth_and_stale_baselines(self):
         errors = []
         contract._check_count_policy("debt", {"legacy.py": 2}, {"legacy.py": 3}, errors)

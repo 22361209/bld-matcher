@@ -9,7 +9,7 @@
 | `ARCH-003` | 自动 | 路由数据库导入和 SQL 基线均为零；`app/database.py` 只允许 `connect()`，业务函数回流即失败 | 无 |
 | `ARCH-004` | 自动 | 跨路由导入已清零，检查器禁止新增 | 无 |
 | `ARCH-005` | 部分自动 | 技术栈/核心协议文件变化必须带 ADR | 增加依赖分类和许可证检查 |
-| `ARCH-006` | 自动 | 白名单相对 base ref 不得新增或增加；路由 DB、SQL、daemon 和异常外泄计数已清零；聚集文件按行数冻结为只减不增；路由适配器硬限制 320 行/15 endpoint 并禁止动态注册 | 消费者迁移后删除兼容 API |
+| `ARCH-006` | 自动 | 白名单相对 base ref 不得新增或增加；路由 DB、SQL、daemon 和异常外泄计数已清零；待拆聚集文件按行数冻结，已拆处理代码限制为 80 行兼容门面和 360 行职责模块；路由适配器硬限制 320 行/15 endpoint 并禁止动态注册 | 消费者迁移后删除兼容 API |
 | `DATA-001` | 自动 | Git 跟踪路径与 Docker ignore 检查 | 增加构建镜像内容审计 |
 | `DATA-002` | 人工/待建 | `AGENTS.md` 数据方向确认规则 | 同步包加入 source/target 确认记录 |
 | `DATA-003` | 部分自动 | 产品同步使用 SQLite Backup API 并有完整性测试 | 抽成平台备份端口统一复用 |
@@ -44,7 +44,7 @@
 | `OPS-005` | 部分自动 | 可配置保留期、默认 dry-run、受控路径、活跃 artifact 与任务上传保护、应用清理审计与测试 | 在生产调度 maintenance profile 并监控执行结果 |
 | `GOV-001` | 自动 | 代码/配置/页面变化必须有 JSON change fragment | 发布汇总器 |
 | `GOV-002` | 部分自动 | 核心文件变化必须有 ADR | 扩大 ADR 触发器覆盖外部数据流 |
-| `GOV-003` | 自动 | 本机和 CI 共用 `scripts/verify.py`，阻断平台/运行边界类型漂移，并从隔离数据库精确比较 Flask 路由与 OpenAPI 提交快照 | 逐步把历史 Excel 与领域模块纳入 Pyright |
+| `GOV-003` | 自动 | 本机和 CI 共用 `scripts/verify.py`，阻断平台、询价 Excel 与运行边界类型漂移，并从隔离数据库精确比较 Flask 路由与 OpenAPI 提交快照 | 逐步把其余历史领域模块纳入 Pyright |
 | `GOV-004` | 自动 | GitHub Actions 失败阻断检查 | 在 GitHub 开启 required check |
 | `GOV-005` | 人工/待建 | 短期分支规则 | GitHub branch protection 管理设置 |
 | `GOV-006` | 部分自动 | 宪章、矩阵、变更片段和运行测试同一验收入口 | 文档示例可执行检查 |

@@ -13,6 +13,7 @@ TYPECHECK_PATHS = (
     "app/modules/admin",
     "app/modules/inquiry/alias_web.py",
     "app/modules/inquiry/download_web.py",
+    "app/modules/inquiry/excel",
     "app/modules/inquiry/match_web.py",
     "app/modules/inquiry/web_helpers.py",
     "app/modules/products/catalog_web.py",

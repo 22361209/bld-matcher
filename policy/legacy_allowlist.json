@@ -18,7 +18,6 @@
   "legacy_exception_exposure_counts": {},
   "legacy_daemon_thread_counts": {},
   "legacy_file_line_counts": {
-    "app/excel_io.py": 872,
     "app/modules/materials/persistence.py": 429,
     "app/purchase_contract.py": 871,
     "app/routes/inquiry.py": 11,

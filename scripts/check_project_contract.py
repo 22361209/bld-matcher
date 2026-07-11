@@ -42,6 +42,7 @@ REQUIRED_DOCS = {
     "docs/adr/0004-product-inquiry-core-and-artifacts.md",
     "docs/adr/0005-domain-and-page-protocol-migration.md",
     "docs/adr/0006-persistent-jobs-ai-and-runtime-governance.md",
+    "docs/adr/0007-processing-module-decomposition.md",
     "docs/api/ai-contract.md",
     "docs/api/product-inquiry-v1.md",
     "docs/api/quote-v1.md",
@@ -77,6 +78,14 @@ ADR_REQUIRED_PATHS = {
 }
 ROUTE_ADAPTER_MAX_LINES = 320
 ROUTE_ADAPTER_MAX_ENDPOINTS = 15
+COMPATIBILITY_FACADE_MAX_LINES = 80
+PROCESSING_MODULE_MAX_LINES = 360
+COMPATIBILITY_FACADES = {
+    "app/excel_io.py",
+}
+DECOMPOSED_PROCESSING_PACKAGES = {
+    "app/modules/inquiry/excel",
+}
 CSS_FOUNDATION_MAX_LINES = 1400
 CSS_COMPONENT_MAX_LINES = 1000
 CSS_PAGE_MAX_LINES = 600
@@ -461,6 +470,49 @@ def _check_route_adapter_limits(relative: str, source: str, tree: ast.AST, error
             f"路由适配器超过 {ROUTE_ADAPTER_MAX_ENDPOINTS} 个 endpoint，必须按职责拆分: "
             f"{relative} ({endpoint_count})"
         )
+
+
+def _check_python_source_size(
+    relative: str,
+    source: str,
+    max_lines: int,
+    errors: list[str],
+    *,
+    label: str,
+) -> None:
+    line_count = len(source.splitlines())
+    if line_count > max_lines:
+        errors.append(f"{label}超过 {max_lines} 行，必须继续按职责拆分: {relative} ({line_count})")
+
+
+def _check_decomposed_processing_sizes(errors: list[str]) -> None:
+    for relative in sorted(COMPATIBILITY_FACADES):
+        path = ROOT / relative
+        if not path.is_file():
+            errors.append(f"兼容门面缺失: {relative}")
+            continue
+        _check_python_source_size(
+            relative,
+            path.read_text(encoding="utf-8"),
+            COMPATIBILITY_FACADE_MAX_LINES,
+            errors,
+            label="兼容门面",
+        )
+
+    for relative in sorted(DECOMPOSED_PROCESSING_PACKAGES):
+        package = ROOT / relative
+        paths = sorted(package.glob("*.py"))
+        if not paths:
+            errors.append(f"拆分后的处理模块缺失: {relative}")
+            continue
+        for path in paths:
+            _check_python_source_size(
+                path.relative_to(ROOT).as_posix(),
+                path.read_text(encoding="utf-8"),
+                PROCESSING_MODULE_MAX_LINES,
+                errors,
+                label="处理模块",
+            )
 
 
 def _is_api_path(path: str) -> bool:
@@ -895,6 +947,7 @@ def check(base_ref: str | None = None) -> list[str]:
         errors.append("治理执行矩阵包含未知规则: " + ", ".join(sorted(unknown_rule_ids)))
 
     _check_css_governance(errors)
+    _check_decomposed_processing_sizes(errors)
 
     legacy_pages = set(policy["legacy_full_page_templates"])
     allowed_inline_counts = policy["legacy_inline_script_counts"]

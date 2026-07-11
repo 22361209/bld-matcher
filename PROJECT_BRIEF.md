@@ -197,6 +197,7 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 - CSS 按 `static/styles.css` 基础层、`static/components/` 共享组件层和 `static/pages/` 页面层归属；页面资产由所属模板加载，共享层禁止业务选择器，项目门禁执行文件容量、零 ID 选择器与禁止新增 `!important`。
 - 全部现有业务、登录、产品同步和货物识别由领域 Service/Repository 负责事务、审计和文件补偿；Web、API 与 Worker 适配器不直接访问 SQLite。
 - 产品与询价 Web 路由已按职责拆分；单个路由适配器最多 320 行、15 个 endpoint，统一验收禁止动态路由注册绕过检查。
+- 询价 Excel 按读取、清理、分析、价格和导出职责位于 `app/modules/inquiry/excel/`；`app/excel_io.py` 仅保留旧导入兼容门面，门禁分别限制处理模块 360 行和兼容门面 80 行。
 - 材料 Excel 更新采用原子替换；数据库导入失败会恢复旧文件。合同、发货通知、模板和物料图纸若审计失败，会删除本次未完成输出。
 - `app/database.py` 只保留 Schema、连接与迁移；路由数据库直连、daemon 后台线程和异常文本外泄债务已清零。
 - `/health/ready` 通过只读连接检查数据库、迁移、最小业务条件与 Worker 心跳，不负责初始化；运行数据清理由默认 dry-run 的 `scripts/cleanup_runtime.py` 统一规划，详见 `docs/operations/runtime.md`。
@@ -239,7 +240,7 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 - `app/modules/inquiry/api.py`：OpenClaw 询价兼容 API 与 v1 询价适配器
 - `app/modules/quotes/`：报价 Domain、Service、Repository、Web、API v1 与旧 API 兼容适配器
 - `app/modules/products/`：产品 Domain、Repository、Service、目录/价格/记录/媒体 Web 适配器、产品搜索 API 和安全数据包同步
-- `app/modules/inquiry/`：询价 Service、匹配/Excel 引擎、匹配/下载/映射 Web 适配器、旧内部 API 与 v1 适配器
+- `app/modules/inquiry/`：询价 Service、按职责拆分的 Excel 引擎、匹配/下载/映射 Web 适配器、旧内部 API 与 v1 适配器
 - `app/platform/artifacts.py`：Principal 所有权、校验值和保留期 artifact 存储
 - `app/routes/products.py`：产品 Web 适配器注册入口
 - `app/modules/materials/`：生产料单、材料明细、物料图纸、原子文件更新和事务补偿

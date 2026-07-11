@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from .api import register as register_api
-
 
 def register(app) -> None:
+    from .api import register as register_api
+
     register_api(app)
 
 

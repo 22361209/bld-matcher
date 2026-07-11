@@ -1,0 +1,15 @@
+{
+  "date": "2026-07-11",
+  "version": "unreleased",
+  "title": "按职责拆分询价 Excel 引擎",
+  "entries": [
+    "将询价 Excel 的读取、清理、分析、价格计算和导出拆入领域子包，旧 app.excel_io 导入继续兼容。",
+    "新增 XLS 输出结构与兼容门面回归，并将拆分后的 Excel 模块纳入 Pyright。",
+    "删除 excel_io 遗留行数白名单，新增 80 行兼容门面和 360 行职责模块硬上限。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "unchanged",
+    "operations": "restart-required"
+  }
+}
