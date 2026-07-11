@@ -26,6 +26,9 @@ def api_index():
                 "stable-errors",
                 "idempotency",
                 "openapi",
+                "products",
+                "inquiries",
+                "artifacts",
                 "quotes",
             ],
         }
@@ -61,4 +64,7 @@ register_openapi_operation(
 
 
 def register(app) -> None:
+    from .artifacts import register as register_artifacts
+
     app.register_blueprint(api_v1)
+    register_artifacts(app)

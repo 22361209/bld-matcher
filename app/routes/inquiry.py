@@ -1,20 +1,14 @@
 from __future__ import annotations
 
-import re
 from datetime import datetime
 from pathlib import Path
 
 from flask import flash, redirect, render_template, request, send_file, url_for
-from openpyxl import Workbook
 
-from app.config import DB_PATH
-from app.database import append_product_code, connect, delete_alias, log_event, save_alias
-from app.drawings import build_drawings_zip
-from app.excel_io import PRICE_EXPORT_MODES, generate_excel_with_bld, preview_inquiry_columns, sanitize_inquiry_workbook_if_needed
+from app.excel_io import PRICE_EXPORT_MODES, sanitize_inquiry_workbook_if_needed
 from app.helpers import (
     clean_original_filename,
     column_display,
-    load_catalog,
     result_output_path,
     unique_prefixed_path,
     user_file_label,
@@ -23,6 +17,8 @@ from app.helpers import (
     user_upload_path,
 )
 from app.matcher import normalize_code
+from app.modules.inquiry.domain import parse_price_options
+from app.modules.inquiry.factory import get_inquiry_service
 from app.security import actor_name, permission_required
 
 
@@ -101,13 +97,6 @@ def _price_options_from_request() -> tuple[dict, str | None]:
     return {"price_mode": mode, "exchange_rate": exchange_rate, "exchange_rate_text": raw_rate}, None
 
 
-def _price_generation_options(price_options: dict) -> dict:
-    return {
-        "price_mode": price_options.get("price_mode", "none"),
-        "exchange_rate": price_options.get("exchange_rate"),
-    }
-
-
 def _price_log_text(price_options: dict) -> str:
     mode = price_options.get("price_mode", "none")
     if mode == "usd":
@@ -119,52 +108,6 @@ def _price_log_text(price_options: dict) -> str:
     return ""
 
 
-def _pasted_segment_codes(segment: str, catalog) -> list[str]:
-    segment = segment.strip()
-    if not segment or not normalize_code(segment):
-        return []
-
-    if re.search(r"\s+", segment) and catalog.match("", segment):
-        return [segment]
-
-    whitespace_codes = [part.strip() for part in re.split(r"\s+", segment) if normalize_code(part)]
-    if len(whitespace_codes) > 1:
-        return whitespace_codes
-
-    return [segment]
-
-
-def _pasted_inquiry_codes(value: str, catalog) -> list[str]:
-    text = value.strip()
-    if not text:
-        return []
-
-    codes: list[str] = []
-    for segment in re.split(r"[\n\r\t,，;；、/]+", text):
-        codes.extend(_pasted_segment_codes(segment, catalog))
-    return codes
-
-
-def _should_render_pasted_result(query: str, codes: list[str]) -> bool:
-    if len(codes) > 1:
-        return True
-    return bool(codes and re.search(r"\s+", query.strip()) and normalize_code(codes[0]) == normalize_code(query))
-
-
-def _save_pasted_inquiry_workbook(codes: list[str]) -> Path:
-    workbook = Workbook()
-    sheet = workbook.active
-    sheet.title = "粘贴号码"
-    sheet.append(["OE号"])
-    for code in codes:
-        sheet.append([code])
-    sheet.column_dimensions["A"].width = 24
-
-    upload_path = user_upload_path("pasted-oe.xlsx", prefix="inquiry-text")
-    workbook.save(upload_path)
-    return upload_path
-
-
 def _clean_inquiry_workbook_for_matching(upload_path: Path, original_filename: str) -> tuple[Path, str]:
     cleanup = sanitize_inquiry_workbook_if_needed(
         upload_path,
@@ -173,44 +116,24 @@ def _clean_inquiry_workbook_for_matching(upload_path: Path, original_filename: s
     if not cleanup.cleaned:
         return upload_path, ""
 
-    with connect(DB_PATH) as conn:
-        log_event(
-            conn,
-            "自动清理询价文件",
-            "inquiry",
-            clean_original_filename(original_filename, fallback_suffix=upload_path.suffix),
-            cleanup.message,
-            actor=actor_name(),
-        )
-        conn.commit()
+    get_inquiry_service().record_cleanup(
+        clean_original_filename(original_filename, fallback_suffix=upload_path.suffix),
+        cleanup.message,
+        actor=actor_name(),
+    )
     return cleanup.path, cleanup.message
 
 
-def _renumber_pasted_summary_rows(summary: dict) -> None:
-    for index, row in enumerate(summary.get("rows", []), start=1):
-        row["row"] = index
-
-
-def _render_pasted_inquiry_result(catalog, query: str):
-    codes = _pasted_inquiry_codes(query, catalog)
-    if not _should_render_pasted_result(query, codes):
+def _render_pasted_inquiry_result(query: str):
+    service = get_inquiry_service()
+    codes = service.pasted_codes(query)
+    if not service.should_render_pasted(query, codes):
         return redirect(url_for("index", quick_oe=query))
 
-    upload_path = _save_pasted_inquiry_workbook(codes)
+    upload_path = user_upload_path("pasted-oe.xlsx", prefix="inquiry-text")
     output_path = result_output_path(PASTED_INQUIRY_FILENAME, fallback_suffix=".xlsx")
     try:
-        summary = generate_excel_with_bld(upload_path, output_path, catalog, write_output=False)
-        _renumber_pasted_summary_rows(summary)
-        with connect(DB_PATH) as conn:
-            log_event(
-                conn,
-                "预览粘贴号码匹配结果",
-                "inquiry",
-                PASTED_INQUIRY_FILENAME,
-                f"粘贴 {len(codes)} 个号码；共 {summary['total']} 行，命中 {summary['matched']} 行，未找到 {summary['unmatched']} 行",
-                actor=actor_name(),
-            )
-            conn.commit()
+        summary = service.analyze_pasted(codes, upload_path=upload_path, actor=actor_name())
     except Exception as exc:
         flash(f"生成失败：{exc}", "error")
         return redirect(url_for("index", quick_oe=query))
@@ -231,8 +154,8 @@ def register(app) -> None:
     @app.post("/match")
     @permission_required("generate_match")
     def match_inquiry():
-        catalog = load_catalog()
-        if not catalog:
+        service = get_inquiry_service()
+        if not service.catalog_available():
             flash("请先上传产品目录。", "error")
             return redirect(url_for("index"))
 
@@ -243,7 +166,7 @@ def register(app) -> None:
                 if len(quick_oe) > PASTED_INQUIRY_MAX_CHARS:
                     flash(f"粘贴号码最多支持 {PASTED_INQUIRY_MAX_CHARS} 个字符，请改用 Excel 文件导入。", "error")
                     return redirect(url_for("index"))
-                return _render_pasted_inquiry_result(catalog, quick_oe)
+                return _render_pasted_inquiry_result(quick_oe)
             flash("请选择客户询价文件或输入 OE、品牌号码或 BLD 号。", "error")
             return redirect(url_for("index"))
         suffix = Path(file.filename).suffix.lower()
@@ -257,7 +180,7 @@ def register(app) -> None:
 
         output_path = result_output_path(file.filename, fallback_suffix=suffix)
         output_name = output_path.name
-        preview = preview_inquiry_columns(match_upload_path)
+        preview = service.preview_columns(match_upload_path)
         return render_template(
             "select_match_column.html",
             upload_path=match_upload_path,
@@ -270,8 +193,8 @@ def register(app) -> None:
     @app.post("/match/column")
     @permission_required("generate_match")
     def match_inquiry_with_column():
-        catalog = load_catalog()
-        if not catalog:
+        service = get_inquiry_service()
+        if not service.catalog_available():
             flash("请先上传产品目录。", "error")
             return redirect(url_for("index"))
 
@@ -289,10 +212,9 @@ def register(app) -> None:
         output_name = request.form.get("output_name")
         output_path = user_output_dir() / Path(output_name).name if output_name else result_output_path(original_filename, fallback_suffix=upload_path.suffix)
         try:
-            summary = generate_excel_with_bld(
+            summary = service.analyze_workbook(
                 upload_path,
                 output_path,
-                catalog,
                 match_column=_match_column_payload(match_columns),
                 write_output=False,
             )
@@ -321,7 +243,7 @@ def register(app) -> None:
             return redirect(url_for("index"))
 
         selected_columns = _optional_match_columns() or [0]
-        preview = preview_inquiry_columns(upload_path)
+        preview = get_inquiry_service().preview_columns(upload_path)
         return render_template(
             "select_match_column.html",
             upload_path=upload_path,
@@ -333,8 +255,8 @@ def register(app) -> None:
         )
 
     def _send_match_result_download(require_match_column: bool = False):
-        catalog = load_catalog()
-        if not catalog:
+        service = get_inquiry_service()
+        if not service.catalog_available():
             flash("请先上传产品目录。", "error")
             return redirect(url_for("index"))
 
@@ -358,19 +280,23 @@ def register(app) -> None:
         output_name = Path(request.form.get("output_name") or "").name
         output_path = user_output_dir() / output_name if output_name else result_output_path(original_filename, fallback_suffix=upload_path.suffix)
         try:
-            summary = generate_excel_with_bld(
+            summary = service.analyze_workbook(
                 upload_path,
                 output_path,
-                catalog,
                 match_column=_match_column_payload(match_columns),
-                **_price_generation_options(price_options),
+                write_output=True,
+                options=parse_price_options(price_options, default="none"),
             )
-            detail = f"共 {summary['total']} 行，命中 {summary['matched']} 行，未找到 {summary['unmatched']} 行{_price_log_text(price_options)}"
-            if match_columns:
-                detail = f"手动选择 {_match_columns_display(match_columns)} 列；" + detail
-            with connect(DB_PATH) as conn:
-                log_event(conn, "生成匹配结果", "inquiry", original_filename, detail, actor=actor_name())
-                conn.commit()
+            detail_prefix = (
+                f"手动选择 {_match_columns_display(match_columns)} 列；" if match_columns else ""
+            )
+            service.record_export(
+                original_filename,
+                summary,
+                detail_prefix,
+                detail_suffix=_price_log_text(price_options),
+                actor=actor_name(),
+            )
         except Exception as exc:
             flash(f"生成失败：{exc}", "error")
             return redirect(url_for("index"))
@@ -390,8 +316,8 @@ def register(app) -> None:
     @app.post("/match/drawings/download")
     @permission_required("generate_match")
     def download_match_drawings():
-        catalog = load_catalog()
-        if not catalog:
+        service = get_inquiry_service()
+        if not service.catalog_available():
             flash("请先上传产品目录。", "error")
             return redirect(url_for("index"))
 
@@ -409,20 +335,22 @@ def register(app) -> None:
             f"drawings-{datetime.now().strftime('%y%m%d')}-{user_file_label()}-{source_stem}.zip",
         )
         try:
-            summary = generate_excel_with_bld(
+            summary = service.analyze_workbook(
                 upload_path,
                 user_output_dir() / "__drawing-match-preview.xlsx",
-                catalog,
                 match_column=_match_column_payload(match_columns),
                 write_output=False,
             )
-            with connect(DB_PATH) as conn:
-                package = build_drawings_zip(conn, summary["rows"], zip_path)
-                detail = f"共 {summary['matched']} 行命中，打包 PDF {package['added']} 个，缺少 {package['missing']} 个"
-                if match_columns:
-                    detail = f"手动选择 {_match_columns_display(match_columns)} 列；" + detail
-                log_event(conn, "生成图纸压缩包", "drawing_zip", zip_path.name, detail, actor=actor_name())
-                conn.commit()
+            detail_prefix = (
+                f"手动选择 {_match_columns_display(match_columns)} 列；" if match_columns else ""
+            )
+            service.package_drawings(
+                summary["rows"],
+                zip_path,
+                detail_prefix=detail_prefix,
+                matched=summary["matched"],
+                actor=actor_name(),
+            )
         except Exception as exc:
             flash(f"图纸打包失败：{exc}", "error")
             return redirect(url_for("index"))
@@ -438,12 +366,14 @@ def register(app) -> None:
             flash("请输入客户号码和 BLD NO.。", "error")
             return redirect(url_for("index"))
 
-        with connect(DB_PATH) as conn:
-            save_alias(conn, source_code, bld_no, request.form.get("note", ""), actor=actor_name())
-            appended = False
-            sync_target = request.form.get("sync_target", "oe")
-            if sync_target in {"oe", "brand_code"}:
-                appended = append_product_code(conn, bld_no, source_code, target=sync_target, actor=actor_name())
+        sync_target = request.form.get("sync_target", "oe")
+        appended = get_inquiry_service().save_alias(
+            source_code,
+            bld_no,
+            request.form.get("note", ""),
+            sync_target,
+            actor=actor_name(),
+        )
         target_label = "OE 号" if request.form.get("sync_target", "oe") == "oe" else "品牌号码"
         flash("人工映射已保存。" + (f" 已同步加入产品目录{target_label}。" if appended else ""), "success")
         return redirect(url_for("index"))
@@ -452,7 +382,6 @@ def register(app) -> None:
     @permission_required("manage_aliases")
     def delete_manual_map():
         source_code = request.form.get("source_code", "")
-        with connect(DB_PATH) as conn:
-            delete_alias(conn, source_code, actor=actor_name())
+        get_inquiry_service().delete_alias(source_code, actor=actor_name())
         flash("人工映射已删除。", "success")
         return redirect(url_for("index"))

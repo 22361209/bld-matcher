@@ -29,6 +29,7 @@ def main() -> int:
         run(["uv", "lock", "--check"])
     run([sys.executable, "-m", "ruff", "check", "app", "scripts", "tests", "tools", "app.py", "wsgi.py"])
     run([sys.executable, "-m", "compileall", "-q", "app", "tools", "scripts", "app.py", "wsgi.py"])
+    run([sys.executable, "scripts/openapi_snapshot.py", "--check"])
     if not args.quick:
         run([sys.executable, "-m", "unittest", "discover", "-v"])
     print("verification: ok")

@@ -49,9 +49,10 @@ api.py                   # /api/v1 适配
 
 1. 已完成：`app/platform/` 提供 API Principal、Scope、请求 ID、稳定错误、Pydantic Schema、OpenAPI、幂等和审计上下文；`app/api/v1/` 已建立版本入口。
 2. 已完成：`app/modules/quotes/` 是首个 Domain/Service/Repository/Web/API 纵向切片；页面、导入、旧 API 和 v1 共用 Service，路由数据库直连已清零，修订使用整数版本和 If-Match。
-3. 下一步：抽出产品 Repository 和 Inquiry Service，Web 与 AI API 复用同一用例。
-4. 迁移合同、材料、发货和管理模块。
-5. `app/database.py` 只保留连接基础设施，最终按领域拆除。
+3. 已完成：`app/modules/products/` 和 `app/modules/inquiry/` 提供产品 Repository、目录快照、询价 Service、Excel 引擎和 v1/旧 API 适配；首页、产品页、网页询价与 AI 消费者共用业务内核。
+4. 已完成：Principal 所有权、24 小时到期和 SHA-256 校验的 artifact 下载边界；OpenAPI 提交快照进入统一验收。
+5. 下一步：迁移合同、材料、发货和管理模块，并将所有页面纳入基础模板协议。
+6. `app/database.py` 只保留连接基础设施，最终按领域拆除。
 
 ## Technology Triggers
 
@@ -67,6 +68,8 @@ api.py                   # /api/v1 适配
 - Pydantic 2 是 `/api/v1` Schema 与 OpenAPI 的唯一模型工具；Flask 仍是唯一 Web 框架。
 - `/api/v1` 写路由必须声明 Scope、Pydantic Schema、幂等保护和 OpenAPI 操作，平台层从服务端 Principal 生成审计身份。
 - 项目合同检查模块层依赖方向；报价模块是后续领域必须优先复用的实现模板。
+- 产品目录缓存同时观察 DB/WAL/SHM 签名，兼容尚未迁移的直接写入；新产品和询价适配器已无数据库导入。
+- `scripts/openapi_snapshot.py --check` 阻断未审查的 API 路径、Schema、Scope、参数和响应漂移。
 - Ruff 当前阻断语法错误、未使用导入和未使用变量。历史导入排序与全量类型检查暂不作为阻断项，完成基线清理后再通过 ADR/配置收紧。
 - 结构约束通过 `policy/legacy_allowlist.json` 做差异棘轮，不能用新增白名单项绕过检查。
 - `docs/governance/enforcement-matrix.md` 为每条宪章规则登记当前门禁和下一步；检查器验证规则编号没有漏项。

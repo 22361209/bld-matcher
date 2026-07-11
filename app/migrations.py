@@ -212,6 +212,27 @@ def _add_idempotency_response_headers(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE api_idempotency_keys ADD COLUMN response_headers TEXT DEFAULT '{}'")
 
 
+def _add_api_artifacts(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS api_artifacts (
+          id TEXT PRIMARY KEY,
+          owner_id TEXT NOT NULL,
+          filename TEXT NOT NULL,
+          storage_path TEXT NOT NULL,
+          content_type TEXT NOT NULL,
+          size_bytes INTEGER NOT NULL,
+          sha256 TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          expires_at TEXT NOT NULL,
+          last_downloaded_at TEXT DEFAULT ''
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_api_artifacts_owner ON api_artifacts(owner_id, created_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_api_artifacts_expires ON api_artifacts(expires_at)")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -228,6 +249,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("013_api_principal_scopes_and_idempotency", _add_api_platform_tables),
     ("014_quote_record_version", _add_quote_record_version),
     ("015_idempotency_response_headers", _add_idempotency_response_headers),
+    ("016_api_artifacts", _add_api_artifacts),
 )
 
 

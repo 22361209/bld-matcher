@@ -20,7 +20,7 @@ Authorization: Bearer <API Key>
 outputs/openclaw/
 ```
 
-返回值里的 `output_path` 是本机绝对路径，机器人可以直接把路径和文件名告诉用户。
+兼容接口返回值里的 `output_path` 是本机绝对路径，现有机器人可以继续使用。新集成应改用 `/api/v1/inquiries/*` 和受 Principal 约束的 artifact；v1 不返回服务器绝对路径。详见 `docs/api/product-inquiry-v1.md`。
 
 ## 导出文件名规则
 

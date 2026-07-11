@@ -7,43 +7,19 @@ from pathlib import Path
 
 from flask import Response, flash, redirect, render_template, request, send_file, url_for
 
-from app.catalog_export import export_products_xlsx
-from app.config import CATALOG_PATH, DATA_DIR, DB_PATH
-from app.database import (
-    bootstrap_from_excel,
-    connect,
-    deactivate_product,
-    delete_product,
-    get_product,
-    import_catalog,
-    count_products,
-    list_products,
-    log_event,
-    product_stats,
-    upsert_product,
-)
-from app.drawings import product_drawing_path, save_product_drawing, validate_product_drawing_file
+from app.config import CATALOG_PATH, DATA_DIR
+from app.drawings import product_drawing_path, validate_product_drawing_file
 from app.helpers import unique_prefixed_path, user_file_label, user_output_dir, user_upload_path
 from app.locks import ImportLockError, import_lock
-from app.price_import import decode_rows, encode_rows, parse_price_file
-from app.product_media import resolve_product_image_path, resolve_product_image_thumb_path, save_product_image, validate_product_image_file
+from app.modules.products.domain import validated_price_value
+from app.modules.products.factory import get_product_service
+from app.modules.products.service import ProductNotFoundError
+from app.price_import import decode_rows, encode_rows
+from app.product_media import resolve_product_image_path, resolve_product_image_thumb_path, validate_product_image_file
 from app.security import actor_name, login_required, permission_required
 
 
 PRODUCT_PAGE_SIZE = 50
-
-
-def _validated_price_value(value: str | None) -> str:
-    text = (value or "").strip()
-    if not text:
-        return ""
-    try:
-        number = float(text)
-    except ValueError as exc:
-        raise ValueError("含税单价请输入数字，或留空。") from exc
-    if number < 0:
-        raise ValueError("含税单价不能小于 0。")
-    return str(round(number, 2))
 
 
 def _pending_product_images() -> list[tuple[int, object]]:
@@ -169,8 +145,7 @@ def register(app) -> None:
                     shutil.copy2(CATALOG_PATH, backup)
                 shutil.copy2(upload_path, CATALOG_PATH)
                 try:
-                    with connect(DB_PATH) as conn:
-                        import_catalog(conn, CATALOG_PATH, replace=False, actor=actor_name())
+                    get_product_service().import_catalog(CATALOG_PATH, actor=actor_name())
                 except Exception:
                     if backup.exists():
                         shutil.copy2(backup, CATALOG_PATH)
@@ -189,32 +164,26 @@ def register(app) -> None:
     @login_required
     def products():
         filters = _product_query_args()
-        with connect(DB_PATH) as conn:
-            bootstrap_from_excel(DB_PATH, CATALOG_PATH)
-            total_products = count_products(
-                conn,
-                query=str(filters["query"]),
-                bld_query=str(filters["bld_query"]),
-                oe_query=str(filters["oe_query"]),
-                include_inactive=bool(filters["include_inactive"]),
-                only_inactive=bool(filters["only_inactive"]),
-            )
-            pagination = _product_pagination(filters, _request_page(), total_products)
-            rows = list_products(
-                conn,
-                query=str(filters["query"]),
-                bld_query=str(filters["bld_query"]),
-                oe_query=str(filters["oe_query"]),
-                include_inactive=bool(filters["include_inactive"]),
-                only_inactive=bool(filters["only_inactive"]),
+        service = get_product_service()
+        requested_page = _request_page()
+        page = service.search(
+            filters,
+            limit=PRODUCT_PAGE_SIZE,
+            offset=(requested_page - 1) * PRODUCT_PAGE_SIZE,
+        )
+        pagination = _product_pagination(filters, requested_page, page.total)
+        if int(pagination["page"]) != requested_page:
+            page = service.search(
+                filters,
                 limit=PRODUCT_PAGE_SIZE,
                 offset=(int(pagination["page"]) - 1) * PRODUCT_PAGE_SIZE,
             )
-            stats = product_stats(conn)
+        rows = [record.web_payload() for record in page.records]
+        stats = service.stats().as_dict()
         return render_template(
             "products.html",
             products=rows,
-            total_products=total_products,
+            total_products=page.total,
             product_page_size=PRODUCT_PAGE_SIZE,
             pagination=pagination,
             query=str(filters["query"]),
@@ -266,18 +235,12 @@ def register(app) -> None:
             user_output_dir(),
             f"catalog-export-{format_label}-{user_file_label()}-{datetime.now().strftime('%y%m%d')}.xlsx",
         )
-        with connect(DB_PATH) as conn:
-            export_products_xlsx(conn, output_path, include_inactive=include_inactive, export_format=export_format)
-            log_event(
-                conn,
-                "导出目录",
-                "catalog",
-                output_path.name,
-                ("按汽车品牌格式；" if export_format == "brand" else "按 BLD 号格式；")
-                + ("包含停用产品" if include_inactive else "仅启用产品"),
-                actor=actor_name(),
-            )
-            conn.commit()
+        get_product_service().export_catalog(
+            output_path,
+            include_inactive=include_inactive,
+            export_format=export_format,
+            actor=actor_name(),
+        )
         return send_file(output_path, as_attachment=True)
 
     @app.get("/prices/import")
@@ -300,8 +263,7 @@ def register(app) -> None:
         upload_path = user_upload_path(file.filename, prefix="price")
         file.save(upload_path)
         try:
-            with connect(DB_PATH) as conn:
-                preview = parse_price_file(upload_path, conn)
+            preview = get_product_service().preview_prices(upload_path)
         except Exception as exc:
             flash(f"解析失败：{exc}", "error")
             return redirect(url_for("price_import"))
@@ -318,20 +280,7 @@ def register(app) -> None:
 
         try:
             with import_lock(actor_name(), "单价批量导入"):
-                updated = 0
-                skipped = 0
-                with connect(DB_PATH) as conn:
-                    for row in rows:
-                        if row.get("status") != "matched":
-                            skipped += 1
-                            continue
-                        conn.execute(
-                            "UPDATE products SET price_cny = ?, updated_at = ? WHERE bld_no = ?",
-                            (row["price"], datetime.now().strftime("%Y-%m-%d %H:%M:%S"), row["bld_no"]),
-                        )
-                        updated += 1
-                    log_event(conn, "批量维护单价", "product", "Unit Price", f"更新 {updated} 条，跳过 {skipped} 条", actor=actor_name())
-                    conn.commit()
+                updated, skipped = get_product_service().apply_prices(rows, actor=actor_name())
         except ImportLockError as exc:
             flash(str(exc), "error")
             return redirect(url_for("price_import"))
@@ -346,9 +295,9 @@ def register(app) -> None:
     @app.get("/products/<int:product_id>/edit")
     @permission_required("edit_products")
     def edit_product(product_id: int):
-        with connect(DB_PATH) as conn:
-            product = get_product(conn, product_id)
-        if not product:
+        try:
+            product = get_product_service().get(product_id).web_payload()
+        except ProductNotFoundError:
             flash("产品不存在。", "error")
             return redirect(url_for("products"))
         return render_template("product_form.html", product=product, embedded=request.args.get("embedded") == "1")
@@ -368,30 +317,17 @@ def register(app) -> None:
                 "oe_no_1": request.form.get("oe_no_1", ""),
                 "oe_no_2": request.form.get("oe_no_2", ""),
                 "models": request.form.get("models", ""),
-                "price_cny": _validated_price_value(request.form.get("price_cny", "")),
+                "price_cny": validated_price_value(request.form.get("price_cny", "")),
                 "product_status": request.form.get("product_status", ""),
                 "image_path": request.form.get("image_path", ""),
                 "active": request.form.get("active", "0"),
             }
-            with connect(DB_PATH) as conn:
-                upsert_product(conn, data, source="web", actor=actor_name(), commit=False, preserve_blank_price=False)
-                product = conn.execute("SELECT * FROM products WHERE bld_no = ?", (data["bld_no"].strip(),)).fetchone()
-                if product:
-                    for image_slot, image_file in image_files:
-                        save_product_image(conn, product, image_file, slot=image_slot, commit=False)
-                        log_event(
-                            conn,
-                            "上传产品图片",
-                            "product",
-                            product["bld_no"],
-                            f"图片 {image_slot}: {image_file.filename or ''}",
-                            actor=actor_name(),
-                        )
-                        product = conn.execute("SELECT * FROM products WHERE id = ?", (product["id"],)).fetchone()
-                    if drawing_file and drawing_file.filename:
-                        save_product_drawing(conn, product, drawing_file, commit=False)
-                        log_event(conn, "上传图纸", "product", product["bld_no"], drawing_file.filename or "", actor=actor_name())
-                conn.commit()
+            get_product_service().save(
+                data,
+                actor=actor_name(),
+                image_files=image_files,
+                drawing_file=drawing_file if drawing_file and drawing_file.filename else None,
+            )
         except Exception as exc:
             flash(f"保存失败：{exc}", "error")
             if request.form.get("embedded") == "1":
@@ -410,14 +346,14 @@ def register(app) -> None:
             flash("请选择 PDF 图纸文件。", "error")
             return redirect(url_for("products") + "#products-results")
         try:
-            with connect(DB_PATH) as conn:
-                product = get_product(conn, product_id)
-                if not product:
-                    flash("产品不存在。", "error")
-                    return redirect(url_for("products") + "#products-results")
-                save_product_drawing(conn, product, file)
-                log_event(conn, "上传图纸", "product", product["bld_no"], file.filename or "", actor=actor_name())
-                conn.commit()
+            product = get_product_service().save_drawing(
+                product_id,
+                file,
+                actor=actor_name(),
+            ).web_payload()
+        except ProductNotFoundError:
+            flash("产品不存在。", "error")
+            return redirect(url_for("products") + "#products-results")
         except Exception as exc:
             flash(f"图纸上传失败：{exc}", "error")
             return redirect(url_for("products") + "#products-results")
@@ -428,9 +364,9 @@ def register(app) -> None:
     @app.get("/products/<int:product_id>/drawing")
     @login_required
     def product_drawing(product_id: int):
-        with connect(DB_PATH) as conn:
-            product = get_product(conn, product_id)
-        if not product:
+        try:
+            product = get_product_service().get(product_id).web_payload()
+        except ProductNotFoundError:
             flash("产品不存在。", "error")
             return redirect(url_for("products"))
         path = product_drawing_path(product)
@@ -448,16 +384,19 @@ def register(app) -> None:
     @app.post("/products/<int:product_id>/deactivate")
     @permission_required("edit_products")
     def stop_product(product_id: int):
-        with connect(DB_PATH) as conn:
-            deactivate_product(conn, product_id, actor=actor_name())
+        try:
+            get_product_service().deactivate(product_id, actor=actor_name())
+        except ProductNotFoundError:
+            flash("产品不存在。", "error")
+            return redirect(url_for("products"))
         flash("产品已停用，历史资料仍保留。", "success")
         return redirect(url_for("products"))
 
     @app.post("/products/<int:product_id>/delete")
     @permission_required("edit_products")
     def remove_product(product_id: int):
-        with connect(DB_PATH) as conn:
-            product = delete_product(conn, product_id, actor=actor_name())
+        product_record = get_product_service().delete(product_id, actor=actor_name())
+        product = product_record.web_payload() if product_record else None
         if not product:
             flash("产品不存在或已经删除。", "error")
             if request.form.get("embedded") == "1":

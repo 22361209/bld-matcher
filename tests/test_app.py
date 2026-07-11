@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import gc
+import json
 import os
 import re
 import shutil
@@ -1825,6 +1826,130 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.get_json()["quotes"]), 1)
 
+    def test_product_inquiry_v1_and_artifact_consumer_contract(self):
+        from app.database import upsert_product
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "V1-INQUIRY-001",
+                    "series": "CONTRACT",
+                    "item": "Consumer Contract Arm",
+                    "oe_no_1": "V1-OE-001",
+                    "models": "Contract Model",
+                    "price_cny": "110",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        token = self.create_internal_api_token(
+            scopes=["products:read", "inquiries:run", "artifacts:read"],
+            name="WorkBuddy Inquiry V1",
+        )
+        authorization = {"Authorization": f"Bearer {token}"}
+
+        product_response = self.client.get(
+            "/api/v1/products/search",
+            query_string={"oe": "V1-OE-001", "limit": 10},
+            headers=authorization,
+        )
+        product_payload = product_response.get_json()
+        self.assertEqual(product_response.status_code, 200)
+        self.assertEqual(product_payload["data"]["total"], 1)
+        self.assertEqual(product_payload["data"]["products"][0]["bld_no"], "V1-INQUIRY-001")
+
+        missing_idempotency = self.client.post(
+            "/api/v1/inquiries/analyze",
+            json={"numbers": ["V1-OE-001"]},
+            headers=authorization,
+        )
+        self.assertEqual(missing_idempotency.status_code, 400)
+        self.assertEqual(missing_idempotency.get_json()["error"]["code"], "idempotency.required")
+
+        analyze_response = self.client.post(
+            "/api/v1/inquiries/analyze",
+            json={"numbers": ["V1-OE-001", "V1-MISSING"], "price_mode": "net"},
+            headers={**authorization, "Idempotency-Key": "inquiry-analyze-v1-001"},
+        )
+        analyze_payload = analyze_response.get_json()
+        self.assertEqual(analyze_response.status_code, 200)
+        self.assertEqual(analyze_payload["data"]["summary"]["matched_count"], 1)
+        self.assertEqual(analyze_payload["data"]["rows"][0]["bld_no"], "V1-INQUIRY-001")
+        self.assertEqual(analyze_payload["data"]["rows"][0]["export_price"], 100)
+        self.assertIsNone(analyze_payload["data"]["artifact"])
+
+        legacy_response = self.client.post(
+            "/api/internal/inquiry/analyze",
+            json={"numbers": ["V1-OE-001"]},
+            headers=authorization,
+        )
+        self.assertEqual(legacy_response.status_code, 200)
+        self.assertEqual(legacy_response.get_json()["rows"][0]["bld_no"], "V1-INQUIRY-001")
+
+        export_body = {
+            "numbers": ["V1-OE-001"],
+            "source_name": "consumer-contract",
+            "price_mode": "tax",
+        }
+        export_headers = {**authorization, "Idempotency-Key": "inquiry-export-v1-001"}
+        export_response = self.client.post(
+            "/api/v1/inquiries/export",
+            json=export_body,
+            headers=export_headers,
+        )
+        export_payload = export_response.get_json()
+        self.assertEqual(export_response.status_code, 201)
+        artifact = export_payload["data"]["artifact"]
+        self.assertTrue(artifact["id"].startswith("art_"))
+        self.assertRegex(artifact["filename"], r"^re\d{6}_consumer-contract\.xlsx$")
+        self.assertNotIn("output_path", json.dumps(export_payload, ensure_ascii=False))
+        self.assertNotIn(str(self.root), json.dumps(export_payload, ensure_ascii=False))
+
+        replay = self.client.post(
+            "/api/v1/inquiries/export",
+            json=export_body,
+            headers=export_headers,
+        )
+        self.assertEqual(replay.status_code, 201)
+        self.assertEqual(replay.headers["Idempotency-Replayed"], "true")
+        self.assertEqual(replay.get_json()["data"]["artifact"]["id"], artifact["id"])
+
+        download = self.client.get(artifact["download_url"], headers=authorization)
+        self.assertEqual(download.status_code, 200)
+        self.assertTrue(download.data.startswith(b"PK"))
+        self.assertIn("attachment", download.headers["Content-Disposition"])
+        self.assertEqual(download.headers["Cache-Control"], "private, no-store")
+        download.close()
+
+        other_token = self.create_internal_api_token(
+            scopes=["artifacts:read"],
+            name="Other Artifact Consumer",
+        )
+        denied = self.client.get(
+            artifact["download_url"],
+            headers={"Authorization": f"Bearer {other_token}"},
+        )
+        self.assertEqual(denied.status_code, 404)
+        self.assertEqual(denied.get_json()["error"]["code"], "artifact.not_found")
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            stored = conn.execute(
+                "SELECT owner_id, storage_path, sha256 FROM api_artifacts WHERE id = ?",
+                (artifact["id"],),
+            ).fetchone()
+            audit = conn.execute(
+                "SELECT actor FROM audit_logs WHERE action = ? ORDER BY id DESC LIMIT 1",
+                ("内部 API 生成号码结果",),
+            ).fetchone()
+        self.assertIsNotNone(stored)
+        self.assertTrue(
+            Path(stored["storage_path"]).resolve().is_relative_to((self.root / "outputs").resolve())
+        )
+        self.assertEqual(len(stored["sha256"]), 64)
+        self.assertEqual(audit["actor"], "WorkBuddy Inquiry V1")
+
     def test_quote_v1_contract_idempotency_and_optimistic_concurrency(self):
         token = self.create_internal_api_token(
             scopes=["api:read", "quotes:read", "quotes:write"],
@@ -2910,6 +3035,7 @@ class WebAppTest(unittest.TestCase):
                 "013_api_principal_scopes_and_idempotency",
                 "014_quote_record_version",
                 "015_idempotency_response_headers",
+                "016_api_artifacts",
             ],
         )
 

@@ -38,22 +38,18 @@
   "legacy_route_database_access": [
     "app/routes/admin.py",
     "app/routes/auth.py",
-    "app/routes/home.py",
-    "app/routes/inquiry.py",
-    "app/routes/internal_api.py",
     "app/routes/material_drawings.py",
     "app/routes/materials.py",
     "app/routes/product_sync.py",
-    "app/routes/products.py",
     "app/routes/purchase_contracts.py",
     "app/routes/shipment_notice.py",
     "app/routes/shipment_recognition.py"
   ],
   "legacy_route_imports": [],
   "legacy_api_routes": [
-    "app/routes/internal_api.py:internal_inquiry_analyze /api/internal/inquiry/analyze",
-    "app/routes/internal_api.py:internal_inquiry_file /api/internal/inquiry/file",
-    "app/routes/internal_api.py:internal_inquiry_numbers /api/internal/inquiry/numbers",
+    "app/modules/inquiry/api.py:internal_inquiry_analyze /api/internal/inquiry/analyze",
+    "app/modules/inquiry/api.py:internal_inquiry_file /api/internal/inquiry/file",
+    "app/modules/inquiry/api.py:internal_inquiry_numbers /api/internal/inquiry/numbers",
     "app/modules/quotes/api.py:api_create_quote /api/quotes",
     "app/modules/quotes/api.py:api_latest_quote /api/quotes/latest",
     "app/modules/quotes/api.py:api_list_quotes /api/quotes",
@@ -62,27 +58,21 @@
   "legacy_route_database_import_counts": {
     "app/routes/admin.py": 6,
     "app/routes/auth.py": 2,
-    "app/routes/home.py": 2,
-    "app/routes/inquiry.py": 5,
-    "app/routes/internal_api.py": 2,
     "app/routes/material_drawings.py": 2,
     "app/routes/materials.py": 11,
     "app/routes/product_sync.py": 3,
-    "app/routes/products.py": 11,
     "app/routes/purchase_contracts.py": 3,
     "app/routes/shipment_notice.py": 2,
     "app/routes/shipment_recognition.py": 2
   },
   "legacy_route_sql_call_counts": {
     "app/routes/product_sync.py": 18,
-    "app/routes/products.py": 3,
     "app/routes/purchase_contracts.py": 1,
     "app/routes/shipment_recognition.py": 5
   },
   "legacy_exception_exposure_counts": {
     "app/routes/admin.py": 1,
     "app/routes/inquiry.py": 4,
-    "app/routes/internal_api.py": 1,
     "app/routes/materials.py": 3,
     "app/routes/product_sync.py": 3,
     "app/routes/products.py": 5,

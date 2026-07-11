@@ -96,6 +96,8 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 
 - 新应用使用 `/api/v1`；`GET /api/v1` 返回平台能力，`GET /api/v1/openapi.json` 返回 OpenAPI 3.1 合同。
 - API v1 使用强类型 Principal、最小权限 Scope、Pydantic Schema、稳定错误码、请求 ID 和持久幂等记录；写操作由服务端 Key 身份审计。
+- `/api/v1/products/search` 提供稳定产品查询；`/api/v1/inquiries/analyze` 与 `/export` 和网页、旧内部接口共用 InquiryService。
+- v1 导出返回限时 artifact ID；下载绑定创建它的 API Principal，响应不包含服务器绝对路径。OpenAPI 提交快照由统一验收阻断漂移。
 - API Key 可设置 Scopes 和到期日期；历史 Key 保留兼容权限，新 Key 默认只有读取和询价权限，写权限需要管理员明确选择。
 - `/api/internal/*` 与 `/api/quotes` 是兼容接口，继续可用但不再扩展新能力。
 
@@ -217,7 +219,10 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 - `app/routes/inquiry.py`：询价上传、匹配、下载 Excel、图纸包
 - `app/routes/internal_api.py`：OpenClaw 询价兼容 API
 - `app/modules/quotes/`：报价 Domain、Service、Repository、Web、API v1 与旧 API 兼容适配器
-- `app/routes/products.py`：产品目录、图片、图纸、单价导入、目录导入导出
+- `app/modules/products/`：产品 Domain、Repository、Service、目录快照和产品搜索 API
+- `app/modules/inquiry/`：询价 Service、匹配/Excel 引擎、旧内部 API 与 v1 适配器
+- `app/platform/artifacts.py`：Principal 所有权、校验值和保留期 artifact 存储
+- `app/routes/products.py`：产品目录页面、图片、图纸、单价和目录导入导出适配器
 - `app/routes/product_sync.py`：本机/NAS 产品数据包导入导出和增量同步
 - `app/routes/materials.py`：生产料单和材料明细
 - `app/routes/shipment_notice.py`：发货通知模板管理、发货数据预览和 Excel 生成
@@ -238,6 +243,7 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 - `PROJECT_CONSTITUTION.md`：长期架构、安全、页面、API 和变更治理硬规则
 - `scripts/init_database.py`：容器启动 Gunicorn 前执行迁移和首启管理员初始化
 - `scripts/verify.py`：本机、AI 和 CI 共用的统一验收入口，包含项目合同、锁文件、Ruff、语法和回归测试
+- `contracts/openapi-v1.json`：API v1 提交快照，由 `scripts/openapi_snapshot.py --check` 精确比较
 - `policy/legacy_allowlist.json`：现有架构债务棘轮白名单，部分债务精确到出现次数，只能缩小
 
 ## 文档策略

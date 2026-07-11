@@ -1,0 +1,2234 @@
+{
+  "components": {
+    "schemas": {
+      "ApiErrorDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
+            "type": "object"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "retryable": {
+            "default": false,
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ApiErrorDetail",
+        "type": "object"
+      },
+      "ApiErrorEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "api_version": {
+            "default": "1",
+            "title": "Api Version",
+            "type": "string"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiErrorDetail"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "error"
+        ],
+        "title": "ApiErrorEnvelope",
+        "type": "object"
+      },
+      "ArtifactResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "content_type": {
+            "title": "Content Type",
+            "type": "string"
+          },
+          "download_url": {
+            "title": "Download Url",
+            "type": "string"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "filename",
+          "content_type",
+          "size_bytes",
+          "sha256",
+          "expires_at",
+          "download_url"
+        ],
+        "title": "ArtifactResponse",
+        "type": "object"
+      },
+      "InquiryAnalyzeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "exchange_rate": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Exchange Rate"
+          },
+          "numbers": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "title": "Numbers",
+            "type": "array"
+          },
+          "price_mode": {
+            "default": "tax",
+            "enum": [
+              "none",
+              "tax",
+              "net",
+              "usd"
+            ],
+            "title": "Price Mode",
+            "type": "string"
+          },
+          "rows_limit": {
+            "default": 200,
+            "maximum": 1000,
+            "minimum": 0,
+            "title": "Rows Limit",
+            "type": "integer"
+          },
+          "text": {
+            "default": "",
+            "maxLength": 5000,
+            "title": "Text",
+            "type": "string"
+          },
+          "unmatched_limit": {
+            "default": 100,
+            "maximum": 1000,
+            "minimum": 0,
+            "title": "Unmatched Limit",
+            "type": "integer"
+          }
+        },
+        "title": "InquiryAnalyzeRequest",
+        "type": "object"
+      },
+      "InquiryData": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ArtifactResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/InquiryRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/InquirySummary"
+          },
+          "unmatched_list": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unmatched List",
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode",
+          "summary",
+          "rows",
+          "unmatched_list",
+          "artifact"
+        ],
+        "title": "InquiryData",
+        "type": "object"
+      },
+      "InquiryEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "api_version": {
+            "default": "1",
+            "title": "Api Version",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/InquiryData"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "request_id",
+          "data"
+        ],
+        "title": "InquiryEnvelope",
+        "type": "object"
+      },
+      "InquiryExportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "exchange_rate": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Exchange Rate"
+          },
+          "numbers": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "title": "Numbers",
+            "type": "array"
+          },
+          "price_mode": {
+            "default": "tax",
+            "enum": [
+              "none",
+              "tax",
+              "net",
+              "usd"
+            ],
+            "title": "Price Mode",
+            "type": "string"
+          },
+          "rows_limit": {
+            "default": 200,
+            "maximum": 1000,
+            "minimum": 0,
+            "title": "Rows Limit",
+            "type": "integer"
+          },
+          "source_name": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Source Name",
+            "type": "string"
+          },
+          "text": {
+            "default": "",
+            "maxLength": 5000,
+            "title": "Text",
+            "type": "string"
+          },
+          "unmatched_limit": {
+            "default": 100,
+            "maximum": 1000,
+            "minimum": 0,
+            "title": "Unmatched Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source_name"
+        ],
+        "title": "InquiryExportRequest",
+        "type": "object"
+      },
+      "InquiryProduct": {
+        "additionalProperties": false,
+        "properties": {
+          "bld_no": {
+            "title": "Bld No",
+            "type": "string"
+          },
+          "image_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Image Paths",
+            "type": "array"
+          },
+          "item": {
+            "title": "Item",
+            "type": "string"
+          },
+          "models": {
+            "title": "Models",
+            "type": "string"
+          },
+          "oe_no_1": {
+            "title": "Oe No 1",
+            "type": "string"
+          },
+          "oe_no_2": {
+            "title": "Oe No 2",
+            "type": "string"
+          },
+          "price_cny": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Cny"
+          },
+          "product_status": {
+            "title": "Product Status",
+            "type": "string"
+          },
+          "series": {
+            "title": "Series",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bld_no",
+          "series",
+          "item",
+          "oe_no_1",
+          "oe_no_2",
+          "models",
+          "price_cny",
+          "product_status",
+          "image_paths"
+        ],
+        "title": "InquiryProduct",
+        "type": "object"
+      },
+      "InquiryRow": {
+        "additionalProperties": false,
+        "properties": {
+          "bld_no": {
+            "title": "Bld No",
+            "type": "string"
+          },
+          "export_price": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Export Price"
+          },
+          "export_price_label": {
+            "title": "Export Price Label",
+            "type": "string"
+          },
+          "match_note": {
+            "title": "Match Note",
+            "type": "string"
+          },
+          "match_reason": {
+            "title": "Match Reason",
+            "type": "string"
+          },
+          "matched": {
+            "title": "Matched",
+            "type": "boolean"
+          },
+          "matched_oe_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Matched Oe Codes",
+            "type": "array"
+          },
+          "original_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Name"
+          },
+          "original_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Number"
+          },
+          "price_cny": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Cny"
+          },
+          "product": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InquiryProduct"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "product_status": {
+            "title": "Product Status",
+            "type": "string"
+          },
+          "row": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Score"
+          },
+          "unmatched_oe_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unmatched Oe Codes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "row",
+          "original_number",
+          "original_name",
+          "matched",
+          "bld_no",
+          "match_reason",
+          "match_note",
+          "score",
+          "price_cny",
+          "product_status",
+          "export_price",
+          "export_price_label",
+          "matched_oe_codes",
+          "unmatched_oe_codes",
+          "product"
+        ],
+        "title": "InquiryRow",
+        "type": "object"
+      },
+      "InquirySummary": {
+        "additionalProperties": false,
+        "properties": {
+          "invalid_items": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Invalid Items",
+            "type": "array"
+          },
+          "matched_count": {
+            "title": "Matched Count",
+            "type": "integer"
+          },
+          "price_mode": {
+            "title": "Price Mode",
+            "type": "string"
+          },
+          "returned_rows": {
+            "title": "Returned Rows",
+            "type": "integer"
+          },
+          "rows_truncated": {
+            "title": "Rows Truncated",
+            "type": "boolean"
+          },
+          "total_rows": {
+            "title": "Total Rows",
+            "type": "integer"
+          },
+          "unmatched_count": {
+            "title": "Unmatched Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_rows",
+          "matched_count",
+          "unmatched_count",
+          "returned_rows",
+          "rows_truncated",
+          "invalid_items",
+          "price_mode"
+        ],
+        "title": "InquirySummary",
+        "type": "object"
+      },
+      "OpenApiDocument": {
+        "additionalProperties": true,
+        "title": "OpenApiDocument",
+        "type": "object"
+      },
+      "PlatformInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "api_version": {
+            "title": "Api Version",
+            "type": "string"
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "api_version",
+          "capabilities"
+        ],
+        "title": "PlatformInfo",
+        "type": "object"
+      },
+      "PlatformInfoEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "api_version": {
+            "default": "1",
+            "title": "Api Version",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/PlatformInfo"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "request_id",
+          "data"
+        ],
+        "title": "PlatformInfoEnvelope",
+        "type": "object"
+      },
+      "ProductResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "bld_no": {
+            "title": "Bld No",
+            "type": "string"
+          },
+          "brand_numbers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Brand Numbers",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "item": {
+            "title": "Item",
+            "type": "string"
+          },
+          "models": {
+            "title": "Models",
+            "type": "string"
+          },
+          "oe_numbers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Oe Numbers",
+            "type": "array"
+          },
+          "price_cny": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Cny"
+          },
+          "product_status": {
+            "title": "Product Status",
+            "type": "string"
+          },
+          "series": {
+            "title": "Series",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "bld_no",
+          "series",
+          "item",
+          "oe_numbers",
+          "brand_numbers",
+          "models",
+          "price_cny",
+          "product_status",
+          "active",
+          "updated_at"
+        ],
+        "title": "ProductResponse",
+        "type": "object"
+      },
+      "ProductSearchData": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "products": {
+            "items": {
+              "$ref": "#/components/schemas/ProductResponse"
+            },
+            "title": "Products",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "products",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "ProductSearchData",
+        "type": "object"
+      },
+      "ProductSearchEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "api_version": {
+            "default": "1",
+            "title": "Api Version",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ProductSearchData"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "request_id",
+          "data"
+        ],
+        "title": "ProductSearchEnvelope",
+        "type": "object"
+      },
+      "QuoteCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "bld_no": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bld No"
+          },
+          "currency": {
+            "default": "CNY",
+            "enum": [
+              "CNY",
+              "USD",
+              "EUR"
+            ],
+            "title": "Currency",
+            "type": "string"
+          },
+          "customer_name": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Customer Name",
+            "type": "string"
+          },
+          "customer_product_code": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Customer Product Code",
+            "type": "string"
+          },
+          "moq": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Moq"
+          },
+          "net_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Net Price"
+          },
+          "on_behalf_of": {
+            "default": "",
+            "maxLength": 200,
+            "title": "On Behalf Of",
+            "type": "string"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Price"
+          },
+          "product_model": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Product Model"
+          },
+          "quote_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Quote Date"
+          },
+          "quoted_by": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Quoted By",
+            "type": "string"
+          },
+          "remark": {
+            "default": "",
+            "maxLength": 5000,
+            "title": "Remark",
+            "type": "string"
+          },
+          "source_text": {
+            "default": "",
+            "maxLength": 20000,
+            "title": "Source Text",
+            "type": "string"
+          },
+          "source_type": {
+            "default": "manual",
+            "enum": [
+              "manual",
+              "wechat",
+              "excel",
+              "pdf",
+              "image"
+            ],
+            "title": "Source Type",
+            "type": "string"
+          },
+          "tax_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tax Price"
+          }
+        },
+        "required": [
+          "customer_name"
+        ],
+        "title": "QuoteCreateRequest",
+        "type": "object"
+      },
+      "QuoteData": {
+        "additionalProperties": false,
+        "properties": {
+          "quote": {
+            "$ref": "#/components/schemas/QuoteResponse"
+          }
+        },
+        "required": [
+          "quote"
+        ],
+        "title": "QuoteData",
+        "type": "object"
+      },
+      "QuoteEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "api_version": {
+            "default": "1",
+            "title": "Api Version",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/QuoteData"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "request_id",
+          "data"
+        ],
+        "title": "QuoteEnvelope",
+        "type": "object"
+      },
+      "QuoteLatestData": {
+        "additionalProperties": false,
+        "properties": {
+          "quote": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QuoteResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "quote"
+        ],
+        "title": "QuoteLatestData",
+        "type": "object"
+      },
+      "QuoteLatestEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "api_version": {
+            "default": "1",
+            "title": "Api Version",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/QuoteLatestData"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "request_id",
+          "data"
+        ],
+        "title": "QuoteLatestEnvelope",
+        "type": "object"
+      },
+      "QuoteListData": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "quotes": {
+            "items": {
+              "$ref": "#/components/schemas/QuoteResponse"
+            },
+            "title": "Quotes",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "quotes",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "QuoteListData",
+        "type": "object"
+      },
+      "QuoteListEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "api_version": {
+            "default": "1",
+            "title": "Api Version",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/QuoteListData"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "request_id",
+          "data"
+        ],
+        "title": "QuoteListEnvelope",
+        "type": "object"
+      },
+      "QuotePatchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "bld_no": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bld No"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "enum": [
+                  "CNY",
+                  "USD",
+                  "EUR"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Currency"
+          },
+          "customer_name": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Customer Name"
+          },
+          "customer_product_code": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Customer Product Code"
+          },
+          "moq": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Moq"
+          },
+          "net_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Net Price"
+          },
+          "on_behalf_of": {
+            "default": "",
+            "maxLength": 200,
+            "title": "On Behalf Of",
+            "type": "string"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Price"
+          },
+          "quote_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Quote Date"
+          },
+          "quoted_by": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Quoted By"
+          },
+          "remark": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Remark"
+          },
+          "source_text": {
+            "anyOf": [
+              {
+                "maxLength": 20000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source Text"
+          },
+          "source_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "manual",
+                  "wechat",
+                  "excel",
+                  "pdf",
+                  "image"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source Type"
+          },
+          "tax_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tax Price"
+          }
+        },
+        "title": "QuotePatchRequest",
+        "type": "object"
+      },
+      "QuoteResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "bld_no": {
+            "title": "Bld No",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "enum": [
+              "CNY",
+              "USD",
+              "EUR"
+            ],
+            "title": "Currency",
+            "type": "string"
+          },
+          "customer_name": {
+            "title": "Customer Name",
+            "type": "string"
+          },
+          "customer_product_code": {
+            "title": "Customer Product Code",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "moq": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moq"
+          },
+          "net_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Net Price"
+          },
+          "price": {
+            "title": "Price",
+            "type": "number"
+          },
+          "product_model": {
+            "title": "Product Model",
+            "type": "string"
+          },
+          "quote_date": {
+            "format": "date",
+            "title": "Quote Date",
+            "type": "string"
+          },
+          "quoted_by": {
+            "title": "Quoted By",
+            "type": "string"
+          },
+          "remark": {
+            "title": "Remark",
+            "type": "string"
+          },
+          "source_text": {
+            "title": "Source Text",
+            "type": "string"
+          },
+          "source_type": {
+            "enum": [
+              "manual",
+              "wechat",
+              "excel",
+              "pdf",
+              "image"
+            ],
+            "title": "Source Type",
+            "type": "string"
+          },
+          "tax_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tax Price"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "customer_name",
+          "bld_no",
+          "customer_product_code",
+          "product_model",
+          "price",
+          "tax_price",
+          "net_price",
+          "currency",
+          "moq",
+          "quote_date",
+          "quoted_by",
+          "source_type",
+          "source_text",
+          "remark",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "QuoteResponse",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "bearerFormat": "BLD API Key",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "Stable API contract for internal tools and AI applications.",
+    "title": "BLD Matcher API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1": {
+      "get": {
+        "operationId": "getApiIndex",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformInfoEnvelope"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Read API capabilities",
+        "x-required-scopes": [
+          "api:read"
+        ]
+      }
+    },
+    "/api/v1/artifacts/{artifact_id}": {
+      "get": {
+        "operationId": "downloadArtifact",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Digest": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Download an artifact owned by the API principal",
+        "x-required-scopes": [
+          "artifacts:read"
+        ]
+      }
+    },
+    "/api/v1/inquiries/analyze": {
+      "post": {
+        "operationId": "analyzeInquiry",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 8,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InquiryAnalyzeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InquiryEnvelope"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Analyze product numbers without creating an output file",
+        "x-required-scopes": [
+          "inquiries:run"
+        ]
+      }
+    },
+    "/api/v1/inquiries/export": {
+      "post": {
+        "operationId": "exportInquiry",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 8,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InquiryExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InquiryEnvelope"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Analyze product numbers and create a principal-owned artifact",
+        "x-required-scopes": [
+          "inquiries:run"
+        ]
+      }
+    },
+    "/api/v1/openapi.json": {
+      "get": {
+        "operationId": "getOpenApiDocument",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenApiDocument"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Read the OpenAPI document",
+        "x-required-scopes": [
+          "api:read"
+        ]
+      }
+    },
+    "/api/v1/products/search": {
+      "get": {
+        "operationId": "searchProducts",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bld",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Bld",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "oe",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Oe",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "series",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Series",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "model",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Model",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": "active",
+              "enum": [
+                "active",
+                "inactive",
+                "all"
+              ],
+              "title": "Status",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductSearchEnvelope"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Search the product catalog",
+        "x-required-scopes": [
+          "products:read"
+        ]
+      }
+    },
+    "/api/v1/quotes": {
+      "get": {
+        "operationId": "listQuotes",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "customer_name",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 300,
+              "title": "Customer Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bld_no",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 100,
+              "title": "Bld No",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Date From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Date To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "currency",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "CNY",
+                    "USD",
+                    "EUR"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Currency"
+            }
+          },
+          {
+            "in": "query",
+            "name": "quoted_by",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 200,
+              "title": "Quoted By",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteListEnvelope"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List quote records",
+        "x-required-scopes": [
+          "quotes:read"
+        ]
+      },
+      "post": {
+        "operationId": "createQuote",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 8,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuoteCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteEnvelope"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Create a quote record",
+        "x-required-scopes": [
+          "quotes:write"
+        ]
+      }
+    },
+    "/api/v1/quotes/latest": {
+      "get": {
+        "operationId": "getLatestQuote",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "customer_name",
+            "required": true,
+            "schema": {
+              "maxLength": 300,
+              "minLength": 1,
+              "title": "Customer Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bld_no",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Bld No",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteLatestEnvelope"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Read the latest quote for a customer and BLD number",
+        "x-required-scopes": [
+          "quotes:read"
+        ]
+      }
+    },
+    "/api/v1/quotes/{quote_id}": {
+      "get": {
+        "operationId": "getQuote",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "quote_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteEnvelope"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Read a quote record",
+        "x-required-scopes": [
+          "quotes:read"
+        ]
+      },
+      "patch": {
+        "operationId": "updateQuote",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "quote_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 8,
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuotePatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteEnvelope"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Update a quote record with optimistic concurrency",
+        "x-required-scopes": [
+          "quotes:write"
+        ]
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ]
+}

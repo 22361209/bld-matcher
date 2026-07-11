@@ -198,6 +198,22 @@ CREATE TABLE IF NOT EXISTS api_idempotency_keys (
   expires_at TEXT NOT NULL,
   UNIQUE(principal_id, method, endpoint, idempotency_key)
 );
+
+CREATE TABLE IF NOT EXISTS api_artifacts (
+  id TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL,
+  filename TEXT NOT NULL,
+  storage_path TEXT NOT NULL,
+  content_type TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL,
+  sha256 TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  last_downloaded_at TEXT DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_artifacts_owner ON api_artifacts(owner_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_api_artifacts_expires ON api_artifacts(expires_at);
 CREATE INDEX IF NOT EXISTS idx_api_idempotency_expires ON api_idempotency_keys(expires_at);
 
 CREATE TABLE IF NOT EXISTS shipment_recognition_jobs (
@@ -469,7 +485,14 @@ def upsert_product(
         conn.commit()
 
 
-def import_catalog(conn: sqlite3.Connection, catalog_path: Path, replace: bool = False, actor: str = "") -> int:
+def import_catalog(
+    conn: sqlite3.Connection,
+    catalog_path: Path,
+    replace: bool = False,
+    actor: str = "",
+    *,
+    commit: bool = True,
+) -> int:
     catalog = ProductCatalog.from_excel(catalog_path)
     if replace:
         conn.execute("DELETE FROM products")
@@ -491,9 +514,10 @@ def import_catalog(conn: sqlite3.Connection, catalog_path: Path, replace: bool =
             "product_status": "",
             "image_path": "",
         }
-        upsert_product(conn, merged, source=catalog_path.name, audit=False)
+        upsert_product(conn, merged, source=catalog_path.name, audit=False, commit=False)
     log_event(conn, "导入目录", "catalog", catalog_path.name, f"汇总导入 {len(grouped)} 个唯一 BLD 号", actor=actor)
-    conn.commit()
+    if commit:
+        conn.commit()
     return len(grouped)
 
 

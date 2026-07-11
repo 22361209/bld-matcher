@@ -14,7 +14,9 @@ class OpenApiOperation:
     operation_id: str
     summary: str
     scopes: tuple[str, ...]
-    response_model: type[BaseModel] = ApiSuccessEnvelope
+    response_model: type[BaseModel] | None = ApiSuccessEnvelope
+    response_media_type: str = "application/json"
+    response_schema: dict | None = None
     request_model: type[BaseModel] | None = None
     query_model: type[BaseModel] | None = None
     path_parameters: tuple[tuple[str, str], ...] = ()
@@ -58,7 +60,11 @@ def build_openapi_document() -> dict:
     error_ref = _schema_for(ApiErrorEnvelope, components)
     paths: dict[str, dict] = {}
     for operation in sorted(_OPERATIONS.values(), key=lambda item: (item.path, item.method)):
-        response_ref = _schema_for(operation.response_model, components)
+        response_ref = (
+            _schema_for(operation.response_model, components)
+            if operation.response_model is not None
+            else dict(operation.response_schema or {"type": "string", "format": "binary"})
+        )
         entry = {
             "operationId": operation.operation_id,
             "summary": operation.summary,
@@ -67,7 +73,7 @@ def build_openapi_document() -> dict:
             "responses": {
                 str(operation.success_status): {
                     "description": "Success",
-                    "content": {"application/json": {"schema": response_ref}},
+                    "content": {operation.response_media_type: {"schema": response_ref}},
                 },
                 "default": {
                     "description": "Error",

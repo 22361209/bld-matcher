@@ -8,7 +8,9 @@ SQLite 是内部实现，不是集成接口。OpenClaw、Hermes、WorkBuddy、MC
 
 当前兼容 Key 已执行安全基线：完整 Key 只在创建响应显示一次，响应禁止缓存；数据库只使用哈希校验并保留遮罩后缀，历史明文字段由迁移清空并删除。Key 已包含 Scopes 和可选到期时间，认证后生成不可伪造的 `ApiPrincipal`，审计身份取服务端 Key 名称，不接受客户端自报 actor。
 
-`GET /api/v1` 返回当前能力，`GET /api/v1/openapi.json` 提供 OpenAPI 3.1 唯一机器合同。阶段 2 已落地 Principal、Scope、请求 ID、稳定错误、Pydantic Schema、OpenAPI 注册和 SQLite 幂等存储；报价资源已经开放，调用说明见 `docs/api/quote-v1.md`，其他领域按后续阶段逐项开放。
+`GET /api/v1` 返回当前能力，`GET /api/v1/openapi.json` 提供 OpenAPI 3.1 唯一机器合同。阶段 2 已落地 Principal、Scope、请求 ID、稳定错误、Pydantic Schema、OpenAPI 注册和 SQLite 幂等存储；报价、产品、询价与 artifact 资源已经开放。调用说明见 `docs/api/quote-v1.md` 和 `docs/api/product-inquiry-v1.md`。
+
+`contracts/openapi-v1.json` 是提交快照，统一验收会从隔离数据库重新生成并精确比较。OpenAPI 变更必须先做兼容判断，再显式更新快照。旧 OpenClaw 与 v1 的核心匹配字段由同一行为测试覆盖。
 
 ## Resource Model
 
@@ -25,6 +27,8 @@ GET  /api/v1/artifacts/{id}
 ```
 
 长任务返回 `202 Accepted`、`job_id` 和状态 URL。文件返回 artifact ID、文件名、大小、校验值、过期时间和授权下载 URL，不返回绝对路径。
+
+当前 artifact 默认保留 24 小时并绑定创建它的 `ApiPrincipal.subject`。下载不存在、过期或其他 Principal 的 artifact 统一返回 404；服务端路径只保存在内部元数据表。阶段 6 将补齐统一清理执行器。
 
 ## Schemas And Errors
 
@@ -77,4 +81,4 @@ API Key 创建时只显示一次，数据库保存哈希、名称、后缀、Sco
 
 ## Consumers
 
-REST/OpenAPI 是规范接口。CLI 和 MCP 是薄适配器，必须调用同一 API 或 Application Service，不能复制匹配逻辑和数据库访问。消费者合同测试覆盖 OpenClaw、Hermes、WorkBuddy 使用的字段和错误码。
+REST/OpenAPI 是规范接口。CLI 和 MCP 是薄适配器，必须调用同一 API 或 Application Service，不能复制匹配逻辑和数据库访问。产品页面、首页快速查询、Excel 询价、OpenClaw 兼容接口和 v1 已共用 Product/Inquiry Service；消费者合同测试覆盖 OpenClaw、Hermes、WorkBuddy 使用的字段、artifact 所有权和错误码。

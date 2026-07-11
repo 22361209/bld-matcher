@@ -1,0 +1,15 @@
+{
+  "date": "2026-07-11",
+  "title": "产品与询价统一业务内核",
+  "entries": [
+    "产品目录建立 ProductService 和 SQLite ProductRepository，首页、产品页与机器接口共用查询边界。",
+    "询价匹配建立 InquiryService，网页、OpenClaw 兼容接口与 API v1 共用目录快照和匹配引擎。",
+    "新增产品搜索、询价分析、询价导出和受 Principal 约束的 artifact 下载 API。",
+    "OpenAPI 与消费者合同固定新接口字段，同时保留现有内部询价 URL 和响应兼容。"
+  ],
+  "impact": {
+    "users": "现有网页、OpenClaw 与 Hermes 调用方式保持不变。",
+    "api": "新增 /api/v1/products/search、/api/v1/inquiries/* 与 /api/v1/artifacts/{id}。",
+    "data": "新增 api_artifacts 元数据表，不迁移或覆盖业务数据。"
+  }
+}
