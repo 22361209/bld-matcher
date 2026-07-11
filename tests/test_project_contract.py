@@ -73,6 +73,43 @@ def dynamic_route():
         self.assertTrue(contract._is_route_decorator(decorator))
         self.assertIsNone(contract._route_declaration(decorator))
 
+    def test_route_adapter_limits_reject_concentration_and_dynamic_registration(self):
+        oversized = "\n".join(
+            ["# padding"] * contract.ROUTE_ADAPTER_MAX_LINES
+            + ["@app.get('/oversized')", "def oversized_route():", "    pass"]
+        )
+        size_errors = []
+        contract._check_route_adapter_limits(
+            "app/modules/example/oversized_web.py",
+            oversized,
+            ast.parse(oversized),
+            size_errors,
+        )
+        self.assertTrue(any("超过 320 行" in error for error in size_errors))
+
+        crowded = "\n\n".join(
+            f"@app.get('/route-{index}')\ndef route_{index}():\n    pass"
+            for index in range(contract.ROUTE_ADAPTER_MAX_ENDPOINTS + 1)
+        )
+        endpoint_errors = []
+        contract._check_route_adapter_limits(
+            "app/modules/example/crowded_web.py",
+            crowded,
+            ast.parse(crowded),
+            endpoint_errors,
+        )
+        self.assertTrue(any("超过 15 个 endpoint" in error for error in endpoint_errors))
+
+        dynamic = "app.add_url_rule('/hidden', view_func=handler)"
+        dynamic_errors = []
+        contract._check_route_adapter_limits(
+            "app/modules/example/dynamic_web.py",
+            dynamic,
+            ast.parse(dynamic),
+            dynamic_errors,
+        )
+        self.assertTrue(any("禁止 add_url_rule" in error for error in dynamic_errors))
+
     def test_count_policy_rejects_growth_and_stale_baselines(self):
         errors = []
         contract._check_count_policy("debt", {"legacy.py": 2}, {"legacy.py": 3}, errors)

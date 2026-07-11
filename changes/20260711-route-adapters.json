@@ -1,0 +1,15 @@
+{
+  "date": "2026-07-11",
+  "version": "unreleased",
+  "title": "按职责拆分产品与询价路由适配器",
+  "entries": [
+    "产品 Web 路由拆为目录导出、价格导入、记录编辑、媒体图纸四个适配器；询价 Web 路由拆为匹配预览、结果下载、人工映射和请求解析模块，原 URL、方法、endpoint 与权限不变。",
+    "统一验收新增路由适配器 320 行、15 endpoint 上限，并禁止 add_url_rule 绕过静态合同检查。",
+    "产品与询价新适配器进入 Pyright 门禁，原聚集路由文件行数基线收紧到当前值。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "unchanged",
+    "operations": "none"
+  }
+}

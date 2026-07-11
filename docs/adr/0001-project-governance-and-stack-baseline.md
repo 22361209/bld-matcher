@@ -19,6 +19,7 @@
 5. AI 工具只能调用认证 API 或同一 Application Service；请求不能覆盖供应商地址、密钥或模型白名单，AI 不得直接访问 SQLite。
 6. Docker 启动在 Gunicorn worker 前执行数据库初始化；迁移本身同时保持跨进程安全。
 7. `scripts/verify.py` 是本机和 CI 的唯一必选验收入口。现有结构债务进入只减不增的白名单，Ruff 先阻断语法和未使用代码；导入排序和全量类型检查按基线逐步收紧。
+8. 路由适配器必须按页面或用例职责组织，单文件上限为 320 行和 15 个 endpoint；禁止用动态路由注册绕过静态权限、API 与结构检查。
 
 ## Alternatives
 
@@ -36,7 +37,7 @@
 
 ## Verification
 
-- `scripts/check_project_contract.py` 检查页面继承、内联资源、路由依赖、写路由鉴权、API 版本、Scope、运行数据和白名单增量。
+- `scripts/check_project_contract.py` 检查页面继承、内联资源、路由依赖与容量、写路由鉴权、API 版本、Scope、运行数据和白名单增量。
 - `scripts/verify.py` 检查项目合同、锁文件、Ruff、语法和完整回归测试。
 - GitHub Actions 在 pull request 和 main push 上运行同一入口。
 - 第一张协议页面 `system_updates.html` 已继承基础模板，证明棘轮可以开始缩小。

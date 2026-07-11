@@ -31,6 +31,8 @@ web.py                   # Blueprint 和页面适配
 api.py                   # /api/v1 适配
 ```
 
+同一领域存在多组独立页面流程时，使用 `<concern>_web.py` 按职责拆分，不把所有 endpoint 重新集中到单个 `web.py`。
+
 ## Dependency Rules
 
 - Web、API、CLI、Worker 是输入适配器，只调用 Service。
@@ -41,7 +43,7 @@ api.py                   # /api/v1 适配
 
 ## Current Debt And Ratchet
 
-产品、询价、报价、合同、材料、发货、后台管理、登录、产品同步和货物识别都已迁入领域 Service/Repository 边界。`app/database.py` 只保留 Schema、`connect()` 和迁移调用；项目检查器禁止业务函数回流。路由数据库导入/SQL、跨路由导入、daemon 线程和异常文本外泄的遗留计数均为零。
+产品、询价、报价、合同、材料、发货、后台管理、登录、产品同步和货物识别都已迁入领域 Service/Repository 边界。产品与询价页面入口已按目录、价格、记录、媒体、匹配、下载和映射职责拆分。`app/database.py` 只保留 Schema、`connect()` 和迁移调用；项目检查器禁止业务函数回流。路由数据库导入/SQL、跨路由导入、daemon 线程和异常文本外泄的遗留计数均为零。
 
 全部完整页面继承 `templates/base.html` 并声明唯一 page ID 和 page type；独立页面、内联脚本/事件和内联样式白名单均为空。`/api/internal/*` 与 `/api/quotes` 仍是明确登记的兼容 API，它们只能复用现有 Service，不能扩展新资源；消费者迁移完成后再通过 ADR 删除。
 
@@ -71,6 +73,7 @@ api.py                   # /api/v1 适配
 - Pydantic 2 是 `/api/v1` Schema 与 OpenAPI 的唯一模型工具；Flask 仍是唯一 Web 框架。
 - `/api/v1` 写路由必须声明 Scope、Pydantic Schema、幂等保护和 OpenAPI 操作，平台层从服务端 Principal 生成审计身份。
 - 项目合同检查模块层依赖方向；报价模块是后续领域必须优先复用的实现模板。
+- 单个路由适配器最多 320 行、15 个 endpoint；新增动态 `add_url_rule` 被阻断，超过容量必须继续按职责拆分。
 - 产品目录缓存同时观察 DB/WAL/SHM 签名，兼容尚未迁移的外部数据更新；应用内产品和询价适配器已无数据库导入。
 - 页面合同检查阻断独立 HTML、无效 page type、内联代码和重复 page ID；产品、材料和物料图纸脚本按 `data-page` 独立初始化。
 - `scripts/openapi_snapshot.py --check` 阻断未审查的 API 路径、Schema、Scope、参数和响应漂移。

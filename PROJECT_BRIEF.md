@@ -194,7 +194,9 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 页面与业务边界：
 
 - 所有完整页面继承 `templates/base.html`，以唯一 `page_id` 和六类 `page_type` 进入统一页面协议；模板禁止内联脚本、事件处理器和样式。
+- 页面专用 CSS/JavaScript 位于 `static/pages/` 并由所属模板加载；全局资产只保留跨页面协议。
 - 全部现有业务、登录、产品同步和货物识别由领域 Service/Repository 负责事务、审计和文件补偿；Web、API 与 Worker 适配器不直接访问 SQLite。
+- 产品与询价 Web 路由已按职责拆分；单个路由适配器最多 320 行、15 个 endpoint，统一验收禁止动态路由注册绕过检查。
 - 材料 Excel 更新采用原子替换；数据库导入失败会恢复旧文件。合同、发货通知、模板和物料图纸若审计失败，会删除本次未完成输出。
 - `app/database.py` 只保留 Schema、连接与迁移；路由数据库直连、daemon 后台线程和异常文本外泄债务已清零。
 - `/health/ready` 通过只读连接检查数据库、迁移、最小业务条件与 Worker 心跳，不负责初始化；运行数据清理由默认 dry-run 的 `scripts/cleanup_runtime.py` 统一规划，详见 `docs/operations/runtime.md`。
@@ -233,13 +235,13 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 - `app.py`：应用入口、全局 before_request、模板全局函数
 - `app/platform/`：API Principal、Key、Scope、错误、请求 ID、审计、Schema、OpenAPI、持久任务、AI Provider、健康检查和保留期基础设施
 - `app/api/v1/`：稳定机器接口的版本入口与 OpenAPI 组装
-- `app/routes/inquiry.py`：询价上传、匹配、下载 Excel、图纸包
+- `app/routes/inquiry.py`：询价 Web 适配器注册入口
 - `app/modules/inquiry/api.py`：OpenClaw 询价兼容 API 与 v1 询价适配器
 - `app/modules/quotes/`：报价 Domain、Service、Repository、Web、API v1 与旧 API 兼容适配器
-- `app/modules/products/`：产品 Domain、Repository、Service、目录快照、产品搜索 API 和安全数据包同步
-- `app/modules/inquiry/`：询价 Service、匹配/Excel 引擎、旧内部 API 与 v1 适配器
+- `app/modules/products/`：产品 Domain、Repository、Service、目录/价格/记录/媒体 Web 适配器、产品搜索 API 和安全数据包同步
+- `app/modules/inquiry/`：询价 Service、匹配/Excel 引擎、匹配/下载/映射 Web 适配器、旧内部 API 与 v1 适配器
 - `app/platform/artifacts.py`：Principal 所有权、校验值和保留期 artifact 存储
-- `app/routes/products.py`：产品目录页面、图片、图纸、单价和目录导入导出适配器
+- `app/routes/products.py`：产品 Web 适配器注册入口
 - `app/modules/materials/`：生产料单、材料明细、物料图纸、原子文件更新和事务补偿
 - `app/modules/contracts/`：采购/销售合同产品补全、PDF 生成、历史和审计
 - `app/modules/shipping/`：发货通知、持久货物识别任务、Excel 生成和审计补偿

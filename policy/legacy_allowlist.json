@@ -21,8 +21,8 @@
     "app/excel_io.py": 872,
     "app/modules/materials/persistence.py": 429,
     "app/purchase_contract.py": 871,
-    "app/routes/inquiry.py": 405,
-    "app/routes/products.py": 426,
+    "app/routes/inquiry.py": 11,
+    "app/routes/products.py": 13,
     "static/app.js": 206,
     "static/styles.css": 3906
   },

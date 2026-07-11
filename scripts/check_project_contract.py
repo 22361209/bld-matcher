@@ -75,6 +75,8 @@ ADR_REQUIRED_PATHS = {
     "docs/ui/page-protocol.md",
     "pyproject.toml",
 }
+ROUTE_ADAPTER_MAX_LINES = 320
+ROUTE_ADAPTER_MAX_ENDPOINTS = 15
 
 
 def _run_git(*args: str) -> list[str]:
@@ -163,6 +165,42 @@ def _is_route_decorator(decorator: ast.expr) -> bool:
         and isinstance(decorator.func, ast.Attribute)
         and decorator.func.attr.lower() in {*ROUTE_METHODS, "route"}
     )
+
+
+def _route_endpoint_count(tree: ast.AST) -> int:
+    return sum(
+        1
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and any(_is_route_decorator(decorator) for decorator in node.decorator_list)
+    )
+
+
+def _check_route_adapter_limits(relative: str, source: str, tree: ast.AST, errors: list[str]) -> None:
+    dynamic_routes = sum(
+        1
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "add_url_rule"
+    )
+    if dynamic_routes:
+        errors.append(f"路由必须使用可静态检查的装饰器，禁止 add_url_rule: {relative}")
+
+    endpoint_count = _route_endpoint_count(tree)
+    if not endpoint_count:
+        return
+    line_count = len(source.splitlines())
+    if line_count > ROUTE_ADAPTER_MAX_LINES:
+        errors.append(
+            f"路由适配器超过 {ROUTE_ADAPTER_MAX_LINES} 行，必须按职责拆分: "
+            f"{relative} ({line_count})"
+        )
+    if endpoint_count > ROUTE_ADAPTER_MAX_ENDPOINTS:
+        errors.append(
+            f"路由适配器超过 {ROUTE_ADAPTER_MAX_ENDPOINTS} 个 endpoint，必须按职责拆分: "
+            f"{relative} ({endpoint_count})"
+        )
 
 
 def _is_api_path(path: str) -> bool:
@@ -663,8 +701,10 @@ def check(base_ref: str | None = None) -> list[str]:
     actual_daemon_counts: dict[str, int] = {}
     for path in sorted((ROOT / "app").rglob("*.py")):
         relative = path.relative_to(ROOT).as_posix()
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(path))
         _check_module_layer(relative, tree, errors)
+        _check_route_adapter_limits(relative, source, tree, errors)
         documented_v1_operations.update(_openapi_declarations(tree))
         documented_v1_request_models.update(_openapi_request_model_operations(tree))
         daemon_count = _daemon_thread_count(tree)
