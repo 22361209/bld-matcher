@@ -17,6 +17,7 @@ TYPECHECK_PATHS = (
     "app/modules/inquiry/excel",
     "app/modules/inquiry/match_web.py",
     "app/modules/inquiry/web_helpers.py",
+    "app/modules/materials",
     "app/modules/products/catalog_web.py",
     "app/modules/products/media_web.py",
     "app/modules/products/pricing_web.py",

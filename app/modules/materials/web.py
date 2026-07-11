@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from math import ceil
 from pathlib import Path
+from typing import Any, cast
 
 from flask import abort, flash, redirect, render_template, request, send_file, url_for
 
@@ -40,7 +41,7 @@ def _material_page_url(query: str, status: str, page: int) -> str:
         params["status"] = status
     if page > 1:
         params["page"] = page
-    return f"{url_for('material_items', **params)}#materials-results"
+    return f"{url_for('material_items', **cast(Any, params))}#materials-results"
 
 
 def _material_pagination(query: str, status: str, page: int, total: int) -> dict[str, object]:
@@ -99,7 +100,7 @@ def register(app) -> None:
         status = request.args.get("status", "active")
         first_page = service.list_items(query=query, status=status, limit=MATERIAL_PAGE_SIZE, offset=0)
         pagination = _material_pagination(query, status, _request_page(), first_page.total)
-        page_number = int(pagination["page"])
+        page_number = int(cast(Any, pagination["page"]))
         page = (
             first_page
             if page_number == 1

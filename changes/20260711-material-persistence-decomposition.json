@@ -1,0 +1,16 @@
+{
+  "date": "2026-07-11",
+  "version": "unreleased",
+  "title": "按职责拆分材料持久化",
+  "entries": [
+    "将材料规格解析、明细 SQL 与 Excel 导入/启动引导拆入独立模块，旧 materials.persistence 导入继续兼容。",
+    "新增兼容入口、16 列 Schema、CRUD、规格搜索、停用、统计和 Excel 导入合同测试，并将材料领域纳入 Pyright。",
+    "隔离数据库前后行为快照、建表 SQL 与列定义完全一致，数据库 Schema 和迁移源文件未改动。",
+    "删除材料 persistence 遗留行数白名单，继续执行 80 行兼容门面和 360 行职责模块硬上限。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "unchanged",
+    "operations": "restart-required"
+  }
+}

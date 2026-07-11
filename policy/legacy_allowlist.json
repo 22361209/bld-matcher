@@ -18,7 +18,6 @@
   "legacy_exception_exposure_counts": {},
   "legacy_daemon_thread_counts": {},
   "legacy_file_line_counts": {
-    "app/modules/materials/persistence.py": 429,
     "app/routes/inquiry.py": 11,
     "app/routes/products.py": 13,
     "static/app.js": 206,
