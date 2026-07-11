@@ -49,7 +49,6 @@ def _add_internal_api_keys(conn: sqlite3.Connection) -> None:
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL DEFAULT 'OpenClaw',
           token_hash TEXT NOT NULL UNIQUE,
-          token_plain TEXT DEFAULT '',
           token_prefix TEXT DEFAULT '',
           token_suffix TEXT DEFAULT '',
           active INTEGER NOT NULL DEFAULT 1,
@@ -64,8 +63,14 @@ def _add_internal_api_keys(conn: sqlite3.Connection) -> None:
 
 
 def _add_internal_api_key_plaintext(conn: sqlite3.Connection) -> None:
-    if "token_plain" not in _columns(conn, "internal_api_keys"):
-        conn.execute("ALTER TABLE internal_api_keys ADD COLUMN token_plain TEXT DEFAULT ''")
+    # 保留历史 migration id，旧版已执行的数据库由 012 清理该列。
+    return None
+
+
+def _scrub_internal_api_key_plaintext(conn: sqlite3.Connection) -> None:
+    if "token_plain" in _columns(conn, "internal_api_keys"):
+        conn.execute("UPDATE internal_api_keys SET token_plain = '' WHERE COALESCE(token_plain, '') != ''")
+        conn.execute("ALTER TABLE internal_api_keys DROP COLUMN token_plain")
 
 
 def _add_shipment_recognition_jobs(conn: sqlite3.Connection) -> None:
@@ -170,22 +175,32 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("009_quote_records", _add_quote_records),
     ("010_quote_record_bld_prices", _add_quote_record_bld_prices),
     ("011_customer_price_bld_index", _add_customer_price_bld_index),
+    ("012_scrub_internal_api_key_plaintext", _scrub_internal_api_key_plaintext),
 )
 
 
 def run_migrations(conn: sqlite3.Connection) -> None:
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS schema_migrations (
-          id TEXT PRIMARY KEY,
-          applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    if conn.in_transaction:
+        raise RuntimeError("数据库迁移必须在独立事务中运行。")
+    try:
+        # SQLite 的写事务同时承担跨进程迁移锁。拿到锁后重新读取记录，
+        # 避免多个 Gunicorn worker 同时执行同一条迁移。
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+              id TEXT PRIMARY KEY,
+              applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
         )
-        """
-    )
-    applied = {row["id"] for row in conn.execute("SELECT id FROM schema_migrations").fetchall()}
-    for migration_id, migration in MIGRATIONS:
-        if migration_id in applied:
-            continue
-        migration(conn)
-        conn.execute("INSERT INTO schema_migrations (id) VALUES (?)", (migration_id,))
-    conn.commit()
+        applied = {row["id"] for row in conn.execute("SELECT id FROM schema_migrations").fetchall()}
+        for migration_id, migration in MIGRATIONS:
+            if migration_id in applied:
+                continue
+            migration(conn)
+            conn.execute("INSERT INTO schema_migrations (id) VALUES (?)", (migration_id,))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise

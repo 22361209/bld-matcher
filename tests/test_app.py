@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import sqlite3
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -324,7 +325,7 @@ class WebAppTest(unittest.TestCase):
             names = set(archive.getnames())
             self.assertIn("data/products.sqlite3", names)
             self.assertIn("manifest.json", names)
-            archive.extract("data/products.sqlite3", self.root / "export-check")
+            archive.extract("data/products.sqlite3", self.root / "export-check", filter="data")
 
         exported_db = self.root / "export-check" / "data" / "products.sqlite3"
         conn = sqlite3.connect(exported_db)
@@ -417,6 +418,50 @@ class WebAppTest(unittest.TestCase):
         self.assertTrue(status["enabled"])
         self.assertTrue(token.endswith(status["preview"][-6:]))
         self.assertTrue((self.root / "data" / "product_images" / "SYNC001.png").exists())
+
+    def test_product_data_sync_rolls_back_media_when_database_apply_fails(self):
+        self.login()
+        target = self.root / "data" / "product_images" / "SYNC001.png"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"original-image")
+        package_path = self._build_product_sync_package(
+            [
+                {
+                    "bld_no": "SYNC-ROLLBACK",
+                    "series": "SYNC",
+                    "item": "Rollback Test",
+                    "image_path": "data_product_images/SYNC001.png",
+                    "active": 1,
+                    "source": "test",
+                    "created_at": "2026-07-11 00:00:00",
+                    "updated_at": "2099-07-11 00:00:00",
+                }
+            ],
+            media=True,
+        )
+        preview = self.client.post(
+            "/product-data-sync/import/preview",
+            data={"include_images": "1", "package": (package_path.open("rb"), package_path.name)},
+            content_type="multipart/form-data",
+        )
+        path_match = re.search(r'name="package_path" value="([^"]+)"', preview.get_data(as_text=True))
+        self.assertIsNotNone(path_match)
+
+        with patch("app.routes.product_sync._apply_products", side_effect=RuntimeError("forced apply failure")):
+            response = self.client.post(
+                "/product-data-sync/import/apply",
+                data={"include_images": "1", "package_path": path_match.group(1)},
+                follow_redirects=True,
+            )
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("forced apply failure", html)
+        self.assertIn("已恢复本次媒体文件变更", html)
+        self.assertEqual(target.read_bytes(), b"original-image")
+        backups = sorted((self.root / "data" / "local-backups").glob("*/products.sqlite3"))
+        self.assertTrue(backups)
+        with sqlite3.connect(backups[-1]) as backup:
+            self.assertEqual(backup.execute("PRAGMA integrity_check").fetchone()[0], "ok")
 
     def test_product_data_sync_skips_older_package_rows(self):
         from app.database import upsert_product
@@ -672,8 +717,10 @@ class WebAppTest(unittest.TestCase):
 
     def test_shipment_recognition_async_job_completes(self):
         self.login()
+        received_args = {}
 
-        def fake_recognize_photo(job, _args):
+        def fake_recognize_photo(job, args):
+            received_args.update({"model": args.model, "base_url": args.base_url})
             return {
                 "relative_name": job.relative_name,
                 "path": str(job.path),
@@ -716,6 +763,8 @@ class WebAppTest(unittest.TestCase):
                 "/shipment-recognition/run",
                 data={
                     "provider": "openai-compatible",
+                    "model": "attacker-model",
+                    "base_url": "https://attacker.invalid/v1",
                     "shipment_photos": (io.BytesIO(png_bytes), "IMG_0001.png"),
                 },
                 headers={"Accept": "application/json", "X-Requested-With": "fetch"},
@@ -740,6 +789,7 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(job["result"]["labels"], 1)
         self.assertEqual(job["result"]["total_tokens"], 18)
         self.assertTrue(job["result"]["excel_url"].startswith("/download/"))
+        self.assertEqual(received_args, {"model": None, "base_url": None})
 
     def test_shipment_recognition_prepares_heic_images(self):
         from PIL import Image
@@ -1095,7 +1145,7 @@ class WebAppTest(unittest.TestCase):
 
     def test_internal_api_defaults_to_analysis_and_restricts_file_path(self):
         from app.database import upsert_product
-        from openpyxl import Workbook, load_workbook
+        from openpyxl import Workbook
 
         token = self.create_internal_api_token()
         with self.web.connect(self.web.DB_PATH) as conn:
@@ -1195,6 +1245,7 @@ class WebAppTest(unittest.TestCase):
         )
         html = generated.get_data(as_text=True)
         self.assertEqual(generated.status_code, 200)
+        self.assertEqual(generated.headers.get("Cache-Control"), "no-store")
         token_match = re.search(r'id="generated-api-key">(bld_sk_[^<]+)</code>', html)
         self.assertIsNotNone(token_match)
         token = token_match.group(1)
@@ -1209,8 +1260,19 @@ class WebAppTest(unittest.TestCase):
         second_match = re.search(r'id="generated-api-key">(bld_sk_[^<]+)</code>', html)
         self.assertIsNotNone(second_match)
         second_token = second_match.group(1)
-        self.assertIn(token, html)
+        self.assertNotIn(token, html)
         self.assertIn(second_token, html)
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            first_key = conn.execute(
+                "SELECT id FROM internal_api_keys WHERE name = ?",
+                ("OpenClaw Visual",),
+            ).fetchone()
+            key_columns = {
+                row["name"] for row in conn.execute("PRAGMA table_info(internal_api_keys)").fetchall()
+            }
+        self.assertIsNotNone(first_key)
+        self.assertNotIn("token_plain", key_columns)
 
         from app.database import upsert_product
 
@@ -1237,9 +1299,7 @@ class WebAppTest(unittest.TestCase):
         )
         self.assertEqual(second_api_response.status_code, 200)
 
-        first_key_id_match = re.search(rf"{re.escape(token)}.*?name=\"key_id\" value=\"([^\"]+)\"", html, flags=re.S)
-        self.assertIsNotNone(first_key_id_match)
-        disabled = self.client.post("/internal-api-key/disable", data={"key_id": first_key_id_match.group(1)})
+        disabled = self.client.post("/internal-api-key/disable", data={"key_id": str(first_key["id"])})
         self.assertEqual(disabled.status_code, 302)
         rejected = self.client.post(
             "/api/internal/inquiry/analyze",
@@ -1645,7 +1705,7 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
 
         token = self.create_internal_api_token()
-        headers = {"Authorization": f"Bearer {token}", "X-Quote-Actor": "hermes"}
+        headers = {"Authorization": f"Bearer {token}", "X-Quote-Actor": "spoofed-client"}
         response = self.client.post(
             "/api/quotes",
             json={
@@ -1704,6 +1764,8 @@ class WebAppTest(unittest.TestCase):
         with self.web.connect(self.web.DB_PATH) as conn:
             revisions = conn.execute("SELECT * FROM quote_record_revisions WHERE quote_id = ?", (quote["id"],)).fetchall()
         self.assertEqual(len(revisions), 1)
+        self.assertEqual(revisions[0]["changed_by"], "OpenClaw Test")
+        self.assertNotEqual(revisions[0]["changed_by"], "spoofed-client")
         self.assertIn('"tax_price": 5.35', revisions[0]["before_json"])
         self.assertIn('"tax_price": 5.45', revisions[0]["after_json"])
 
@@ -2376,8 +2438,11 @@ class WebAppTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("系统更新", html)
+        self.assertIn('data-page="admin.system_updates"', html)
+        self.assertIn('data-page-type="system-admin"', html)
         self.assertIn("当前最近重要变更", html)
         self.assertIn("项目交接说明.md", html)
+        self.assertIn("建立长期项目治理基线并加固安全边界", html)
         self.assertIn("2026-07-10", html)
         self.assertIn("补齐系统更新记录并设为强制提交要求", html)
         self.assertIn("d1ab621", html)
@@ -2646,8 +2711,91 @@ class WebAppTest(unittest.TestCase):
                 "009_quote_records",
                 "010_quote_record_bld_prices",
                 "011_customer_price_bld_index",
+                "012_scrub_internal_api_key_plaintext",
             ],
         )
+
+    def test_migration_scrubs_historical_api_key_plaintext(self):
+        from app.database import verify_internal_api_token
+        from app.migrations import run_migrations
+
+        token = self.create_internal_api_token()
+        with self.web.connect(self.web.DB_PATH) as conn:
+            conn.execute("ALTER TABLE internal_api_keys ADD COLUMN token_plain TEXT DEFAULT ''")
+            conn.execute(
+                "UPDATE internal_api_keys SET token_plain = ? WHERE id = (SELECT MIN(id) FROM internal_api_keys)",
+                ("historical-plaintext",),
+            )
+            conn.execute(
+                "DELETE FROM schema_migrations WHERE id = '012_scrub_internal_api_key_plaintext'"
+            )
+            conn.commit()
+            run_migrations(conn)
+            columns = {
+                row["name"] for row in conn.execute("PRAGMA table_info(internal_api_keys)").fetchall()
+            }
+            principal = verify_internal_api_token(conn, token)
+        self.assertNotIn("token_plain", columns)
+        self.assertEqual(principal["integration_name"], "OpenClaw Test")
+
+    def test_concurrent_database_initialization_is_process_safe(self):
+        database_path = self.root / "concurrent-init.sqlite3"
+        gate_path = self.root / "concurrent-init.go"
+        script = """
+import sys
+import time
+from pathlib import Path
+from app.database import connect
+
+database_path = Path(sys.argv[1])
+gate_path = Path(sys.argv[2])
+while not gate_path.exists():
+    time.sleep(0.005)
+with connect(database_path) as conn:
+    conn.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()
+"""
+        processes = [
+            subprocess.Popen(
+                [sys.executable, "-c", script, str(database_path), str(gate_path)],
+                cwd=PROJECT_ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            for _ in range(6)
+        ]
+        gate_path.touch()
+        results = [process.communicate(timeout=20) for process in processes]
+        failures = [stderr for process, (_stdout, stderr) in zip(processes, results) if process.returncode != 0]
+        self.assertEqual(failures, [])
+
+    def test_default_admin_requires_explicit_password_and_never_rewrites_existing_hash(self):
+        from app.config import DEFAULT_ADMIN_PASSWORD_PLACEHOLDER
+        from app.database import ensure_default_admin, now_text
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            with self.assertRaisesRegex(RuntimeError, "DEFAULT_ADMIN_PASSWORD"):
+                ensure_default_admin(
+                    conn,
+                    username="placeholder-admin",
+                    password=DEFAULT_ADMIN_PASSWORD_PLACEHOLDER,
+                )
+            legacy_hash = "scrypt:32768:8:1$legacy$unsupported-hash"
+            stamp = now_text()
+            conn.execute(
+                """
+                INSERT INTO users (username, display_name, password_hash, role, active, created_at, updated_at)
+                VALUES (?, '', ?, 'admin', 1, ?, ?)
+                """,
+                ("legacy-admin", legacy_hash, stamp, stamp),
+            )
+            conn.commit()
+            ensure_default_admin(conn, username="legacy-admin", password="replacement-password")
+            stored = conn.execute(
+                "SELECT password_hash FROM users WHERE username = ?",
+                ("legacy-admin",),
+            ).fetchone()["password_hash"]
+        self.assertEqual(stored, legacy_hash)
 
     def test_generated_files_are_scoped_to_user(self):
         self.login()

@@ -1,0 +1,104 @@
+{
+  "legacy_full_page_templates": [
+    "templates/drawing_batch_placeholder.html",
+    "templates/export_catalog.html",
+    "templates/index.html",
+    "templates/internal_api_key.html",
+    "templates/login.html",
+    "templates/logs.html",
+    "templates/material_drawings.html",
+    "templates/material_item_form.html",
+    "templates/materials.html",
+    "templates/price_import.html",
+    "templates/product_data_sync.html",
+    "templates/product_form.html",
+    "templates/products.html",
+    "templates/purchase_contracts.html",
+    "templates/quote_import.html",
+    "templates/quotes.html",
+    "templates/result.html",
+    "templates/select_match_column.html",
+    "templates/shipment_recognition.html",
+    "templates/shipping_notice.html",
+    "templates/shipping_notice_preview.html",
+    "templates/users.html"
+  ],
+  "legacy_inline_script_counts": {
+    "templates/material_drawings.html": 1,
+    "templates/materials.html": 1,
+    "templates/product_form.html": 1,
+    "templates/products.html": 5
+  },
+  "legacy_inline_style_counts": {
+    "templates/materials.html": 10,
+    "templates/products.html": 10,
+    "templates/purchase_contracts.html": 12,
+    "templates/quotes.html": 12
+  },
+  "legacy_route_database_access": [
+    "app/routes/admin.py",
+    "app/routes/auth.py",
+    "app/routes/home.py",
+    "app/routes/inquiry.py",
+    "app/routes/internal_api.py",
+    "app/routes/material_drawings.py",
+    "app/routes/materials.py",
+    "app/routes/product_sync.py",
+    "app/routes/products.py",
+    "app/routes/purchase_contracts.py",
+    "app/routes/quotes.py",
+    "app/routes/shipment_notice.py",
+    "app/routes/shipment_recognition.py"
+  ],
+  "legacy_route_imports": [
+    "app/routes/quotes.py"
+  ],
+  "legacy_api_routes": [
+    "app/routes/internal_api.py:internal_inquiry_analyze /api/internal/inquiry/analyze",
+    "app/routes/internal_api.py:internal_inquiry_file /api/internal/inquiry/file",
+    "app/routes/internal_api.py:internal_inquiry_numbers /api/internal/inquiry/numbers",
+    "app/routes/quotes.py:api_create_quote /api/quotes",
+    "app/routes/quotes.py:api_latest_quote /api/quotes/latest",
+    "app/routes/quotes.py:api_list_quotes /api/quotes",
+    "app/routes/quotes.py:api_update_quote /api/quotes/<int:quote_id>"
+  ],
+  "legacy_route_database_import_counts": {
+    "app/routes/admin.py": 10,
+    "app/routes/auth.py": 2,
+    "app/routes/home.py": 2,
+    "app/routes/inquiry.py": 5,
+    "app/routes/internal_api.py": 3,
+    "app/routes/material_drawings.py": 2,
+    "app/routes/materials.py": 11,
+    "app/routes/product_sync.py": 3,
+    "app/routes/products.py": 11,
+    "app/routes/purchase_contracts.py": 3,
+    "app/routes/quotes.py": 9,
+    "app/routes/shipment_notice.py": 2,
+    "app/routes/shipment_recognition.py": 2
+  },
+  "legacy_route_sql_call_counts": {
+    "app/routes/product_sync.py": 18,
+    "app/routes/products.py": 3,
+    "app/routes/purchase_contracts.py": 1,
+    "app/routes/shipment_recognition.py": 5
+  },
+  "legacy_exception_exposure_counts": {
+    "app/routes/admin.py": 1,
+    "app/routes/inquiry.py": 4,
+    "app/routes/internal_api.py": 1,
+    "app/routes/materials.py": 3,
+    "app/routes/product_sync.py": 3,
+    "app/routes/products.py": 5,
+    "app/routes/purchase_contracts.py": 2,
+    "app/routes/quotes.py": 10,
+    "app/routes/shipment_notice.py": 4,
+    "app/routes/shipment_recognition.py": 2
+  },
+  "legacy_daemon_thread_counts": {
+    "app/routes/shipment_recognition.py": 1
+  },
+  "public_write_endpoints": [
+    "app/routes/auth.py:do_login"
+  ]
+}

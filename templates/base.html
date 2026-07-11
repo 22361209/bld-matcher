@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block page_title %}BLD 工作台{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
+    {% block page_head %}{% endblock %}
+  </head>
+  <body data-page="{% block page_id %}shared.page{% endblock %}" data-page-type="{% block page_type %}workbench{% endblock %}">
+    <main class="{% block page_class %}shell wide{% endblock %}">
+      {% block navigation %}
+        {% if g.user %}{% include "_nav.html" %}{% endif %}
+      {% endblock %}
+
+      {% block messages %}
+        {% with flashed_messages = get_flashed_messages(with_categories=true) %}
+          {% if flashed_messages %}
+            <section class="messages" aria-live="polite">
+              {% for category, message in flashed_messages %}
+                <div class="message {{ category }}">{{ message }}</div>
+              {% endfor %}
+            </section>
+          {% endif %}
+        {% endwith %}
+      {% endblock %}
+
+      {% block page_header %}{% endblock %}
+      {% block page_toolbar %}{% endblock %}
+      {% block page_filters %}{% endblock %}
+      {% block page_content %}{% endblock %}
+      {% block page_modals %}{% endblock %}
+    </main>
+    <script type="module" src="{{ url_for('static', filename='app.js', v=static_version('app.js')) }}"></script>
+    {% block page_scripts %}{% endblock %}
+  </body>
+</html>

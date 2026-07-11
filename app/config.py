@@ -57,10 +57,10 @@ APP_HOST = os.environ.get("APP_HOST", "127.0.0.1")
 APP_PORT = int(os.environ.get("APP_PORT", "5055"))
 APP_DEBUG = os.environ.get("APP_DEBUG", "").lower() in {"1", "true", "yes", "on"}
 
-# 首启时创建的默认管理员账号。生产部署应通过环境变量覆盖密码,
-# 并在登录后立即从后台修改。
+# 首启管理员密码必须显式配置，不能使用公开占位值创建账号。
 DEFAULT_ADMIN_USERNAME = os.environ.get("DEFAULT_ADMIN_USERNAME", "007").strip() or "007"
-DEFAULT_ADMIN_PASSWORD = os.environ.get("DEFAULT_ADMIN_PASSWORD", "change-me-on-first-login")
+DEFAULT_ADMIN_PASSWORD_PLACEHOLDER = "change-me-on-first-login"
+DEFAULT_ADMIN_PASSWORD = os.environ.get("DEFAULT_ADMIN_PASSWORD", DEFAULT_ADMIN_PASSWORD_PLACEHOLDER)
 INTERNAL_API_TOKEN = os.environ.get("INTERNAL_API_TOKEN", "").strip()
 
 

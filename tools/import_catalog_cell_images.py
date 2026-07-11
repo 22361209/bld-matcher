@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.product_media import generate_product_image_thumb
+from app.product_media import generate_product_image_thumb  # noqa: E402
 
 DATA_DIR = ROOT / "data"
 DB_PATH = DATA_DIR / "products.sqlite3"

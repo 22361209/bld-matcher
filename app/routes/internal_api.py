@@ -8,7 +8,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from functools import wraps
 from pathlib import Path
 
-from flask import jsonify, request
+from flask import g, jsonify, request
 from openpyxl import Workbook
 
 from app.config import BASE_DIR, DB_PATH, INTERNAL_API_TOKEN, OUTPUT_DIR, UPLOAD_DIR
@@ -75,21 +75,36 @@ def _request_token() -> str:
     return request.headers.get("X-Internal-API-Token", "").strip()
 
 
-def _authorized() -> bool:
+def _authenticate() -> dict[str, object] | None:
     token = _request_token()
     if not token:
-        return False
+        return None
     if INTERNAL_API_TOKEN and hmac.compare_digest(token, INTERNAL_API_TOKEN):
-        return True
+        return {
+            "key_id": None,
+            "integration_name": "environment-fallback",
+            "scopes": (),
+        }
     with connect(DB_PATH) as conn:
         return verify_internal_api_token(conn, token)
+
+
+def api_actor_name() -> str:
+    principal = getattr(g, "api_principal", None)
+    if isinstance(principal, dict):
+        name = str(principal.get("integration_name") or "").strip()
+        if name:
+            return name
+    return "internal-api"
 
 
 def internal_api_required(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        if not _authorized():
+        principal = _authenticate()
+        if not principal:
             return _json_error("内部 API 未授权，请先在后台生成 API Key，并用 Authorization: Bearer <key> 调用。", 401)
+        g.api_principal = principal
         return fn(*args, **kwargs)
 
     return wrapper
@@ -655,7 +670,14 @@ def _run_numbers(payload: dict, *, export: bool):
     if export and output_path:
         with connect(DB_PATH) as conn:
             detail = f"OpenClaw 号码查询 {summary['total']} 行，命中 {summary['matched']} 行，未找到 {summary['unmatched']} 行"
-            log_event(conn, "内部 API 生成号码结果", "internal_api", output_path.name, detail, actor="openclaw")
+            log_event(
+                conn,
+                "内部 API 生成号码结果",
+                "internal_api",
+                output_path.name,
+                detail,
+                actor=api_actor_name(),
+            )
             conn.commit()
 
     return jsonify(
@@ -721,7 +743,14 @@ def _run_file(payload: dict, *, export: bool):
             detail = f"OpenClaw 增强客户原始文件 {summary['total']} 行，命中 {summary['matched']} 行，未找到 {summary['unmatched']} 行"
             if cleanup.cleaned:
                 detail = f"{detail}；{cleanup.message}"
-            log_event(conn, "内部 API 生成增强询价文件", "internal_api", output_path.name, detail, actor="openclaw")
+            log_event(
+                conn,
+                "内部 API 生成增强询价文件",
+                "internal_api",
+                output_path.name,
+                detail,
+                actor=api_actor_name(),
+            )
             conn.commit()
 
     return jsonify(

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from datetime import datetime
-from pathlib import Path
 
 from .config import DATA_DIR
 

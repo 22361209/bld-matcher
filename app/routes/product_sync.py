@@ -5,11 +5,12 @@ import shutil
 import sqlite3
 import tarfile
 import tempfile
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from flask import flash, redirect, render_template, request, send_file, url_for
+from flask import current_app, flash, redirect, render_template, request, send_file, url_for
 
 from app.config import DATA_DIR, DB_PATH, DRAWING_DIR, PRODUCT_IMAGE_DIR
 from app.database import connect, log_event
@@ -36,6 +37,12 @@ class ProductDiff:
     unchanged_count: int
     local_only_count: int
     rows: list[dict[str, object]]
+
+
+@dataclass(frozen=True)
+class MediaChange:
+    target: Path
+    backup_path: Path | None
 
 
 def _now_label() -> str:
@@ -121,7 +128,7 @@ def _safe_extract_package(package_path: Path, destination: Path) -> None:
                 raise ValueError(f"数据包包含不安全路径：{member.name}")
             if member.issym() or member.islnk():
                 raise ValueError(f"数据包不能包含链接文件：{member.name}")
-        archive.extractall(destination)
+        archive.extractall(destination, filter="data")
 
 
 def _find_product_db(extracted_dir: Path) -> Path:
@@ -350,7 +357,33 @@ def _apply_products(package_db: Path, *, deactivate_local_only: bool = False) ->
         conn.close()
 
 
-def _copy_media_dir(extracted_dir: Path, key: str, backup_dir: Path) -> int:
+def _atomic_copy(source: Path, target: Path) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(f".{target.name}.sync-{uuid.uuid4().hex}.tmp")
+    try:
+        shutil.copy2(source, temporary)
+        temporary.replace(target)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _backup_database(backup_path: Path) -> None:
+    backup_path.parent.mkdir(parents=True, exist_ok=True)
+    target = sqlite3.connect(backup_path)
+    try:
+        with connect(DB_PATH) as source:
+            source.backup(target)
+        target.commit()
+    finally:
+        target.close()
+
+
+def _copy_media_dir(
+    extracted_dir: Path,
+    key: str,
+    backup_dir: Path,
+    changes: list[MediaChange],
+) -> int:
     relative, destination = MEDIA_DIRS[key]
     source = extracted_dir / relative
     if not source.exists():
@@ -361,14 +394,28 @@ def _copy_media_dir(extracted_dir: Path, key: str, backup_dir: Path) -> int:
             continue
         relative_path = path.relative_to(source)
         target = destination / relative_path
+        backup_path = None
         if target.exists():
             backup_path = backup_dir / relative / relative_path
-            backup_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(target, backup_path)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(path, target)
+            _atomic_copy(target, backup_path)
+        changes.append(MediaChange(target=target, backup_path=backup_path))
+        _atomic_copy(path, target)
         count += 1
     return count
+
+
+def _restore_media_changes(changes: list[MediaChange]) -> None:
+    errors = []
+    for change in reversed(changes):
+        try:
+            if change.backup_path and change.backup_path.exists():
+                _atomic_copy(change.backup_path, change.target)
+            else:
+                change.target.unlink(missing_ok=True)
+        except OSError as exc:
+            errors.append(f"{change.target}: {exc}")
+    if errors:
+        raise RuntimeError("媒体回滚失败：" + "；".join(errors[:3]))
 
 
 def _prepare_package(package_path: Path) -> tuple[tempfile.TemporaryDirectory, Path, dict[str, object]]:
@@ -461,37 +508,56 @@ def register(app) -> None:
         include_images = request.form.get("include_images") == "1"
         deactivate_local_only = request.form.get("deactivate_local_only") == "1"
         backup_dir = DATA_DIR / "local-backups" / f"before-product-data-sync-{_now_label()}"
+        media_changes: list[MediaChange] = []
+        database_applied = False
         try:
             with import_lock(actor_name(), "产品数据包导入"):
                 backup_dir.mkdir(parents=True, exist_ok=True)
-                for path in (DB_PATH, DB_PATH.with_name(f"{DB_PATH.name}-wal"), DB_PATH.with_name(f"{DB_PATH.name}-shm")):
-                    if path.exists():
-                        shutil.copy2(path, backup_dir / path.name)
+                _backup_database(backup_dir / DB_PATH.name)
                 temporary, product_db, _manifest = _prepare_package(package_path)
                 try:
+                    copied_drawings = (
+                        _copy_media_dir(Path(temporary.name), "drawings", backup_dir, media_changes)
+                        if include_drawings
+                        else 0
+                    )
+                    copied_images = (
+                        _copy_media_dir(Path(temporary.name), "product_images", backup_dir, media_changes)
+                        if include_images
+                        else 0
+                    )
                     new_count, updated_count, conflict_count, unchanged_count, deactivated_count = _apply_products(
                         product_db,
                         deactivate_local_only=deactivate_local_only,
                     )
-                    copied_drawings = _copy_media_dir(Path(temporary.name), "drawings", backup_dir) if include_drawings else 0
-                    copied_images = _copy_media_dir(Path(temporary.name), "product_images", backup_dir) if include_images else 0
-                    with connect(DB_PATH) as conn:
-                        log_event(
-                            conn,
-                            "应用产品数据包媒体",
-                            "product_sync",
-                            package_path.name,
-                            f"复制图纸 {copied_drawings} 个；复制图片 {copied_images} 个；备份：{backup_dir}",
-                            actor=actor_name(),
-                        )
-                        conn.commit()
+                    database_applied = True
+                    try:
+                        with connect(DB_PATH) as conn:
+                            log_event(
+                                conn,
+                                "应用产品数据包媒体",
+                                "product_sync",
+                                package_path.name,
+                                f"复制图纸 {copied_drawings} 个；复制图片 {copied_images} 个；备份：{backup_dir}",
+                                actor=actor_name(),
+                            )
+                            conn.commit()
+                    except Exception:
+                        current_app.logger.exception("产品数据已导入，但媒体操作日志写入失败")
                 finally:
                     temporary.cleanup()
         except ImportLockError as exc:
             flash(str(exc), "error")
             return redirect(url_for("product_data_sync"))
         except Exception as exc:
-            flash(f"产品数据包导入失败：{exc}", "error")
+            rollback_detail = ""
+            if media_changes and not database_applied:
+                try:
+                    _restore_media_changes(media_changes)
+                    rollback_detail = "；已恢复本次媒体文件变更"
+                except RuntimeError as rollback_error:
+                    rollback_detail = f"；{rollback_error}"
+            flash(f"产品数据包导入失败：{exc}{rollback_detail}", "error")
             return redirect(url_for("product_data_sync"))
         flash(
             f"产品数据导入完成：新增 {new_count} 条，更新 {updated_count} 条，跳过无变化 {unchanged_count} 条，跳过包内旧数据 {conflict_count} 条，停用本机独有 {deactivated_count} 条。",

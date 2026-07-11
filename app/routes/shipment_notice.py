@@ -4,7 +4,6 @@ import csv
 import io
 import json
 import re
-import shutil
 import zipfile
 from copy import copy
 from datetime import datetime
@@ -15,7 +14,7 @@ from openpyxl import load_workbook
 
 from app.config import DATA_DIR, DB_PATH
 from app.database import connect, log_event
-from app.helpers import download_name, safe_upload_name, unique_prefixed_path, user_file_label, user_output_dir, user_recent_outputs, user_upload_dir, user_upload_path
+from app.helpers import download_name, safe_upload_name, unique_prefixed_path, user_output_dir, user_recent_outputs, user_upload_dir, user_upload_path
 from app.security import actor_name, permission_required
 
 
@@ -104,7 +103,6 @@ def _detect_template_mapping(path: Path) -> dict:
             code_col = qty_col = None
             for cell in row:
                 text = str(cell.value or "").strip()
-                normalized = _norm(text.strip("{} "))
                 if text in {"{{商品编码}}", "{商品编码}", "{{产品编码}}"}:
                     code_col = cell.column
                 elif text in {"{{数量}}", "{数量}", "{{发货数量}}"}:

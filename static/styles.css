@@ -4171,6 +4171,7 @@ textarea {
 
 .update-group li {
   padding-left: 2px;
+  overflow-wrap: anywhere;
 }
 
 .purchase-contract-page {

@@ -1,6 +1,6 @@
 # BLD Project Brief
 
-更新时间：2026-07-10
+更新时间：2026-07-11
 
 这是给新接手 Codex 或开发者的短版项目说明。先读 `AGENTS.md`，再读本文件。详细历史在 `项目交接说明.md`，需要查旧决策时用 `rg` 搜索，不要默认整篇读取。
 
@@ -60,7 +60,7 @@ APP_DEBUG=0 SECRET_KEY=local-dev-bld-matcher .venv/bin/python app.py
 常用检查：
 
 ```bash
-.venv/bin/python -m unittest tests.test_app -v
+uv run python scripts/verify.py
 git status --short
 lsof -nP -iTCP:5055 -sTCP:LISTEN
 ```
@@ -95,12 +95,12 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 OpenClaw 内部 API：
 
 - 文档在 `OPENCLAW_API.md`，接口前缀为 `/api/internal/`。
-- 管理员菜单里有“内部 API Key”页面，可生成多条 Key、查看完整 Key，并按条停用；旧版未保存明文的历史 Key 只能显示遮罩标识。
+- 管理员菜单里有“内部 API Key”页面，可生成多条 Key 并按条停用；完整 Key 只在创建响应显示一次，数据库只保留哈希和遮罩后缀，历史明文字段会在迁移时清空并删除。
 - `/api/internal/*` 必须带 `Authorization: Bearer <key>`，不允许匿名调用；`.env` 的 `INTERNAL_API_TOKEN` 仅作为应急 fallback。
 - `/api/internal/inquiry/numbers`：号码数组或文字号码查询；默认仅分析，传 `export: true` 才生成新 Excel，输出到 `outputs/openclaw/`。
 - `/api/internal/inquiry/file`：传本机 Excel 路径或上传文件；默认仅分析，传 `export: true` 才在原文件基础上追加结果列。
 - `/api/internal/inquiry/analyze`：只返回命中摘要，不生成文件；号码分析用临时工作簿，不长期写入 `uploads/openclaw/`。
-- API 导出文件名统一为 `reYYMMDD_源文件名称_openclaw.xls/xlsx`；号码数组/文字号码没有源文件，导出前必须由机器人询问并传 `source_name`；重名自动追加 `_2`、`_3`。
+- API 导出文件名统一为 `reYYMMDD_源文件名称.xls/xlsx`；号码数组/文字号码没有源文件，导出前必须由机器人询问并传 `source_name`；重名自动追加 `_2`、`_3`。
 - API 的 `file_path` 只允许读取项目目录、`uploads/`、`outputs/` 下的 `.xls/.xlsx`。
 - API 价格模式支持 `none`、`tax`、`net`、`usd`；`net` 为不含税价，`usd` 需要传汇率。
 
@@ -113,7 +113,7 @@ OpenClaw 内部 API：
 - 表格在含税单价后显示“产品状态”，数据库保存中文配置，产品目录默认显示英文；询价结果预览和人民币报价导出显示中文，美金报价导出显示英文。
 - 导出目录只对管理员开放。
 - 管理员菜单有“产品数据同步”入口，可导出产品数据包；导出包包含 `products` 表和 `manifest.json`，可选带 `data/drawings/` 和 `data/product_images/`。
-- “产品数据同步”导入会先预览新增/更新/包内旧数据/无变化/本机独有数量，再增量合并 `products` 表；包内更新时间早于当前系统的同 BLD 产品会跳过，避免旧包覆盖新数据；本机独有产品默认保留，只有在确认导入时勾选“停用包内不存在的产品”才会停用；不会覆盖本机账号、内部 API Key、操作日志或其他运行状态；勾选时才复制包内图纸/图片，导入前会备份本机 `products.sqlite3` 和被覆盖的媒体文件。
+- “产品数据同步”导入会先预览新增/更新/包内旧数据/无变化/本机独有数量，再增量合并 `products` 表；包内更新时间早于当前系统的同 BLD 产品会跳过；导入前使用 SQLite Backup API 生成一致性备份，媒体文件原子复制，数据库应用失败时自动恢复本次媒体变更。
 - 产品编辑页可上传/替换单个 PDF 图纸和最多 5 张产品图片，也可删除产品；手工清空含税单价会写入空值，图片/图纸格式校验失败时不会先更新产品文字资料。
 
 外部品牌号码审核工具：
@@ -182,7 +182,7 @@ OpenClaw 内部 API：
 
 ```bash
 git status --short
-.venv/bin/python -m unittest tests.test_app -v
+uv run python scripts/verify.py
 git pull --ff-only origin main
 git add ...
 git commit -m "..."
@@ -226,12 +226,19 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 - `templates/_product_rows.html`：产品目录行模板
 - `static/styles.css`：主要样式
 - `tests/test_app.py`：主要回归测试
+- `PROJECT_CONSTITUTION.md`：长期架构、安全、页面、API 和变更治理硬规则
+- `scripts/init_database.py`：容器启动 Gunicorn 前执行迁移和首启管理员初始化
+- `scripts/verify.py`：本机、AI 和 CI 共用的统一验收入口，包含项目合同、锁文件、Ruff、语法和回归测试
+- `policy/legacy_allowlist.json`：现有架构债务棘轮白名单，部分债务精确到出现次数，只能缩小
 
 ## 文档策略
 
 - `AGENTS.md`：必须遵守的短规则。
+- `PROJECT_CONSTITUTION.md`：长期工程边界和 Definition of Done。
+- `docs/governance/enforcement-matrix.md`：宪章规则的自动化覆盖、现有债务和下一道门禁。
 - `PROJECT_BRIEF.md`：当前状态和快速接手说明，保持短。
-- `项目交接说明.md`：详细历史和系统更新来源，按需搜索。
+- `changes/*.json`：系统更新的当前事实来源，由检查器强制。
+- `项目交接说明.md`：详细历史档案，按需搜索。
 - `README.md`：安装、启动和通用说明。
 - `OPENCLAW_API.md`：机器人内部 API 调用说明。
-- 强制规则：每次修改任何 Git 跟踪文件，都必须在同一次提交中更新 `项目交接说明.md` 的“当前最近重要变更”；缺少更新日志时不得提交或部署。完整执行要求见 `AGENTS.md`。
+- 强制规则：提交或部署前运行 `uv run python scripts/verify.py`；涉及行为或运行影响的改动必须包含 `changes/*.json` 片段。

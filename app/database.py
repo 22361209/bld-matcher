@@ -172,7 +172,6 @@ CREATE TABLE IF NOT EXISTS internal_api_keys (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL DEFAULT 'OpenClaw',
   token_hash TEXT NOT NULL UNIQUE,
-  token_plain TEXT DEFAULT '',
   token_prefix TEXT DEFAULT '',
   token_suffix TEXT DEFAULT '',
   active INTEGER NOT NULL DEFAULT 1,
@@ -413,28 +412,25 @@ def internal_api_key_status(conn: sqlite3.Connection) -> dict:
 def list_internal_api_keys(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute(
         """
-        SELECT * FROM internal_api_keys
+        SELECT id, name, token_prefix, token_suffix, active,
+               created_by, created_at, updated_at, last_used_at
+        FROM internal_api_keys
         ORDER BY active DESC, id DESC
         """
     ).fetchall()
-    keys = []
-    for row in rows:
-        token_plain = str(row["token_plain"] or "") if "token_plain" in row.keys() else ""
-        keys.append(
-            {
-                "id": row["id"],
-                "name": row["name"],
-                "token": token_plain,
-                "preview": token_plain or _api_key_preview(row),
-                "active": bool(row["active"]),
-                "created_by": row["created_by"],
-                "created_at": row["created_at"],
-                "updated_at": row["updated_at"],
-                "last_used_at": row["last_used_at"],
-                "visible": bool(token_plain),
-            }
-        )
-    return keys
+    return [
+        {
+            "id": row["id"],
+            "name": row["name"],
+            "preview": _api_key_preview(row),
+            "active": bool(row["active"]),
+            "created_by": row["created_by"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+            "last_used_at": row["last_used_at"],
+        }
+        for row in rows
+    ]
 
 
 def create_internal_api_key(conn: sqlite3.Connection, *, actor: str = "", name: str = "OpenClaw") -> str:
@@ -444,10 +440,10 @@ def create_internal_api_key(conn: sqlite3.Connection, *, actor: str = "", name: 
     conn.execute(
         """
         INSERT INTO internal_api_keys
-          (name, token_hash, token_plain, token_prefix, token_suffix, active, created_by, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)
+          (name, token_hash, token_prefix, token_suffix, active, created_by, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 1, ?, ?, ?)
         """,
-        (label, _hash_api_token(token), token, "bld_sk_", token[-6:], actor, timestamp, timestamp),
+        (label, _hash_api_token(token), "bld_sk_", token[-6:], actor, timestamp, timestamp),
     )
     log_event(conn, "Create internal API key", "internal_api_key", label, "New key created; existing keys remain unchanged.", actor=actor)
     conn.commit()
@@ -476,10 +472,10 @@ def disable_internal_api_key(conn: sqlite3.Connection, *, actor: str = "", key_i
     return changed
 
 
-def verify_internal_api_token(conn: sqlite3.Connection, token: str) -> bool:
+def verify_internal_api_token(conn: sqlite3.Connection, token: str) -> dict[str, object] | None:
     token_hash = _hash_api_token(token)
     rows = conn.execute(
-        "SELECT id, token_hash FROM internal_api_keys WHERE active = 1"
+        "SELECT id, name, token_hash FROM internal_api_keys WHERE active = 1"
     ).fetchall()
     for row in rows:
         if hmac.compare_digest(str(row["token_hash"]), token_hash):
@@ -488,8 +484,12 @@ def verify_internal_api_token(conn: sqlite3.Connection, token: str) -> bool:
                 (now_text(), row["id"]),
             )
             conn.commit()
-            return True
-    return False
+            return {
+                "key_id": row["id"],
+                "integration_name": row["name"],
+                "scopes": (),
+            }
+    return None
 
 
 def _field_changes(before: sqlite3.Row | None, after: dict) -> list[str]:
@@ -1779,20 +1779,18 @@ def ensure_default_admin(
 ) -> None:
     # 默认值从配置中读取,允许通过环境变量在首启前覆盖。
     # 已经存在的管理员不会被这里改密。
-    from .config import DEFAULT_ADMIN_PASSWORD, DEFAULT_ADMIN_USERNAME
+    from .config import DEFAULT_ADMIN_PASSWORD, DEFAULT_ADMIN_PASSWORD_PLACEHOLDER, DEFAULT_ADMIN_USERNAME
 
     username = username or DEFAULT_ADMIN_USERNAME
     password = password or DEFAULT_ADMIN_PASSWORD
     existing = conn.execute("SELECT id, password_hash FROM users WHERE username = ?", (username,)).fetchone()
     if existing:
-        if str(existing["password_hash"] or "").startswith("scrypt:"):
-            conn.execute(
-                "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
-                (hash_password(password), now_text(), existing["id"]),
-            )
-            log_event(conn, "迁移管理员密码", "user", username, "切换为兼容的密码哈希算法", actor="system")
-            conn.commit()
         return
+    if not password or password == DEFAULT_ADMIN_PASSWORD_PLACEHOLDER:
+        raise RuntimeError(
+            "首次启动必须通过 .env 或环境变量显式设置 DEFAULT_ADMIN_PASSWORD，"
+            "不能使用公开占位密码创建管理员。"
+        )
     timestamp = now_text()
     conn.execute(
         """

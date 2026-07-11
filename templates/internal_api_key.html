@@ -37,7 +37,7 @@
         <section class="api-key-reveal" aria-label="新生成的 API Key">
           <div>
             <h2>新 Key 已生成</h2>
-            <p>完整 Key 已保存到列表中，后续也可以在本页查看和复制。</p>
+            <p>完整 Key 只显示这一次。请立即复制并保存到调用方的密钥配置中。</p>
           </div>
           <div class="api-key-copy-row">
             <code id="generated-api-key">{{ generated_token }}</code>
@@ -79,7 +79,7 @@
         <div class="materials-table-title">
           <div>
             <h2>API Key 列表</h2>
-            <p>新生成的 Key 会完整显示；历史旧 Key 如果没有保存明文，只显示遮罩标识。</p>
+            <p>列表只显示遮罩标识。完整 Key 不会保存在系统中，也不能再次查看。</p>
           </div>
         </div>
         {% if keys %}
@@ -100,18 +100,13 @@
                 {% for key in keys %}
                   <tr>
                     <td>{{ key.name }}</td>
-                    <td>
-                      <code{% if key.visible %} class="api-key-visible"{% endif %}>{{ key.preview }}</code>
-                    </td>
+                    <td><code>{{ key.preview }}</code></td>
                     <td>{{ "启用" if key.active else "停用" }}</td>
                     <td>{{ key.created_by or "暂无" }}</td>
                     <td>{{ key.created_at or "暂无" }}</td>
                     <td>{{ key.last_used_at or "暂无" }}</td>
                     <td>
                       <div class="materials-actions">
-                        {% if key.visible %}
-                          <button class="linear-button subtle compact" type="button" data-copy-value="{{ key.token }}">复制</button>
-                        {% endif %}
                         <form action="{{ url_for('disable_internal_api_key_route') }}" method="post">
                           {{ csrf_field() }}
                           <input type="hidden" name="key_id" value="{{ key.id }}">
@@ -144,27 +139,6 @@ POST /api/internal/inquiry/file
 POST /api/internal/inquiry/analyze</pre>
       </section>
     </main>
-    <script>
-      (() => {
-        const copyText = async (value, button) => {
-          try {
-            await navigator.clipboard.writeText(value.trim());
-            button.textContent = "已复制";
-          } catch (_error) {
-            button.textContent = "请手动复制";
-          }
-        };
-
-        const generatedButton = document.querySelector("[data-copy-api-key]");
-        const generatedKey = document.querySelector("#generated-api-key");
-        if (generatedButton && generatedKey) {
-          generatedButton.addEventListener("click", () => copyText(generatedKey.textContent, generatedButton));
-        }
-
-        document.querySelectorAll("[data-copy-value]").forEach((button) => {
-          button.addEventListener("click", () => copyText(button.dataset.copyValue || "", button));
-        });
-      })();
-    </script>
+    <script type="module" src="{{ url_for('static', filename='internal_api_key.js', v=static_version('internal_api_key.js')) }}"></script>
   </body>
 </html>

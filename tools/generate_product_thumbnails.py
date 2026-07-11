@@ -10,8 +10,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.config import PRODUCT_IMAGE_DIR, PRODUCT_IMAGE_THUMB_DIR
-from app.product_media import IMAGE_SUFFIXES, generate_product_image_thumb, product_image_thumb_path
+from app.config import PRODUCT_IMAGE_DIR, PRODUCT_IMAGE_THUMB_DIR  # noqa: E402
+from app.product_media import IMAGE_SUFFIXES, generate_product_image_thumb, product_image_thumb_path  # noqa: E402
 
 
 def iter_product_images() -> list[Path]:

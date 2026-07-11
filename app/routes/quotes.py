@@ -3,7 +3,7 @@ from __future__ import annotations
 from math import ceil
 from pathlib import Path
 
-from flask import flash, jsonify, redirect, render_template, request, url_for
+from flask import flash, g, jsonify, redirect, render_template, request, url_for
 
 from app.config import DB_PATH
 from app.database import (
@@ -100,7 +100,12 @@ def _pagination(filters: dict[str, str], page: int, total: int) -> dict[str, obj
 
 
 def _api_actor() -> str:
-    return request.headers.get("X-Quote-Actor", "").strip() or "hermes"
+    principal = getattr(g, "api_principal", None)
+    if isinstance(principal, dict):
+        name = str(principal.get("integration_name") or "").strip()
+        if name:
+            return name
+    return "internal-api"
 
 
 def register(app) -> None:

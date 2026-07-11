@@ -123,8 +123,9 @@ def _recognizer_args() -> argparse.Namespace:
         provider = "openai-compatible"
     return argparse.Namespace(
         provider=provider,
-        model=request.form.get("model", "").strip() or None,
-        base_url=request.form.get("base_url", "").strip() or None,
+        # Web 请求不能覆盖模型或供应商地址，避免环境密钥和图片被发送到任意地址。
+        model=None,
+        base_url=None,
         endpoint_path="",
         timeout=180,
         max_side=2200,

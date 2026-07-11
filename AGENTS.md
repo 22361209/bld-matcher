@@ -1,6 +1,6 @@
 # Agent Rules
 
-This file is the short, always-read rule set for this project. For project shape and current state, read `PROJECT_BRIEF.md`. Use `项目交接说明.md` only as a searchable history archive.
+This file is the short, always-read rule set for this project. Read `PROJECT_CONSTITUTION.md` for non-negotiable engineering boundaries and `PROJECT_BRIEF.md` for current state. Use `项目交接说明.md` only as a searchable history archive.
 
 ## Interactive Password Prompts
 
@@ -76,21 +76,30 @@ sudo /usr/local/bin/docker-compose ps
 
 Use visible Terminal for the NAS `sudo` commands.
 
+## Engineering Contract
+
+- Keep the project a modular monolith. New routes must not access SQLite directly or import another route module.
+- New full pages must follow `docs/ui/page-protocol.md`; do not add standalone document shells or inline scripts.
+- AI and automation must use authenticated application APIs, never direct runtime database access.
+- Architecture, framework, database, queue, external AI provider, or breaking API changes require an ADR under `docs/adr/`.
+- Existing exceptions are frozen in `policy/legacy_allowlist.json`. Do not add new entries merely to make a check pass.
+- Before commit or deployment, run `uv run python scripts/verify.py`. Required checks must pass.
+
+Full rules live in `PROJECT_CONSTITUTION.md`. The machine-enforced subset lives in `scripts/check_project_contract.py`.
+
 ## Documentation
 
 Keep `PROJECT_BRIEF.md` concise and current. Keep `项目交接说明.md` as detailed history; search it with `rg` or read small sections only.
 
-### Mandatory update log
+### Mandatory change fragment
 
-Every commit that changes tracked project files must add or update an entry under `项目交接说明.md` -> `## 当前最近重要变更`. This is a required completion condition, not an optional documentation follow-up.
+Every user-visible, data, permission, API, configuration, or operational change must add or update one `changes/*.json` fragment. This is a required completion condition, not an optional documentation follow-up.
 
-- Update the log in the same commit as the code, UI, database, configuration, deployment, or documentation change.
-- Use `### YYYY-MM-DD · commit · title`; use `本次提交` while preparing a new commit.
-- Describe the user-visible behavior and any operational, permission, data, or compatibility impact.
-- Before committing, confirm the staged diff includes `项目交接说明.md`. Do not commit or deploy when it is missing.
-- This rule also applies to small fixes and follow-up changes so the web “系统更新” page never silently falls behind.
+- Follow `changes/README.md` and describe user-visible behavior plus data, API, and operational impact.
+- The system updates page reads change fragments first and keeps `项目交接说明.md` only for historical compatibility.
+- `scripts/check_project_contract.py` enforces the fragment requirement locally and in CI.
 
 For important changes, update:
 
 - `PROJECT_BRIEF.md` if current behavior, deployment, data ownership, or key workflow changed
-- `项目交接说明.md` if the system updates page or detailed historical changelog should show the change
+- the relevant architecture, page, API, or ADR document when its contract changed

@@ -7,16 +7,21 @@
 为减少 Codex 压缩上下文后的负担，项目说明拆成短版和历史档案：
 
 - `AGENTS.md`：必须遵守的操作规则，例如 NAS sudo 必须用可见 Terminal、超过 5 分钟先问、不要覆盖运行数据。
+- `PROJECT_CONSTITUTION.md`：架构、页面、数据、安全、API 和变更治理硬规则。
+- `docs/governance/enforcement-matrix.md`：每条硬规则当前由什么检查、测试或后续门禁负责。
 - `PROJECT_BRIEF.md`：当前项目状态、关键路径、数据归属和部署流程。
-- `项目交接说明.md`：详细历史和系统更新页面来源，按需搜索，不建议默认整篇读取。
+- `changes/*.json`：系统更新事实来源；`项目交接说明.md` 仅保留详细历史。
 
 ## 本机启动
 
+推荐使用锁定的 Python 3.12 环境：
+
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-.venv/bin/python app.py
+uv sync --frozen
+uv run python app.py
 ```
+
+`requirements.txt` 由 `uv.lock` 生成，供 Docker 和兼容安装流程使用，不要手工维护依赖版本。
 
 默认访问地址：
 
@@ -43,10 +48,10 @@ bash tools/install_bld_launcher.sh
 
 ```text
 账号：007
-密码：通过环境变量 DEFAULT_ADMIN_PASSWORD 设置,默认值 change-me-on-first-login
+密码：必须通过环境变量 DEFAULT_ADMIN_PASSWORD 显式设置
 ```
 
-**首次部署前请通过 `.env` 或环境变量设置 `DEFAULT_ADMIN_PASSWORD` 为强密码,登录后立即从后台再次修改。** 已经存在的管理员不会被环境变量覆盖。
+**首次部署前必须通过 `.env` 或环境变量设置 `DEFAULT_ADMIN_PASSWORD` 为强密码，否则空数据库会拒绝启动。** 已经存在的管理员不会被环境变量覆盖，也不会因密码哈希兼容处理而被自动改密。
 
 ## 配置
 
@@ -61,7 +66,7 @@ bash tools/install_bld_launcher.sh
 - `BLD_DATA_DIR`：数据目录，默认 `data`
 - `BLD_UPLOAD_DIR`：上传目录，默认 `uploads`
 - `BLD_OUTPUT_DIR`：输出目录，默认 `outputs`
-- `INTERNAL_API_TOKEN`：可选应急 fallback；日常在网页“内部 API Key”页面生成 Key。页面支持多条 Key、完整显示和单条停用；`/api/internal/*` 始终需要 `Authorization: Bearer <token>`
+- `INTERNAL_API_TOKEN`：可选应急 fallback；日常在网页“内部 API Key”页面生成 Key。完整 Key 只在创建时显示一次，之后仅显示遮罩并支持单条停用；`/api/internal/*` 始终需要 `Authorization: Bearer <token>`
 
 ## 目录说明
 
@@ -86,7 +91,7 @@ bash tools/install_bld_launcher.sh
 
 管理员菜单里的“产品数据同步”用于两端系统之间交换产品数据包。导出包只包含 `products` 表和 `manifest.json`，可选包含 `data/drawings/`、`data/product_images/`；导入时先预览差异，再增量合并 `products` 表，不覆盖本机账号、内部 API Key 或操作日志。包内更新时间早于当前系统的同 BLD 产品会标记为“包内旧数据”并跳过，避免旧包覆盖新数据；勾选图纸/图片时才复制包内媒体文件，覆盖前会把本机对应文件备份到 `data/local-backups/`。
 
-数据库结构变化集中放在 `app/migrations.py`。新增字段或表时，添加一个新的 migration id 和对应函数，让本机和 NAS 在启动连接数据库时自动补齐结构。
+数据库结构变化集中放在 `app/migrations.py`。新增字段或表时，添加一个新的 migration id 和对应函数。容器会先运行 `python -m scripts.init_database`，初始化成功后才启动 Gunicorn worker；迁移本身也使用跨进程安全的 SQLite 写事务。
 
 产品目录 Excel 中的单元格图片可用 `tools/import_catalog_cell_images.py` 提取到 `data/product_images/`，脚本会解析 `DISPIMG` 图片映射，并应用 Excel/WPS 中的水平或垂直翻转。先运行 dry-run 查看匹配统计，确认后再加 `--apply` 写入图片和数据库：
 
@@ -154,12 +159,12 @@ export SHIPMENT_VISION_MODEL="你的视觉模型名"
 
 ## 系统更新
 
-右上角管理员菜单里的“系统更新”页面会读取 `项目交接说明.md` 中的“当前最近重要变更”，用于在网页内查看项目代码、页面、权限、部署和核心业务规则的更新记录。更新条目使用 `YYYY-MM-DD · commit · 标题` 格式，同一天多次更新会拆成多条版本记录。
+右上角管理员菜单里的“系统更新”页面优先读取 `changes/*.json`，并继续读取 `项目交接说明.md` 的历史条目。新变更使用独立片段，避免多人或 AI 反复编辑同一篇长文档。
 
 ## 测试
 
 ```bash
-.venv/bin/python -m unittest discover
+uv run python scripts/verify.py
 ```
 
-当前测试覆盖登录、核心页面访问、系统更新页面、20MB 上传限制、用户文件隔离、导入锁、迁移记录、PDF 图纸上传和询价图纸包。
+统一验收包括项目合同、依赖锁、Ruff、Python 语法和完整回归测试；GitHub CI 使用同一入口。

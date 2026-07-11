@@ -64,10 +64,10 @@ http://192.168.1.20:5055
 
 ```text
 登录名：007
-密码：由 DEFAULT_ADMIN_PASSWORD 环境变量决定 (默认 change-me-on-first-login)
+密码：必须由 DEFAULT_ADMIN_PASSWORD 环境变量显式设置
 ```
 
-**首次启动前**请在 `docker-compose.yml` 的 `environment` 中设置 `DEFAULT_ADMIN_PASSWORD` 和强随机的 `SECRET_KEY`,登录后立即在 `账号管理` 中再次修改密码。
+**首次启动前**请在 `.env` 中设置 `DEFAULT_ADMIN_PASSWORD` 和强随机的 `SECRET_KEY`；空数据库缺少管理员密码时会拒绝启动。登录后可在 `账号管理` 中再次修改密码。
 
 登录后可以在 `账号管理` 中新增其他用户、修改角色、重置密码。
 
@@ -150,7 +150,7 @@ outputs/
 .env
 ```
 
-当前 Compose 配置使用 `restart: unless-stopped`，Dockerfile 使用 Gunicorn 运行 `wsgi:app`。这和本机临时 Flask 开发进程不同；如果容器进程异常退出，Docker 会按重启策略自动拉起。
+当前 Compose 配置使用 `restart: unless-stopped`。Dockerfile 会先运行数据库初始化和迁移，成功后再启动 Gunicorn，并通过 `/login` 健康检查确认 Web 进程可响应；初始化失败时不会带病启动 worker。这和本机临时 Flask 开发进程不同；如果容器进程异常退出，Docker 会按重启策略自动拉起。
 
 ## 7. 安全建议
 

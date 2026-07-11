@@ -1,52 +1,48 @@
-<!doctype html>
-<html lang="zh-CN">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>系统更新</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
-  </head>
-  <body>
-    <main class="shell wide materials-linear">
-      {% set active_page = "system_updates" %}
-      {% include "_nav.html" %}
+{% extends "base.html" %}
+{% set active_page = "system_updates" %}
 
-      <header class="materials-hero">
+{% block page_title %}系统更新{% endblock %}
+{% block page_id %}admin.system_updates{% endblock %}
+{% block page_type %}system-admin{% endblock %}
+{% block page_class %}shell wide materials-linear{% endblock %}
+
+{% block page_header %}
+  <header class="materials-hero">
+    <div>
+      <h1>系统更新</h1>
+      <p>查看项目代码、页面、权限、部署和核心业务规则的重要变更。</p>
+    </div>
+    <div class="materials-file-meta">
+      <span>来源</span>
+      <strong>{{ source_name }}</strong>
+      <span>当前最近重要变更</span>
+    </div>
+  </header>
+{% endblock %}
+
+{% block page_content %}
+  <section class="updates-timeline">
+    {% for group in updates %}
+      <article class="update-group">
+        <div class="update-meta">
+          <span class="update-date">{{ group.date }}</span>
+          {% if group.version %}<span class="update-version">{{ group.version }}</span>{% endif %}
+        </div>
         <div>
-          <h1>系统更新</h1>
-          <p>查看项目代码、页面、权限、部署和核心业务规则的重要变更。</p>
+          <h2>{{ group.title }}</h2>
+          <ul>
+            {% for item in group.entries %}
+              <li>{{ item }}</li>
+            {% endfor %}
+          </ul>
         </div>
-        <div class="materials-file-meta">
-          <span>来源</span>
-          <strong>{{ source_name }}</strong>
-          <span>当前最近重要变更</span>
-        </div>
-      </header>
-
-      <section class="updates-timeline">
-        {% for group in updates %}
-          <article class="update-group">
-            <div class="update-meta">
-              <span class="update-date">{{ group.date }}</span>
-              {% if group.version %}<span class="update-version">{{ group.version }}</span>{% endif %}
-            </div>
-            <div>
-              <h2>{{ group.title }}</h2>
-            <ul>
-              {% for item in group.entries %}
-                <li>{{ item }}</li>
-              {% endfor %}
-            </ul>
-            </div>
-          </article>
-        {% endfor %}
-        {% if not updates %}
-          <article class="update-group">
-            <div class="update-date">暂无记录</div>
-            <p class="note">没有从交接说明中读取到“当前最近重要变更”。</p>
-          </article>
-        {% endif %}
-      </section>
-    </main>
-  </body>
-</html>
+      </article>
+    {% endfor %}
+    {% if not updates %}
+      <article class="update-group">
+        <div class="update-date">暂无记录</div>
+        <p class="note">没有可显示的系统更新记录。</p>
+      </article>
+    {% endif %}
+  </section>
+{% endblock %}

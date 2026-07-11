@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from flask import flash, redirect, render_template, request, url_for
+import json
+
+from flask import flash, make_response, redirect, render_template, request, url_for
 
 from app.config import BASE_DIR, DB_PATH
 from app.database import (
@@ -19,6 +21,7 @@ from app.security import actor_name, permission_required
 
 
 UPDATES_DOC_PATH = BASE_DIR / "项目交接说明.md"
+CHANGE_FRAGMENTS_DIR = BASE_DIR / "changes"
 
 
 def parse_update_heading(heading: str) -> dict[str, str]:
@@ -30,7 +33,7 @@ def parse_update_heading(heading: str) -> dict[str, str]:
     return {"date": heading.strip(), "version": "", "title": "重要变更"}
 
 
-def read_system_updates() -> list[dict[str, object]]:
+def read_archived_system_updates() -> list[dict[str, object]]:
     if not UPDATES_DOC_PATH.exists():
         return []
 
@@ -53,6 +56,42 @@ def read_system_updates() -> list[dict[str, object]]:
         if line.startswith("- ") and current is not None:
             current["entries"].append(line.removeprefix("- ").strip())
     return [item for item in updates if item["entries"]]
+
+
+def read_change_fragments() -> list[dict[str, object]]:
+    updates = []
+    if not CHANGE_FRAGMENTS_DIR.is_dir():
+        return updates
+    for path in sorted(CHANGE_FRAGMENTS_DIR.glob("*.json"), reverse=True):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        entries = payload.get("entries")
+        if not isinstance(entries, list) or not entries:
+            continue
+        updates.append(
+            {
+                "date": str(payload.get("date") or ""),
+                "version": str(payload.get("version") or ""),
+                "title": str(payload.get("title") or "重要变更"),
+                "entries": [str(entry) for entry in entries],
+            }
+        )
+    return updates
+
+
+def read_system_updates() -> list[dict[str, object]]:
+    updates = [*read_change_fragments(), *read_archived_system_updates()]
+    unique = []
+    seen = set()
+    for item in updates:
+        key = (item["date"], item["title"])
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(item)
+    return unique
 
 
 def register(app) -> None:
@@ -110,8 +149,12 @@ def register(app) -> None:
             token = create_internal_api_key(conn, actor=actor_name(), name=name)
             status = internal_api_key_status(conn)
             keys = list_internal_api_keys(conn)
-        flash("Internal API Key 已生成。新旧 Key 可同时使用，可在列表中查看和停用。", "success")
-        return render_template("internal_api_key.html", status=status, keys=keys, generated_token=token)
+        flash("Internal API Key 已生成。请立即复制；离开本页后无法再次查看完整 Key。", "success")
+        response = make_response(
+            render_template("internal_api_key.html", status=status, keys=keys, generated_token=token)
+        )
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     @app.post("/internal-api-key/disable")
     @permission_required("manage_users")
@@ -140,5 +183,5 @@ def register(app) -> None:
         return render_template(
             "system_updates.html",
             updates=read_system_updates(),
-            source_name=UPDATES_DOC_PATH.name,
+            source_name=f"changes/*.json + {UPDATES_DOC_PATH.name}",
         )

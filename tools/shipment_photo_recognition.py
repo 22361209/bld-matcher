@@ -12,7 +12,6 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
-from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
