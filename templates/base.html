@@ -6,6 +6,7 @@
     <title>{% block page_title %}BLD 工作台{% endblock %}</title>
     <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='components/workspace.css', v=static_version('components/workspace.css')) }}">
     {% block page_head %}{% endblock %}
   </head>
   <body class="{% block body_class %}{% endblock %}" data-page="{% block page_id %}shared.page{% endblock %}" data-page-type="{% block page_type %}workbench{% endblock %}">

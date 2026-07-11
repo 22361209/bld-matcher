@@ -3,14 +3,14 @@
 {% block page_title %}发货通知{% endblock %}
 {% block page_id %}shipping.notice{% endblock %}
 {% block page_type %}workbench{% endblock %}
-{% block page_class %}shell wide materials-linear inquiry-search-page shipping-notice-page{% endblock %}
+{% block page_class %}shell wide app-surface search-workspace shipping-notice-page{% endblock %}
 {% block page_head %}
   <link rel="stylesheet" href="{{ url_for('static', filename='pages/shipping_notice.css', v=static_version('pages/shipping_notice.css')) }}">
 {% endblock %}
 
 {% block page_content %}
 {% if request.args.get("generated") %}
-        <section class="materials-command">
+        <section class="workspace-command">
           <div>
             <h2>发货通知已生成</h2>
             <p class="note">{{ request.args.get("generated") }}</p>
@@ -19,22 +19,22 @@
         </section>
       {% endif %}
 
-      <header class="inquiry-landing shipping-landing">
+      <header class="search-hero shipping-landing">
         <h1>发货通知</h1>
         <p>上传发货数据，选择客户模板后预览生成 Excel。</p>
       </header>
 
-      <section class="inquiry-command-center shipping-command-center">
-        <div class="inquiry-directory-note">先上传发货数据，下一步选择客户模板。</div>
-        <form id="shipping-upload-form" action="{{ url_for('preview_shipping_notice') }}" method="post" enctype="multipart/form-data" class="inquiry-command-row inquiry-upload-form" data-submit-wait data-submit-wait-text="正在上传并生成预览，请稍候..." data-submit-wait-button-text="处理中...">
+      <section class="search-command shipping-command-center">
+        <div class="search-command-note">先上传发货数据，下一步选择客户模板。</div>
+        <form id="shipping-upload-form" action="{{ url_for('preview_shipping_notice') }}" method="post" enctype="multipart/form-data" class="search-command-row upload-command" data-submit-wait data-submit-wait-text="正在上传并生成预览，请稍候..." data-submit-wait-button-text="处理中...">
           {{ csrf_field() }}
           <div class="file-picker-field">
             <span>可拖入发货数据</span>
-            <div class="file-picker inquiry-file-oe-picker" data-file-drop-zone data-file-drop-accept=".xlsx,.csv">
+            <div class="file-picker inline-file-picker" data-file-drop-zone data-file-drop-accept=".xlsx,.csv">
               <input id="shipping-data-input" class="file-picker-input" type="file" name="shipment_data" accept=".xlsx,.csv" required>
               <div class="file-picker-control">
                 <label class="file-picker-button" for="shipping-data-input">选择文件</label>
-                <input class="file-picker-oe-input shipping-file-placeholder" tabindex="-1" placeholder="Excel / CSV 发货数据" readonly>
+                <input class="file-picker-text shipping-file-placeholder" tabindex="-1" placeholder="Excel / CSV 发货数据" readonly>
                 <button class="file-picker-clear" type="button" disabled>清除</button>
                 <button class="embedded-submit" type="button" data-open-shipping-template-select-modal>下一步</button>
               </div>
@@ -52,16 +52,16 @@
           <span>最近发货通知</span>
           <strong>{{ latest_outputs|length }} 个</strong>
         </summary>
-        <section class="materials-table-section shipping-history-panel">
-          <div class="materials-table-title">
+        <section class="data-section shipping-history-panel">
+          <div class="data-section-header">
             <div>
               <h2>最近发货通知</h2>
               <p>显示当前账号最近生成的发货通知 Excel。</p>
             </div>
             <span>{{ latest_outputs|length }} 个</span>
           </div>
-          <div class="materials-table-wrap">
-            <table class="materials-grid-table">
+          <div class="data-table-scroll">
+            <table class="data-table">
               <thead>
                 <tr>
                   <th>文件名</th>

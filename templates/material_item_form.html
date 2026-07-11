@@ -3,20 +3,20 @@
 {% block page_title %}{{ "编辑材料明细" if item else "新增材料明细" }}{% endblock %}
 {% block page_id %}materials.edit{% endblock %}
 {% block page_type %}edit{% endblock %}
-{% block page_class %}shell wide materials-linear{% endblock %}
+{% block page_class %}shell wide app-surface{% endblock %}
 
 {% block page_content %}
-<header class="materials-hero">
+<header class="workspace-header">
         <div>
           <h1>{{ "编辑材料明细" if item else "新增材料明细" }}</h1>
           <p>母件编码用于匹配生产计划；规格尺寸会自动识别厚度、宽度、长度。</p>
         </div>
-        <div class="materials-actions">
+        <div class="command-actions">
           <a class="linear-button subtle" href="{{ url_for('material_items', q=item.model if item else '') }}">返回材料明细</a>
         </div>
       </header>
       <section class="workbench-form-section">
-        <form action="{{ url_for('save_material_item') }}" method="post" class="product-form" data-enter-navigation>
+        <form action="{{ url_for('save_material_item') }}" method="post" class="record-form" data-enter-navigation>
           {{ csrf_field() }}
           {% if item %}<input type="hidden" name="id" value="{{ item.id }}">{% endif %}
           <label>

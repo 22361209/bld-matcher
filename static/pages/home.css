@@ -181,7 +181,7 @@
 .inquiry-history-drawer {
   display: grid;
   justify-items: stretch;
-  width: var(--inquiry-panel-width);
+  width: var(--search-panel-width);
   max-width: 100%;
   margin: 2px auto 12px;
 }
@@ -245,4 +245,23 @@
   border: 1px solid var(--linear-line);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.72);
+}
+
+@media (max-width: 760px) {
+  .quick-oe-card,
+  .quick-oe-card.unmatched {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-oe-heading {
+    display: grid;
+  }
+
+  .quick-oe-filters {
+    justify-content: flex-start;
+  }
+
+  .quick-oe-image-placeholder {
+    display: none;
+  }
 }

@@ -113,7 +113,7 @@ class WebAppTest(unittest.TestCase):
         html = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
         self.assertIn("BLD", html)
-        self.assertLess(html.index('class="messages'), html.index('class="inquiry-landing"'))
+        self.assertLess(html.index('class="messages'), html.index('class="search-hero"'))
         self.assertIn('class="embedded-submit" type="submit">开始匹配', html)
         self.assertIn('class="embedded-input-control"', html)
         self.assertIn('class="embedded-submit" type="submit">搜索', html)

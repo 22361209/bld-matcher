@@ -3,46 +3,46 @@
 {% block page_title %}导入报价记录{% endblock %}
 {% block page_id %}quotes.import{% endblock %}
 {% block page_type %}import-preview{% endblock %}
-{% block page_class %}shell wide materials-linear{% endblock %}
+{% block page_class %}shell wide app-surface{% endblock %}
 
 {% block page_content %}
-<header class="materials-hero">
+<header class="workspace-header">
         <div>
           <h1>导入报价记录</h1>
           <p>确认预览后写入报价记录表。</p>
         </div>
-        <div class="materials-actions">
+        <div class="command-actions">
           <a class="linear-button subtle" href="{{ url_for('quote_web.quotes') }}">返回报价记录</a>
         </div>
       </header>
-      <section class="materials-metrics" aria-label="报价记录导入统计">
+      <section class="metric-strip" aria-label="报价记录导入统计">
         <div><span>总行数</span><strong>{{ preview.counts.total }}</strong></div>
         <div><span>可导入</span><strong>{{ preview.counts.valid }}</strong></div>
         <div><span>跳过</span><strong>{{ preview.counts.invalid }}</strong></div>
       </section>
 
-      <section class="materials-command">
+      <section class="workspace-command">
         <div>
           <h2>导入预览</h2>
           <p class="note">只会导入状态为可导入的行。</p>
         </div>
-        <form action="{{ url_for('quote_web.quote_import_apply') }}" method="post" class="materials-actions">
+        <form action="{{ url_for('quote_web.quote_import_apply') }}" method="post" class="command-actions">
           {{ csrf_field() }}
           <input type="hidden" name="payload" value="{{ payload }}">
           <button class="linear-button primary" type="submit">确认导入报价记录</button>
         </form>
       </section>
 
-      <section class="materials-table-section">
-        <div class="materials-table-title">
+      <section class="data-section">
+        <div class="data-section-header">
           <div>
             <h2>预览明细</h2>
             <p>检查客户、BLD号、客户产品编码和价格字段。</p>
           </div>
           <span>{{ preview.rows|length }} 条</span>
         </div>
-        <div class="materials-table-wrap">
-          <table class="materials-grid-table quote-table">
+        <div class="data-table-scroll">
+          <table class="data-table quote-table">
             <thead>
               <tr>
                 <th>Excel行</th>

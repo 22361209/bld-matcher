@@ -10,7 +10,7 @@
   min-width: 130px;
 }
 
-.materials-linear .quote-form {
+.app-surface .quote-form {
   width: min(760px, calc(100vw - 48px));
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }

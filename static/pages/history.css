@@ -6,15 +6,15 @@
   padding: 4px 0 12px;
 }
 
-.history-command .materials-search-form {
+.history-command .search-form {
   flex-basis: 560px;
 }
 
-.history-command .materials-search-form label {
+.history-command .search-form label {
   flex: 1 1 360px;
 }
 
-.history-command .materials-search-form input {
+.history-command .search-form input {
   width: min(520px, 100%);
 }
 

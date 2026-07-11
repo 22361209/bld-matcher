@@ -6,10 +6,13 @@
 {% block page_title %}匹配结果{% endblock %}
 {% block page_id %}inquiry.result{% endblock %}
 {% block page_type %}workbench{% endblock %}
-{% block page_class %}shell wide materials-linear{% endblock %}
+{% block page_class %}shell wide app-surface{% endblock %}
+{% block page_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='pages/inquiry.css', v=static_version('pages/inquiry.css')) }}">
+{% endblock %}
 
 {% block page_content %}
-<header class="materials-hero">
+<header class="workspace-header">
         <div>
           <h1>匹配结果</h1>
           <p>共 {{ summary.total }} 行，命中 {{ summary.matched }} 行，未找到 {{ summary.unmatched }} 行。</p>
@@ -21,13 +24,13 @@
         </div>
       </header>
 
-      <section class="materials-table-section">
-        <div class="materials-table-title">
+      <section class="data-section">
+        <div class="data-section-header">
           <div>
             <h2>匹配明细</h2>
             <p>按源表行号显示匹配结果和说明。</p>
           </div>
-          <div class="materials-table-title-actions">
+          <div class="data-section-actions">
             <span>{{ summary.rows|length }} 条</span>
             {% if output_pending %}
               <button class="linear-button primary" type="button" data-open-download-modal>下载 Excel</button>
@@ -73,8 +76,8 @@
             {% endif %}
           </div>
         </div>
-        <div class="materials-table-wrap">
-        <table class="materials-grid-table">
+        <div class="data-table-scroll">
+        <table class="data-table">
           <thead>
             <tr>
               <th>行号</th>
@@ -94,7 +97,7 @@
                 <td>{{ row.oe }}</td>
                 <td>{{ row.name }}</td>
                 <td><strong>{{ row.bld_no }}</strong></td>
-                <td class="price-cell">{% if row.price_cny is not none %}¥{{ "%.2f"|format(row.price_cny) }}{% endif %}</td>
+                <td class="money-cell">{% if row.price_cny is not none %}¥{{ "%.2f"|format(row.price_cny) }}{% endif %}</td>
                 <td class="product-status-cell">{{ format_product_status(row.product_status, "zh") }}</td>
                 <td>{{ row.score }}</td>
                 <td>

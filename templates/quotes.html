@@ -3,27 +3,27 @@
 {% block page_title %}报价记录{% endblock %}
 {% block page_id %}quotes.list{% endblock %}
 {% block page_type %}list{% endblock %}
-{% block page_class %}shell wide materials-linear{% endblock %}
+{% block page_class %}shell wide app-surface{% endblock %}
 {% block page_head %}
   <link rel="stylesheet" href="{{ url_for('static', filename='pages/quotes.css', v=static_version('pages/quotes.css')) }}">
 {% endblock %}
 
 {% block page_content %}
-<header class="materials-hero">
+<header class="workspace-header">
         <div>
           <h1>报价记录</h1>
           <p>集中保存人工和 Hermes 录入的客户报价，按客户、BLD号、日期、币种和报价人查询。</p>
         </div>
       </header>
-      <section class="materials-metrics" aria-label="报价记录统计">
+      <section class="metric-strip" aria-label="报价记录统计">
         <div><span>总记录</span><strong>{{ stats.total }}</strong></div>
         <div><span>客户数</span><strong>{{ stats.customers }}</strong></div>
         <div><span>BLD号数</span><strong>{{ stats.models }}</strong></div>
         <div><span>当前结果</span><strong>{{ total_records }}</strong></div>
       </section>
 
-      <section class="materials-command quote-command">
-        <form class="materials-search-form quote-search" method="get" action="{{ url_for('quote_web.quotes') }}#quote-results">
+      <section class="workspace-command quote-command">
+        <form class="search-form quote-search" method="get" action="{{ url_for('quote_web.quotes') }}#quote-results">
           <label>
             <span>客户</span>
             <input name="customer_name" value="{{ filters.customer_name }}" placeholder="例如 博世">
@@ -129,7 +129,7 @@
         {% if can("manage_customer_prices") %}
           <details class="toolbar-popover linear-popover">
             <summary>导入报价记录</summary>
-            <form action="{{ url_for('quote_web.quote_import_preview') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form price-import-form">
+            <form action="{{ url_for('quote_web.quote_import_preview') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form toolbar-upload-form">
               {{ csrf_field() }}
               <label>
                 <span>客户</span>
@@ -159,7 +159,7 @@
       </section>
 
       {% if latest %}
-        <section class="materials-flow quote-latest">
+        <section class="workspace-flow quote-latest">
           <h2>最近一次报价</h2>
           <p>
             {{ latest.customer_name }} / {{ latest.bld_no or latest.product_model }}：
@@ -170,15 +170,15 @@
         </section>
       {% endif %}
 
-      <section class="materials-table-section" id="quote-results">
-        <div class="materials-table-title">
+      <section class="data-section" id="quote-results">
+        <div class="data-section-header">
           <div>
             <h2>报价列表</h2>
             <p>当前筛选 {{ total_records }} 条；输入客户和BLD号可查看历史报价和最近一次报价。</p>
           </div>
         </div>
-        <div class="materials-table-wrap">
-          <table class="materials-grid-table quote-table">
+        <div class="data-table-scroll">
+          <table class="data-table quote-table">
             <colgroup>
               <col class="col-width-92">
               <col class="col-width-128">

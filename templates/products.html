@@ -3,16 +3,19 @@
 {% block page_title %}产品目录{% endblock %}
 {% block page_id %}products.list{% endblock %}
 {% block page_type %}list{% endblock %}
-{% block page_class %}shell wide materials-linear{% endblock %}
+{% block page_class %}shell wide app-surface{% endblock %}
+{% block page_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='pages/products.css', v=static_version('pages/products.css')) }}">
+{% endblock %}
 
 {% block page_content %}
-<header class="materials-hero">
+<header class="workspace-header">
         <div>
           <h1>产品目录</h1>
           <p>维护产品、OE、价格和图片资料，支持按 BLD NO. 或 OE 号快速检索。</p>
         </div>
       </header>
-      <section class="materials-metrics" aria-label="产品目录统计">
+      <section class="metric-strip" aria-label="产品目录统计">
         <div><span>总产品</span><strong>{{ stats.products }}</strong></div>
         <div><span>启用产品</span><strong>{{ stats.active }}</strong></div>
         <div><span>停用产品</span><strong>{{ stats.inactive }}</strong></div>
@@ -20,8 +23,8 @@
       </section>
 
       {% set status_label = "包含停用" if status == "all" else ("只看停用" if status == "inactive" else "只看启用") %}
-      <section class="materials-command products-sticky-command">
-        <form class="materials-search-form" method="get" action="{{ url_for('products') }}#products-results">
+      <section class="workspace-command products-sticky-command">
+        <form class="search-form" method="get" action="{{ url_for('products') }}#products-results">
           <label>
             <span>按 BLD / 品牌 / 车型搜索</span>
             <input id="bld-search" name="bld" value="{{ bld_query }}" placeholder="例如 K6015 / HYUNDAI / Sportage">
@@ -41,7 +44,7 @@
             </div>
           </details>
         </form>
-        <div class="secondary-actions materials-actions">
+        <div class="secondary-actions command-actions">
           {% if can("edit_products") %}
             <button class="linear-button primary" type="button" data-open-product-modal>新增产品</button>
             <a class="linear-button subtle" href="{{ url_for('batch_drawings') }}">批量上传图纸</a>
@@ -49,7 +52,7 @@
           {% if can("edit_products") %}
             <details class="toolbar-popover linear-popover">
               <summary>维护单价</summary>
-              <form action="{{ url_for('price_import_preview') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form price-import-form">
+              <form action="{{ url_for('price_import_preview') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form toolbar-upload-form">
                 {{ csrf_field() }}
                 <label class="file-picker">
                   <span>单价 Excel</span>
@@ -67,7 +70,7 @@
           {% if can("import_catalog") %}
             <details class="toolbar-popover linear-popover">
               <summary>导入目录</summary>
-              <form action="{{ url_for('upload_catalog') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form catalog-import-form">
+              <form action="{{ url_for('upload_catalog') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form toolbar-upload-form">
                 {{ csrf_field() }}
                 <input type="hidden" name="next" value="products">
                 <label class="file-picker">
@@ -86,7 +89,7 @@
           {% if can("export_catalog") %}
             <details class="toolbar-popover linear-popover">
               <summary>导出目录</summary>
-              <form action="{{ url_for('export_products') }}" method="post" class="toolbar-popover-form catalog-export-form">
+              <form action="{{ url_for('export_products') }}" method="post" class="toolbar-popover-form toolbar-export-form">
                 {{ csrf_field() }}
                 <input type="hidden" name="status" value="{{ status }}">
                 <label>
@@ -103,9 +106,9 @@
         </div>
       </section>
 
-      <section class="materials-table-section" id="products-results">
-        <div class="materials-table-wrap">
-        <table class="resizable-table materials-grid-table" id="products-table">
+      <section class="data-section" id="products-results">
+        <div class="data-table-scroll">
+        <table class="resizable-table data-table products-table" id="products-table">
           <colgroup>
             <col data-col="bld" class="col-width-104">
             <col data-col="series" class="col-width-82">
@@ -137,7 +140,7 @@
           </tbody>
         </table>
         {% if total_products == 0 %}
-          <p class="materials-empty">没有符合条件的产品。</p>
+          <p class="empty-message">没有符合条件的产品。</p>
         {% elif pagination.total_pages > 1 %}
           <div class="product-pagination bottom">
             <span>第 {{ pagination.page }} / {{ pagination.total_pages }} 页，每页 {{ product_page_size }} 条</span>
@@ -170,15 +173,15 @@
 
 {% block page_modals %}
 {% if can("edit_products") %}
-      <div class="product-modal" id="product-modal" aria-hidden="true">
-        <div class="product-modal-backdrop" data-close-product-modal></div>
-        <div class="product-modal-panel" role="dialog" aria-modal="true" aria-label="新增产品" data-draggable-modal-panel>
+      <div class="editor-modal" id="product-modal" aria-hidden="true">
+        <div class="editor-modal-backdrop" data-close-product-modal></div>
+        <div class="editor-modal-panel" role="dialog" aria-modal="true" aria-label="新增产品" data-draggable-modal-panel>
           <button class="image-modal-close" type="button" data-close-product-modal aria-label="关闭新增产品">×</button>
           <div class="modal-heading draggable-modal-heading" data-modal-drag-handle>
             <h2>新增产品</h2>
             <p class="note">一个 BLD NO. 可以维护多个 OE、多个品牌和多个车型；每行一个 OE 会更清楚。</p>
           </div>
-          <form action="{{ url_for('save_product') }}" method="post" class="product-form modal-product-form">
+          <form action="{{ url_for('save_product') }}" method="post" class="record-form modal-form">
             {{ csrf_field() }}
             <label>
               BLD NO.
@@ -219,9 +222,9 @@
           </form>
         </div>
       </div>
-      <div class="product-modal" id="product-edit-modal" aria-hidden="true">
-        <div class="product-modal-backdrop" data-close-product-edit-modal></div>
-        <div class="product-modal-panel product-edit-modal-panel" role="dialog" aria-modal="true" aria-label="编辑产品" data-draggable-modal-panel>
+      <div class="editor-modal" id="product-edit-modal" aria-hidden="true">
+        <div class="editor-modal-backdrop" data-close-product-edit-modal></div>
+        <div class="editor-modal-panel product-edit-modal-panel" role="dialog" aria-modal="true" aria-label="编辑产品" data-draggable-modal-panel>
           <button class="image-modal-close" type="button" data-close-product-edit-modal aria-label="关闭编辑产品">×</button>
           <div class="modal-heading draggable-modal-heading" data-modal-drag-handle>
             <h2>编辑产品</h2>

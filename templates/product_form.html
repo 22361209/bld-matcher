@@ -4,25 +4,28 @@
 {% block page_id %}products.edit{% endblock %}
 {% block page_type %}edit{% endblock %}
 {% block body_class %}{% if embedded %}embedded-product-form-page{% endif %}{% endblock %}
-{% block page_class %}shell wide materials-linear {% if embedded %}embedded-product-form-shell{% endif %}{% endblock %}
+{% block page_class %}shell wide app-surface {% if embedded %}embedded-product-form-shell{% endif %}{% endblock %}
 {% block navigation %}{% if not embedded %}{{ super() }}{% endif %}{% endblock %}
 {% block messages %}{% if not embedded %}{{ super() }}{% endif %}{% endblock %}
+{% block page_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='pages/products.css', v=static_version('pages/products.css')) }}">
+{% endblock %}
 
 {% block page_content %}
 {% if not embedded %}
-        <header class="materials-hero">
+        <header class="workspace-header">
           <div>
             <h1>{{ "编辑产品" if product else "新增产品" }}</h1>
             <p>一个 BLD NO. 可以维护多个 OE、多个品牌和多个车型；每行一个 OE 会更清楚。</p>
           </div>
-          <div class="materials-actions">
+          <div class="command-actions">
             <a class="linear-button subtle" href="{{ url_for('products') }}">返回目录</a>
           </div>
         </header>
       {% endif %}
 
       <section class="workbench-form-section">
-        <form action="{{ url_for('save_product') }}" method="post" enctype="multipart/form-data" class="product-form">
+        <form action="{{ url_for('save_product') }}" method="post" enctype="multipart/form-data" class="record-form">
           {{ csrf_field() }}
           {% if embedded %}<input type="hidden" name="embedded" value="1">{% endif %}
           <label>

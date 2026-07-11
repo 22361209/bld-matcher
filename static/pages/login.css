@@ -1,0 +1,20 @@
+/* Login page. */
+
+.login-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.login-panel {
+  width: min(420px, 100%);
+}
+
+.login-brand {
+  margin-bottom: 18px;
+}
+
+.login-brand h1 {
+  margin-bottom: 6px;
+}

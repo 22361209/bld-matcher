@@ -3,18 +3,18 @@
 {% block page_title %}操作日志{% endblock %}
 {% block page_id %}admin.logs{% endblock %}
 {% block page_type %}system-admin{% endblock %}
-{% block page_class %}shell wide materials-linear{% endblock %}
+{% block page_class %}shell wide app-surface{% endblock %}
 
 {% block page_content %}
-<header class="materials-hero">
+<header class="workspace-header">
         <div>
           <h1>操作日志</h1>
           <p>记录目录导入、产品新增/编辑/停用、人工映射变更。</p>
         </div>
       </header>
 
-      <section class="materials-command">
-        <form class="materials-search-form" method="get" action="{{ url_for('logs') }}">
+      <section class="workspace-command">
+        <form class="search-form" method="get" action="{{ url_for('logs') }}">
           <label>
             <span>搜索日志</span>
             <input name="q" value="{{ query }}" placeholder="输入 BLD 号、OE、操作类型">
@@ -32,16 +32,16 @@
         </form>
       </section>
 
-      <section class="materials-table-section">
-        <div class="materials-table-title">
+      <section class="data-section">
+        <div class="data-section-header">
           <div>
             <h2>日志明细</h2>
             <p>按最新操作倒序显示。</p>
           </div>
           <span>{{ logs|length }} 条</span>
         </div>
-        <div class="materials-table-wrap">
-        <table class="materials-grid-table log-table">
+        <div class="data-table-scroll">
+        <table class="data-table log-table">
           <thead>
             <tr>
               <th>时间</th>

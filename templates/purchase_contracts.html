@@ -3,7 +3,7 @@
 {% block page_title %}合同管理{% endblock %}
 {% block page_id %}contracts.workspace{% endblock %}
 {% block page_type %}workbench{% endblock %}
-{% block page_class %}shell wide materials-linear purchase-contract-page{% endblock %}
+{% block page_class %}shell wide app-surface purchase-contract-page{% endblock %}
 {% block page_head %}
   <link rel="stylesheet" href="{{ url_for('static', filename='pages/contracts.css', v=static_version('pages/contracts.css')) }}">
 {% endblock %}
@@ -13,7 +13,7 @@
       {% set contract_label = "销售合同" if is_sales else "采购合同" %}
       {% set party_a_label = "供方（甲方）" if is_sales else "采购方（甲方）" %}
       {% set party_b_label = "需方（乙方）" if is_sales else "供应方（乙方）" %}
-      <header class="materials-hero contract-management-hero">
+      <header class="workspace-header contract-management-hero">
         <div>
           <h1>合同管理</h1>
           <p>采购合同和销售合同分别生成、分别归档。</p>
@@ -35,15 +35,15 @@
           </span>
           <em>{{ contract_outputs|length }} 个</em>
         </summary>
-        <section class="materials-table-section contract-history-section">
-        <div class="materials-table-title">
+        <section class="data-section contract-history-section">
+        <div class="data-section-header">
           <div>
             <h2>已生成合同</h2>
             <p>按合同类型、公司名或合同编号查找已生成的 PDF。</p>
           </div>
           <span>{{ contract_outputs|length }} 个</span>
         </div>
-        <form class="materials-search-form contract-history-search" method="get" action="{{ history_action }}#contract-history">
+        <form class="search-form contract-history-search" method="get" action="{{ history_action }}#contract-history">
           <label>
             <span>搜索合同</span>
             <input name="contract_q" value="{{ contract_filters.contract_q }}" placeholder="合同编号、客户/供应商、文件名或操作用户">
@@ -62,8 +62,8 @@
           {% endif %}
         </form>
         {% if contract_outputs %}
-          <div class="materials-table-wrap">
-            <table class="materials-grid-table contract-history-table">
+          <div class="data-table-scroll">
+            <table class="data-table contract-history-table">
               <thead>
                 <tr>
                   <th>类型</th>
@@ -89,7 +89,7 @@
             </table>
           </div>
         {% else %}
-          <p class="materials-empty">
+          <p class="empty-message">
             {% if contract_filters.contract_q %}没有找到匹配的合同。{% else %}还没有已生成的合同。{% endif %}
           </p>
         {% endif %}
@@ -299,7 +299,7 @@
           </div>
         </div>
       {% else %}
-        <p class="materials-muted">当前账号没有合同管理权限。</p>
+        <p class="muted-text">当前账号没有合同管理权限。</p>
       {% endif %}
 {% endblock %}
 

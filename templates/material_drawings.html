@@ -3,10 +3,13 @@
 {% block page_title %}物料图纸{% endblock %}
 {% block page_id %}materials.drawings{% endblock %}
 {% block page_type %}workbench{% endblock %}
-{% block page_class %}shell wide materials-linear material-drawing-workspace{% endblock %}
+{% block page_class %}shell wide app-surface material-drawing-workspace{% endblock %}
+{% block page_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='pages/material_drawings.css', v=static_version('pages/material_drawings.css')) }}">
+{% endblock %}
 
 {% block page_content %}
-<header class="materials-hero">
+<header class="workspace-header">
         <div>
           <h1>物料图纸</h1>
           <p>按产品编码查找并连续查看物料 PDF 图纸。</p>
@@ -14,8 +17,8 @@
       </header>
       {%- macro pdf_preview_src(name) -%}{{ url_for('preview_material_drawing', name=name) }}#page=1&zoom=100{%- endmacro %}
 
-      <section class="materials-command material-drawings-command">
-        <form class="materials-search-form" method="get" action="{{ url_for('material_drawings') }}">
+      <section class="workspace-command material-drawings-command">
+        <form class="search-form" method="get" action="{{ url_for('material_drawings') }}">
           <label>
             <span>产品编码</span>
             <input name="q" value="{{ query }}" placeholder="例如 QD1000">
@@ -35,7 +38,7 @@
           {% endif %}
         </form>
         {% if can("manage_materials") %}
-          <form class="materials-search-form material-drawing-upload-form" action="{{ url_for('upload_material_drawing') }}" method="post" enctype="multipart/form-data">
+          <form class="search-form material-drawing-upload-form" action="{{ url_for('upload_material_drawing') }}" method="post" enctype="multipart/form-data">
             {{ csrf_field() }}
             <label class="file-picker">
               <span>上传 PDF 图纸</span>

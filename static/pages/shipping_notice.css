@@ -195,6 +195,10 @@
 }
 
 @media (max-width: 760px) {
+  .shipping-flow {
+    display: block;
+  }
+
   .shipping-step + .shipping-step {
     margin-top: 10px;
   }

@@ -3,15 +3,18 @@
 {% block page_title %}产品数据同步{% endblock %}
 {% block page_id %}products.sync{% endblock %}
 {% block page_type %}import-preview{% endblock %}
-{% block page_class %}shell wide materials-linear{% endblock %}
+{% block page_class %}shell wide app-surface{% endblock %}
+{% block page_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='pages/product_sync.css', v=static_version('pages/product_sync.css')) }}">
+{% endblock %}
 
 {% block page_content %}
-<header class="materials-hero">
+<header class="workspace-header">
         <div>
           <h1>产品数据同步</h1>
           <p>用于两端系统之间交换产品库，可选择是否带图纸和产品图片。</p>
         </div>
-        <div class="materials-actions">
+        <div class="command-actions">
           <a class="linear-button subtle" href="{{ url_for('products') }}">返回产品目录</a>
         </div>
       </header>
@@ -96,7 +99,7 @@
       </section>
 
       {% if preview %}
-        <section class="materials-metrics" aria-label="产品数据差异统计">
+        <section class="metric-strip" aria-label="产品数据差异统计">
           <div><span>新增产品</span><strong>{{ preview.diff.new_count }}</strong></div>
           <div><span>更新产品</span><strong>{{ preview.diff.updated_count }}</strong></div>
           <div><span>包内旧数据</span><strong>{{ preview.diff.conflict_count }}</strong></div>
@@ -104,14 +107,14 @@
           <div><span>当前系统独有</span><strong>{{ preview.diff.local_only_count }}</strong></div>
         </section>
 
-        <section class="materials-command">
+        <section class="workspace-command">
           <div>
             <h2>导入预览</h2>
             <p class="note">
               包内图纸 {{ preview.media_counts.drawings }} 个，产品图片 {{ preview.media_counts.product_images }} 个。
             </p>
           </div>
-          <form action="{{ url_for('apply_product_data_package') }}" method="post" class="materials-actions">
+          <form action="{{ url_for('apply_product_data_package') }}" method="post" class="command-actions">
             {{ csrf_field() }}
             <input type="hidden" name="package_path" value="{{ preview.package_path }}">
             {% if preview.include_drawings %}<input type="hidden" name="include_drawings" value="1">{% endif %}
@@ -126,16 +129,16 @@
           </form>
         </section>
 
-        <section class="materials-table-section">
-          <div class="materials-table-title">
+        <section class="data-section">
+          <div class="data-section-header">
             <div>
               <h2>差异明细</h2>
               <p>最多显示前 50 条新增、更新、包内旧数据或当前系统独有产品。</p>
             </div>
             <span>{{ preview.diff.rows|length }} 条</span>
           </div>
-          <div class="materials-table-wrap">
-            <table class="materials-grid-table">
+          <div class="data-table-scroll">
+            <table class="data-table">
               <thead>
                 <tr>
                   <th>状态</th>

@@ -1,0 +1,61 @@
+/* System update timeline. */
+
+.updates-timeline {
+  padding: 8px 0 24px;
+}
+
+.update-group {
+  display: grid;
+  grid-template-columns: 156px minmax(0, 1fr);
+  gap: 20px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--linear-line);
+}
+
+.update-meta {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+
+.update-date {
+  color: var(--linear-accent);
+  font-weight: 800;
+}
+
+.update-version {
+  width: fit-content;
+  padding: 2px 7px;
+  border: 1px solid #c8d4df;
+  border-radius: 999px;
+  color: #52677c;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.update-group h2 {
+  margin-bottom: 8px;
+  font-size: 16px;
+}
+
+.update-group ul {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.75;
+}
+
+.update-group li {
+  padding-left: 2px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .update-group {
+    display: block;
+  }
+
+  .update-group ul {
+    margin-top: 8px;
+  }
+}

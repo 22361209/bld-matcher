@@ -3,18 +3,19 @@
 {% block page_title %}BLD 询价处理{% endblock %}
 {% block page_id %}inquiry.home{% endblock %}
 {% block page_type %}workbench{% endblock %}
-{% block page_class %}shell wide materials-linear inquiry-search-page{% endblock %}
+{% block page_class %}shell wide app-surface search-workspace{% endblock %}
 {% block page_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='pages/inquiry.css', v=static_version('pages/inquiry.css')) }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='pages/home.css', v=static_version('pages/home.css')) }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='pages/history.css', v=static_version('pages/history.css')) }}">
 {% endblock %}
 
 {% block page_content %}
-<header class="inquiry-landing">
+<header class="search-hero">
         <h1><span>BLD</span> 询价处理</h1>
         <p>上传客户询价表，自动在产品目录中新增匹配的 BLD NO.</p>
         {% if catalog_summary %}
-          <div class="inquiry-stat-strip" aria-label="产品目录统计">
+          <div class="compact-metrics" aria-label="产品目录统计">
             <span>启用产品 <strong>{{ product_stats.active }}</strong></span>
             <span>号码索引 <strong>{{ catalog_summary.oe_keys }}</strong></span>
             <span>BLD 索引 <strong>{{ catalog_summary.bld_keys }}</strong></span>
@@ -23,8 +24,8 @@
         {% endif %}
       </header>
 
-      <section class="inquiry-command-center">
-        <div class="inquiry-directory-note">
+      <section class="search-command">
+        <div class="search-command-note">
           {% if catalog_summary %}
             当前目录：{{ catalog_path.name }}
           {% else %}
@@ -32,15 +33,15 @@
           {% endif %}
         </div>
         {% if can("generate_match") %}
-          <form action="{{ url_for('match_inquiry') }}" method="post" enctype="multipart/form-data" class="inquiry-command-row inquiry-upload-form" data-submit-wait data-submit-wait-text="正在上传并分析，请稍候..." data-submit-wait-button-text="处理中...">
+          <form action="{{ url_for('match_inquiry') }}" method="post" enctype="multipart/form-data" class="search-command-row upload-command" data-submit-wait data-submit-wait-text="正在上传并分析，请稍候..." data-submit-wait-button-text="处理中...">
             {{ csrf_field() }}
             <div class="file-picker-field">
               <span>可拖入询价文件</span>
-              <div class="file-picker inquiry-file-oe-picker" data-file-drop-zone data-file-drop-accept=".xls,.xlsx">
+              <div class="file-picker inline-file-picker" data-file-drop-zone data-file-drop-accept=".xls,.xlsx">
                 <input id="inquiry-file-input" class="file-picker-input" type="file" name="inquiry" accept=".xls,.xlsx">
                 <div class="file-picker-control">
                   <label class="file-picker-button" for="inquiry-file-input">选择文件</label>
-                  <input class="file-picker-oe-input" name="quick_oe" value="{{ quick_oe }}" maxlength="5000" placeholder="输入 OE或 BLD 号">
+                  <input class="file-picker-text" name="quick_oe" value="{{ quick_oe }}" maxlength="5000" placeholder="输入 OE或 BLD 号">
                   <button class="file-picker-clear" type="button" disabled>清除</button>
                   <button class="embedded-submit" type="submit">开始匹配</button>
                 </div>
@@ -106,14 +107,14 @@
                     </article>
                   {% endfor %}
                 </div>
-                <p class="materials-empty quick-oe-filter-empty" data-quick-filter-empty hidden>没有符合筛选的结果。</p>
+                <p class="empty-message quick-oe-filter-empty" data-quick-filter-empty hidden>没有符合筛选的结果。</p>
               {% else %}
-                <p class="materials-empty">没有可查询的号码。</p>
+                <p class="empty-message">没有可查询的号码。</p>
               {% endif %}
             </section>
           {% endif %}
         {% else %}
-          <p class="materials-muted">当前账号没有生成匹配结果权限。</p>
+          <p class="muted-text">当前账号没有生成匹配结果权限。</p>
         {% endif %}
       </section>
 
@@ -129,7 +130,7 @@
           <strong data-history-count>{% if history_loaded %}{{ history_files|length }} 条{% else %}展开后加载{% endif %}</strong>
         </summary>
         <div class="inquiry-history-panel">
-          <form class="inquiry-command-row inquiry-history-search" method="get" action="{{ url_for('index') }}">
+          <form class="search-command-row compact-search-row" method="get" action="{{ url_for('index') }}">
             <label class="embedded-search-field">
               <span>搜索历史报价文件</span>
               <span class="embedded-input-control">
@@ -141,16 +142,16 @@
               <a class="linear-button subtle" href="{{ url_for('index') }}">清除</a>
             {% endif %}
           </form>
-          <section class="materials-recent inquiry-history">
-            <div class="materials-table-title">
+          <section class="recent-files inquiry-history">
+            <div class="data-section-header">
               <div>
                 <h2>历史报价文件</h2>
                 <p>按文件名搜索已经处理过的询价结果，方便重新下载。</p>
               </div>
               <span data-history-table-count>{% if history_loaded %}{{ history_files|length }} 条{% else %}未加载{% endif %}</span>
             </div>
-            <div class="materials-table-wrap inquiry-history-wrap" {% if not history_files %}hidden{% endif %} data-history-table-wrap>
-                <table class="materials-grid-table inquiry-history-table">
+            <div class="data-table-scroll inquiry-history-wrap" {% if not history_files %}hidden{% endif %} data-history-table-wrap>
+                <table class="data-table inquiry-history-table">
                   <thead>
                     <tr>
                       <th>文件名</th>
@@ -173,7 +174,7 @@
                   </tbody>
                 </table>
             </div>
-            <p class="materials-empty" data-history-empty {% if history_files %}hidden{% endif %}>
+            <p class="empty-message" data-history-empty {% if history_files %}hidden{% endif %}>
               {% if history_loaded %}
                 {% if history_query %}没有找到匹配的报价文件。{% else %}还没有历史报价文件。{% endif %}
               {% else %}

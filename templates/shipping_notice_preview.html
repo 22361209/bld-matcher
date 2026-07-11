@@ -3,10 +3,10 @@
 {% block page_title %}发货通知预览{% endblock %}
 {% block page_id %}shipping.notice_preview{% endblock %}
 {% block page_type %}import-preview{% endblock %}
-{% block page_class %}shell wide materials-linear shipping-notice-page{% endblock %}
+{% block page_class %}shell wide app-surface shipping-notice-page{% endblock %}
 
 {% block page_content %}
-<header class="materials-hero">
+<header class="workspace-header">
         <div>
           <h1>发货通知预览</h1>
           <p>确认商品编码和数量无误后再生成客户模板 Excel。</p>
@@ -14,19 +14,19 @@
         <a class="linear-button subtle" href="{{ url_for('shipping_notice') }}">返回上传</a>
       </header>
 
-      <section class="materials-metrics">
+      <section class="metric-strip">
         <div><span>客户</span><strong>{{ generate_preview.template.customer }}</strong></div>
         <div><span>模板</span><strong>{{ generate_preview.template.name }}</strong></div>
         <div><span>数据行</span><strong>{{ generate_preview.row_count }}</strong></div>
         <div><span>来源表</span><strong>{{ generate_preview.source.sheet }}</strong></div>
       </section>
 
-      <section class="materials-command">
+      <section class="workspace-command">
         <div>
           <h2>生成前预览</h2>
           <p class="note">当前显示前 20 行，生成时会处理全部 {{ generate_preview.row_count }} 行。</p>
         </div>
-        <form action="{{ url_for('generate_shipping_notice') }}" method="post" class="materials-actions">
+        <form action="{{ url_for('generate_shipping_notice') }}" method="post" class="command-actions">
           {{ csrf_field() }}
           <input type="hidden" name="template_id" value="{{ selected_template_id }}">
           <input type="hidden" name="upload_path" value="{{ generate_preview.upload_path }}">
@@ -34,16 +34,16 @@
         </form>
       </section>
 
-      <section class="materials-table-section">
-        <div class="materials-table-title">
+      <section class="data-section">
+        <div class="data-section-header">
           <div>
             <h2>发货数据明细</h2>
             <p>按源表行号显示商品编码和数量。</p>
           </div>
           <span>{{ generate_preview.row_count }} 行</span>
         </div>
-        <div class="materials-table-wrap">
-          <table class="materials-grid-table">
+        <div class="data-table-scroll">
+          <table class="data-table">
             <thead>
               <tr>
                 <th>源行</th>

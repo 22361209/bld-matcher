@@ -3,10 +3,10 @@
 {% block page_title %}账号管理{% endblock %}
 {% block page_id %}admin.users{% endblock %}
 {% block page_type %}system-admin{% endblock %}
-{% block page_class %}shell wide materials-linear{% endblock %}
+{% block page_class %}shell wide app-surface{% endblock %}
 
 {% block page_content %}
-<header class="materials-hero">
+<header class="workspace-header">
         <div>
           <h1>账号管理</h1>
           <p>管理员可以新增账号、修改登录名、角色、启用状态，并重置密码。</p>
@@ -48,7 +48,7 @@
 
         <article class="workbench-section">
           <h2>角色权限</h2>
-          <table class="materials-grid-table">
+          <table class="data-table">
             <thead><tr><th>角色</th><th>说明</th></tr></thead>
             <tbody>
               <tr><td>管理员</td><td>账号管理、目录导入、产品维护、映射维护、生成匹配、生成生产料单、材料数据维护、查看操作日志</td></tr>
@@ -60,16 +60,16 @@
         </article>
       </section>
 
-      <section class="materials-table-section">
-        <div class="materials-table-title">
+      <section class="data-section">
+        <div class="data-section-header">
           <div>
             <h2>账号列表</h2>
             <p>管理系统登录账号和角色。</p>
           </div>
           <span>{{ users|length }} 个</span>
         </div>
-        <div class="materials-table-wrap">
-        <table class="materials-grid-table">
+        <div class="data-table-scroll">
+        <table class="data-table">
           <thead>
             <tr>
               <th>登录名</th>

@@ -77,6 +77,83 @@ ADR_REQUIRED_PATHS = {
 }
 ROUTE_ADAPTER_MAX_LINES = 320
 ROUTE_ADAPTER_MAX_ENDPOINTS = 15
+CSS_FOUNDATION_MAX_LINES = 1400
+CSS_COMPONENT_MAX_LINES = 1000
+CSS_PAGE_MAX_LINES = 600
+CSS_SHARED_DOMAIN_MARKERS = (
+    "api-key",
+    "bld",
+    "catalog",
+    "contract",
+    "customer",
+    "drawing",
+    "history",
+    "inquiry",
+    "login",
+    "match",
+    "material",
+    "oe",
+    "price",
+    "product",
+    "purchase",
+    "quote",
+    "shipment",
+    "shipping",
+    "sync",
+    "update",
+)
+CSS_DEPRECATED_CLASS_NAMES = {
+    "catalog-export-form",
+    "catalog-import-form",
+    "file-picker-oe-input",
+    "history-search",
+    "inquiry-command-center",
+    "inquiry-command-row",
+    "inquiry-directory-note",
+    "inquiry-file-oe-picker",
+    "inquiry-history-search",
+    "inquiry-landing",
+    "inquiry-search-page",
+    "inquiry-stat-strip",
+    "inquiry-upload-form",
+    "match-column-choice",
+    "materials-actions",
+    "materials-command",
+    "materials-empty",
+    "materials-file-meta",
+    "materials-flow",
+    "materials-generate-form",
+    "materials-grid-table",
+    "materials-hero",
+    "materials-linear",
+    "materials-messages",
+    "materials-metrics",
+    "materials-muted",
+    "materials-recent",
+    "materials-search-form",
+    "materials-table-section",
+    "materials-table-title",
+    "materials-table-title-actions",
+    "materials-table-wrap",
+    "modal-product-form",
+    "price-cell",
+    "price-import-form",
+    "product-form",
+    "product-modal",
+    "product-modal-backdrop",
+    "product-modal-panel",
+    "shipment-hidden-input",
+}
+CSS_DEPRECATED_RAW_TOKENS = ("--inquiry-", "shipment-spin")
+CSS_IMPORTANT_ALLOWLIST = {
+    "static/styles.css": {
+        "display: none !important;": 1,
+        "display: inline-flex !important;": 1,
+    }
+}
+CSS_COMMENT_RE = re.compile(r"/\*.*?\*/", re.S)
+CSS_CLASS_RE = re.compile(r"\.([A-Za-z_][A-Za-z0-9_-]*)")
+TEMPLATE_CLASS_RE = re.compile(r"\bclass\s*=\s*['\"]([^'\"]*)['\"]", re.I | re.S)
 
 
 def _run_git(*args: str) -> list[str]:
@@ -88,6 +165,189 @@ def _run_git(*args: str) -> list[str]:
         text=True,
     )
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def _css_selectors(source: str) -> list[str]:
+    clean = CSS_COMMENT_RE.sub("", source)
+    selectors: list[str] = []
+    segment_start = 0
+    quote = ""
+    escaped = False
+    for index, character in enumerate(clean):
+        if escaped:
+            escaped = False
+            continue
+        if character == "\\" and quote:
+            escaped = True
+            continue
+        if character in {'"', "'"}:
+            if quote == character:
+                quote = ""
+            elif not quote:
+                quote = character
+            continue
+        if quote or character not in "{}":
+            continue
+        if character == "{":
+            prelude = clean[segment_start:index].strip()
+            if prelude and not prelude.startswith("@"):
+                selectors.extend(item.strip() for item in prelude.split(",") if item.strip())
+        segment_start = index + 1
+    return selectors
+
+
+def _css_domain_marker(selector: str) -> str | None:
+    normalized_selector = re.sub(r"[^a-z0-9]", "", selector.lower())
+    for marker in CSS_SHARED_DOMAIN_MARKERS:
+        normalized_marker = re.sub(r"[^a-z0-9]", "", marker.lower())
+        if normalized_marker in normalized_selector:
+            return marker
+    return None
+
+
+def _template_class_names(source: str) -> set[str]:
+    names: set[str] = set()
+    for value in TEMPLATE_CLASS_RE.findall(source):
+        names.update(re.findall(r"[A-Za-z_][A-Za-z0-9_-]*", value))
+    return names
+
+
+def _check_css_source(
+    relative: str,
+    source: str,
+    max_lines: int,
+    errors: list[str],
+    *,
+    shared: bool,
+) -> None:
+    line_count = len(source.splitlines())
+    if line_count > max_lines:
+        errors.append(f"CSS 文件超过 {max_lines} 行，必须继续拆分: {relative} ({line_count})")
+
+    clean = CSS_COMMENT_RE.sub("", source)
+    if re.search(r"@import\b", clean, re.I):
+        errors.append(f"CSS 禁止 @import，资产必须由模板显式加载: {relative}")
+
+    selectors = _css_selectors(source)
+    id_selectors = [selector for selector in selectors if re.search(r"#[A-Za-z_]", selector)]
+    if id_selectors:
+        errors.append(f"CSS 禁止 ID 选择器: {relative} ({', '.join(id_selectors[:4])})")
+
+    important_counts = Counter(
+        line.strip()
+        for line in clean.splitlines()
+        if "!important" in line
+    )
+    allowed_important = CSS_IMPORTANT_ALLOWLIST.get(relative, {})
+    important_violations = [
+        declaration
+        for declaration, count in important_counts.items()
+        if count > allowed_important.get(declaration, 0)
+    ]
+    if important_violations:
+        errors.append(
+            f"CSS 禁止新增 !important: {relative} ({', '.join(sorted(important_violations))})"
+        )
+
+    if not shared:
+        return
+    domain_selectors = [
+        (selector, marker)
+        for selector in selectors
+        if (marker := _css_domain_marker(selector)) is not None
+    ]
+    if domain_selectors:
+        details = ", ".join(
+            f"{marker}:{selector}" for selector, marker in domain_selectors[:4]
+        )
+        errors.append(f"共享 CSS 禁止业务选择器: {relative} ({details})")
+
+
+def _check_css_governance(errors: list[str]) -> None:
+    static_root = ROOT / "static"
+    foundation = static_root / "styles.css"
+    component_paths = sorted((static_root / "components").glob("*.css"))
+    page_paths = sorted((static_root / "pages").glob("*.css"))
+    allowed_paths = {foundation, *component_paths, *page_paths}
+    unexpected_paths = [
+        path.relative_to(ROOT).as_posix()
+        for path in static_root.rglob("*.css")
+        if path not in allowed_paths
+    ]
+    if unexpected_paths:
+        errors.append(
+            "CSS 只能位于 static/styles.css、static/components/ 或 static/pages/: "
+            + ", ".join(sorted(unexpected_paths))
+        )
+
+    _check_css_source(
+        "static/styles.css",
+        foundation.read_text(encoding="utf-8"),
+        CSS_FOUNDATION_MAX_LINES,
+        errors,
+        shared=True,
+    )
+    for path in component_paths:
+        relative = path.relative_to(ROOT).as_posix()
+        _check_css_source(
+            relative,
+            path.read_text(encoding="utf-8"),
+            CSS_COMPONENT_MAX_LINES,
+            errors,
+            shared=True,
+        )
+    for path in page_paths:
+        relative = path.relative_to(ROOT).as_posix()
+        _check_css_source(
+            relative,
+            path.read_text(encoding="utf-8"),
+            CSS_PAGE_MAX_LINES,
+            errors,
+            shared=False,
+        )
+
+    template_sources = {
+        path.relative_to(ROOT).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted((ROOT / "templates").rglob("*.html"))
+    }
+    base_source = template_sources["templates/base.html"]
+    if "filename='styles.css'" not in base_source:
+        errors.append("templates/base.html 必须加载 static/styles.css。")
+    if "pages/" in base_source:
+        errors.append("templates/base.html 禁止加载页面 CSS。")
+
+    for path in component_paths:
+        asset = f"components/{path.name}"
+        owners = [relative for relative, source in template_sources.items() if asset in source]
+        if owners != ["templates/base.html"]:
+            errors.append(f"共享组件 CSS 必须且只能由 base.html 加载: {asset} ({owners})")
+
+    for path in page_paths:
+        asset = f"pages/{path.name}"
+        owners = [relative for relative, source in template_sources.items() if asset in source]
+        if not owners:
+            errors.append(f"页面 CSS 没有所属模板: {asset}")
+        elif "templates/base.html" in owners:
+            errors.append(f"页面 CSS 禁止进入 base.html: {asset}")
+
+    class_names: set[str] = set()
+    for source in template_sources.values():
+        class_names.update(_template_class_names(source))
+    for path in allowed_paths:
+        if not path.is_file():
+            continue
+        for selector in _css_selectors(path.read_text(encoding="utf-8")):
+            class_names.update(CSS_CLASS_RE.findall(selector))
+    deprecated_classes = sorted(class_names.intersection(CSS_DEPRECATED_CLASS_NAMES))
+    if deprecated_classes:
+        errors.append("前端禁止恢复废弃的跨域类名: " + ", ".join(deprecated_classes))
+
+    css_source = "\n".join(
+        path.read_text(encoding="utf-8") for path in allowed_paths if path.is_file()
+    )
+    stale_raw_tokens = [token for token in CSS_DEPRECATED_RAW_TOKENS if token in css_source]
+    if stale_raw_tokens:
+        errors.append("CSS 禁止恢复废弃 token/动画名: " + ", ".join(stale_raw_tokens))
 
 
 def _load_policy() -> dict[str, Any]:
@@ -633,6 +893,8 @@ def check(base_ref: str | None = None) -> list[str]:
         errors.append("治理执行矩阵缺少规则: " + ", ".join(sorted(missing_rule_ids)))
     if unknown_rule_ids:
         errors.append("治理执行矩阵包含未知规则: " + ", ".join(sorted(unknown_rule_ids)))
+
+    _check_css_governance(errors)
 
     legacy_pages = set(policy["legacy_full_page_templates"])
     allowed_inline_counts = policy["legacy_inline_script_counts"]

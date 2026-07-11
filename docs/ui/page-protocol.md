@@ -60,8 +60,12 @@
 
 ## CSS And JavaScript
 
-- CSS 分为 tokens、base、components 和 pages；颜色、间距、字体、边框和 z-index 使用 token。
-- 业务页面只能覆盖必要布局，不复制按钮、表单、表格和弹窗样式。
+- CSS 只有三种所有权：`static/styles.css` 保存 token、reset 和基础壳；`static/components/*.css` 保存由 `base.html` 全局加载的共享组件；`static/pages/*.css` 保存由业务模板显式加载的页面规则。
+- 基础层和共享组件层的选择器必须按界面职责命名，禁止出现产品、询价、材料、合同、报价、发货、同步、登录等业务词。业务选择器只能进入页面层。
+- 基础文件最多 1400 行，共享组件单文件最多 1000 行，页面单文件最多 600 行。`static/styles.css` 和当前聚集组件还受精确行数棘轮约束，只能缩小；接近上限时必须按独立职责拆文件。
+- 新 CSS 不得放在 `static/` 其他位置，不得使用 `@import` 隐藏依赖。共享组件必须且只能由 `base.html` 加载；每个页面 CSS 至少由一个非基础模板认领。
+- 禁止 ID 选择器。禁止新增 `!important`；仅保留检查器中登记的 `[hidden]` 与图片导航占位兼容声明。业务页面只能覆盖必要布局，不复制按钮、表单、表格和弹窗样式。
+- 跨页面类名按职责命名，例如 `workspace-header`、`data-section`、`search-command`、`choice-card`；页面类名使用清晰业务前缀。废弃的 `materials-*` 共享类、`inquiry-*` 搜索壳和 `product-modal` 等旧类名由检查器阻止恢复。
 - JavaScript 使用 ES Module、事件委托和 `data-*` 钩子，不按可见文字查找元素。
 - 模板禁止 `<script>`、`<style>`、`onclick`、`onchange`、`onsubmit`。
 - 页面根节点使用 `data-page="domain.view"`，只初始化当前页面模块。
@@ -70,8 +74,8 @@
 
 页面专用脚本放在 `static/pages/`，必须以 `body[data-page]` 作为初始化边界。公共交互放在 `static/app.js`；当前破坏性提交统一使用 `data-confirm`，不在模板写事件代码。
 
-页面资产按模板归属：页面 CSS 通过 `page_head` 引入，页面 JavaScript 通过 `page_scripts` 引入。`static/styles.css` 和 `static/app.js` 只保留跨页面共享规则与交互；禁止为了复用加载顺序，把单页选择器、弹窗或业务流程重新放回全局文件。项目继续使用浏览器原生 CSS 与 ES Module，不引入仅用于资产拆分的构建流水线。
+页面资产按模板归属：页面 CSS 通过 `page_head` 引入，页面 JavaScript 通过 `page_scripts` 引入。`static/styles.css`、`static/components/` 和 `static/app.js` 只保留跨页面共享协议；禁止为了复用加载顺序，把单页选择器、弹窗或业务流程重新放回全局文件。项目继续使用浏览器原生 CSS 与 ES Module，不引入仅用于资产拆分的构建流水线。
 
 ## Acceptance
 
-每种页面类型至少维护一个桌面和移动端基准流程，验证正常、空、错误、无权限、提交中和长文本状态。静态协议、服务端渲染回归和真实浏览器验收缺一不可；页面协议变化需要 ADR 或 UI 协议版本说明。
+每种页面类型至少维护一个桌面和移动端基准流程，验证正常、空、错误、无权限、提交中和长文本状态。CSS 变更还要验证页面无根级横向溢出、所属样式请求成功且浏览器控制台无错误。静态协议、服务端渲染回归和真实浏览器验收缺一不可；页面协议变化需要 ADR 或 UI 协议版本说明。

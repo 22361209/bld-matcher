@@ -3,20 +3,20 @@
 {% block page_title %}批量维护单价{% endblock %}
 {% block page_id %}products.price_import{% endblock %}
 {% block page_type %}import-preview{% endblock %}
-{% block page_class %}shell wide materials-linear{% endblock %}
+{% block page_class %}shell wide app-surface{% endblock %}
 
 {% block page_content %}
-<header class="materials-hero">
+<header class="workspace-header">
         <div>
           <h1>批量维护单价</h1>
           <p>上传包含 BLD NO. 和 Unit Price/含税单价 的 Excel，确认预览后批量更新。</p>
         </div>
-        <div class="materials-actions">
+        <div class="command-actions">
           <a class="linear-button subtle" href="{{ url_for('products') }}">返回产品目录</a>
         </div>
       </header>
-      <section class="materials-flow">
-        <form action="{{ url_for('price_import_preview') }}" method="post" enctype="multipart/form-data" class="materials-generate-form">
+      <section class="workspace-flow">
+        <form action="{{ url_for('price_import_preview') }}" method="post" enctype="multipart/form-data" class="command-form">
           {{ csrf_field() }}
           <label class="file-picker">
             <span>单价 Excel 文件</span>
@@ -32,35 +32,35 @@
       </section>
 
       {% if preview %}
-        <section class="materials-metrics" aria-label="单价导入统计">
+        <section class="metric-strip" aria-label="单价导入统计">
           <div><span>总行数</span><strong>{{ preview.counts.total }}</strong></div>
           <div><span>可更新</span><strong>{{ preview.counts.matched }}</strong></div>
           <div><span>未找到</span><strong>{{ preview.counts.missing }}</strong></div>
           <div><span>价格错误</span><strong>{{ preview.counts.invalid_price }}</strong></div>
         </section>
 
-        <section class="materials-command">
+        <section class="workspace-command">
           <div>
             <h2>导入预览</h2>
             <p class="note">确认后会批量更新匹配到的产品单价。</p>
           </div>
-          <form action="{{ url_for('price_import_apply') }}" method="post" class="materials-actions">
+          <form action="{{ url_for('price_import_apply') }}" method="post" class="command-actions">
             {{ csrf_field() }}
             <input type="hidden" name="payload" value="{{ payload }}">
             <button class="linear-button primary" type="submit">确认批量更新单价</button>
           </form>
         </section>
 
-        <section class="materials-table-section">
-          <div class="materials-table-title">
+        <section class="data-section">
+          <div class="data-section-header">
             <div>
               <h2>预览明细</h2>
               <p>只会更新状态为可更新的行。</p>
             </div>
             <span>{{ preview.rows|length }} 条</span>
           </div>
-          <div class="materials-table-wrap">
-          <table class="materials-grid-table">
+          <div class="data-table-scroll">
+          <table class="data-table">
             <thead>
               <tr>
                 <th>Excel 行</th>

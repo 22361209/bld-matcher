@@ -3,8 +3,9 @@
 {% block page_title %}生产料单{% endblock %}
 {% block page_id %}materials.workspace{% endblock %}
 {% block page_type %}workbench{% endblock %}
-{% block page_class %}shell wide materials-linear materials-clean-page{% endblock %}
+{% block page_class %}shell wide app-surface materials-clean-page{% endblock %}
 {% block page_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='pages/materials.css', v=static_version('pages/materials.css')) }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='pages/history.css', v=static_version('pages/history.css')) }}">
 {% endblock %}
 
@@ -12,7 +13,7 @@
 <header class="material-landing">
         <h1>{% if show_material_items %}材料明细{% else %}生产料单{% endif %}</h1>
         <p>{% if show_material_items %}维护生成生产料单时使用的材料明细。{% else %}上传生产计划，按启用材料明细生成采购和下料所需的料单。{% endif %}</p>
-        <div class="inquiry-stat-strip material-stat-strip" aria-label="材料数据统计">
+        <div class="compact-metrics material-stat-strip" aria-label="材料数据统计">
           <span>总明细 <strong>{{ material_stats["items"] }}</strong></span>
           <span>启用明细 <strong>{{ material_stats.active }}</strong></span>
           <span>停用明细 <strong>{{ material_stats.inactive }}</strong></span>
@@ -31,13 +32,13 @@
 
       {% if not show_material_items %}
       <section class="material-command-center">
-        <div class="inquiry-directory-note material-file-note">
+        <div class="search-command-note material-file-note">
           <span>材料文件：{{ material_path.name if material_path else "未上传" }}</span>
           <span>{{ material_file_stats.updated_at or "未记录更新时间" }}</span>
           <a href="{{ url_for('download_material_template') }}">下载生产计划模板</a>
         </div>
         {% if can("generate_material_sheet") %}
-          <form action="{{ url_for('generate_materials') }}" method="post" enctype="multipart/form-data" class="inquiry-command-row material-generate-row">
+          <form action="{{ url_for('generate_materials') }}" method="post" enctype="multipart/form-data" class="search-command-row material-generate-row">
             {{ csrf_field() }}
             <div class="file-picker-field">
               <span>生产计划 Excel</span>
@@ -52,21 +53,21 @@
             </div>
           </form>
         {% else %}
-          <p class="materials-muted">当前账号没有生成生产料单权限。</p>
+          <p class="muted-text">当前账号没有生成生产料单权限。</p>
         {% endif %}
-        <p class="materials-muted material-help-text">生产计划需包含型号和计划数/只；网页编辑、新增、停用后会影响下一次生成。</p>
+        <p class="muted-text material-help-text">生产计划需包含型号和计划数/只；网页编辑、新增、停用后会影响下一次生成。</p>
       </section>
       {% endif %}
 
       {% if show_material_items %}
       {% set status_label = "包含停用" if status == "all" else ("只看停用" if status == "inactive" else "只看启用") %}
-      <section class="materials-table-section" id="materials-results">
-        <div class="materials-table-title">
+      <section class="data-section" id="materials-results">
+        <div class="data-section-header">
           <div>
             <h2>材料明细</h2>
             <p>按母件编码和零件编码排序。规格尺寸会自动识别并统一显示。</p>
           </div>
-          <div class="materials-table-title-actions">
+          <div class="data-section-actions">
             <span>
               {% if total_material_items %}
                 第 {{ pagination.start }}-{{ pagination.end }} 条 / 共 {{ total_material_items }} 条
@@ -97,7 +98,7 @@
         </div>
 
         <div class="material-table-toolbar">
-          <form class="materials-search-form material-table-search" method="get" action="{{ url_for('material_items') }}#materials-results">
+          <form class="search-form material-table-search" method="get" action="{{ url_for('material_items') }}#materials-results">
             <label>
               <span>搜索材料明细</span>
               <input name="q" value="{{ query }}" placeholder="母件编码、零件编码或规格，例如 8234 / 2.5 357 / 357*1260">
@@ -115,8 +116,8 @@
           </form>
         </div>
 
-        <div class="materials-table-wrap">
-          <table class="materials-grid-table">
+        <div class="data-table-scroll">
+          <table class="data-table">
             <colgroup>
               <col class="col-width-62">
               <col class="col-width-80">
@@ -204,7 +205,7 @@
           <strong>{{ material_history_files|length }} 条</strong>
         </summary>
         <div class="materials-history-panel">
-          <form class="inquiry-command-row inquiry-history-search" method="get" action="{{ url_for('materials') }}#material-history">
+          <form class="search-command-row compact-search-row" method="get" action="{{ url_for('materials') }}#material-history">
             <label class="embedded-search-field">
               <span>搜索最近料单</span>
               <span class="embedded-input-control">
@@ -216,8 +217,8 @@
               <a class="linear-button subtle" href="{{ url_for('materials') }}#material-history">清除</a>
             {% endif %}
           </form>
-          <section class="materials-recent" id="material-history">
-            <div class="materials-table-title">
+          <section class="recent-files" id="material-history">
+            <div class="data-section-header">
               <div>
                 <h2>最近料单</h2>
                 <p>按文件名搜索已经生成过的生产料单，方便重新下载。</p>
@@ -225,8 +226,8 @@
               <span>{{ material_history_files|length }} 条</span>
             </div>
             {% if material_history_files %}
-              <div class="materials-table-wrap">
-                <table class="materials-grid-table inquiry-history-table">
+              <div class="data-table-scroll">
+                <table class="data-table inquiry-history-table">
                   <thead>
                     <tr>
                       <th>文件名</th>
@@ -250,7 +251,7 @@
                 </table>
               </div>
             {% else %}
-              <p class="materials-empty">
+              <p class="empty-message">
                 {% if material_history_query %}没有找到匹配的料单文件。{% else %}还没有最近料单文件。{% endif %}
               </p>
             {% endif %}
@@ -262,15 +263,15 @@
 
 {% block page_modals %}
 {% if show_material_items and can("manage_materials") %}
-      <div class="product-modal" id="material-modal" aria-hidden="true">
-        <div class="product-modal-backdrop" data-close-material-modal></div>
-        <div class="product-modal-panel material-modal-panel" role="dialog" aria-modal="true" aria-label="新增材料明细">
+      <div class="editor-modal" id="material-modal" aria-hidden="true">
+        <div class="editor-modal-backdrop" data-close-material-modal></div>
+        <div class="editor-modal-panel material-modal-panel" role="dialog" aria-modal="true" aria-label="新增材料明细">
           <button class="image-modal-close" type="button" data-close-material-modal aria-label="关闭新增材料明细">×</button>
           <div class="modal-heading">
             <h2>新增材料明细</h2>
             <p class="note">母件编码用于匹配生产计划；规格尺寸支持空格、*、-、/ 分隔。</p>
           </div>
-          <form action="{{ url_for('save_material_item') }}" method="post" class="product-form modal-product-form material-modal-form" data-enter-navigation>
+          <form action="{{ url_for('save_material_item') }}" method="post" class="record-form modal-form material-modal-form" data-enter-navigation>
             {{ csrf_field() }}
             <label>
               母件编码

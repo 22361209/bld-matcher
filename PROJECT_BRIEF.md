@@ -194,7 +194,7 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 页面与业务边界：
 
 - 所有完整页面继承 `templates/base.html`，以唯一 `page_id` 和六类 `page_type` 进入统一页面协议；模板禁止内联脚本、事件处理器和样式。
-- 页面专用 CSS/JavaScript 位于 `static/pages/` 并由所属模板加载；全局资产只保留跨页面协议。
+- CSS 按 `static/styles.css` 基础层、`static/components/` 共享组件层和 `static/pages/` 页面层归属；页面资产由所属模板加载，共享层禁止业务选择器，项目门禁执行文件容量、零 ID 选择器与禁止新增 `!important`。
 - 全部现有业务、登录、产品同步和货物识别由领域 Service/Repository 负责事务、审计和文件补偿；Web、API 与 Worker 适配器不直接访问 SQLite。
 - 产品与询价 Web 路由已按职责拆分；单个路由适配器最多 320 行、15 个 endpoint，统一验收禁止动态路由注册绕过检查。
 - 材料 Excel 更新采用原子替换；数据库导入失败会恢复旧文件。合同、发货通知、模板和物料图纸若审计失败，会删除本次未完成输出。
@@ -255,7 +255,9 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 - `templates/products.html`：产品目录页面
 - `templates/purchase_contracts.html`：合同管理和采购/销售合同页面
 - `templates/_product_rows.html`：产品目录行模板
-- `static/styles.css`：主要样式
+- `static/styles.css`：token、reset 和基础页面壳
+- `static/components/workspace.css`：跨页面工作台、搜索、表格和文件选择组件
+- `static/pages/`：由所属模板显式加载的页面 CSS/JavaScript
 - `tests/test_app.py`：主要回归测试
 - `PROJECT_CONSTITUTION.md`：长期架构、安全、页面、API 和变更治理硬规则
 - `scripts/init_database.py`：容器启动 Gunicorn 前执行迁移和首启管理员初始化

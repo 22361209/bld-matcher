@@ -3,6 +3,9 @@
 {% block page_id %}auth.login{% endblock %}
 {% block page_type %}edit{% endblock %}
 {% block page_class %}login-shell{% endblock %}
+{% block page_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='pages/login.css', v=static_version('pages/login.css')) }}">
+{% endblock %}
 {% block messages %}{% endblock %}
 
 {% block page_content %}

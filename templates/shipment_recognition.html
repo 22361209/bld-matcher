@@ -3,26 +3,29 @@
 {% block page_title %}货物识别{% endblock %}
 {% block page_id %}shipping.recognition{% endblock %}
 {% block page_type %}background-job{% endblock %}
-{% block page_class %}shell wide materials-linear inquiry-search-page shipment-recognition-page{% endblock %}
+{% block page_class %}shell wide app-surface search-workspace shipment-recognition-page{% endblock %}
+{% block page_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='pages/shipment_recognition.css', v=static_version('pages/shipment_recognition.css')) }}">
+{% endblock %}
 
 {% block page_content %}
-<header class="inquiry-landing shipment-landing">
+<header class="search-hero shipment-landing">
         <h1><span>BLD</span> 货物识别</h1>
         <p>选择发货照片或整个照片文件夹，识别标签并生成汇总 Excel。</p>
       </header>
 
-      <section class="inquiry-command-center shipment-command-center">
-        <form action="{{ url_for('run_shipment_recognition') }}" method="post" enctype="multipart/form-data" class="inquiry-command-row inquiry-upload-form shipment-single-form" data-shipment-form{% if active_job %} data-active-shipment-status-url="{{ url_for('shipment_recognition_status', job_id=active_job.id) }}" data-active-shipment-cancel-url="{{ url_for('cancel_shipment_recognition', job_id=active_job.id) }}"{% endif %}>
+      <section class="search-command shipment-command-center">
+        <form action="{{ url_for('run_shipment_recognition') }}" method="post" enctype="multipart/form-data" class="search-command-row upload-command shipment-single-form" data-shipment-form{% if active_job %} data-active-shipment-status-url="{{ url_for('shipment_recognition_status', job_id=active_job.id) }}" data-active-shipment-cancel-url="{{ url_for('cancel_shipment_recognition', job_id=active_job.id) }}"{% endif %}>
           {{ csrf_field() }}
           <input type="hidden" name="shipment_date" value="{{ default_date }}">
           <input type="hidden" name="limit" value="{{ default_limit }}">
           <div class="file-picker-field">
             <span>发货照片</span>
-            <div class="file-picker inquiry-file-oe-picker shipment-folder-picker">
-              <input id="shipment-photo-input" class="shipment-hidden-input shipment-file-input" type="file" name="shipment_photos" accept="image/*,.heic,.tif,.tiff" multiple>
+            <div class="file-picker inline-file-picker shipment-folder-picker">
+              <input id="shipment-photo-input" class="visually-hidden-input shipment-file-input" type="file" name="shipment_photos" accept="image/*,.heic,.tif,.tiff" multiple>
               <div class="file-picker-control">
                 <label class="file-picker-button" for="shipment-photo-input">选择照片</label>
-                <span class="file-picker-oe-input shipment-file-status" data-shipment-file-status>可多选照片，也可拖入整个文件夹</span>
+                <span class="file-picker-text shipment-file-status" data-shipment-file-status>可多选照片，也可拖入整个文件夹</span>
                 <button class="file-picker-clear" type="button" data-clear-shipment-files disabled>清除</button>
                 <button class="embedded-submit" type="submit" data-shipment-submit>开始识别</button>
               </div>
@@ -103,8 +106,8 @@
           <span>最近识别文件</span>
           <strong>{{ latest_outputs|length }} 个</strong>
         </summary>
-        <section class="materials-table-section shipment-history-panel">
-          <div class="materials-table-title">
+        <section class="data-section shipment-history-panel">
+          <div class="data-section-header">
             <div>
               <h2>最近识别文件</h2>
               <p>只显示当前账号生成的货物识别 Excel。</p>
@@ -112,8 +115,8 @@
             <span>{{ latest_outputs|length }} 个</span>
           </div>
           {% if latest_outputs %}
-            <div class="materials-table-wrap">
-              <table class="materials-grid-table">
+            <div class="data-table-scroll">
+              <table class="data-table">
                 <thead>
                   <tr>
                     <th>文件名</th>
@@ -133,7 +136,7 @@
               </table>
             </div>
           {% else %}
-            <p class="materials-empty">还没有货物识别输出。</p>
+            <p class="empty-message">还没有货物识别输出。</p>
           {% endif %}
         </section>
       </details>

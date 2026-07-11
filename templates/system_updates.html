@@ -4,15 +4,18 @@
 {% block page_title %}系统更新{% endblock %}
 {% block page_id %}admin.system_updates{% endblock %}
 {% block page_type %}system-admin{% endblock %}
-{% block page_class %}shell wide materials-linear{% endblock %}
+{% block page_class %}shell wide app-surface{% endblock %}
+{% block page_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='pages/system_updates.css', v=static_version('pages/system_updates.css')) }}">
+{% endblock %}
 
 {% block page_header %}
-  <header class="materials-hero">
+  <header class="workspace-header">
     <div>
       <h1>系统更新</h1>
       <p>查看项目代码、页面、权限、部署和核心业务规则的重要变更。</p>
     </div>
-    <div class="materials-file-meta">
+    <div class="workspace-meta">
       <span>来源</span>
       <strong>{{ source_name }}</strong>
       <span>当前最近重要变更</span>

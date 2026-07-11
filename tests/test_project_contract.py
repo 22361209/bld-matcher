@@ -127,6 +127,34 @@ def dynamic_route():
         }
         self.assertEqual(actual, expected)
 
+    def test_css_parser_and_layer_rules_reject_specificity_and_domain_drift(self):
+        source = """
+/* ignored .product-comment {} */
+@media (max-width: 760px) {
+  .product-card, #result-panel { color: red !important; }
+}
+"""
+        self.assertEqual(
+            contract._css_selectors(source),
+            [".product-card", "#result-panel"],
+        )
+        errors = []
+        contract._check_css_source(
+            "static/components/example.css",
+            source,
+            contract.CSS_COMPONENT_MAX_LINES,
+            errors,
+            shared=True,
+        )
+        self.assertTrue(any("ID 选择器" in error for error in errors))
+        self.assertTrue(any("!important" in error for error in errors))
+        self.assertTrue(any("业务选择器" in error for error in errors))
+
+    def test_current_css_assets_follow_layer_and_ownership_contract(self):
+        errors = []
+        contract._check_css_governance(errors)
+        self.assertEqual(errors, [])
+
     def test_page_behavior_stays_out_of_global_script(self):
         global_script = (contract.ROOT / "static" / "app.js").read_text(encoding="utf-8")
         page_only_markers = (
@@ -144,18 +172,38 @@ def dynamic_route():
 
     def test_split_page_assets_are_declared_by_owning_templates(self):
         asset_owners = {
-            "index.html": ("pages/home.css", "pages/history.css", "pages/home.js"),
-            "materials.html": ("pages/history.css",),
+            "index.html": (
+                "pages/inquiry.css",
+                "pages/home.css",
+                "pages/history.css",
+                "pages/home.js",
+            ),
+            "internal_api_key.html": ("pages/api_keys.css",),
+            "login.html": ("pages/login.css",),
+            "material_drawings.html": ("pages/material_drawings.css", "pages/material_drawings.js"),
+            "materials.html": ("pages/materials.css", "pages/history.css"),
+            "product_data_sync.html": ("pages/product_sync.css",),
+            "product_form.html": ("pages/products.css",),
+            "products.html": ("pages/products.css", "pages/products.js"),
             "purchase_contracts.html": ("pages/contracts.css", "pages/contracts.js"),
             "quotes.html": ("pages/quotes.css",),
-            "result.html": ("pages/inquiry_result.js",),
-            "shipment_recognition.html": ("pages/shipment_recognition.js",),
+            "result.html": ("pages/inquiry.css", "pages/inquiry_result.js"),
+            "select_match_column.html": ("pages/inquiry.css",),
+            "shipment_recognition.html": (
+                "pages/shipment_recognition.css",
+                "pages/shipment_recognition.js",
+            ),
             "shipping_notice.html": ("pages/shipping_notice.css", "pages/shipping_notice.js"),
+            "system_updates.html": ("pages/system_updates.css",),
         }
         for template_name, assets in asset_owners.items():
             template = (contract.ROOT / "templates" / template_name).read_text(encoding="utf-8")
             for asset in assets:
                 self.assertIn(asset, template, f"{template_name} must load {asset}")
+
+        base = (contract.ROOT / "templates" / "base.html").read_text(encoding="utf-8")
+        for path in sorted((contract.ROOT / "static" / "components").glob("*.css")):
+            self.assertIn(f"components/{path.name}", base)
 
     def test_route_snapshot_matches_runtime_contract(self):
         result = subprocess.run(

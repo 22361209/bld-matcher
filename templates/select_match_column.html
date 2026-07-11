@@ -3,17 +3,20 @@
 {% block page_title %}选择匹配列{% endblock %}
 {% block page_id %}inquiry.select_columns{% endblock %}
 {% block page_type %}import-preview{% endblock %}
-{% block page_class %}shell wide materials-linear{% endblock %}
+{% block page_class %}shell wide app-surface{% endblock %}
+{% block page_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='pages/inquiry.css', v=static_version('pages/inquiry.css')) }}">
+{% endblock %}
 
 {% block page_content %}
-<header class="materials-hero">
+<header class="workspace-header">
         <div>
           <h1>选择匹配列</h1>
           <p>没有识别到明确的 OE 号码表头，请选择客户号码所在的列。</p>
         </div>
       </header>
 
-      <section class="materials-table-section">
+      <section class="data-section">
         <div class="match-column-command">
           <div class="match-column-summary">
             <h2>文件预览：{{ preview.sheet }}</h2>
@@ -22,7 +25,7 @@
               <p class="note">{{ cleanup_message }}</p>
             {% endif %}
           </div>
-          <form action="{{ url_for('match_inquiry_with_column') }}" method="post" class="materials-search-form match-column-form" data-submit-wait data-submit-wait-text="正在匹配，请稍候...">
+          <form action="{{ url_for('match_inquiry_with_column') }}" method="post" class="search-form match-column-form" data-submit-wait data-submit-wait-text="正在匹配，请稍候...">
             {{ csrf_field() }}
             <input type="hidden" name="upload_path" value="{{ upload_path }}">
             <input type="hidden" name="original_filename" value="{{ original_filename }}">
@@ -33,7 +36,7 @@
               {% set selected_columns = selected_columns|default([0]) %}
               <div class="match-column-options">
                 {% for column in preview.columns %}
-                  <label class="match-column-choice">
+                  <label class="choice-card">
                     <input type="checkbox" name="match_columns" value="{{ column.index }}" {% if column.index in selected_columns %}checked{% endif %}>
                     <span>{{ column.label }} 列</span>
                   </label>
@@ -48,8 +51,8 @@
             </div>
           </form>
         </div>
-        <div class="materials-table-wrap match-preview-wrap">
-        <table class="materials-grid-table match-preview-table">
+        <div class="data-table-scroll match-preview-wrap">
+        <table class="data-table match-preview-table">
           <thead>
             <tr>
               <th>源行</th>
