@@ -13,14 +13,11 @@ from .config import (
     BASE_DIR,
     CATALOG_PATH,
     DATA_DIR,
-    DB_PATH,
-    MANUAL_MAP_PATH,
     OUTPUT_DIR,
     PRODUCT_IMAGE_DATA_PREFIX,
     UPLOAD_DIR,
 )
-from .database import bootstrap_from_excel, connect, rows_for_catalog
-from .matcher import ProductCatalog, load_manual_map
+from .matcher import ProductCatalog
 
 
 PRODUCT_IMAGE_SLOT_FIELDS = ("image_path", "image_path_2", "image_path_3", "image_path_4", "image_path_5")
@@ -142,48 +139,11 @@ def bootstrap_catalog() -> None:
         shutil.copy2(candidates[0], CATALOG_PATH)
 
 
-def _file_signature(path: Path) -> tuple[int, int]:
-    try:
-        stat = path.stat()
-    except OSError:
-        return (0, 0)
-    return (stat.st_mtime_ns, stat.st_size)
-
-
-def _catalog_version() -> tuple[object, ...]:
-    with connect(DB_PATH) as conn:
-        products = conn.execute(
-            "SELECT COUNT(*) AS total, COALESCE(MAX(updated_at), '') AS updated_at FROM products"
-        ).fetchone()
-        aliases = conn.execute(
-            "SELECT COUNT(*) AS total, COALESCE(MAX(updated_at), '') AS updated_at FROM aliases WHERE active = 1"
-        ).fetchone()
-    return (
-        products["total"] or 0,
-        products["updated_at"] or "",
-        aliases["total"] or 0,
-        aliases["updated_at"] or "",
-        _file_signature(DB_PATH),
-        _file_signature(DB_PATH.with_name(f"{DB_PATH.name}-wal")),
-        _file_signature(MANUAL_MAP_PATH),
-    )
-
-
-@lru_cache(maxsize=8)
-def _load_catalog_cached(version: tuple[object, ...]) -> ProductCatalog | None:
-    with connect(DB_PATH) as conn:
-        products, aliases = rows_for_catalog(conn)
-    if not products:
-        return None
-    legacy_map = load_manual_map(MANUAL_MAP_PATH)
-    aliases.update(legacy_map)
-    return ProductCatalog(products, manual_map=aliases)
-
-
 def load_catalog() -> ProductCatalog | None:
     bootstrap_catalog()
-    bootstrap_from_excel(DB_PATH, CATALOG_PATH)
-    return _load_catalog_cached(_catalog_version())
+    from app.modules.products.factory import get_product_service
+
+    return get_product_service().catalog()
 
 
 def safe_upload_name(filename: str) -> str:

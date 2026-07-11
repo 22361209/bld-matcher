@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from pathlib import Path
 from threading import Barrier
 from unittest.mock import patch
@@ -114,6 +115,30 @@ class ApiPlatformTest(unittest.TestCase):
         self.assertFalse(status["enabled"])
         self.assertTrue(key["expired"])
         self.assertFalse(key["usable"])
+
+    def test_api_key_rotation_reminder_is_advisory(self):
+        token = self._token(scopes=["api:read"])
+        with connect(self.db_path) as conn:
+            conn.execute(
+                "UPDATE internal_api_keys SET created_at = '2026-01-01 00:00:00' WHERE name = 'Platform Test'"
+            )
+            conn.commit()
+            before_due = list_internal_api_keys(
+                conn,
+                rotation_days=90,
+                current_time=datetime(2026, 3, 31, 23, 59, 59),
+            )[0]
+            due = list_internal_api_keys(
+                conn,
+                rotation_days=90,
+                current_time=datetime(2026, 4, 1),
+            )[0]
+            principal = verify_internal_api_token(conn, token)
+        self.assertFalse(before_due["rotation_due"])
+        self.assertTrue(due["rotation_due"])
+        self.assertEqual(due["rotation_due_at"], "2026-04-01")
+        self.assertTrue(due["usable"], "rotation reminder must not disable the key")
+        self.assertIsNotNone(principal)
 
     def test_idempotency_replays_response_and_audits_server_principal(self):
         token = self._token(scopes=["quotes:write"])

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import shutil
 from datetime import datetime
 from math import ceil
@@ -20,6 +21,7 @@ from app.security import actor_name, login_required, permission_required
 
 
 PRODUCT_PAGE_SIZE = 50
+logger = logging.getLogger(__name__)
 
 
 def _pending_product_images() -> list[tuple[int, object]]:
@@ -153,8 +155,9 @@ def register(app) -> None:
         except ImportLockError as exc:
             flash(str(exc), "error")
             return redirect(redirect_target)
-        except Exception as exc:
-            flash(f"目录读取失败，已恢复旧目录：{exc}", "error")
+        except Exception:
+            logger.exception("Catalog import failed and the previous catalog was restored")
+            flash("目录读取失败，已恢复旧目录。", "error")
             return redirect(redirect_target)
 
         flash("产品目录已导入。已有 BLD NO. 会更新，新增 BLD NO. 会加入产品库。", "success")
@@ -264,8 +267,12 @@ def register(app) -> None:
         file.save(upload_path)
         try:
             preview = get_product_service().preview_prices(upload_path)
-        except Exception as exc:
+        except ValueError as exc:
             flash(f"解析失败：{exc}", "error")
+            return redirect(url_for("price_import"))
+        except Exception:
+            logger.exception("Price import preview failed")
+            flash("解析失败，请检查文件后重试。", "error")
             return redirect(url_for("price_import"))
         return render_template("price_import.html", preview=preview, payload=encode_rows(preview["rows"]))
 
@@ -274,8 +281,9 @@ def register(app) -> None:
     def price_import_apply():
         try:
             rows = decode_rows(request.form.get("payload", "[]"))
-        except Exception as exc:
-            flash(f"导入数据无效：{exc}", "error")
+        except Exception:
+            logger.exception("Price import payload could not be decoded")
+            flash("导入数据无效，请重新预览。", "error")
             return redirect(url_for("price_import"))
 
         try:
@@ -328,8 +336,14 @@ def register(app) -> None:
                 image_files=image_files,
                 drawing_file=drawing_file if drawing_file and drawing_file.filename else None,
             )
-        except Exception as exc:
+        except ValueError as exc:
             flash(f"保存失败：{exc}", "error")
+            if request.form.get("embedded") == "1":
+                return _embedded_product_done_response()
+            return redirect(url_for("products"))
+        except Exception:
+            logger.exception("Product save failed")
+            flash("保存失败，请稍后重试。", "error")
             if request.form.get("embedded") == "1":
                 return _embedded_product_done_response()
             return redirect(url_for("products"))
@@ -354,8 +368,12 @@ def register(app) -> None:
         except ProductNotFoundError:
             flash("产品不存在。", "error")
             return redirect(url_for("products") + "#products-results")
-        except Exception as exc:
+        except ValueError as exc:
             flash(f"图纸上传失败：{exc}", "error")
+            return redirect(url_for("products") + "#products-results")
+        except Exception:
+            logger.exception("Product drawing upload failed")
+            flash("图纸上传失败，请稍后重试。", "error")
             return redirect(url_for("products") + "#products-results")
 
         flash("图纸已保存。", "success")

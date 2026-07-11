@@ -27,6 +27,7 @@ APPROVED_API_SCOPES = {
     "quotes:read",
     "quotes:write",
     "contracts:generate",
+    "jobs:read",
     "jobs:cancel",
 }
 UI_WRITE_GUARDS = {"login_required", "permission_required"}
@@ -39,11 +40,13 @@ REQUIRED_DOCS = {
     "docs/adr/0003-quote-vertical-slice.md",
     "docs/adr/0004-product-inquiry-core-and-artifacts.md",
     "docs/adr/0005-domain-and-page-protocol-migration.md",
+    "docs/adr/0006-persistent-jobs-ai-and-runtime-governance.md",
     "docs/api/ai-contract.md",
     "docs/api/product-inquiry-v1.md",
     "docs/api/quote-v1.md",
     "docs/architecture/overview.md",
     "docs/governance/enforcement-matrix.md",
+    "docs/operations/runtime.md",
     "docs/ui/page-protocol.md",
     "contracts/openapi-v1.json",
     "pyproject.toml",
@@ -240,7 +243,7 @@ def _check_module_layer(relative: str, tree: ast.AST, errors: list[str]) -> None
     filename = match.group(1)
     imported = _imported_modules(tree)
     forbidden_prefixes: tuple[str, ...] = ()
-    if filename == "domain":
+    if filename == "domain" or filename.endswith("_domain"):
         forbidden_prefixes = (
             "flask",
             "sqlite3",
@@ -253,9 +256,9 @@ def _check_module_layer(relative: str, tree: ast.AST, errors: list[str]) -> None
             "httpx",
             "requests",
         )
-    elif filename == "service":
+    elif filename == "service" or filename.endswith("_service"):
         forbidden_prefixes = ("flask", "sqlite3", "app.config", "app.database", "app.routes")
-    elif filename in {"web", "api"}:
+    elif filename in {"web", "api"} or filename.endswith(("_web", "_api")):
         forbidden_prefixes = ("sqlite3", "app.database")
     violations = sorted(
         module
@@ -344,6 +347,19 @@ def _daemon_thread_count(tree: ast.AST) -> int:
         ):
             count += 1
     return count
+
+
+def _database_boundary_errors(tree: ast.Module) -> list[str]:
+    functions = {
+        node.name
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    unexpected = functions - {"connect"}
+    errors = []
+    if unexpected:
+        errors.append("app/database.py 只能保留 connect，业务函数必须位于领域或平台模块: " + ", ".join(sorted(unexpected)))
+    return errors
 
 
 def _check_count_policy(
@@ -491,6 +507,9 @@ def check(base_ref: str | None = None) -> list[str]:
     baseline_policy = _policy_at_ref(base_ref or "HEAD")
     tracked = set(_run_git("ls-files"))
 
+    database_tree = ast.parse((ROOT / "app" / "database.py").read_text(encoding="utf-8"))
+    errors.extend(_database_boundary_errors(database_tree))
+
     if baseline_policy:
         for key, values in policy.items():
             baseline_values = baseline_policy.get(key, {} if isinstance(values, dict) else [])
@@ -510,6 +529,14 @@ def check(base_ref: str | None = None) -> list[str]:
                         f"{path} ({baseline_counts[path]} -> {count})"
                         for path, count in current_counts.items()
                         if count > baseline_counts[path]
+                    ]
+                elif key == "public_write_endpoints":
+                    baseline_functions = Counter(entry.rsplit(":", 1)[-1] for entry in baseline_values)
+                    current_functions = Counter(entry.rsplit(":", 1)[-1] for entry in values)
+                    additions = [
+                        function_name
+                        for function_name, count in current_functions.items()
+                        if count > baseline_functions[function_name]
                     ]
                 else:
                     additions = sorted(set(values) - set(baseline_values))
@@ -534,6 +561,18 @@ def check(base_ref: str | None = None) -> list[str]:
     missing_docker_ignores = REQUIRED_DOCKER_IGNORES - docker_ignores
     if missing_docker_ignores:
         errors.append(".dockerignore 缺少运行数据规则: " + ", ".join(sorted(missing_docker_ignores)))
+
+    compose_text = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    dockerfile_text = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    runtime_markers = {
+        "docker-compose.yml:bld-worker": "bld-worker:" in compose_text,
+        "docker-compose.yml:run_worker": "scripts.run_worker" in compose_text,
+        "docker-compose.yml:retention": "scripts.cleanup_runtime --apply" in compose_text,
+        "Dockerfile:readiness": "/health/ready" in dockerfile_text,
+    }
+    missing_runtime_markers = [name for name, present in runtime_markers.items() if not present]
+    if missing_runtime_markers:
+        errors.append("运行治理配置缺失: " + ", ".join(sorted(missing_runtime_markers)))
 
     missing_docs = [path for path in REQUIRED_DOCS if not (ROOT / path).is_file()]
     if missing_docs:

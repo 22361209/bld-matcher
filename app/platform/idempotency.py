@@ -12,11 +12,13 @@ from functools import wraps
 from flask import Response, current_app, make_response, request
 
 from app.config import DB_PATH
-from app.database import connect, now_text
+from app.database import connect
+from app.platform.clock import now_text
 
 from .api_errors import ApiError
 from .api_auth import current_api_principal
 from .audit import current_audit_context, record_api_mutation
+from .runtime_factory import get_runtime_settings
 
 
 IDEMPOTENCY_KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$")
@@ -161,7 +163,7 @@ def _complete(
                 sort_keys=True,
             ),
             now_text(),
-            _timestamp(datetime.now() + IDEMPOTENCY_TTL),
+            _timestamp(datetime.now() + timedelta(hours=get_runtime_settings().idempotency_retention_hours)),
             principal_id,
             method,
             endpoint,
@@ -251,5 +253,5 @@ def idempotency_required(fn):
                 )
         return response
 
-    wrapper.__idempotency_required__ = True
+    setattr(wrapper, "__idempotency_required__", True)
     return wrapper

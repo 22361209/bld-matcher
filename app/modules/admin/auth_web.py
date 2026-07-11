@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from flask import flash, redirect, render_template, request, session, url_for
 
-from app.config import DB_PATH
-from app.database import connect, get_user_by_username
-from app.security import login_required, password_matches, safe_redirect_target
+from app.security import login_required, safe_redirect_target
+
+from .factory import get_admin_service
 
 
 def register(app) -> None:
@@ -14,14 +14,14 @@ def register(app) -> None:
 
     @app.post("/login")
     def do_login():
-        username = request.form.get("username", "").strip()
-        password = request.form.get("password", "")
-        with connect(DB_PATH) as conn:
-            user = get_user_by_username(conn, username)
-        if not user or not user["active"] or not password_matches(user["password_hash"], password):
+        user = get_admin_service().authenticate(
+            request.form.get("username", ""),
+            request.form.get("password", ""),
+        )
+        if not user:
             flash("登录名或密码不正确。", "error")
             return redirect(url_for("login"))
-        session["user_id"] = user["id"]
+        session["user_id"] = int(str(user["id"]))
         flash("登录成功。", "success")
         return redirect(safe_redirect_target(request.form.get("next"), url_for("index")))
 

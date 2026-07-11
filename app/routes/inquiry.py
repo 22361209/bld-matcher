@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from pathlib import Path
 
@@ -24,6 +25,7 @@ from app.security import actor_name, permission_required
 
 PASTED_INQUIRY_FILENAME = "粘贴号码询价.xlsx"
 PASTED_INQUIRY_MAX_CHARS = 5000
+logger = logging.getLogger(__name__)
 
 
 def _validated_user_upload_path() -> Path | None:
@@ -134,8 +136,12 @@ def _render_pasted_inquiry_result(query: str):
     output_path = result_output_path(PASTED_INQUIRY_FILENAME, fallback_suffix=".xlsx")
     try:
         summary = service.analyze_pasted(codes, upload_path=upload_path, actor=actor_name())
-    except Exception as exc:
+    except ValueError as exc:
         flash(f"生成失败：{exc}", "error")
+        return redirect(url_for("index", quick_oe=query))
+    except Exception:
+        logger.exception("Pasted inquiry analysis failed")
+        flash("生成失败，请稍后重试。", "error")
         return redirect(url_for("index", quick_oe=query))
 
     return render_template(
@@ -218,8 +224,12 @@ def register(app) -> None:
                 match_column=_match_column_payload(match_columns),
                 write_output=False,
             )
-        except Exception as exc:
+        except ValueError as exc:
             flash(f"生成失败：{exc}", "error")
+            return redirect(url_for("index"))
+        except Exception:
+            logger.exception("Inquiry preview generation failed")
+            flash("生成失败，请稍后重试。", "error")
             return redirect(url_for("index"))
 
         return render_template(
@@ -297,8 +307,12 @@ def register(app) -> None:
                 detail_suffix=_price_log_text(price_options),
                 actor=actor_name(),
             )
-        except Exception as exc:
+        except ValueError as exc:
             flash(f"生成失败：{exc}", "error")
+            return redirect(url_for("index"))
+        except Exception:
+            logger.exception("Inquiry export failed")
+            flash("生成失败，请稍后重试。", "error")
             return redirect(url_for("index"))
 
         return send_file(output_path, as_attachment=True)
@@ -351,8 +365,12 @@ def register(app) -> None:
                 matched=summary["matched"],
                 actor=actor_name(),
             )
-        except Exception as exc:
+        except ValueError as exc:
             flash(f"图纸打包失败：{exc}", "error")
+            return redirect(url_for("index"))
+        except Exception:
+            logger.exception("Inquiry drawing package failed")
+            flash("图纸打包失败，请稍后重试。", "error")
             return redirect(url_for("index"))
 
         return send_file(zip_path, as_attachment=True)

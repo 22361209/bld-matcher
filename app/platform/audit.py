@@ -7,7 +7,7 @@ from typing import Any
 
 from flask import g, request
 
-from app.database import log_event
+from app.platform.audit_store import log_event
 
 from .api_principal import ApiPrincipal
 

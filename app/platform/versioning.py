@@ -28,7 +28,7 @@ def if_match_required(fn):
         g.expected_version = int(match.group(1))
         return fn(*args, **kwargs)
 
-    wrapper.__if_match_required__ = True
+    setattr(wrapper, "__if_match_required__", True)
     return wrapper
 
 

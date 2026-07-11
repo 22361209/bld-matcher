@@ -122,7 +122,7 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(nav_positions, sorted(nav_positions))
 
     def test_quick_inquiry_results_can_filter_by_match_source(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         self.login()
         with self.web.connect(self.web.DB_PATH) as conn:
@@ -304,7 +304,7 @@ class WebAppTest(unittest.TestCase):
         return package_path
 
     def test_product_data_sync_exports_products_without_api_keys(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         self.login()
         self.create_internal_api_token()
@@ -343,7 +343,7 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(count, 1)
 
     def test_product_data_sync_imports_incrementally_and_preserves_api_key(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
         from app.platform.api_keys import internal_api_key_status
 
         self.login()
@@ -453,7 +453,10 @@ class WebAppTest(unittest.TestCase):
         path_match = re.search(r'name="package_path" value="([^"]+)"', preview.get_data(as_text=True))
         self.assertIsNotNone(path_match)
 
-        with patch("app.routes.product_sync._apply_products", side_effect=RuntimeError("forced apply failure")):
+        with patch(
+            "app.modules.products.sync_repository.SQLiteProductSyncRepository.apply",
+            side_effect=RuntimeError("forced apply failure"),
+        ):
             response = self.client.post(
                 "/product-data-sync/import/apply",
                 data={"include_images": "1", "package_path": path_match.group(1)},
@@ -461,7 +464,8 @@ class WebAppTest(unittest.TestCase):
             )
         html = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
-        self.assertIn("forced apply failure", html)
+        self.assertNotIn("forced apply failure", html)
+        self.assertIn("产品数据包导入失败，请稍后重试", html)
         self.assertIn("已恢复本次媒体文件变更", html)
         self.assertEqual(target.read_bytes(), b"original-image")
         backups = sorted((self.root / "data" / "local-backups").glob("*/products.sqlite3"))
@@ -470,7 +474,7 @@ class WebAppTest(unittest.TestCase):
             self.assertEqual(backup.execute("PRAGMA integrity_check").fetchone()[0], "ok")
 
     def test_product_data_sync_skips_older_package_rows(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         self.login()
         with self.web.connect(self.web.DB_PATH) as conn:
@@ -482,6 +486,18 @@ class WebAppTest(unittest.TestCase):
                     "item": "Local Newer",
                     "oe_no_1": "LOCAL-OE",
                     "price_cny": "30",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "SYNC-BAD-TIME",
+                    "series": "LOCAL-VALID-TIME",
+                    "item": "Local Protected",
+                    "oe_no_1": "LOCAL-VALID-OE",
+                    "price_cny": "31",
                     "active": "1",
                 },
                 actor="tester",
@@ -504,7 +520,18 @@ class WebAppTest(unittest.TestCase):
                     "source": "old-package",
                     "created_at": "2020-01-01 00:00:00",
                     "updated_at": "2020-01-01 00:00:00",
-                }
+                },
+                {
+                    "bld_no": "SYNC-BAD-TIME",
+                    "series": "INVALID-PACKAGE-TIME",
+                    "item": "Must Not Overwrite",
+                    "oe_no_1": "INVALID-TIME-OE",
+                    "price_cny": 2,
+                    "active": 1,
+                    "source": "bad-package-time",
+                    "created_at": "2020-01-01 00:00:00",
+                    "updated_at": "not-a-timestamp",
+                },
             ],
         )
         preview = self.client.post(
@@ -525,14 +552,19 @@ class WebAppTest(unittest.TestCase):
         )
         applied_html = applied.get_data(as_text=True)
         self.assertEqual(applied.status_code, 200)
-        self.assertIn("跳过包内旧数据 1 条", applied_html)
+        self.assertIn("跳过包内旧数据 2 条", applied_html)
         with self.web.connect(self.web.DB_PATH) as conn:
             row = conn.execute("SELECT * FROM products WHERE bld_no = ?", ("SYNC-STALE",)).fetchone()
+            invalid_time_row = conn.execute(
+                "SELECT * FROM products WHERE bld_no = ?", ("SYNC-BAD-TIME",)
+            ).fetchone()
         self.assertEqual(row["series"], "LOCAL")
         self.assertEqual(row["oe_no_1"], "LOCAL-OE")
+        self.assertEqual(invalid_time_row["series"], "LOCAL-VALID-TIME")
+        self.assertEqual(invalid_time_row["oe_no_1"], "LOCAL-VALID-OE")
 
     def test_product_data_sync_can_deactivate_local_only_rows_after_preview(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         self.login()
         with self.web.connect(self.web.DB_PATH) as conn:
@@ -764,7 +796,16 @@ class WebAppTest(unittest.TestCase):
             b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\xff\xff?"
             b"\x00\x05\xfe\x02\xfeA\x89\xa3\x95\x00\x00\x00\x00IEND\xaeB`\x82"
         )
-        with patch("app.routes.shipment_recognition.recognizer.recognize_photo", side_effect=fake_recognize_photo):
+        from argparse import Namespace
+        from scripts.run_worker import build_worker
+
+        with patch(
+            "app.modules.shipping.recognition_service.recognizer.build_runtime_args",
+            return_value=Namespace(limit=10, model=None, base_url=None),
+        ), patch(
+            "app.modules.shipping.recognition_service.recognizer.recognize_photo",
+            side_effect=fake_recognize_photo,
+        ):
             response = self.client.post(
                 "/shipment-recognition/run",
                 data={
@@ -779,6 +820,7 @@ class WebAppTest(unittest.TestCase):
             payload = response.get_json()
             self.assertEqual(response.status_code, 202)
             self.assertTrue(payload["ok"])
+            build_worker(worker_id="test-shipment-worker").run_once(job_id=payload["job_id"])
 
             status_payload = None
             for _ in range(30):
@@ -814,7 +856,7 @@ class WebAppTest(unittest.TestCase):
         self.assertTrue(raw.startswith(b"\xff\xd8\xff"))
 
     def test_internal_api_numbers_generate_openclaw_workbook(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
         from openpyxl import load_workbook
 
         token = self.create_internal_api_token()
@@ -880,7 +922,7 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("必须传 source_name", rejected_payload["error"])
 
     def test_internal_api_numbers_use_oe_suffix_variant_matching(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         token = self.create_internal_api_token()
         with self.web.connect(self.web.DB_PATH) as conn:
@@ -911,7 +953,7 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(payload["rows"][0]["match_reason"], "OE 尾字母容错命中")
 
     def test_internal_api_numbers_use_bld_fragment_lookup(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
         from openpyxl import load_workbook
 
         token = self.create_internal_api_token()
@@ -1005,7 +1047,7 @@ class WebAppTest(unittest.TestCase):
             generated.close()
 
     def test_internal_api_numbers_use_psa_352x_dot_rule(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         token = self.create_internal_api_token()
         with self.web.connect(self.web.DB_PATH) as conn:
@@ -1046,7 +1088,7 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(payload["rows"][0]["match_reason"], "PSA 号码点号容错命中")
 
     def test_internal_api_file_augment_and_analyze(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
         from openpyxl import Workbook, load_workbook
 
         token = self.create_internal_api_token()
@@ -1150,7 +1192,7 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("B列：API-FILE-REF", multi_payload["rows"][0]["match_note"])
 
     def test_internal_api_defaults_to_analysis_and_restricts_file_path(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
         from openpyxl import Workbook
 
         token = self.create_internal_api_token()
@@ -1216,7 +1258,7 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
         self.assertFalse(response.get_json()["ok"])
 
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         with self.web.connect(self.web.DB_PATH) as conn:
             upsert_product(
@@ -1268,6 +1310,68 @@ class WebAppTest(unittest.TestCase):
             ["api:read"],
         )
         self.assertIn("PlatformInfoEnvelope", document["components"]["schemas"])
+        self.assertIn("JobPublicData", document["components"]["schemas"])
+        self.assertEqual(
+            document["components"]["schemas"]["JobPublicData"]["properties"]["status"]["enum"],
+            ["queued", "running", "completed", "failed", "cancelled"],
+        )
+        self.assertIn("/api/v1/jobs/{job_id}/result", document["paths"])
+
+    def test_job_v1_enforces_owner_cancel_scope_and_idempotency(self):
+        from app.platform.api_keys import verify_internal_api_token
+        from app.platform.jobs.factory import get_job_service
+
+        token = self.create_internal_api_token(
+            scopes={"jobs:read", "jobs:cancel"},
+            name="Job Owner",
+        )
+        other_token = self.create_internal_api_token(
+            scopes={"jobs:read"},
+            name="Other Job Reader",
+        )
+        with self.web.connect(self.web.DB_PATH) as connection:
+            principal = verify_internal_api_token(connection, token)
+        self.assertIsNotNone(principal)
+        job = get_job_service().submit(
+            kind="test.api-job",
+            owner_id=principal.subject,
+            request_payload={"internal_path": "/tmp/never-public"},
+        )
+        headers = {"Authorization": f"Bearer {token}"}
+        response = self.client.get(f"/api/v1/jobs/{job.id}", headers=headers)
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["data"]["job"]["status"], "queued")
+        self.assertNotIn("never-public", json.dumps(payload))
+
+        hidden = self.client.get(
+            f"/api/v1/jobs/{job.id}",
+            headers={"Authorization": f"Bearer {other_token}"},
+        )
+        self.assertEqual(hidden.status_code, 404)
+        self.assertEqual(hidden.get_json()["error"]["code"], "job.not_found")
+
+        cancel_headers = {
+            **headers,
+            "Idempotency-Key": "cancel-job-api-001",
+        }
+        cancelled = self.client.post(
+            f"/api/v1/jobs/{job.id}/cancel",
+            json={"reason": "consumer requested"},
+            headers=cancel_headers,
+        )
+        self.assertEqual(cancelled.status_code, 202)
+        self.assertEqual(cancelled.get_json()["data"]["job"]["status"], "cancelled")
+        replay = self.client.post(
+            f"/api/v1/jobs/{job.id}/cancel",
+            json={"reason": "consumer requested"},
+            headers=cancel_headers,
+        )
+        self.assertEqual(replay.status_code, 202)
+        self.assertEqual(replay.headers["Idempotency-Replayed"], "true")
+        result = self.client.get(f"/api/v1/jobs/{job.id}/result", headers=headers)
+        self.assertEqual(result.status_code, 409)
+        self.assertEqual(result.get_json()["error"]["code"], "job.not_ready")
 
     def test_admin_can_generate_and_disable_internal_api_key(self):
         self.login()
@@ -1323,7 +1427,7 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("scopes", key_columns)
         self.assertIn("expires_at", key_columns)
 
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         with self.web.connect(self.web.DB_PATH) as conn:
             upsert_product(
@@ -1365,7 +1469,7 @@ class WebAppTest(unittest.TestCase):
 
     def test_purchase_contract_can_generate_pdf(self):
         from PIL import Image
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         image_dir = self.root / "data" / "product_images"
         image_dir.mkdir(parents=True, exist_ok=True)
@@ -1476,7 +1580,7 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("下载", html)
 
     def test_sales_contract_can_generate_pdf_with_customer_code(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         with self.web.connect(self.web.DB_PATH) as conn:
             upsert_product(
@@ -1577,7 +1681,7 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(contract["buyer_signature_date"], "")
 
     def test_purchase_contracts_are_admin_only(self):
-        from app.database import save_user
+        from app.modules.admin.persistence import save_user
 
         with self.web.connect(self.web.DB_PATH) as conn:
             save_user(
@@ -1827,7 +1931,7 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(len(response.get_json()["quotes"]), 1)
 
     def test_product_inquiry_v1_and_artifact_consumer_contract(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         with self.web.connect(self.web.DB_PATH) as conn:
             upsert_product(
@@ -2148,7 +2252,7 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("上传文件不能超过", payload["error"])
 
     def test_quotes_are_admin_only(self):
-        from app.database import save_user
+        from app.modules.admin.persistence import save_user
 
         with self.web.connect(self.web.DB_PATH) as conn:
             save_user(
@@ -2183,7 +2287,7 @@ class WebAppTest(unittest.TestCase):
         self.client.post("/logout")
 
     def test_products_search_uses_results_anchor(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         with self.web.connect(self.web.DB_PATH) as conn:
             upsert_product(
@@ -2252,7 +2356,7 @@ class WebAppTest(unittest.TestCase):
                 self.assertIn("K-FILTER-DOT-OE", html)
 
     def test_products_oe_search_psa_352x_dot_does_not_show_gm_exact(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         with self.web.connect(self.web.DB_PATH) as conn:
             upsert_product(
@@ -2295,7 +2399,7 @@ class WebAppTest(unittest.TestCase):
 
     def test_products_use_bld_natural_order(self):
         from app.bld_sort import bld_sort_key
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         self.assertEqual(
             sorted(["K8274LA", "K8274RA", "K8274LB", "K8274RB"], key=bld_sort_key),
@@ -2334,7 +2438,7 @@ class WebAppTest(unittest.TestCase):
         self.assertLess(html.index("K8058LB"), html.index("K8058RB"))
 
     def test_products_are_paginated(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         with self.web.connect(self.web.DB_PATH) as conn:
             for index in range(121):
@@ -2373,7 +2477,7 @@ class WebAppTest(unittest.TestCase):
         self.assertNotIn("K-PAGE-099", third_html)
 
     def test_product_drawing_upload_preview_and_batch_entry(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         with self.web.connect(self.web.DB_PATH) as conn:
             upsert_product(
@@ -2509,7 +2613,7 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("暂未开放", batch.get_data(as_text=True))
 
     def test_product_save_can_clear_price_and_reject_invalid_price(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         with self.web.connect(self.web.DB_PATH) as conn:
             upsert_product(
@@ -2570,7 +2674,7 @@ class WebAppTest(unittest.TestCase):
         self.assertIsNone(product["price_cny"])
 
     def test_product_status_can_be_edited_and_shown_in_catalog(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         with self.web.connect(self.web.DB_PATH) as conn:
             upsert_product(
@@ -2624,7 +2728,7 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(updated["product_status"], "0 个球头 1 个衬套")
 
     def test_product_save_rejects_invalid_image_before_updating_fields(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         with self.web.connect(self.web.DB_PATH) as conn:
             upsert_product(
@@ -2670,7 +2774,7 @@ class WebAppTest(unittest.TestCase):
     def test_product_image_table_uses_generated_thumbnail(self):
         from PIL import Image
 
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         image_dir = self.root / "data" / "product_images"
         image_dir.mkdir(parents=True, exist_ok=True)
@@ -2708,7 +2812,8 @@ class WebAppTest(unittest.TestCase):
         self.assertTrue((image_dir / "thumbs" / "K-THUMB-001.png").exists())
 
     def test_product_edit_can_delete_product(self):
-        from app.database import save_alias, upsert_product
+        from app.modules.inquiry.persistence import save_alias
+        from app.modules.products.persistence import upsert_product
 
         with self.web.connect(self.web.DB_PATH) as conn:
             upsert_product(
@@ -2927,7 +3032,7 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(count, 0)
 
     def test_material_import_calculates_spec_text_from_dimensions(self):
-        from app.database import import_materials_from_excel
+        from app.modules.materials.persistence import import_materials_from_excel
         from openpyxl import Workbook
 
         path = self.root / "stale-material-spec.xlsx"
@@ -3036,6 +3141,7 @@ class WebAppTest(unittest.TestCase):
                 "014_quote_record_version",
                 "015_idempotency_response_headers",
                 "016_api_artifacts",
+                "017_runtime_jobs_ai_and_health",
             ],
         )
 
@@ -3101,7 +3207,8 @@ with connect(database_path) as conn:
 
     def test_default_admin_requires_explicit_password_and_never_rewrites_existing_hash(self):
         from app.config import DEFAULT_ADMIN_PASSWORD_PLACEHOLDER
-        from app.database import ensure_default_admin, now_text
+        from app.modules.admin.persistence import ensure_default_admin
+        from app.platform.clock import now_text
 
         with self.web.connect(self.web.DB_PATH) as conn:
             with self.assertRaisesRegex(RuntimeError, "DEFAULT_ADMIN_PASSWORD"):
@@ -3139,7 +3246,7 @@ with connect(database_path) as conn:
         self.assertFalse(list((self.root / "outputs").glob("catalog-export-bld-007-*.xlsx")))
 
     def test_catalog_export_is_admin_only(self):
-        from app.database import save_user
+        from app.modules.admin.persistence import save_user
 
         with self.web.connect(self.web.DB_PATH) as conn:
             save_user(
@@ -3180,7 +3287,7 @@ with connect(database_path) as conn:
         from openpyxl import load_workbook
         from PIL import Image
 
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         image_dir = self.root / "data" / "product_images"
         image_dir.mkdir(parents=True, exist_ok=True)
@@ -3219,7 +3326,7 @@ with connect(database_path) as conn:
     def test_catalog_export_uses_bld_natural_order(self):
         from openpyxl import load_workbook
 
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         expected = ["K8274LA", "K8274RA", "K8274LB", "K8274RB"]
         with self.web.connect(self.web.DB_PATH) as conn:
@@ -3305,7 +3412,7 @@ with connect(database_path) as conn:
         self.assertNotIn("old-root-result.xlsx", names)
 
     def test_quick_oe_lookup_on_homepage(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         with self.web.connect(self.web.DB_PATH) as conn:
             upsert_product(
@@ -3334,7 +3441,7 @@ with connect(database_path) as conn:
         self.assertIn('id="quick-oe-image-modal"', html)
 
     def test_quick_brand_code_lookup_on_homepage(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         with self.web.connect(self.web.DB_PATH) as conn:
             upsert_product(
@@ -3363,7 +3470,7 @@ with connect(database_path) as conn:
                 self.assertIn("品牌号码精准命中", html)
 
     def test_quick_bld_lookup_on_homepage(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         with self.web.connect(self.web.DB_PATH) as conn:
             upsert_product(
@@ -3389,7 +3496,7 @@ with connect(database_path) as conn:
         self.assertIn("BLD NO. 精准命中", html)
 
     def test_quick_bld_fragment_lookup_on_homepage(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         with self.web.connect(self.web.DB_PATH) as conn:
             for bld_no in ["K6004LB", "K6004RB", "K6015B"]:
@@ -3418,7 +3525,7 @@ with connect(database_path) as conn:
         self.assertIn("BLD NO. 片段命中", html)
 
     def test_quick_partial_number_lookup_checks_bld_oe_and_brand_codes(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         with self.web.connect(self.web.DB_PATH) as conn:
             for bld_no, oe_no, brand_no in [
@@ -3461,7 +3568,7 @@ with connect(database_path) as conn:
         self.assertIn("品牌号码片段命中", html)
 
     def test_quick_lookup_requires_at_least_four_normalized_chars(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         with self.web.connect(self.web.DB_PATH) as conn:
             upsert_product(
@@ -3486,7 +3593,7 @@ with connect(database_path) as conn:
         self.assertNotIn("K-SHORT-001", html)
 
     def test_quick_lookup_uses_unique_oe_suffix_variant(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         with self.web.connect(self.web.DB_PATH) as conn:
             upsert_product(
@@ -3510,7 +3617,7 @@ with connect(database_path) as conn:
         self.assertIn("OE 尾字母容错命中", html)
 
     def test_quick_lookup_psa_352x_dot_prefers_psa_over_gm_exact(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         with self.web.connect(self.web.DB_PATH) as conn:
             upsert_product(
@@ -3552,7 +3659,7 @@ with connect(database_path) as conn:
         self.assertTrue(response.headers["Location"].endswith("/?quick_oe=55270-2Z000"))
 
     def test_pasted_inquiry_has_character_limit(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         with self.web.connect(self.web.DB_PATH) as conn:
             upsert_product(
@@ -3577,7 +3684,7 @@ with connect(database_path) as conn:
         self.assertIn("粘贴号码最多支持 5000 个字符", html)
 
     def test_pasted_multiple_codes_generates_match_excel(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
         from openpyxl import load_workbook
 
         products = [
@@ -3665,7 +3772,7 @@ with connect(database_path) as conn:
         generated.close()
 
     def test_pasted_combined_oe_prefix_stays_one_query(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         with self.web.connect(self.web.DB_PATH) as conn:
             upsert_product(
@@ -3704,7 +3811,7 @@ with connect(database_path) as conn:
         self.assertNotIn("<td>2</td>", html)
 
     def test_uploaded_inquiry_combined_oe_prefix_matches_before_fragments(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
         from app.excel_io import generate_excel_with_bld
         from app.helpers import load_catalog
         from openpyxl import Workbook
@@ -3755,7 +3862,7 @@ with connect(database_path) as conn:
         self.assertEqual(summary["rows"][0]["reason"], "OE 组合前缀命中")
 
     def test_uploaded_inquiry_integer_decimal_text_matches_prefix(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
         from app.excel_io import generate_excel_with_bld
         from app.helpers import load_catalog
         from openpyxl import Workbook
@@ -3795,7 +3902,7 @@ with connect(database_path) as conn:
         self.assertEqual(summary["rows"][0]["reason"], "OE 组合前缀命中")
 
     def test_uploaded_inquiry_oe_suffix_variant_matches_unique_base(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
         from app.excel_io import generate_excel_with_bld
         from app.helpers import load_catalog
         from openpyxl import Workbook
@@ -3835,7 +3942,7 @@ with connect(database_path) as conn:
         self.assertEqual(summary["rows"][0]["reason"], "OE 尾字母容错命中")
 
     def test_uploaded_inquiry_split_oe_suffix_variants_match_same_product(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
         from app.excel_io import generate_excel_with_bld
         from app.helpers import load_catalog
         from openpyxl import Workbook
@@ -3950,7 +4057,7 @@ with connect(database_path) as conn:
         self.assertEqual(match.reason, "OE 精准命中")
 
     def test_uploaded_inquiry_psa_352x_dot_does_not_match_gm_exact(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
         from app.excel_io import generate_excel_with_bld
         from app.helpers import load_catalog
         from openpyxl import Workbook
@@ -4001,7 +4108,7 @@ with connect(database_path) as conn:
         self.assertEqual(summary["rows"][0]["reason"], "PSA 号码点号容错命中")
 
     def test_pasted_multiple_bld_codes_generates_match_excel(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
 
         with self.web.connect(self.web.DB_PATH) as conn:
             for bld_no in ["K-BLD-BATCH-1", "K-BLD-BATCH-2"]:
@@ -4029,7 +4136,7 @@ with connect(database_path) as conn:
         self.assertIn("BLD NO. 精准命中", html)
 
     def test_uploaded_inquiry_can_export_tax_price(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
         from openpyxl import Workbook, load_workbook
 
         with self.web.connect(self.web.DB_PATH) as conn:
@@ -4140,7 +4247,7 @@ with connect(database_path) as conn:
         generated.close()
 
     def test_uploaded_polluted_xlsx_uses_cleaned_copy_without_skipping_late_rows(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
         from openpyxl import Workbook, load_workbook
 
         with self.web.connect(self.web.DB_PATH) as conn:
@@ -4206,7 +4313,7 @@ with connect(database_path) as conn:
         self.assertIn("<td>250</td>", result_html)
 
     def test_uploaded_inquiry_can_match_multiple_selected_columns(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
         from openpyxl import Workbook, load_workbook
 
         with self.web.connect(self.web.DB_PATH) as conn:
@@ -4284,7 +4391,7 @@ with connect(database_path) as conn:
         generated.close()
 
     def test_item_header_with_code_values_prompts_for_match_column(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
         from openpyxl import Workbook
 
         with self.web.connect(self.web.DB_PATH) as conn:
@@ -4383,7 +4490,7 @@ with connect(database_path) as conn:
         self.assertNotIn("生成失败", html)
 
     def test_segmented_merged_headers_do_not_count_as_inquiry_rows(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
         from openpyxl import Workbook, load_workbook
 
         with self.web.connect(self.web.DB_PATH) as conn:
@@ -4492,7 +4599,7 @@ with connect(database_path) as conn:
                 self.assertEqual(match.reason, "品牌号码精准命中")
 
     def test_manual_column_result_defers_excel_until_download(self):
-        from app.database import upsert_product
+        from app.modules.products.persistence import upsert_product
         from openpyxl import Workbook, load_workbook
 
         with self.web.connect(self.web.DB_PATH) as conn:

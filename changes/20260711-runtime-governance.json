@@ -1,0 +1,20 @@
+{
+  "date": "2026-07-11",
+  "version": "unreleased",
+  "title": "完成持久任务、AI Provider 与运行治理",
+  "entries": [
+    "货物识别改由独立持久 Worker 执行，Web 重启后任务仍可查询，检查点续租、过期租约恢复、优雅停机重排，并支持刷新续查和取消。",
+    "新增统一 jobs API，任务状态、结果和取消受 Principal 所有权、Scope 与幂等保护，响应不暴露内部请求路径。",
+    "AI Provider 统一使用环境配置、目标和模型白名单、同源重定向、超时、响应上限、可中断有限重试、并发上限及 Token/耗时/费用记录。",
+    "新增 liveness、readiness、Worker 心跳和部署业务探针；Web 与 Worker 在 Docker Compose 中独立运行。",
+    "新增默认 dry-run 的保留期清理器，覆盖上传、输出、artifact、终态任务、幂等记录、AI 调用、心跳和备份，保护活跃任务路径，并为实际清理写审计。",
+    "产品数据包导入增加逐成员路径、链接、类型、数量、单文件和解压总量校验，包内无效更新时间不会覆盖本机有效记录。",
+    "产品同步、登录和货物识别迁入领域模块，app/database.py 只保留连接与迁移基础设施；路由数据库依赖、daemon 和异常外泄债务清零，平台与运行边界加入 Pyright 棘轮。",
+    "内部 API Key 增加可配置的轮换提醒，提醒不会自动停用现有 Key。"
+  ],
+  "impact": {
+    "data": "migration-017-and-retention-policy",
+    "api": "compatible-new-jobs-resources",
+    "operations": "web-and-worker-restart-required"
+  }
+}

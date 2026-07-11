@@ -10,8 +10,6 @@ import subprocess
 import sys
 import tempfile
 import time
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -23,13 +21,18 @@ from openpyxl.utils import get_column_letter
 from PIL import Image, ImageOps
 from pillow_heif import register_heif_opener
 
+from app.platform.ai import (
+    AiProviderError,
+    AiProviderInterruptedError,
+    OpenAICompatibleVisionProvider,
+    VisionProviderConfig,
+)
+
 
 register_heif_opener()
 
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".heif"}
-DEFAULT_BASE_URL = "https://api.openai.com/v1"
-DEFAULT_ENDPOINT_PATH = "/chat/completions"
 OUTPUT_ROOT = Path("outputs") / "shipment_photo_recognition"
 
 SYSTEM_PROMPT = """你是发货核对照片识别助手。任务是从货物/纸箱/托盘照片中识别每一张实际贴在货物上的白色标签，然后输出给程序处理的结构化 JSON。
@@ -187,69 +190,18 @@ def _extract_json_object(text: str) -> dict[str, Any]:
     return value
 
 
-def _chat_completion_request(
-    *,
-    api_key: str,
-    base_url: str,
-    endpoint_path: str,
-    model: str,
-    image_path: Path,
-    timeout: int,
-    max_side: int,
-) -> dict[str, Any]:
-    url = base_url.rstrip("/") + "/" + endpoint_path.strip("/")
-    payload = {
-        "model": model,
-        "temperature": 0,
-        "response_format": {"type": "json_object"},
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": (
-                            "请识别这张发货照片中的每一张货物标签，按指定 JSON 结构输出。"
-                            "重点读取标签上的号码、产品名称、数量、车型和纸箱尺寸。"
-                        ),
-                    },
-                    {"type": "image_url", "image_url": {"url": _data_url(image_path, max_side), "detail": "high"}},
-                ],
-            },
-        ],
-    }
-    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    request = urllib.request.Request(
-        url,
-        data=body,
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
+def build_runtime_args(*, limit: int = 0, caller: str = "shipment-recognition-worker") -> argparse.Namespace:
+    config = VisionProviderConfig.from_environment()
+    provider = OpenAICompatibleVisionProvider(config) if config.provider == "openai-compatible" else None
+    return argparse.Namespace(
+        provider=config.provider,
+        provider_config=config,
+        vision_provider=provider,
+        timeout=config.timeout_seconds,
+        max_side=config.max_image_side,
+        limit=max(0, min(int(limit), 200)),
+        caller=caller,
     )
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            response_payload = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"视觉接口返回 HTTP {exc.code}: {detail[:800]}") from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"视觉接口请求失败: {exc}") from exc
-
-    try:
-        content = response_payload["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, TypeError) as exc:
-        raise RuntimeError(f"视觉接口返回格式无法识别: {response_payload}") from exc
-    parsed = _extract_json_object(content)
-    usage = response_payload.get("usage")
-    if isinstance(usage, dict):
-        parsed["_usage"] = usage
-    response_model = response_payload.get("model")
-    if response_model:
-        parsed["_model"] = response_model
-    return parsed
 
 
 def _available_tesseract_languages(timeout: int) -> set[str]:
@@ -456,6 +408,7 @@ def _write_sheet(sheet, headers: list[str], rows: list[list[Any]]) -> None:
 def write_workbook(photo_results: list[dict[str, Any]], output_path: Path, run_date: str) -> None:
     workbook = Workbook()
     summary_sheet = workbook.active
+    assert summary_sheet is not None
     summary_sheet.title = "汇总"
     summary = _summary_rows(photo_results, run_date)
     _write_sheet(
@@ -511,7 +464,7 @@ def write_workbook(photo_results: list[dict[str, Any]], output_path: Path, run_d
     photo_sheet = workbook.create_sheet("照片清单")
     _write_sheet(
         photo_sheet,
-        ["照片", "识别状态", "标签数", "耗时秒", "输入Token", "输出Token", "总Token", "模型", "照片说明", "错误"],
+        ["照片", "识别状态", "标签数", "耗时秒", "输入Token", "输出Token", "总Token", "供应商", "模型", "预估费用USD", "照片说明", "错误"],
         [
             [
                 photo["relative_name"],
@@ -521,7 +474,9 @@ def write_workbook(photo_results: list[dict[str, Any]], output_path: Path, run_d
                 photo.get("usage", {}).get("prompt_tokens", 0),
                 photo.get("usage", {}).get("completion_tokens", 0),
                 photo.get("usage", {}).get("total_tokens", 0),
+                photo.get("provider", ""),
                 photo.get("model", ""),
+                photo.get("ai_metrics", {}).get("estimated_cost_usd", 0),
                 photo["result"].get("photo_summary", ""),
                 photo.get("error", ""),
             ]
@@ -548,59 +503,65 @@ def find_photos(input_dir: Path) -> list[PhotoJob]:
 
 def recognize_photo(job: PhotoJob, args: argparse.Namespace) -> dict[str, Any]:
     started = time.time()
-    provider = args.provider
+    provider_name = args.provider
+    metrics: dict[str, object] = {}
     try:
-        if provider == "tesseract":
+        if provider_name == "tesseract":
             raw = _tesseract_result(job.path, args.timeout)
             usage = {}
             response_model = "tesseract"
         else:
-            api_key = (
-                os.environ.get("SHIPMENT_VISION_API_KEY")
-                or os.environ.get("DASHSCOPE_API_KEY")
-                or os.environ.get("QWEN_API_KEY")
-                or os.environ.get("OPENAI_API_KEY")
+            vision_provider = getattr(args, "vision_provider", None)
+            config = getattr(args, "provider_config", None)
+            if not isinstance(config, VisionProviderConfig):
+                config = VisionProviderConfig.from_environment()
+            if not isinstance(vision_provider, OpenAICompatibleVisionProvider):
+                vision_provider = OpenAICompatibleVisionProvider(config)
+            completion = vision_provider.complete(
+                system_prompt=SYSTEM_PROMPT,
+                user_prompt=(
+                    "请识别这张发货照片中的每一张货物标签，按指定 JSON 结构输出。"
+                    "重点读取标签上的号码、产品名称、数量、车型和纸箱尺寸。"
+                ),
+                image_data_url=_data_url(job.path, config.max_image_side),
+                caller=str(getattr(args, "caller", "shipment-photo-recognition")),
+                data_type="shipment_label_photo",
+                check_interrupted=getattr(args, "check_interrupted", None),
             )
-            model = args.model or os.environ.get("SHIPMENT_VISION_MODEL")
-            base_url = args.base_url or os.environ.get("SHIPMENT_VISION_BASE_URL") or DEFAULT_BASE_URL
-            endpoint_path = args.endpoint_path or os.environ.get("SHIPMENT_VISION_ENDPOINT_PATH") or DEFAULT_ENDPOINT_PATH
-            if not api_key:
-                raise RuntimeError("缺少 SHIPMENT_VISION_API_KEY、DASHSCOPE_API_KEY、QWEN_API_KEY 或 OPENAI_API_KEY。")
-            if not model:
-                raise RuntimeError("缺少 --model 或 SHIPMENT_VISION_MODEL。")
-            raw = _chat_completion_request(
-                api_key=api_key,
-                base_url=base_url,
-                endpoint_path=endpoint_path,
-                model=model,
-                image_path=job.path,
-                timeout=args.timeout,
-                max_side=args.max_side,
-            )
-            usage = raw.pop("_usage", {})
-            response_model = _compact_text(raw.pop("_model", "")) or model
+            raw = _extract_json_object(completion.content)
+            usage = completion.usage
+            response_model = completion.response_model
+            metrics = completion.metrics.audit_payload()
         result = _normalize_result(raw)
         return {
             "relative_name": job.relative_name,
-            "path": str(job.path),
             "status": "ok",
             "seconds": round(time.time() - started, 2),
+            "provider": provider_name,
             "model": response_model,
             "usage": _normalize_usage(usage),
+            "ai_metrics": metrics,
             "result": result,
             "error": "",
         }
+    except AiProviderInterruptedError:
+        raise
+    except AiProviderError as exc:
+        metrics = exc.metrics.audit_payload()
+        error_message = exc.message
     except Exception as exc:
-        return {
-            "relative_name": job.relative_name,
-            "path": str(job.path),
-            "status": "error",
-            "seconds": round(time.time() - started, 2),
-            "model": "",
-            "usage": _normalize_usage({}),
-            "result": {"photo_summary": "", "labels": []},
-            "error": str(exc),
-        }
+        error_message = str(exc)
+    return {
+        "relative_name": job.relative_name,
+        "status": "error",
+        "seconds": round(time.time() - started, 2),
+        "provider": provider_name,
+        "model": str(metrics.get("model") or ""),
+        "usage": _normalize_usage(metrics),
+        "ai_metrics": metrics,
+        "result": {"photo_summary": "", "labels": []},
+        "error": error_message,
+    }
 
 
 def default_output_path(input_dir: Path) -> Path:
@@ -628,6 +589,28 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 def main(argv: list[str]) -> int:
     _load_env_file(Path(".env"))
     args = parse_args(argv)
+    admin_overrides = {
+        "provider": args.provider,
+        "timeout_seconds": args.timeout,
+        "max_image_side": args.max_side,
+    }
+    if args.model:
+        admin_overrides["model"] = args.model
+    if args.base_url:
+        admin_overrides["base_url"] = args.base_url
+    if args.endpoint_path:
+        admin_overrides["endpoint_path"] = args.endpoint_path
+    try:
+        args.provider_config = VisionProviderConfig.from_environment(admin_overrides=admin_overrides)
+        args.vision_provider = (
+            OpenAICompatibleVisionProvider(args.provider_config)
+            if args.provider_config.provider == "openai-compatible"
+            else None
+        )
+        args.caller = "shipment-photo-recognition-cli"
+    except ValueError as exc:
+        print(f"视觉识别配置无效：{exc}", file=sys.stderr)
+        return 2
     input_dir = args.input_dir.expanduser().resolve()
     if not input_dir.exists() or not input_dir.is_dir():
         print(f"照片文件夹不存在：{input_dir}", file=sys.stderr)

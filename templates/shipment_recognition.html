@@ -12,11 +12,10 @@
       </header>
 
       <section class="inquiry-command-center shipment-command-center">
-        <form action="{{ url_for('run_shipment_recognition') }}" method="post" enctype="multipart/form-data" class="inquiry-command-row inquiry-upload-form shipment-single-form" data-shipment-form>
+        <form action="{{ url_for('run_shipment_recognition') }}" method="post" enctype="multipart/form-data" class="inquiry-command-row inquiry-upload-form shipment-single-form" data-shipment-form{% if active_job %} data-active-shipment-status-url="{{ url_for('shipment_recognition_status', job_id=active_job.id) }}" data-active-shipment-cancel-url="{{ url_for('cancel_shipment_recognition', job_id=active_job.id) }}"{% endif %}>
           {{ csrf_field() }}
           <input type="hidden" name="shipment_date" value="{{ default_date }}">
           <input type="hidden" name="limit" value="{{ default_limit }}">
-          <input type="hidden" name="provider" value="openai-compatible">
           <div class="file-picker-field">
             <span>发货照片</span>
             <div class="file-picker inquiry-file-oe-picker shipment-folder-picker">
@@ -38,6 +37,7 @@
                   <div class="shipment-progress-bar" data-shipment-progress-bar></div>
                 </div>
                 <div class="shipment-progress-detail" data-shipment-progress-detail></div>
+                <button class="linear-button" type="button" data-shipment-cancel hidden>取消任务</button>
               </div>
             </div>
           </div>

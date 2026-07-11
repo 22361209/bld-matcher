@@ -13,3 +13,38 @@ services:
       - ./outputs:/app/outputs
     environment:
       - TZ=Asia/Shanghai
+
+  bld-worker:
+    build: .
+    container_name: bld-matcher-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+      - ./outputs:/app/outputs
+    environment:
+      - TZ=Asia/Shanghai
+    command: ["sh", "-c", "python -m scripts.init_database && exec python -m scripts.run_worker"]
+    stop_grace_period: 330s
+    healthcheck:
+      test: ["CMD", "python", "-m", "scripts.worker_health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+  bld-retention:
+    build: .
+    profiles: ["maintenance"]
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+      - ./outputs:/app/outputs
+    environment:
+      - TZ=Asia/Shanghai
+    command: ["sh", "-c", "python -m scripts.init_database && exec python -m scripts.cleanup_runtime --apply"]
+    restart: "no"

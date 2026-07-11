@@ -2,11 +2,7 @@
   "legacy_full_page_templates": [],
   "legacy_inline_script_counts": {},
   "legacy_inline_style_counts": {},
-  "legacy_route_database_access": [
-    "app/routes/auth.py",
-    "app/routes/product_sync.py",
-    "app/routes/shipment_recognition.py"
-  ],
+  "legacy_route_database_access": [],
   "legacy_route_imports": [],
   "legacy_api_routes": [
     "app/modules/inquiry/api.py:internal_inquiry_analyze /api/internal/inquiry/analyze",
@@ -17,25 +13,11 @@
     "app/modules/quotes/api.py:api_list_quotes /api/quotes",
     "app/modules/quotes/api.py:api_update_quote /api/quotes/<int:quote_id>"
   ],
-  "legacy_route_database_import_counts": {
-    "app/routes/auth.py": 2,
-    "app/routes/product_sync.py": 3,
-    "app/routes/shipment_recognition.py": 2
-  },
-  "legacy_route_sql_call_counts": {
-    "app/routes/product_sync.py": 18,
-    "app/routes/shipment_recognition.py": 5
-  },
-  "legacy_exception_exposure_counts": {
-    "app/routes/inquiry.py": 4,
-    "app/routes/product_sync.py": 3,
-    "app/routes/products.py": 5,
-    "app/routes/shipment_recognition.py": 2
-  },
-  "legacy_daemon_thread_counts": {
-    "app/routes/shipment_recognition.py": 1
-  },
+  "legacy_route_database_import_counts": {},
+  "legacy_route_sql_call_counts": {},
+  "legacy_exception_exposure_counts": {},
+  "legacy_daemon_thread_counts": {},
   "public_write_endpoints": [
-    "app/routes/auth.py:do_login"
+    "app/modules/admin/auth_web.py:do_login"
   ]
 }

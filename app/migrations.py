@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 import json
 from collections.abc import Callable
+from datetime import datetime, timedelta
 
 from .platform.api_principal import LEGACY_COMPATIBILITY_SCOPES
 
@@ -233,6 +234,143 @@ def _add_api_artifacts(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_api_artifacts_expires ON api_artifacts(expires_at)")
 
 
+def _add_runtime_platform_tables(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS background_jobs (
+          id TEXT PRIMARY KEY,
+          kind TEXT NOT NULL,
+          owner_id TEXT NOT NULL,
+          status TEXT NOT NULL,
+          request_payload TEXT NOT NULL DEFAULT '{}',
+          progress_payload TEXT NOT NULL DEFAULT '{}',
+          result_payload TEXT NOT NULL DEFAULT '{}',
+          error_code TEXT NOT NULL DEFAULT '',
+          error_message TEXT NOT NULL DEFAULT '',
+          cancel_requested INTEGER NOT NULL DEFAULT 0,
+          attempt INTEGER NOT NULL DEFAULT 0,
+          max_attempts INTEGER NOT NULL DEFAULT 3,
+          run_after TEXT NOT NULL,
+          lease_owner TEXT NOT NULL DEFAULT '',
+          lease_expires_at TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          started_at TEXT NOT NULL DEFAULT '',
+          finished_at TEXT NOT NULL DEFAULT '',
+          expires_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_background_jobs_owner ON background_jobs(owner_id, created_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_background_jobs_claim ON background_jobs(status, run_after, created_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_background_jobs_expiry ON background_jobs(expires_at)")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS background_job_events (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          job_id TEXT NOT NULL,
+          event_type TEXT NOT NULL,
+          payload TEXT NOT NULL DEFAULT '{}',
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (job_id) REFERENCES background_jobs(id)
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_background_job_events_job ON background_job_events(job_id, id)")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ai_provider_calls (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          job_id TEXT NOT NULL DEFAULT '',
+          provider TEXT NOT NULL,
+          model TEXT NOT NULL,
+          data_type TEXT NOT NULL,
+          caller TEXT NOT NULL,
+          status TEXT NOT NULL,
+          attempts INTEGER NOT NULL DEFAULT 1,
+          latency_ms INTEGER NOT NULL DEFAULT 0,
+          prompt_tokens INTEGER NOT NULL DEFAULT 0,
+          completion_tokens INTEGER NOT NULL DEFAULT 0,
+          total_tokens INTEGER NOT NULL DEFAULT 0,
+          estimated_cost_usd REAL NOT NULL DEFAULT 0,
+          error_code TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_provider_calls_job ON ai_provider_calls(job_id, id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_provider_calls_created ON ai_provider_calls(created_at)")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS runtime_heartbeats (
+          component TEXT NOT NULL,
+          instance_id TEXT NOT NULL,
+          payload TEXT NOT NULL DEFAULT '{}',
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (component, instance_id)
+        )
+        """
+    )
+
+    if "shipment_recognition_jobs" not in {
+        row["name"] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
+    }:
+        return
+    rows = conn.execute("SELECT id, owner, payload, created_at, updated_at FROM shipment_recognition_jobs").fetchall()
+    for row in rows:
+        try:
+            payload = json.loads(str(row["payload"] or "{}"))
+        except json.JSONDecodeError:
+            payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+        legacy_status = str(payload.get("status") or "failed")
+        result = payload.get("result") if isinstance(payload.get("result"), dict) else {}
+        if legacy_status == "completed":
+            status = "completed"
+            error_code = error_message = ""
+        else:
+            status = "failed"
+            error_code = "job.legacy_interrupted"
+            error_message = "服务升级前的识别任务已中断，请重新提交。"
+        updated_at = str(row["updated_at"] or row["created_at"] or datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        try:
+            expires_at = (datetime.strptime(updated_at[:19], "%Y-%m-%d %H:%M:%S") + timedelta(days=1)).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+        except ValueError:
+            expires_at = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
+        progress = {
+            key: payload[key]
+            for key in ("phase", "message", "total", "completed", "percent", "current")
+            if key in payload
+        }
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO background_jobs (
+              id, kind, owner_id, status, request_payload, progress_payload, result_payload,
+              error_code, error_message, cancel_requested, attempt, max_attempts, run_after,
+              lease_owner, lease_expires_at, created_at, updated_at, started_at, finished_at, expires_at
+            ) VALUES (?, 'shipping.recognition', ?, ?, '{}', ?, ?, ?, ?, 0, 1, 1, ?, '', '', ?, ?, '', ?, ?)
+            """,
+            (
+                str(row["id"]),
+                str(row["owner"]),
+                status,
+                json.dumps(progress, ensure_ascii=False),
+                json.dumps(result, ensure_ascii=False),
+                error_code,
+                error_message,
+                updated_at,
+                str(row["created_at"] or updated_at),
+                updated_at,
+                updated_at,
+                expires_at,
+            ),
+        )
+    conn.execute("DROP TABLE shipment_recognition_jobs")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -250,6 +388,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("014_quote_record_version", _add_quote_record_version),
     ("015_idempotency_response_headers", _add_idempotency_response_headers),
     ("016_api_artifacts", _add_api_artifacts),
+    ("017_runtime_jobs_ai_and_health", _add_runtime_platform_tables),
 )
 
 

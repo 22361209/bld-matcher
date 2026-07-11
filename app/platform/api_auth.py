@@ -88,7 +88,7 @@ def api_scope_required(*required_scopes: str):
                 )
             return fn(*args, **kwargs)
 
-        wrapper.__api_scopes__ = required
+        setattr(wrapper, "__api_scopes__", required)
         return wrapper
 
     return decorator

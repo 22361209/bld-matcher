@@ -6,13 +6,11 @@ from pathlib import Path
 from types import TracebackType
 
 from app.catalog_export import export_products_xlsx
-from app.database import (
-    connect,
+from app.database import connect
+from app.modules.products.persistence import (
     count_products,
     import_catalog,
     list_products,
-    log_event,
-    now_text,
     product_stats,
     rows_for_catalog,
     upsert_product,
@@ -21,6 +19,8 @@ from app.drawings import save_product_drawing
 from app.matcher import compact_text
 from app.price_import import parse_price_file
 from app.product_media import save_product_image
+from app.platform.audit_store import log_event
+from app.platform.clock import now_text
 
 from .domain import ProductFilters, ProductRecord, ProductStats
 

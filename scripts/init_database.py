@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from app.config import DB_PATH, assert_production_secrets
-from app.database import connect, ensure_default_admin
+from app.database import connect
+from app.modules.admin.persistence import ensure_default_admin
 
 
 def main() -> int:

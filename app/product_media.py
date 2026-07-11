@@ -8,7 +8,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from werkzeug.datastructures import FileStorage
 
 from .config import PRODUCT_IMAGE_ARCHIVE_DIR, PRODUCT_IMAGE_DATA_PREFIX, PRODUCT_IMAGE_DIR, PRODUCT_IMAGE_THUMB_DIR
-from .database import now_text
+from .platform.clock import now_text
 from .drawings import safe_filename_part
 
 

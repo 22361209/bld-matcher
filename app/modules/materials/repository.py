@@ -5,18 +5,18 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from types import TracebackType
 
-from app.database import (
-    connect,
+from app.database import connect
+from app.modules.materials.persistence import (
     count_material_items,
     deactivate_material_item,
     get_material_item,
     import_materials_from_excel,
     list_material_items,
-    log_event,
     material_item_stats,
     rows_for_material_sheet,
     upsert_material_item,
 )
+from app.platform.audit_store import log_event
 
 
 class SQLiteMaterialRepository:

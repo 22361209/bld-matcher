@@ -9,7 +9,7 @@ from pathlib import Path
 from werkzeug.datastructures import FileStorage
 
 from .config import DATA_DIR, DRAWING_ARCHIVE_DIR, DRAWING_PDF_DIR
-from .database import now_text
+from .platform.clock import now_text
 from .matcher import split_codes
 
 

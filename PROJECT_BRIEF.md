@@ -52,7 +52,14 @@ NAS 信息：
 
 ```bash
 cd "/Users/linzhenyue/Projects/bld-matcher"
-APP_DEBUG=0 SECRET_KEY=local-dev-bld-matcher .venv/bin/python app.py
+uv run python -m scripts.init_database
+APP_DEBUG=0 SECRET_KEY=local-dev-bld-matcher uv run python app.py
+```
+
+另开一个终端运行持久任务 Worker：
+
+```bash
+uv run python -m scripts.run_worker
 ```
 
 本机也有 `/Applications/BLD.app` 启动器；它只用于通过 Terminal 启动本机 5055 并打开浏览器，不用于 NAS。启动日志在 `logs/bld-local-5055.log`。
@@ -61,6 +68,7 @@ APP_DEBUG=0 SECRET_KEY=local-dev-bld-matcher .venv/bin/python app.py
 
 ```bash
 uv run python scripts/verify.py
+uv run python -m scripts.runtime_probe --base-url http://127.0.0.1:5055
 git status --short
 lsof -nP -iTCP:5055 -sTCP:LISTEN
 ```
@@ -97,8 +105,9 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 - 新应用使用 `/api/v1`；`GET /api/v1` 返回平台能力，`GET /api/v1/openapi.json` 返回 OpenAPI 3.1 合同。
 - API v1 使用强类型 Principal、最小权限 Scope、Pydantic Schema、稳定错误码、请求 ID 和持久幂等记录；写操作由服务端 Key 身份审计。
 - `/api/v1/products/search` 提供稳定产品查询；`/api/v1/inquiries/analyze` 与 `/export` 和网页、旧内部接口共用 InquiryService。
+- `/api/v1/jobs/{id}`、`/result` 与 `/cancel` 提供持久任务状态、结果和幂等取消；任务绑定 API Principal，不返回内部请求路径。
 - v1 导出返回限时 artifact ID；下载绑定创建它的 API Principal，响应不包含服务器绝对路径。OpenAPI 提交快照由统一验收阻断漂移。
-- API Key 可设置 Scopes 和到期日期；历史 Key 保留兼容权限，新 Key 默认只有读取和询价权限，写权限需要管理员明确选择。
+- API Key 可设置 Scopes 和到期日期；历史 Key 保留兼容权限，新 Key 默认只有读取和询价权限，写权限需要管理员明确选择；管理页按默认 90 天周期提示轮换，但不自动停用。
 - `/api/internal/*` 与 `/api/quotes` 是兼容接口，继续可用但不再扩展新能力。
 
 - 文档在 `OPENCLAW_API.md`，接口前缀为 `/api/internal/`。
@@ -120,7 +129,7 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 - 表格在含税单价后显示“产品状态”，数据库保存中文配置，产品目录默认显示英文；询价结果预览和人民币报价导出显示中文，美金报价导出显示英文。
 - 导出目录只对管理员开放。
 - 管理员菜单有“产品数据同步”入口，可导出产品数据包；导出包包含 `products` 表和 `manifest.json`，可选带 `data/drawings/` 和 `data/product_images/`。
-- “产品数据同步”导入会先预览新增/更新/包内旧数据/无变化/本机独有数量，再增量合并 `products` 表；包内更新时间早于当前系统的同 BLD 产品会跳过；导入前使用 SQLite Backup API 生成一致性备份，媒体文件原子复制，数据库应用失败时自动恢复本次媒体变更。
+- “产品数据同步”导入会先预览新增/更新/包内旧数据/无变化/本机独有数量，再增量合并 `products` 表；包内更新时间早于当前系统或时间戳无效的同 BLD 产品会跳过；数据包逐成员阻断穿越、链接、特殊文件和解压膨胀；导入前使用 SQLite Backup API 生成一致性备份，媒体文件原子复制，数据库应用失败时自动恢复本次媒体变更。
 - 产品编辑页可上传/替换单个 PDF 图纸和最多 5 张产品图片，也可删除产品；手工清空含税单价会写入空值，图片/图纸格式校验失败时不会先更新产品文字资料。
 
 外部品牌号码审核工具：
@@ -148,12 +157,12 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 发货照片识别：
 
 - `tools/shipment_photo_recognition.py` 可读取 NAS 挂载目录或本机照片文件夹，识别货物白色标签并生成 Excel 和 JSON。
-- 导航栏“货物识别”是试验入口，页面支持选择多张照片或拖入照片文件夹，上传后保存到当前用户 `uploads/u*/shipment_photos/`；识别走后台线程，任务状态写入 SQLite `shipment_recognition_jobs` 并轮询真实进度，服务重启后未完成线程仍会中断。
+- 导航栏“货物识别”是试验入口，页面支持选择多张照片或拖入照片文件夹，上传后保存到当前用户 `uploads/u*/shipment_photos/`；Web 只提交 `background_jobs` 持久任务，独立 Worker 执行识别，页面可刷新续查并取消，检查点会续租，过期租约可恢复，正常停机会把未提交任务重新排队。
 - 第一版不写入产品库、不匹配现有目录；按标签内容汇总日期、标签号码、BLD号、产品名称、数量、车型和箱数。
 - 箱数按识别出的标签张数计算；数量只使用标签上明确写出的数量，看不清时为 0 并保留低置信备注。
 - 支持 jpg、png、webp、bmp、tif、heic/heif 图片；HEIC 解码依赖 `pillow-heif`。
-- 默认支持 OpenAI-compatible 视觉 Chat Completions 接口，配置 `SHIPMENT_VISION_API_KEY`、`SHIPMENT_VISION_BASE_URL`、`SHIPMENT_VISION_MODEL`；也可用 `--provider tesseract` 做本机 OCR 草稿。
-- Qwen/DashScope 返回的 `usage` 会记录到 JSON，并写入 Excel“照片清单”的输入 Token、输出 Token、总 Token、耗时秒和模型列；页面本次结果会汇总显示 Token 和耗时。
+- 默认支持 OpenAI-compatible 视觉 Chat Completions 接口；Provider、地址、模型、密钥、代理和 allowlist 只从运行环境读取，页面请求不能覆盖。统一 Provider 执行超时、2 MiB 响应上限、可中断有限重试、并发限制和同 origin 安全重定向校验；命令行仍可用 `--provider tesseract` 做本机 OCR 草稿。
+- 每次逻辑 AI 调用关联任务记录供应商、模型、尝试次数、Token、估算费用、耗时和成功/失败/中断结果；Excel“照片清单”和页面继续展示本次可用指标。
 
 合同管理：
 
@@ -185,8 +194,10 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 页面与业务边界：
 
 - 所有完整页面继承 `templates/base.html`，以唯一 `page_id` 和六类 `page_type` 进入统一页面协议；模板禁止内联脚本、事件处理器和样式。
-- 合同、材料、发货通知和后台管理由各自 Application Service 负责事务、审计和文件补偿，Web 适配器不再直接访问 SQLite。
+- 全部现有业务、登录、产品同步和货物识别由领域 Service/Repository 负责事务、审计和文件补偿；Web、API 与 Worker 适配器不直接访问 SQLite。
 - 材料 Excel 更新采用原子替换；数据库导入失败会恢复旧文件。合同、发货通知、模板和物料图纸若审计失败，会删除本次未完成输出。
+- `app/database.py` 只保留 Schema、连接与迁移；路由数据库直连、daemon 后台线程和异常文本外泄债务已清零。
+- `/health/ready` 通过只读连接检查数据库、迁移、最小业务条件与 Worker 心跳，不负责初始化；运行数据清理由默认 dry-run 的 `scripts/cleanup_runtime.py` 统一规划，详见 `docs/operations/runtime.md`。
 
 ## NAS 更新流程
 
@@ -220,22 +231,20 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 ## 重要代码入口
 
 - `app.py`：应用入口、全局 before_request、模板全局函数
-- `app/platform/`：API Principal、Key、Scope、错误、请求 ID、审计、Schema、OpenAPI 和幂等基础设施
+- `app/platform/`：API Principal、Key、Scope、错误、请求 ID、审计、Schema、OpenAPI、持久任务、AI Provider、健康检查和保留期基础设施
 - `app/api/v1/`：稳定机器接口的版本入口与 OpenAPI 组装
 - `app/routes/inquiry.py`：询价上传、匹配、下载 Excel、图纸包
-- `app/routes/internal_api.py`：OpenClaw 询价兼容 API
+- `app/modules/inquiry/api.py`：OpenClaw 询价兼容 API 与 v1 询价适配器
 - `app/modules/quotes/`：报价 Domain、Service、Repository、Web、API v1 与旧 API 兼容适配器
-- `app/modules/products/`：产品 Domain、Repository、Service、目录快照和产品搜索 API
+- `app/modules/products/`：产品 Domain、Repository、Service、目录快照、产品搜索 API 和安全数据包同步
 - `app/modules/inquiry/`：询价 Service、匹配/Excel 引擎、旧内部 API 与 v1 适配器
 - `app/platform/artifacts.py`：Principal 所有权、校验值和保留期 artifact 存储
 - `app/routes/products.py`：产品目录页面、图片、图纸、单价和目录导入导出适配器
-- `app/routes/product_sync.py`：本机/NAS 产品数据包导入导出和增量同步
 - `app/modules/materials/`：生产料单、材料明细、物料图纸、原子文件更新和事务补偿
 - `app/modules/contracts/`：采购/销售合同产品补全、PDF 生成、历史和审计
-- `app/modules/shipping/`：发货通知模板、数据预览、Excel 生成和审计补偿
-- `app/modules/admin/`：账号、API Key、操作日志和系统更新
-- `app/routes/shipment_recognition.py`：货物识别页面，触发发货照片标签识别批处理
-- `app/database.py`：SQLite 表结构、查询、写入、迁移调用
+- `app/modules/shipping/`：发货通知、持久货物识别任务、Excel 生成和审计补偿
+- `app/modules/admin/`：登录、账号、API Key、操作日志和系统更新
+- `app/database.py`：SQLite Schema、连接和迁移入口，不保存业务查询
 - `app/matcher.py`：产品匹配逻辑
 - `app/product_media.py`：产品图片上传、缩略图生成和读取
 - `app/catalog_export.py`：产品目录 Excel 导出和图片嵌入
@@ -248,7 +257,9 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 - `tests/test_app.py`：主要回归测试
 - `PROJECT_CONSTITUTION.md`：长期架构、安全、页面、API 和变更治理硬规则
 - `scripts/init_database.py`：容器启动 Gunicorn 前执行迁移和首启管理员初始化
-- `scripts/verify.py`：本机、AI 和 CI 共用的统一验收入口，包含项目合同、锁文件、Ruff、语法和回归测试
+- `scripts/run_worker.py`：独立持久任务 Worker 入口
+- `scripts/runtime_probe.py`、`scripts/cleanup_runtime.py`：部署业务探针和默认 dry-run 的保留期执行器
+- `scripts/verify.py`：本机、AI 和 CI 共用的统一验收入口，包含项目合同、锁文件、Ruff、平台/运行边界 Pyright、语法、OpenAPI 快照和回归测试
 - `contracts/openapi-v1.json`：API v1 提交快照，由 `scripts/openapi_snapshot.py --check` 精确比较
 - `policy/legacy_allowlist.json`：现有架构债务棘轮白名单，部分债务精确到出现次数，只能缩小
 

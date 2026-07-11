@@ -8,8 +8,9 @@ from unittest.mock import patch
 
 from openpyxl import Workbook
 
-from app.database import connect, upsert_product
-import app.database as database_module
+from app.database import connect
+from app.modules.products.persistence import upsert_product
+import app.modules.products.persistence as product_persistence
 from app.migrations import run_migrations
 from app.modules.inquiry.domain import InquiryValidationError
 from app.modules.inquiry.infrastructure import WorkbookInquiryEngine
@@ -186,7 +187,7 @@ class ProductInquiryModuleTest(unittest.TestCase):
         workbook.save(catalog_path)
         workbook.close()
 
-        original_upsert = database_module.upsert_product
+        original_upsert = product_persistence.upsert_product
         calls = 0
 
         def fail_on_second(connection, data, *args, **kwargs):
@@ -196,7 +197,7 @@ class ProductInquiryModuleTest(unittest.TestCase):
                 raise RuntimeError("simulated batch failure")
             return original_upsert(connection, data, *args, **kwargs)
 
-        with patch.object(database_module, "upsert_product", side_effect=fail_on_second):
+        with patch.object(product_persistence, "upsert_product", side_effect=fail_on_second):
             with self.assertRaises(RuntimeError):
                 self.product_service.import_catalog(catalog_path, actor="module-test")
 

@@ -10,7 +10,8 @@ from unittest.mock import patch
 from openpyxl import Workbook, load_workbook
 from werkzeug.datastructures import FileStorage, MultiDict
 
-from app.database import connect, upsert_product
+from app.database import connect
+from app.modules.products.persistence import upsert_product
 from app.modules.admin.repository import SQLiteAdminUnitOfWork
 from app.modules.admin.service import AdminService
 from app.modules.contracts.repository import SQLiteContractRepository, SQLiteContractUnitOfWork
@@ -77,7 +78,11 @@ class DomainPageModuleTest(unittest.TestCase):
         self.temporary.cleanup()
 
     def test_admin_service_owns_user_key_and_log_transactions(self) -> None:
-        service = AdminService(lambda: SQLiteAdminUnitOfWork(self.database_path), _UpdateReader())
+        service = AdminService(
+            lambda: SQLiteAdminUnitOfWork(self.database_path),
+            _UpdateReader(),
+            lambda _stored, _password: False,
+        )
         service.save_user(
             {
                 "username": "service-user",

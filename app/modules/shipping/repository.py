@@ -5,7 +5,8 @@ from collections.abc import Callable
 from pathlib import Path
 from types import TracebackType
 
-from app.database import connect, log_event
+from app.database import connect
+from app.platform.audit_store import log_event
 
 
 class SQLiteShippingRepository:
@@ -20,6 +21,42 @@ class SQLiteShippingRepository:
             target_key,
             detail,
             actor=actor,
+        )
+
+    def audit_recognition(self, action: str, target_key: str, detail: str, *, actor: str) -> None:
+        log_event(
+            self.connection,
+            action,
+            "shipment_recognition",
+            target_key,
+            detail,
+            actor=actor,
+        )
+
+    def record_ai_call(self, *, job_id: str, metrics: dict[str, object]) -> None:
+        self.connection.execute(
+            """
+            INSERT INTO ai_provider_calls (
+              job_id, provider, model, data_type, caller, status, attempts, latency_ms,
+              prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd,
+              error_code, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
+            """,
+            (
+                job_id,
+                str(metrics.get("provider") or ""),
+                str(metrics.get("model") or ""),
+                str(metrics.get("data_type") or ""),
+                str(metrics.get("caller") or ""),
+                str(metrics.get("status") or ""),
+                int(metrics.get("attempts") or 0),
+                int(metrics.get("latency_ms") or 0),
+                int(metrics.get("prompt_tokens") or 0),
+                int(metrics.get("completion_tokens") or 0),
+                int(metrics.get("total_tokens") or 0),
+                float(metrics.get("estimated_cost_usd") or 0),
+                str(metrics.get("error_code") or ""),
+            ),
         )
 
 

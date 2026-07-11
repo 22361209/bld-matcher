@@ -2882,6 +2882,10 @@ textarea {
   font-weight: 700;
 }
 
+.shipment-progress-panel [data-shipment-cancel] {
+  justify-self: end;
+}
+
 .shipment-usage-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2935,7 +2939,8 @@ textarea {
 }
 
 .shipment-result-compact {
-  width: var(--inquiry-panel-width);
+  width: 100%;
+  min-width: 0;
   max-width: 100%;
   margin: 10px auto 18px;
 }
@@ -3281,6 +3286,16 @@ textarea {
   color: var(--linear-muted);
   font-size: 12px;
   overflow-wrap: anywhere;
+}
+
+.api-key-rotation {
+  color: var(--linear-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.api-key-rotation.due {
+  color: #9a4f14;
 }
 
 @media (max-width: 720px) {

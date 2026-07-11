@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from datetime import timedelta
 
 from flask import Blueprint, send_file
 
@@ -8,6 +9,7 @@ from app.config import DB_PATH, OUTPUT_DIR
 from app.platform.api_auth import api_scope_required, current_api_principal
 from app.platform.api_errors import ApiError, register_api_error_handlers
 from app.platform.artifacts import ArtifactNotFoundError, SQLiteArtifactStore
+from app.platform.runtime_factory import get_runtime_settings
 from app.platform.openapi import OpenApiOperation, register_openapi_operation
 
 
@@ -16,7 +18,11 @@ register_api_error_handlers(artifact_v1_api)
 
 
 def artifact_store() -> SQLiteArtifactStore:
-    return SQLiteArtifactStore(DB_PATH, (OUTPUT_DIR,))
+    return SQLiteArtifactStore(
+        DB_PATH,
+        (OUTPUT_DIR,),
+        default_ttl=timedelta(hours=get_runtime_settings().artifact_retention_hours),
+    )
 
 
 @artifact_v1_api.get("/api/v1/artifacts/<string:artifact_id>")

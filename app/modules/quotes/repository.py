@@ -6,7 +6,9 @@ from collections.abc import Callable
 from pathlib import Path
 from types import TracebackType
 
-from app.database import connect, log_event, now_text
+from app.database import connect
+from app.platform.audit_store import log_event
+from app.platform.clock import now_text
 
 from .domain import QuoteDraft, QuoteFilters, QuoteRecord, QuoteStats
 

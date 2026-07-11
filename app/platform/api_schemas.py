@@ -69,7 +69,7 @@ def api_schema(model_type: type[StrictApiModel]):
             kwargs["payload"] = parse_json(model_type)
             return fn(*args, **kwargs)
 
-        wrapper.__api_request_model__ = model_type
+        setattr(wrapper, "__api_request_model__", model_type)
         return wrapper
 
     return decorator

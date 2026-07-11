@@ -6,9 +6,12 @@ from flask import Flask, abort, flash, g, jsonify, redirect, request, session, u
 from werkzeug.exceptions import RequestEntityTooLarge
 
 from app.config import APP_DEBUG, APP_HOST, APP_PORT, DB_PATH, MAX_CONTENT_LENGTH, MAX_UPLOAD_MB, PRODUCT_SYNC_MAX_UPLOAD_MB, SECRET_KEY, assert_production_secrets
-from app.database import connect, ensure_default_admin, get_user
+from app.database import connect
 from app.helpers import download_name, product_image_thumb_url, product_image_url, product_image_urls, product_item_display_lines
+from app.modules.admin.factory import get_admin_service
+from app.modules.admin.persistence import ensure_default_admin
 from app.platform.api_errors import ApiError, error_response
+from app.platform.logging_config import configure_logging
 from app.platform.request_context import is_machine_api_path, register_request_context
 from app.product_status import format_product_status
 from app.routes import register_routes
@@ -16,6 +19,7 @@ from app.security import ROLE_LABELS, can, csrf_field, safe_referrer, validate_c
 
 
 def create_app() -> Flask:
+    configure_logging()
     assert_production_secrets()
     web_app = Flask(__name__)
     web_app.secret_key = SECRET_KEY
@@ -53,7 +57,7 @@ def create_app() -> Flask:
         if is_machine_api_path():
             g.user = None
             return
-        if request.endpoint in {"login", "do_login", "static"}:
+        if request.endpoint in {"login", "do_login", "health_live", "health_ready", "static"}:
             if request.method == "POST" and not web_app.config.get("TESTING") and not validate_csrf_token():
                 if wants_json_response():
                     return jsonify({"ok": False, "error": "页面已过期，请刷新后重试。"}), 400
@@ -69,8 +73,7 @@ def create_app() -> Flask:
         user_id = session.get("user_id")
         g.user = None
         if user_id:
-            with connect(DB_PATH) as conn:
-                g.user = get_user(conn, int(user_id))
+            g.user = get_admin_service().user(int(user_id))
         if request.endpoint and not g.user:
             if wants_json_response():
                 return jsonify({"ok": False, "error": "登录已失效，请刷新页面重新登录。"}), 401

@@ -282,6 +282,7 @@ document.querySelectorAll(".shipment-folder-picker").forEach((picker) => {
   const dropStatus = picker.querySelector("[data-file-drop-status]");
   const form = picker.closest("[data-shipment-form]");
   const submitButton = form?.querySelector("[data-shipment-submit]");
+  const cancelButton = form?.querySelector("[data-shipment-cancel]");
   const runStatus = form?.querySelector("[data-shipment-run-status]");
   const progressPanel = form?.querySelector("[data-shipment-progress]");
   const progressText = form?.querySelector("[data-shipment-progress-text]");
@@ -303,6 +304,8 @@ document.querySelectorAll(".shipment-folder-picker").forEach((picker) => {
   const inputs = [photoInput].filter((input) => input instanceof HTMLInputElement);
   if (!inputs.length || !(status instanceof HTMLElement)) return;
   let pollTimer = null;
+  let currentStatusUrl = form?.dataset.activeShipmentStatusUrl || "";
+  let currentCancelUrl = form?.dataset.activeShipmentCancelUrl || "";
 
   const readJsonResponse = async (response, fallbackMessage) => {
     const contentType = response.headers.get("content-type") || "";
@@ -362,6 +365,12 @@ document.querySelectorAll(".shipment-folder-picker").forEach((picker) => {
       submitButton.textContent = enabled ? "开始识别" : "识别中...";
     }
   };
+  const setCancelVisible = (visible) => {
+    if (cancelButton instanceof HTMLButtonElement) {
+      cancelButton.hidden = !visible;
+      cancelButton.disabled = false;
+    }
+  };
   const sync = () => {
     const files = selectedFiles().filter(isImageFile);
     if (files.length) {
@@ -381,8 +390,8 @@ document.querySelectorAll(".shipment-folder-picker").forEach((picker) => {
       runStatus.classList.remove("active", "done", "error");
     }
     if (!files.length && progressPanel instanceof HTMLElement) {
-      progressPanel.hidden = true;
       setProgress({ percent: 0, text: "等待开始", detail: "" });
+      progressPanel.hidden = true;
     }
   };
 
@@ -399,6 +408,7 @@ document.querySelectorAll(".shipment-folder-picker").forEach((picker) => {
       const percent = Number(job.percent || 0);
       const summary = total ? `${completed}/${total} 张` : "准备中";
       const message = job.message || "正在处理";
+      setCancelVisible(job.status === "queued" || job.status === "running");
       setProgress({
         percent,
         text: message,
@@ -430,6 +440,9 @@ document.querySelectorAll(".shipment-folder-picker").forEach((picker) => {
         if (liveSummary instanceof HTMLElement) {
           liveSummary.textContent = `照片 ${result.photos || completed} 张 · 标签 ${result.labels || 0} 张 · 失败 ${result.failed || 0} 张 · Token ${result.total_tokens || 0}`;
         }
+        if (liveMessage instanceof HTMLElement) {
+          liveMessage.textContent = "识别完成，可以下载结果。";
+        }
         if (liveStats instanceof HTMLElement) {
           liveStats.hidden = false;
         }
@@ -452,15 +465,37 @@ document.querySelectorAll(".shipment-folder-picker").forEach((picker) => {
           liveJson.href = result.json_url;
           liveJson.textContent = result.json_filename || "下载 JSON";
         }
-        return;
+        setCancelVisible(false);
+        return false;
       }
       if (job.status === "error") {
         throw new Error(job.error || job.message || "识别失败");
       }
+      if (job.status === "failed") {
+        throw new Error(job.error || job.message || "识别失败");
+      }
+      if (job.status === "cancelled") {
+        window.clearInterval(pollTimer);
+        pollTimer = null;
+        setSubmitEnabled(true);
+        setCancelVisible(false);
+        status.textContent = "任务已取消";
+        if (runStatus instanceof HTMLElement) {
+          runStatus.textContent = "任务已取消";
+          runStatus.classList.add("active");
+          runStatus.classList.remove("done", "error");
+        }
+        if (liveSummary instanceof HTMLElement) liveSummary.textContent = "任务已取消";
+        if (liveMessage instanceof HTMLElement) liveMessage.textContent = "可以重新选择照片并提交。";
+        setProgress({ percent, text: "任务已取消", detail: summary });
+        return false;
+      }
+      return true;
     } catch (error) {
       window.clearInterval(pollTimer);
       pollTimer = null;
       setSubmitEnabled(true);
+      setCancelVisible(false);
       const message = error instanceof Error ? error.message : "识别失败";
       if (dropStatus instanceof HTMLElement) {
         dropStatus.textContent = message;
@@ -479,8 +514,35 @@ document.querySelectorAll(".shipment-folder-picker").forEach((picker) => {
         liveMessage.textContent = message;
       }
       setProgress({ percent: 100, text: "识别失败", detail: message });
+      return false;
     }
   };
+
+  cancelButton?.addEventListener("click", async () => {
+    if (!currentCancelUrl || !(cancelButton instanceof HTMLButtonElement)) return;
+    cancelButton.disabled = true;
+    const csrfToken = form?.querySelector("input[name='csrf_token']")?.value || "";
+    try {
+      const response = await fetch(currentCancelUrl, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "X-Requested-With": "fetch",
+          "X-CSRF-Token": csrfToken,
+        },
+      });
+      const data = await readJsonResponse(response, "取消任务失败");
+      if (!response.ok || !data.ok) throw new Error(data.error || "取消任务失败");
+      if (runStatus instanceof HTMLElement) runStatus.textContent = "已请求取消，等待当前照片处理结束";
+      if (currentStatusUrl) await pollJob(currentStatusUrl);
+    } catch (error) {
+      cancelButton.disabled = false;
+      if (runStatus instanceof HTMLElement) {
+        runStatus.textContent = error instanceof Error ? error.message : "取消任务失败";
+        runStatus.classList.add("active", "error");
+      }
+    }
+  });
 
   inputs.forEach((input) => {
     input.addEventListener("change", () => {
@@ -595,9 +657,16 @@ document.querySelectorAll(".shipment-folder-picker").forEach((picker) => {
       if (runStatus instanceof HTMLElement) {
         runStatus.textContent = "正在调用视觉模型并生成进度...";
       }
+      currentStatusUrl = data.status_url || "";
+      currentCancelUrl = data.cancel_url || "";
+      if (data.job_id) {
+        const pageUrl = new URL(window.location.href);
+        pageUrl.searchParams.set("job_id", data.job_id);
+        window.history.replaceState({}, "", pageUrl);
+      }
       setProgress({ percent: 8, text: "上传完成，等待模型识别", detail: "后台任务已开始" });
-      await pollJob(data.status_url);
-      pollTimer = window.setInterval(() => pollJob(data.status_url), 1000);
+      const active = await pollJob(currentStatusUrl);
+      if (active) pollTimer = window.setInterval(() => pollJob(currentStatusUrl), 1000);
     } catch (error) {
       setSubmitEnabled(true);
       const message = error instanceof Error ? error.message : "提交失败";
@@ -658,6 +727,13 @@ document.querySelectorAll(".shipment-folder-picker").forEach((picker) => {
   });
 
   sync();
+  if (currentStatusUrl) {
+    setSubmitEnabled(false);
+    setProgress({ percent: 0, text: "正在恢复任务进度", detail: "" });
+    pollJob(currentStatusUrl).then((active) => {
+      if (active) pollTimer = window.setInterval(() => pollJob(currentStatusUrl), 1000);
+    });
+  }
 });
 
 document.querySelectorAll("[data-price-mode]").forEach((select) => {

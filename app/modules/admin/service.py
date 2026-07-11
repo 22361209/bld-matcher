@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Callable, Protocol
 
 
 class AdminUnitOfWork(Protocol):
@@ -29,9 +29,28 @@ class ApiKeyPage:
 
 
 class AdminService:
-    def __init__(self, unit_of_work_factory, update_reader: UpdateReader) -> None:
+    def __init__(
+        self,
+        unit_of_work_factory,
+        update_reader: UpdateReader,
+        password_verifier: Callable[[str, str], bool],
+    ) -> None:
         self.unit_of_work_factory = unit_of_work_factory
         self.update_reader = update_reader
+        self.password_verifier = password_verifier
+
+    def user(self, user_id: int) -> dict[str, object] | None:
+        with self.unit_of_work_factory() as unit_of_work:
+            return unit_of_work.repository.user(user_id)
+
+    def authenticate(self, username: str, password: str) -> dict[str, object] | None:
+        with self.unit_of_work_factory() as unit_of_work:
+            user = unit_of_work.repository.user_by_username(username.strip())
+        if not user or not bool(user.get("active")):
+            return None
+        if not self.password_verifier(str(user.get("password_hash") or ""), password):
+            return None
+        return user
 
     def users(self, *, editing_id: int | None = None) -> tuple[list[dict[str, object]], dict[str, object] | None]:
         with self.unit_of_work_factory() as unit_of_work:

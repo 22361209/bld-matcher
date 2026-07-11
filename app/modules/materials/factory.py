@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 
 from app.config import DATA_DIR, DB_PATH, MATERIAL_DATA_PATH, MATERIAL_TEMPLATE_PATH
-from app.database import bootstrap_materials_from_excel
+from app.modules.materials.persistence import bootstrap_materials_from_excel
 
 from .infrastructure import MaterialFileAdapter
 from .repository import SQLiteMaterialUnitOfWork

@@ -5,7 +5,8 @@ from collections.abc import Callable
 from pathlib import Path
 from types import TracebackType
 
-from app.database import connect, log_event
+from app.database import connect
+from app.platform.audit_store import log_event
 
 
 class SQLiteContractRepository:

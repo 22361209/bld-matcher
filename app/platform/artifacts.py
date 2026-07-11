@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from app.database import connect, now_text
+from app.database import connect
+from app.platform.clock import now_text
 
 
 ARTIFACT_TTL = timedelta(hours=24)
@@ -54,9 +55,16 @@ def _sha256(path: Path) -> str:
 
 
 class SQLiteArtifactStore:
-    def __init__(self, database_path: Path, allowed_roots: tuple[Path, ...]) -> None:
+    def __init__(
+        self,
+        database_path: Path,
+        allowed_roots: tuple[Path, ...],
+        *,
+        default_ttl: timedelta = ARTIFACT_TTL,
+    ) -> None:
         self.database_path = database_path
         self.allowed_roots = tuple(root.resolve() for root in allowed_roots)
+        self.default_ttl = default_ttl
 
     def _checked_path(self, path: Path) -> Path:
         resolved = path.resolve()
@@ -73,12 +81,12 @@ class SQLiteArtifactStore:
         owner_id: str,
         filename: str | None = None,
         content_type: str | None = None,
-        ttl: timedelta = ARTIFACT_TTL,
+        ttl: timedelta | None = None,
     ) -> ArtifactRecord:
         resolved = self._checked_path(path)
         artifact_id = f"art_{secrets.token_urlsafe(18)}"
         created = datetime.now()
-        expires = created + ttl
+        expires = created + (ttl or self.default_ttl)
         safe_filename = Path(filename or resolved.name).name
         media_type = content_type or mimetypes.guess_type(safe_filename)[0] or "application/octet-stream"
         size = resolved.stat().st_size

@@ -79,6 +79,12 @@ def dynamic_route():
         self.assertIn("禁止增加", errors[0])
         self.assertIn("同步收紧白名单", errors[1])
 
+    def test_database_boundary_allows_connection_infrastructure_only(self):
+        clean = ast.parse("def connect(path):\n    return path\n")
+        dirty = ast.parse("def connect(path):\n    return path\n\ndef save_product():\n    pass\n")
+        self.assertEqual(contract._database_boundary_errors(clean), [])
+        self.assertIn("save_product", contract._database_boundary_errors(dirty)[0])
+
     def test_legacy_api_path_counts_allow_adapter_move_without_endpoint_growth(self):
         before = [
             "app/routes/quotes.py:create /api/quotes",
@@ -172,6 +178,22 @@ def update_quote(quote_id):
             api_errors,
         )
         self.assertEqual(len(api_errors), 1)
+
+        suffixed_service_errors = []
+        contract._check_module_layer(
+            "app/modules/products/sync_service.py",
+            ast.parse("import sqlite3\n"),
+            suffixed_service_errors,
+        )
+        self.assertEqual(len(suffixed_service_errors), 1)
+
+        suffixed_web_errors = []
+        contract._check_module_layer(
+            "app/modules/admin/auth_web.py",
+            ast.parse("from app.database import connect\n"),
+            suffixed_web_errors,
+        )
+        self.assertEqual(len(suffixed_web_errors), 1)
 
 
 if __name__ == "__main__":

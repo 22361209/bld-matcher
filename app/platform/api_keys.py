@@ -6,9 +6,10 @@ import json
 import secrets
 import sqlite3
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from app.database import log_event, now_text
+from app.platform.audit_store import log_event
+from app.platform.clock import now_text
 from app.matcher import compact_text
 
 from .api_principal import ALL_API_SCOPES, DEFAULT_API_SCOPES, ApiPrincipal
@@ -93,7 +94,12 @@ def internal_api_key_status(conn: sqlite3.Connection) -> dict:
     }
 
 
-def list_internal_api_keys(conn: sqlite3.Connection) -> list[dict]:
+def list_internal_api_keys(
+    conn: sqlite3.Connection,
+    *,
+    rotation_days: int = 90,
+    current_time: datetime | None = None,
+) -> list[dict]:
     rows = conn.execute(
         """
         SELECT id, name, token_prefix, token_suffix, active, scopes, expires_at,
@@ -102,25 +108,30 @@ def list_internal_api_keys(conn: sqlite3.Connection) -> list[dict]:
         ORDER BY active DESC, id DESC
         """
     ).fetchall()
-    now = datetime.now()
+    now = current_time or datetime.now()
     result = []
     for row in rows:
         expiry = _parse_expiry(row["expires_at"])
         expired = bool(row["active"] and expiry is not None and expiry <= now)
+        created_at = _parse_expiry(row["created_at"])
+        rotation_due_at = created_at + timedelta(days=rotation_days) if created_at else None
+        rotation_due = bool(row["active"] and not expired and rotation_due_at and rotation_due_at <= now)
         result.append(
             {
-            "id": row["id"],
-            "name": row["name"],
-            "preview": _api_key_preview(row),
-            "active": bool(row["active"]),
-            "usable": bool(row["active"] and not expired),
-            "expired": expired,
-            "scopes": sorted(_scopes_from_row(row)),
-            "expires_at": row["expires_at"],
-            "created_by": row["created_by"],
-            "created_at": row["created_at"],
-            "updated_at": row["updated_at"],
-            "last_used_at": row["last_used_at"],
+                "id": row["id"],
+                "name": row["name"],
+                "preview": _api_key_preview(row),
+                "active": bool(row["active"]),
+                "usable": bool(row["active"] and not expired),
+                "expired": expired,
+                "rotation_due": rotation_due,
+                "rotation_due_at": rotation_due_at.strftime("%Y-%m-%d") if rotation_due_at else "",
+                "scopes": sorted(_scopes_from_row(row)),
+                "expires_at": row["expires_at"],
+                "created_by": row["created_by"],
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+                "last_used_at": row["last_used_at"],
             }
         )
     return result
