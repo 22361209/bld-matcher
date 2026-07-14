@@ -1,0 +1,14 @@
+{
+  "date": "2026-07-15",
+  "version": "unreleased",
+  "title": "询价匹配拒绝异常超长号码",
+  "entries": [
+    "询价号码标准化会将超过 256 个字符或展开后超过限制的异常数字作为无效输入处理，不再因 Python 整数转换限制导致整次询价生成失败。",
+    "正常纯数字、前导零和 Excel 科学计数法号码继续按原有规则参与匹配。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "compatible",
+    "operations": "restart-required"
+  }
+}

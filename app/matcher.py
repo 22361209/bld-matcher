@@ -49,6 +49,7 @@ LOOKALIKE_TRANSLATION = str.maketrans(
 )
 
 PSA_352X_BRANDS = ("PEUGEOT", "CITROEN", "CITROËN", "PSA", "标致", "雪铁龙")
+MAX_MATCH_CODE_LENGTH = 256
 
 
 @dataclass(frozen=True)
@@ -65,6 +66,8 @@ def normalize_code(value: object) -> str:
     if isinstance(value, float) and math.isfinite(value) and value.is_integer():
         value = int(value)
     text = "" if value is None else str(value).strip()
+    if len(text) > MAX_MATCH_CODE_LENGTH:
+        return ""
     if isinstance(value, str) and re.fullmatch(r"\d+(?:\.0+|(?:\.\d+)?[Ee][+-]?\d+)", text):
         try:
             numeric_value = Decimal(text)
@@ -72,6 +75,8 @@ def normalize_code(value: object) -> str:
             pass
         else:
             if numeric_value == numeric_value.to_integral_value():
+                if numeric_value and numeric_value.adjusted() >= MAX_MATCH_CODE_LENGTH:
+                    return ""
                 text = str(int(numeric_value))
     text = text.translate(LOOKALIKE_TRANSLATION)
     return re.sub(r"[^A-Z0-9]", "", text.upper())

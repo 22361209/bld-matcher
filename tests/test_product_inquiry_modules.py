@@ -11,13 +11,14 @@ from flask import Flask
 from openpyxl import Workbook, load_workbook
 
 from app.database import connect
+from app.matcher import normalize_code
 from app.modules.products.persistence import upsert_product
 import app.modules.products.persistence as product_persistence
 import app.modules.products.repository as product_repository
 from app.modules.products import catalog_web
 from app.modules.products.domain import ProductFilters, ProductFilterValidationError
 from app.migrations import run_migrations
-from app.modules.inquiry.domain import InquiryValidationError
+from app.modules.inquiry.domain import InquiryValidationError, extract_numbers
 from app.modules.inquiry.infrastructure import WorkbookInquiryEngine
 from app.modules.inquiry.repository import SQLiteInquiryUnitOfWork
 from app.modules.inquiry.service import InquiryService
@@ -77,6 +78,14 @@ class ProductInquiryModuleTest(unittest.TestCase):
                 },
                 actor="module-test",
             )
+
+    def test_oversized_numeric_inquiry_code_is_rejected_without_integer_conversion_error(self) -> None:
+        oversized_digits = "1" * 4301
+
+        self.assertEqual(normalize_code(oversized_digits), "")
+        self.assertEqual(normalize_code("1e500"), "")
+        self.assertEqual(normalize_code("001234.0"), "1234")
+        self.assertEqual(extract_numbers({"numbers": [oversized_digits]}), ([], [oversized_digits]))
 
     def test_catalog_column_filters_are_exact_multiselect_facets(self) -> None:
         self.add_product(
