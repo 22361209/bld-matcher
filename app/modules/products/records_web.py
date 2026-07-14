@@ -1,15 +1,22 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
-from flask import Response, flash, redirect, render_template, request, url_for
+from flask import Response, flash, jsonify, redirect, render_template, request, url_for
 
+from app.config import DATA_DIR
 from app.drawings import validate_product_drawing_file
+from app.locks import ImportLockError, import_lock
+from app.modules.products.brand_normalization import (
+    BrandNormalizationConflictError,
+    BrandNormalizationPreviewChangedError,
+)
 from app.modules.products.domain import validated_price_value
 from app.modules.products.factory import get_product_service
 from app.modules.products.service import ProductNotFoundError
 from app.product_media import validate_product_image_file
-from app.security import actor_name, permission_required
+from app.security import actor_name, permission_required, wants_json_response
 
 
 logger = logging.getLogger(__name__)
@@ -47,7 +54,61 @@ def _embedded_product_done_response() -> Response:
     )
 
 
+def _brand_normalization_error(message: str, status: int):
+    if wants_json_response():
+        return jsonify({"ok": False, "error": message}), status
+    flash(message, "error")
+    return redirect(url_for("products"))
+
+
 def register(app) -> None:
+    @app.post("/products/brands/normalize")
+    @permission_required("import_catalog")
+    def normalize_product_brands():
+        if request.form.get("confirmation") != "normalize-product-brands-v1":
+            return _brand_normalization_error("缺少品牌清洗确认标记，未修改任何数据。", 400)
+        expected_digest = request.form.get("snapshot_digest", "").strip()
+        backup_path = (
+            DATA_DIR
+            / "local-backups"
+            / f"before-product-brand-normalization-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.sqlite3"
+        )
+        try:
+            actor = actor_name()
+            with import_lock(actor, "产品品牌清洗"):
+                result = get_product_service().normalize_brands(
+                    backup_path=backup_path,
+                    expected_digest=expected_digest,
+                    actor=actor,
+                )
+        except ImportLockError as exc:
+            return _brand_normalization_error(str(exc), 409)
+        except BrandNormalizationPreviewChangedError as exc:
+            return _brand_normalization_error(str(exc), 409)
+        except BrandNormalizationConflictError as exc:
+            return _brand_normalization_error(str(exc), 409)
+        except ValueError as exc:
+            return _brand_normalization_error(str(exc), 400)
+        except Exception:
+            logger.exception(
+                "Product brand normalization failed",
+                extra={"error_code": "product.brand_normalization_failed"},
+            )
+            return _brand_normalization_error(
+                "品牌清洗失败，数据未修改，请稍后重试。",
+                500,
+            )
+        if wants_json_response():
+            return jsonify(
+                {
+                    "ok": True,
+                    "changed_count": result.changed_count,
+                    "backup": f"local-backups/{result.backup_path.name}",
+                }
+            )
+        flash(f"产品品牌清洗完成，共规范 {result.changed_count} 条。", "success")
+        return redirect(url_for("products"))
+
     @app.get("/products/new")
     @permission_required("edit_products")
     def new_product():

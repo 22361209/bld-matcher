@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 import threading
 from collections import defaultdict
+from collections.abc import Sequence
 from pathlib import Path
 
 from app.database import connect
@@ -10,6 +11,7 @@ from app.matcher import PSA_352X_BRANDS, ProductCatalog, compact_text, normalize
 from app.platform.audit_store import log_event
 from app.platform.clock import now_text
 
+from .brand_normalization import canonicalize_brands
 
 _BOOTSTRAP_LOCK = threading.Lock()
 _BOOTSTRAPPED_SOURCES: set[tuple[Path, Path, int | None]] = set()
@@ -84,7 +86,7 @@ def upsert_product(
         raise ValueError("BLD NO. 不能为空。")
     values = {
         "bld_no": bld_no,
-        "series": clean_multiline(data.get("series") or data.get("SERIES")),
+        "series": canonicalize_brands(data.get("series") or data.get("SERIES")),
         "item": clean_multiline(data.get("item") or data.get("ITEM")),
         "oe_no_1": clean_oe_list(data.get("oe_no_1") or data.get("OE NO.1")),
         "oe_no_2": clean_oe_list(data.get("oe_no_2") or data.get("OE NO.2")),
@@ -214,6 +216,54 @@ def _psa_product_clause() -> tuple[str, list[str]]:
     return "(" + " OR ".join(checks) + ")", params
 
 
+def _product_status_key_sql(column: str) -> str:
+    return f"PRODUCT_STATUS_KEY(COALESCE({column}, ''))"
+
+
+def _append_column_filters(
+    clauses: list[str],
+    params: list[object],
+    *,
+    brands: Sequence[str],
+    items: Sequence[str],
+    product_statuses: Sequence[str],
+    brand_blank: bool,
+    item_blank: bool,
+    product_status_blank: bool,
+) -> None:
+    if brands or brand_blank:
+        brand_checks: list[str] = []
+        normalized_series = "REPLACE(COALESCE(series, ''), CHAR(13), CHAR(10))"
+        for brand in brands:
+            brand_checks.append(
+                f"INSTR(CHAR(10) || UPPER({normalized_series}) || CHAR(10), "
+                "CHAR(10) || UPPER(?) || CHAR(10)) > 0"
+            )
+            params.append(brand)
+        if brand_blank:
+            brand_checks.append("TRIM(COALESCE(series, '')) = ''")
+        clauses.append("(" + " OR ".join(brand_checks) + ")")
+
+    if items or item_blank:
+        item_checks: list[str] = []
+        for item in items:
+            item_checks.append("item COLLATE NOCASE = ?")
+            params.append(item)
+        if item_blank:
+            item_checks.append("TRIM(COALESCE(item, '')) = ''")
+        clauses.append("(" + " OR ".join(item_checks) + ")")
+
+    if product_statuses or product_status_blank:
+        status_checks: list[str] = []
+        normalized_status = _product_status_key_sql("product_status")
+        for product_status in product_statuses:
+            status_checks.append(f"{normalized_status} COLLATE NOCASE = ?")
+            params.append(product_status)
+        if product_status_blank:
+            status_checks.append(f"{normalized_status} = ''")
+        clauses.append("(" + " OR ".join(status_checks) + ")")
+
+
 def _product_filter_clauses(
     query: str = "",
     include_inactive: bool = False,
@@ -222,6 +272,12 @@ def _product_filter_clauses(
     oe_query: str = "",
     series_query: str = "",
     model_query: str = "",
+    brands: Sequence[str] = (),
+    items: Sequence[str] = (),
+    product_statuses: Sequence[str] = (),
+    brand_blank: bool = False,
+    item_blank: bool = False,
+    product_status_blank: bool = False,
 ) -> tuple[list[str], list[object]]:
     params: list[object] = []
     clauses: list[str] = []
@@ -252,6 +308,16 @@ def _product_filter_clauses(
     if model_query.strip():
         clauses.append("UPPER(models) LIKE ?")
         params.append(f"%{model_query.strip().upper()}%")
+    _append_column_filters(
+        clauses,
+        params,
+        brands=brands,
+        items=items,
+        product_statuses=product_statuses,
+        brand_blank=brand_blank,
+        item_blank=item_blank,
+        product_status_blank=product_status_blank,
+    )
     return clauses, params
 
 
@@ -260,21 +326,45 @@ def list_products(
     query: str = "",
     include_inactive: bool = False,
     only_inactive: bool = False,
-    limit: int = 3000,
+    limit: int | None = 3000,
     bld_query: str = "",
     oe_query: str = "",
     series_query: str = "",
     model_query: str = "",
     offset: int = 0,
+    brands: Sequence[str] = (),
+    items: Sequence[str] = (),
+    product_statuses: Sequence[str] = (),
+    brand_blank: bool = False,
+    item_blank: bool = False,
+    product_status_blank: bool = False,
+    sort_by: str = "bld",
 ) -> list[sqlite3.Row]:
     sql = "SELECT * FROM products"
     clauses, params = _product_filter_clauses(
-        query, include_inactive, only_inactive, bld_query, oe_query, series_query, model_query
+        query,
+        include_inactive,
+        only_inactive,
+        bld_query,
+        oe_query,
+        series_query,
+        model_query,
+        brands,
+        items,
+        product_statuses,
+        brand_blank,
+        item_blank,
+        product_status_blank,
     )
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)
-    sql += " ORDER BY bld_no COLLATE BLD_NATURAL LIMIT ? OFFSET ?"
-    params.extend((max(0, limit), max(0, offset)))
+    if sort_by == "series":
+        sql += " ORDER BY series COLLATE NOCASE, bld_no COLLATE BLD_NATURAL"
+    else:
+        sql += " ORDER BY bld_no COLLATE BLD_NATURAL"
+    if limit is not None:
+        sql += " LIMIT ? OFFSET ?"
+        params.extend((max(0, limit), max(0, offset)))
     return connection.execute(sql, params).fetchall()
 
 
@@ -287,10 +377,28 @@ def count_products(
     oe_query: str = "",
     series_query: str = "",
     model_query: str = "",
+    brands: Sequence[str] = (),
+    items: Sequence[str] = (),
+    product_statuses: Sequence[str] = (),
+    brand_blank: bool = False,
+    item_blank: bool = False,
+    product_status_blank: bool = False,
 ) -> int:
     sql = "SELECT COUNT(*) FROM products"
     clauses, params = _product_filter_clauses(
-        query, include_inactive, only_inactive, bld_query, oe_query, series_query, model_query
+        query,
+        include_inactive,
+        only_inactive,
+        bld_query,
+        oe_query,
+        series_query,
+        model_query,
+        brands,
+        items,
+        product_statuses,
+        brand_blank,
+        item_blank,
+        product_status_blank,
     )
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)

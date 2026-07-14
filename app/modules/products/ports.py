@@ -6,13 +6,16 @@ from typing import Mapping, Protocol, Self
 
 from app.matcher import ProductCatalog
 
-from .domain import ProductFilters, ProductRecord, ProductStats
+from .brand_normalization import BrandNormalizationChange
+from .domain import ProductFilterOptions, ProductFilters, ProductRecord, ProductStats
 
 
 class ProductRepository(Protocol):
     def list(self, filters: ProductFilters, *, limit: int, offset: int) -> list[ProductRecord]: ...
 
     def count(self, filters: ProductFilters) -> int: ...
+
+    def filter_options(self, filters: ProductFilters) -> ProductFilterOptions: ...
 
     def get(self, product_id: int) -> ProductRecord | None: ...
 
@@ -36,9 +39,29 @@ class ProductRepository(Protocol):
 
     def import_catalog(self, path: Path, *, actor: str) -> int: ...
 
-    def export_catalog(self, path: Path, *, include_inactive: bool, export_format: str, actor: str) -> None: ...
+    def export_catalog(
+        self,
+        path: Path,
+        *,
+        filters: ProductFilters,
+        export_format: str,
+        actor: str,
+    ) -> int: ...
 
     def preview_prices(self, path: Path) -> dict: ...
+
+    def preview_brand_normalization(self) -> list[BrandNormalizationChange]: ...
+
+    def apply_brand_normalization(
+        self,
+        changes: list[BrandNormalizationChange],
+        *,
+        actor: str,
+    ) -> int: ...
+
+    def backup_database(self, target_path: Path) -> None: ...
+
+    def lock_brand_normalization(self) -> None: ...
 
 
 class ProductUnitOfWork(Protocol):

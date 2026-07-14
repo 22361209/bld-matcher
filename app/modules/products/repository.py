@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Callable, Mapping
+from dataclasses import replace
 from pathlib import Path
 from types import TracebackType
+from uuid import uuid4
 
 from app.catalog_export import export_products_xlsx
 from app.database import connect
@@ -21,8 +23,21 @@ from app.price_import import parse_price_file
 from app.product_media import save_product_image
 from app.platform.audit_store import log_event
 from app.platform.clock import now_text
+from app.product_status import canonical_product_status, format_product_status
 
-from .domain import ProductFilters, ProductRecord, ProductStats
+from .brand_normalization import (
+    BrandNormalizationChange,
+    BrandNormalizationConflictError,
+    canonicalize_brands,
+)
+from .domain import (
+    ProductFilterOption,
+    ProductFilterOptions,
+    ProductFilters,
+    ProductRecord,
+    ProductStats,
+    compact,
+)
 
 
 def _record(row: sqlite3.Row | None) -> ProductRecord | None:
@@ -54,13 +69,102 @@ def _record(row: sqlite3.Row | None) -> ProductRecord | None:
     )
 
 
+def _add_option_count(
+    buckets: dict[str, ProductFilterOption],
+    *,
+    value: str,
+    label: str,
+) -> None:
+    key = value.casefold()
+    current = buckets.get(key)
+    buckets[key] = ProductFilterOption(
+        value=current.value if current else value,
+        label=current.label if current else label,
+        count=(current.count if current else 0) + 1,
+    )
+
+
+def _options_from_records(
+    records: list[ProductRecord],
+    *,
+    field: str,
+    selected: tuple[str, ...],
+    blank_selected: bool,
+) -> tuple[ProductFilterOption, ...]:
+    buckets: dict[str, ProductFilterOption] = {}
+    for record in records:
+        values: list[tuple[str, str]] = []
+        if field == "brand":
+            seen_tokens: set[str] = set()
+            for line in record.series.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+                token = compact(line)
+                key = token.casefold()
+                if not token or key in seen_tokens:
+                    continue
+                seen_tokens.add(key)
+                values.append((token, token))
+        elif field == "item":
+            item = record.item.strip()
+            if item:
+                values.append((item, item))
+        else:
+            status = canonical_product_status(record.product_status)
+            if status:
+                values.append((status, format_product_status(status, "en")))
+
+        if not values:
+            values.append(("", "（空白）"))
+        for value, label in values:
+            _add_option_count(buckets, value=value, label=label)
+
+    selected_values = (*selected, "") if blank_selected else selected
+    for value in selected_values:
+        key = value.casefold()
+        current = buckets.get(key)
+        if current is not None:
+            buckets[key] = ProductFilterOption(value=value, label=current.label, count=current.count)
+            continue
+        if not value:
+            label = "（空白）"
+        elif field == "product_status":
+            label = format_product_status(value, "en")
+        else:
+            label = value
+        buckets[key] = ProductFilterOption(value=value, label=label, count=0)
+
+    options = list(buckets.values())
+    return tuple(
+        sorted(
+            options,
+            key=lambda option: (
+                not option.value,
+                option.label.casefold(),
+                option.value.casefold(),
+            ),
+        )
+    )
+
+
 class SQLiteProductRepository:
     def __init__(self, connection: sqlite3.Connection, database_path: Path) -> None:
         self.connection = connection
         self.database_path = database_path
+        self.connection.create_function(
+            "PRODUCT_STATUS_KEY",
+            1,
+            canonical_product_status,
+            deterministic=True,
+        )
 
-    def list(self, filters: ProductFilters, *, limit: int, offset: int) -> list[ProductRecord]:
-        rows = list_products(
+    def _rows(
+        self,
+        filters: ProductFilters,
+        *,
+        limit: int | None,
+        offset: int = 0,
+        sort_by: str = "bld",
+    ) -> list[sqlite3.Row]:
+        return list_products(
             self.connection,
             query=filters.query,
             bld_query=filters.bld_query,
@@ -69,10 +173,24 @@ class SQLiteProductRepository:
             model_query=filters.model_query,
             include_inactive=filters.include_inactive,
             only_inactive=filters.only_inactive,
+            brands=filters.brands,
+            items=filters.items,
+            product_statuses=filters.product_statuses,
+            brand_blank=filters.brand_blank,
+            item_blank=filters.item_blank,
+            product_status_blank=filters.product_status_blank,
+            limit=limit,
+            offset=offset,
+            sort_by=sort_by,
+        )
+
+    def list(self, filters: ProductFilters, *, limit: int, offset: int) -> list[ProductRecord]:
+        rows = self._rows(
+            filters,
             limit=max(1, min(500, int(limit))),
             offset=max(0, int(offset)),
         )
-        return [_record(row) for row in rows if row is not None]
+        return [record for row in rows if (record := _record(row)) is not None]
 
     def count(self, filters: ProductFilters) -> int:
         return count_products(
@@ -84,6 +202,52 @@ class SQLiteProductRepository:
             model_query=filters.model_query,
             include_inactive=filters.include_inactive,
             only_inactive=filters.only_inactive,
+            brands=filters.brands,
+            items=filters.items,
+            product_statuses=filters.product_statuses,
+            brand_blank=filters.brand_blank,
+            item_blank=filters.item_blank,
+            product_status_blank=filters.product_status_blank,
+        )
+
+    def filter_options(self, filters: ProductFilters) -> ProductFilterOptions:
+        brand_records = [
+            record
+            for row in self._rows(replace(filters, brands=(), brand_blank=False), limit=None)
+            if (record := _record(row)) is not None
+        ]
+        item_records = [
+            record
+            for row in self._rows(replace(filters, items=(), item_blank=False), limit=None)
+            if (record := _record(row)) is not None
+        ]
+        status_records = [
+            record
+            for row in self._rows(
+                replace(filters, product_statuses=(), product_status_blank=False),
+                limit=None,
+            )
+            if (record := _record(row)) is not None
+        ]
+        return ProductFilterOptions(
+            brand=_options_from_records(
+                brand_records,
+                field="brand",
+                selected=filters.brands,
+                blank_selected=filters.brand_blank,
+            ),
+            item=_options_from_records(
+                item_records,
+                field="item",
+                selected=filters.items,
+                blank_selected=filters.item_blank,
+            ),
+            product_status=_options_from_records(
+                status_records,
+                field="product_status",
+                selected=filters.product_statuses,
+                blank_selected=filters.product_status_blank,
+            ),
         )
 
     def get(self, product_id: int) -> ProductRecord | None:
@@ -249,28 +413,129 @@ class SQLiteProductRepository:
         self,
         path: Path,
         *,
-        include_inactive: bool,
+        filters: ProductFilters,
         export_format: str,
         actor: str,
-    ) -> None:
+    ) -> int:
+        rows = self._rows(
+            filters,
+            limit=None,
+            sort_by="series" if export_format == "brand" else "bld",
+        )
+        if not rows:
+            return 0
         export_products_xlsx(
             self.connection,
             path,
-            include_inactive=include_inactive,
             export_format=export_format,
+            product_rows=rows,
         )
+        status_label = {
+            "active": "仅启用产品",
+            "inactive": "仅停用产品",
+            "all": "包含启用和停用产品",
+        }[filters.status]
         log_event(
             self.connection,
             "导出目录",
             "catalog",
             path.name,
             ("按汽车品牌格式；" if export_format == "brand" else "按 BLD 号格式；")
-            + ("包含停用产品" if include_inactive else "仅启用产品"),
+            + f"{status_label}；按当前筛选导出 {len(rows)} 条",
             actor=actor,
         )
+        return len(rows)
 
     def preview_prices(self, path: Path) -> dict:
         return parse_price_file(path, self.connection)
+
+    def preview_brand_normalization(self) -> list[BrandNormalizationChange]:
+        changes: list[BrandNormalizationChange] = []
+        rows = self.connection.execute(
+            "SELECT id, bld_no, series FROM products ORDER BY bld_no COLLATE BLD_NATURAL"
+        ).fetchall()
+        for row in rows:
+            before = str(row["series"] or "")
+            after = canonicalize_brands(before)
+            if before == after:
+                continue
+            changes.append(
+                BrandNormalizationChange(
+                    product_id=int(row["id"]),
+                    bld_no=str(row["bld_no"] or ""),
+                    before=before,
+                    after=after,
+                )
+            )
+        return changes
+
+    def apply_brand_normalization(
+        self,
+        changes: list[BrandNormalizationChange],
+        *,
+        actor: str,
+    ) -> int:
+        timestamp = now_text()
+        for change in changes:
+            cursor = self.connection.execute(
+                """
+                UPDATE products
+                SET series = ?, updated_at = ?
+                WHERE id = ? AND bld_no = ? AND COALESCE(series, '') = ?
+                """,
+                (change.after, timestamp, change.product_id, change.bld_no, change.before),
+            )
+            if cursor.rowcount != 1:
+                raise BrandNormalizationConflictError(
+                    f"产品 {change.bld_no} 的品牌已在预览后发生变化，整批清洗已取消。"
+                )
+            log_event(
+                self.connection,
+                "清洗产品品牌",
+                "product",
+                change.bld_no,
+                f"品牌: {change.before or '(空)'} -> {change.after or '(空)'}",
+                actor=actor,
+            )
+        log_event(
+            self.connection,
+            "批量清洗产品品牌",
+            "catalog",
+            "product-brands",
+            f"规范 {len(changes)} 条产品品牌；全部转为大写，RAM 归入 DODGE。",
+            actor=actor,
+        )
+        return len(changes)
+
+    def backup_database(self, target_path: Path) -> None:
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary_path = target_path.with_name(f".{target_path.name}.{uuid4().hex}.tmp")
+        source: sqlite3.Connection | None = None
+        target: sqlite3.Connection | None = None
+        try:
+            try:
+                source = sqlite3.connect(self.database_path)
+                target = sqlite3.connect(temporary_path)
+                # The caller holds BEGIN IMMEDIATE on ``self.connection``. A
+                # separate source connection can still read the locked snapshot;
+                # backing up from the lock-owning connection would self-block.
+                source.backup(target)
+                target.commit()
+                integrity = str(target.execute("PRAGMA integrity_check").fetchone()[0])
+                if integrity != "ok":
+                    raise RuntimeError("产品品牌清洗备份完整性检查失败。")
+            finally:
+                if target is not None:
+                    target.close()
+                if source is not None:
+                    source.close()
+            temporary_path.replace(target_path)
+        except Exception:
+            temporary_path.unlink(missing_ok=True)
+            raise
+
+    def lock_brand_normalization(self) -> None:
+        self.connection.execute("BEGIN IMMEDIATE")
 
 
 ConnectionFactory = Callable[[Path], sqlite3.Connection]

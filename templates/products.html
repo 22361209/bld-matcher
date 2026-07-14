@@ -1,10 +1,90 @@
 {% extends "base.html" %}
 {% set active_page = "products" %}
+{% set product_filter_options = filter_options if filter_options is defined else {} %}
+{% set product_column_filters = column_filters if column_filters is defined else {} %}
+{% set selected_brand_filters = product_column_filters.get("brand", []) %}
+{% set selected_item_filters = product_column_filters.get("item", []) %}
+{% set selected_product_status_filters = product_column_filters.get("product_status", []) %}
+
+{% macro product_column_heading(column_id, label, filter_key=none, options=none, selected=none) %}
+  {% set filter_options_for_column = options or [] %}
+  {% set selected_values = selected or [] %}
+  {% set selected_values_lower = selected_values | map('lower') | list %}
+  <div class="products-column-heading">
+    <button
+      class="products-column-label"
+      type="button"
+      data-column-drag-handle
+      data-column-label="{{ label }}"
+      aria-label="移动{{ label }}列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整"
+    >{{ label }}</button>
+    {% if filter_key %}
+      <button
+        class="products-column-filter-trigger{% if selected_values %} active{% endif %}"
+        type="button"
+        data-column-filter-trigger
+        data-filter-key="{{ filter_key }}"
+        aria-label="筛选{{ label }}{% if selected_values %}，已选择 {{ selected_values|length }} 项{% endif %}"
+        aria-haspopup="dialog"
+        aria-expanded="false"
+        aria-controls="products-filter-{{ column_id }}"
+      ><span aria-hidden="true"></span></button>
+    {% endif %}
+  </div>
+  {% if filter_key %}
+    <div
+      class="products-column-filter"
+      id="products-filter-{{ column_id }}"
+      role="dialog"
+      aria-label="筛选{{ label }}"
+      data-column-filter-panel
+      data-filter-key="{{ filter_key }}"
+      hidden
+    >
+      <div class="products-column-filter-header">
+        <strong>筛选{{ label }}</strong>
+        <button type="button" data-column-filter-close aria-label="关闭{{ label }}筛选">×</button>
+      </div>
+      <label class="products-column-filter-search">
+        <span>搜索候选项</span>
+        <input type="search" autocomplete="off" placeholder="输入关键词" data-column-filter-search>
+      </label>
+      <div class="products-column-filter-bulk">
+        <button class="linear-button subtle" type="button" data-column-filter-select-all aria-label="全选所有{{ label }}候选项">全选</button>
+        <button class="linear-button subtle" type="button" data-column-filter-select-none aria-label="全不选所有{{ label }}候选项">全不选</button>
+        <span data-column-filter-selection aria-live="polite"></span>
+      </div>
+      <div class="products-column-filter-options" role="group" aria-label="{{ label }}候选项">
+        {% for option in filter_options_for_column %}
+          <label class="products-column-filter-option" data-column-filter-option>
+            <input
+              type="checkbox"
+              value="{{ option.value }}"
+              {% if not selected_values or option.value|lower in selected_values_lower %}checked{% endif %}
+            >
+            <span>{{ option.label }}</span>
+            {% if option.count is defined %}<small>{{ option.count }}</small>{% endif %}
+          </label>
+        {% else %}
+          <p class="products-column-filter-empty">暂无可筛选项。</p>
+        {% endfor %}
+      </div>
+      <p class="products-column-filter-no-match" data-column-filter-no-match hidden>没有匹配项。</p>
+      <p class="products-column-filter-validation" data-column-filter-validation aria-live="polite"></p>
+      <div class="products-column-filter-actions">
+        <button class="linear-button subtle" type="button" data-column-filter-reset>重置筛选</button>
+        <button class="linear-button primary" type="button" data-column-filter-apply>应用</button>
+      </div>
+    </div>
+  {% endif %}
+{% endmacro %}
+
 {% block page_title %}产品目录{% endblock %}
 {% block page_id %}products.list{% endblock %}
 {% block page_type %}list{% endblock %}
 {% block page_class %}shell wide app-surface{% endblock %}
 {% block page_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='pages/product_table.css', v=static_version('pages/product_table.css')) }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='pages/products.css', v=static_version('pages/products.css')) }}">
 {% endblock %}
 
@@ -34,10 +114,13 @@
             <input id="oe-search" name="oe" value="{{ oe_query }}" placeholder="例如 55100-2S150">
           </label>
           <input type="hidden" id="status-input" name="status" value="{{ status }}">
+          {% for value in selected_brand_filters %}<input type="hidden" name="brand" value="{{ value }}">{% endfor %}
+          {% for value in selected_item_filters %}<input type="hidden" name="item" value="{{ value }}">{% endfor %}
+          {% for value in selected_product_status_filters %}<input type="hidden" name="product_status" value="{{ value }}">{% endfor %}
           <button class="linear-button primary" type="submit">搜索</button>
           <details class="toolbar-popover linear-popover status-popover">
             <summary>{{ status_label }}</summary>
-            <div class="status-menu" role="group" aria-label="产品状态筛选">
+            <div class="status-menu" role="group" aria-label="启用状态筛选">
               <button class="status-menu-option {% if status == 'active' %}selected{% endif %}" type="submit" data-status="active">只看启用</button>
               <button class="status-menu-option {% if status == 'all' %}selected{% endif %}" type="submit" data-status="all">包含停用</button>
               <button class="status-menu-option {% if status == 'inactive' %}selected{% endif %}" type="submit" data-status="inactive">只看停用</button>
@@ -45,6 +128,8 @@
           </details>
         </form>
         <div class="secondary-actions command-actions">
+          <button class="linear-button subtle" type="button" data-reset-product-columns>恢复默认列顺序</button>
+          <span class="products-visually-hidden" aria-live="polite" data-column-order-status></span>
           {% if can("edit_products") %}
             <button class="linear-button primary" type="button" data-open-product-modal>新增产品</button>
             <a class="linear-button subtle" href="{{ url_for('batch_drawings') }}">批量上传图纸</a>
@@ -85,13 +170,31 @@
                 <span class="note">按 BLD 号合并更新已有资料并加入新增产品。</span>
               </form>
             </details>
+            {% if brand_normalization_preview and brand_normalization_preview.changed_count %}
+              <details class="toolbar-popover linear-popover">
+                <summary>规范品牌 {{ brand_normalization_preview.changed_count }}</summary>
+                <form action="{{ url_for('normalize_product_brands') }}" method="post" class="toolbar-popover-form">
+                  {{ csrf_field() }}
+                  <input type="hidden" name="confirmation" value="normalize-product-brands-v1">
+                  <input type="hidden" name="snapshot_digest" value="{{ brand_normalization_preview.digest }}">
+                  <p>将 {{ brand_normalization_preview.changed_count }} 条品牌统一为大写、每行一个品牌，并把 RAM 归入 DODGE。</p>
+                  <p class="note">提交前自动生成数据库一致性备份；产品数量、价格和启停状态不变。</p>
+                  <button class="linear-button primary" type="submit">确认规范品牌</button>
+                </form>
+              </details>
+            {% endif %}
           {% endif %}
           {% if can("export_catalog") %}
             <details class="toolbar-popover linear-popover">
               <summary>导出目录</summary>
-              <form action="{{ url_for('export_products') }}" method="post" class="toolbar-popover-form toolbar-export-form">
+              <form action="{{ url_for('export_products') }}" method="post" class="toolbar-popover-form toolbar-export-form" data-submit-wait data-submit-wait-text="正在生成筛选后的目录，浏览器会开始下载..." data-submit-wait-button-text="导出中..." data-submit-wait-reset="6000">
                 {{ csrf_field() }}
+                <input type="hidden" name="bld" value="{{ bld_query }}">
+                <input type="hidden" name="oe" value="{{ oe_query }}">
                 <input type="hidden" name="status" value="{{ status }}">
+                {% for value in selected_brand_filters %}<input type="hidden" name="brand" value="{{ value }}">{% endfor %}
+                {% for value in selected_item_filters %}<input type="hidden" name="item" value="{{ value }}">{% endfor %}
+                {% for value in selected_product_status_filters %}<input type="hidden" name="product_status" value="{{ value }}">{% endfor %}
                 <label>
                   导出格式
                   <select name="export_format">
@@ -100,6 +203,7 @@
                   </select>
                 </label>
                 <button class="linear-button primary" type="submit">导出 Excel</button>
+                <p class="submit-wait-message" data-submit-wait-message aria-live="polite"></p>
               </form>
             </details>
           {% endif %}
@@ -108,7 +212,7 @@
 
       <section class="data-section" id="products-results">
         <div class="data-table-scroll">
-        <table class="resizable-table data-table products-table" id="products-table">
+        <table class="resizable-table data-table products-table" id="products-table" data-column-storage-scope="{{ g.user['id'] if g.user else 'guest' }}">
           <colgroup>
             <col data-col="bld" class="col-width-104">
             <col data-col="series" class="col-width-82">
@@ -123,16 +227,16 @@
           </colgroup>
           <thead>
             <tr>
-              <th>BLD 号</th>
-              <th>品牌</th>
-              <th>产品名称</th>
-              <th>OE 号</th>
-              <th>品牌号码</th>
-              <th class="resizable-heading">车型<span class="resize-handle"></span></th>
-              <th>产品图片</th>
-              <th>含税单价</th>
-              <th>产品状态</th>
-              <th class="sticky-actions">操作</th>
+              <th data-col="bld">{{ product_column_heading("bld", "BLD 号") }}</th>
+              <th data-col="series">{{ product_column_heading("series", "品牌", "brand", product_filter_options.get("brand", []), selected_brand_filters) }}</th>
+              <th data-col="item">{{ product_column_heading("item", "产品名称", "item", product_filter_options.get("item", []), selected_item_filters) }}</th>
+              <th data-col="oe1">{{ product_column_heading("oe1", "OE 号") }}</th>
+              <th data-col="oe2">{{ product_column_heading("oe2", "品牌号码") }}</th>
+              <th class="resizable-heading" data-col="models">{{ product_column_heading("models", "车型") }}<span class="resize-handle" aria-hidden="true"></span></th>
+              <th data-col="image">{{ product_column_heading("image", "产品图片") }}</th>
+              <th data-col="price">{{ product_column_heading("price", "含税单价") }}</th>
+              <th data-col="product-status">{{ product_column_heading("product-status", "产品状态", "product_status", product_filter_options.get("product_status", []), selected_product_status_filters) }}</th>
+              <th class="sticky-actions" data-col="actions"><span class="products-static-column-label">操作</span></th>
             </tr>
           </thead>
           <tbody>
@@ -179,7 +283,7 @@
           <button class="image-modal-close" type="button" data-close-product-modal aria-label="关闭新增产品">×</button>
           <div class="modal-heading draggable-modal-heading" data-modal-drag-handle>
             <h2>新增产品</h2>
-            <p class="note">一个 BLD NO. 可以维护多个 OE、多个品牌和多个车型；每行一个 OE 会更清楚。</p>
+            <p class="note">一个 BLD NO. 可以维护多个 OE、多个品牌和多个车型；OE 与品牌均建议每行一个。</p>
           </div>
           <form action="{{ url_for('save_product') }}" method="post" class="record-form modal-form">
             {{ csrf_field() }}
@@ -189,7 +293,7 @@
             </label>
             <label>
               品牌 / SERIES
-              <textarea name="series" rows="2" placeholder="例如 HONDA / MAZDA"></textarea>
+              <textarea name="series" rows="2" placeholder="每行一个品牌，例如 HONDA"></textarea>
             </label>
             <label class="full">
               产品名称 / ITEM

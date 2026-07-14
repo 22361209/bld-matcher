@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from pathlib import Path
 
 from app.database import connect
 from app.platform.audit_store import log_event
 
+from .brand_normalization import canonicalize_brands
 from .sync_domain import ProductDiff, ProductSyncResult
 
 
@@ -33,11 +34,22 @@ def _parse_updated_at(value: object) -> datetime | None:
     return None
 
 
-def _row_changed(local_row: sqlite3.Row | None, incoming_row: sqlite3.Row, columns: list[str]) -> bool:
+def _normalized_product_row(row: sqlite3.Row, columns: list[str]) -> dict[str, object]:
+    normalized = {column: row[column] for column in columns}
+    if "series" in normalized:
+        normalized["series"] = canonicalize_brands(normalized["series"])
+    return normalized
+
+
+def _row_changed(
+    local_row: sqlite3.Row | None,
+    incoming_row: Mapping[str, object],
+    columns: list[str],
+) -> bool:
     return local_row is None or any(local_row[column] != incoming_row[column] for column in columns if column != "id")
 
 
-def _incoming_is_older(local_row: sqlite3.Row | None, incoming_row: sqlite3.Row) -> bool:
+def _incoming_is_older(local_row: sqlite3.Row | None, incoming_row: Mapping[str, object]) -> bool:
     if local_row is None:
         return False
     local_updated = _parse_updated_at(local_row["updated_at"])
@@ -95,9 +107,12 @@ class SQLiteProductSyncRepository:
             if set(local_columns) != set(incoming_columns):
                 raise ValueError("数据包 products 表结构与当前系统不一致，请先升级程序后再导入。")
             column_sql = ", ".join(local_columns)
-            incoming_rows = connection.execute(
-                f"SELECT {column_sql} FROM incoming.products ORDER BY bld_no COLLATE BLD_NATURAL"
-            ).fetchall()
+            incoming_rows = [
+                _normalized_product_row(row, local_columns)
+                for row in connection.execute(
+                    f"SELECT {column_sql} FROM incoming.products ORDER BY bld_no COLLATE BLD_NATURAL"
+                ).fetchall()
+            ]
             local_by_bld = {
                 str(row["bld_no"]): row for row in connection.execute("SELECT * FROM main.products").fetchall()
             }
@@ -187,9 +202,12 @@ class SQLiteProductSyncRepository:
                 f"{column} = excluded.{column}" for column in insert_columns if column != "bld_no"
             )
             new_count = updated_count = conflict_count = unchanged_count = deactivated_count = 0
-            rows = connection.execute(
-                f"SELECT {', '.join(columns)} FROM incoming.products ORDER BY bld_no COLLATE BLD_NATURAL"
-            ).fetchall()
+            rows = [
+                _normalized_product_row(row, columns)
+                for row in connection.execute(
+                    f"SELECT {', '.join(columns)} FROM incoming.products ORDER BY bld_no COLLATE BLD_NATURAL"
+                ).fetchall()
+            ]
             with connection:
                 for row in rows:
                     local_row = connection.execute(

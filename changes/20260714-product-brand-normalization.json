@@ -1,0 +1,16 @@
+{
+  "date": "2026-07-14",
+  "version": "unreleased",
+  "title": "产品品牌统一大写并清理历史不规范值",
+  "entries": [
+    "产品品牌统一按每行一个品牌和全大写保存，修复 MERCEDES-BENZ 错误断行、MAZADA 拼写及历史斜杠或空格复合写法。",
+    "RAM 不再作为独立品牌候选，历史 RAM 和 DODGE RAM 均归入 DODGE。",
+    "手工保存、Excel 目录导入和产品数据包同步共用同一幂等规范化规则，避免旧格式再次写入。",
+    "管理员品牌清洗使用完整快照校验、SQLite 一致性备份、单事务更新和逐产品审计；不修改目录源 Excel。"
+  ],
+  "impact": {
+    "data": "120 条本机产品品牌规范化；产品数量、启停状态、价格和其他资料不变",
+    "api": "compatible",
+    "operations": "restart-required"
+  }
+}

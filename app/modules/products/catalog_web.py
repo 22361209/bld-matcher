@@ -11,31 +11,35 @@ from flask import flash, redirect, render_template, request, send_file, url_for
 from app.config import CATALOG_PATH, DATA_DIR
 from app.helpers import unique_prefixed_path, user_file_label, user_output_dir, user_upload_path
 from app.locks import ImportLockError, import_lock
+from app.modules.products.domain import (
+    ProductFilters,
+    ProductFilterValidationError,
+    build_product_filters,
+)
 from app.modules.products.factory import get_product_service
-from app.security import actor_name, login_required, permission_required
+from app.security import actor_name, can, login_required, permission_required
 
 
 PRODUCT_PAGE_SIZE = 50
 logger = logging.getLogger(__name__)
 
 
-def _product_query_args() -> dict[str, Any]:
-    query = request.args.get("q", "")
-    bld_query = request.args.get("bld", "")
-    oe_query = request.args.get("oe", "")
-    if oe_query.strip():
-        bld_query = ""
-    status = request.args.get("status", "active")
-    if status not in {"active", "all", "inactive"}:
-        status = "active"
-    return {
-        "query": query,
-        "bld_query": bld_query,
-        "oe_query": oe_query,
-        "status": status,
-        "include_inactive": status == "all",
-        "only_inactive": status == "inactive",
-    }
+def _product_filters(values: Any, *, default_status: str) -> ProductFilters:
+    return build_product_filters(
+        {
+            "q": values.get("q", ""),
+            "bld": values.get("bld", ""),
+            "oe": values.get("oe", ""),
+            "status": values.get("status", default_status),
+            "brand": values.getlist("brand"),
+            "item": values.getlist("item"),
+            "product_status": values.getlist("product_status"),
+        }
+    )
+
+
+def _product_query_args() -> ProductFilters:
+    return _product_filters(request.args, default_status="active")
 
 
 def _request_page() -> int:
@@ -45,22 +49,34 @@ def _request_page() -> int:
         return 1
 
 
-def _product_page_url(filters: dict[str, Any], page: int) -> str:
+def _product_page_url(filters: ProductFilters, page: int) -> str:
     params: dict[str, Any] = {}
-    if str(filters["oe_query"]).strip():
-        params["oe"] = filters["oe_query"]
-    elif str(filters["bld_query"]).strip():
-        params["bld"] = filters["bld_query"]
-    elif str(filters["query"]).strip():
-        params["q"] = filters["query"]
-    if str(filters["status"]) != "active":
-        params["status"] = filters["status"]
+    if filters.oe_query:
+        params["oe"] = filters.oe_query
+    elif filters.bld_query:
+        params["bld"] = filters.bld_query
+    elif filters.query:
+        params["q"] = filters.query
+    if filters.status != "active":
+        params["status"] = filters.status
+    brand_values = [*filters.brands, *(("",) if filters.brand_blank else ())]
+    item_values = [*filters.items, *(("",) if filters.item_blank else ())]
+    product_status_values = [
+        *filters.product_statuses,
+        *(("",) if filters.product_status_blank else ()),
+    ]
+    if brand_values:
+        params["brand"] = brand_values
+    if item_values:
+        params["item"] = item_values
+    if product_status_values:
+        params["product_status"] = product_status_values
     if page > 1:
         params["page"] = page
     return f"{url_for('products', **params)}#products-results"
 
 
-def _product_pagination(filters: dict[str, Any], page: int, total: int) -> dict[str, Any]:
+def _product_pagination(filters: ProductFilters, page: int, total: int) -> dict[str, Any]:
     total_pages = max(1, ceil(total / PRODUCT_PAGE_SIZE))
     page = min(max(1, page), total_pages)
     start = ((page - 1) * PRODUCT_PAGE_SIZE) + 1 if total else 0
@@ -129,7 +145,10 @@ def register(app) -> None:
     @app.get("/products")
     @login_required
     def products():
-        filters = _product_query_args()
+        try:
+            filters = _product_query_args()
+        except ProductFilterValidationError as exc:
+            return f"筛选条件无效：{exc}", 400, {"Content-Type": "text/plain; charset=utf-8"}
         service = get_product_service()
         requested_page = _request_page()
         page = service.search(
@@ -146,16 +165,28 @@ def register(app) -> None:
             )
         rows = [record.web_payload() for record in page.records]
         stats = service.stats().as_dict()
+        filter_options = service.filter_options(filters).web_payload()
+        brand_normalization_preview = service.preview_brand_normalization() if can("import_catalog") else None
         return render_template(
             "products.html",
             products=rows,
             total_products=page.total,
             product_page_size=PRODUCT_PAGE_SIZE,
             pagination=pagination,
-            query=str(filters["query"]),
-            bld_query=str(filters["bld_query"] or filters["query"]),
-            oe_query=str(filters["oe_query"]),
-            status=str(filters["status"]),
+            query=filters.query,
+            bld_query=filters.bld_query or filters.query,
+            oe_query=filters.oe_query,
+            status=filters.status,
+            filter_options=filter_options,
+            brand_normalization_preview=brand_normalization_preview,
+            column_filters={
+                "brand": [*filters.brands, *(("",) if filters.brand_blank else ())],
+                "item": [*filters.items, *(("",) if filters.item_blank else ())],
+                "product_status": [
+                    *filters.product_statuses,
+                    *(("",) if filters.product_status_blank else ()),
+                ],
+            },
             stats=stats,
         )
 
@@ -168,8 +199,10 @@ def register(app) -> None:
     @app.post("/products/export")
     @permission_required("export_catalog")
     def export_products():
-        status = request.form.get("status", "all")
-        include_inactive = status != "active"
+        try:
+            filters = _product_filters(request.form, default_status="all")
+        except ProductFilterValidationError as exc:
+            return f"筛选条件无效：{exc}", 400, {"Content-Type": "text/plain; charset=utf-8"}
         export_format = request.form.get("export_format", "bld")
         if export_format not in {"bld", "brand"}:
             export_format = "bld"
@@ -178,10 +211,13 @@ def register(app) -> None:
             user_output_dir(),
             f"catalog-export-{format_label}-{user_file_label()}-{datetime.now().strftime('%y%m%d')}.xlsx",
         )
-        get_product_service().export_catalog(
+        exported = get_product_service().export_catalog(
             output_path,
-            include_inactive=include_inactive,
+            filters=filters,
             export_format=export_format,
             actor=actor_name(),
         )
+        if not exported:
+            flash("当前筛选条件下没有可导出的产品。", "error")
+            return redirect(_product_page_url(filters, 1))
         return send_file(output_path, as_attachment=True)

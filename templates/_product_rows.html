@@ -1,30 +1,30 @@
 {% for product in products %}
   <tr class="{% if not product.active %}muted-row{% endif %}">
-    <td class="bld-cell">
+    <td class="bld-cell" data-col="bld">
       {% if product.drawing_path %}
         <a class="bld-drawing-link" href="{{ url_for('product_drawing', product_id=product.id) }}" target="_blank" rel="noopener" title="预览 {{ product.bld_no }} PDF 图纸">{{ product.bld_no }}</a>
       {% else %}
         <strong>{{ product.bld_no }}</strong>
       {% endif %}
     </td>
-    <td class="preline">{{ product.series }}</td>
-    <td class="product-item-cell">
+    <td class="preline" data-col="series">{{ product.series }}</td>
+    <td class="product-item-cell" data-col="item">
       {% for line in product_item_display_lines(product.item) %}
         <span{% if loop.index > 1 %} class="product-item-tail"{% endif %}>{{ line }}</span>
       {% endfor %}
     </td>
-    <td class="product-code-list">
+    <td class="product-code-list" data-col="oe1">
       {% for code in product.oe_no_1.splitlines() %}
         <span>{{ code }}</span>{% if not loop.last %}<br>{% endif %}
       {% endfor %}
     </td>
-    <td class="product-code-list">
+    <td class="product-code-list" data-col="oe2">
       {% for code in product.oe_no_2.splitlines() %}
         <span>{{ code }}</span>{% if not loop.last %}<br>{% endif %}
       {% endfor %}
     </td>
-    <td class="preline">{{ product.models }}</td>
-    <td>
+    <td class="preline" data-col="models">{{ product.models }}</td>
+    <td data-col="image">
       {% set image_gallery = product_image_urls(product) %}
       {% if image_gallery %}
         <a class="image-link" href="{{ image_gallery[0].url }}" target="_blank" rel="noopener" title="打开 {{ product.bld_no }} 产品图片" data-gallery='{{ image_gallery|tojson }}' data-caption="{{ product.bld_no }}">
@@ -34,9 +34,9 @@
         <span class="note">无图</span>
       {% endif %}
     </td>
-    <td class="money-cell">{% if product.price_cny is not none %}¥{{ "%.2f"|format(product.price_cny) }}{% endif %}</td>
-    <td class="product-status-cell">{{ format_product_status(product.product_status if "product_status" in product.keys() else "", "en") }}</td>
-    <td class="row-actions sticky-actions">
+    <td class="money-cell" data-col="price">{% if product.price_cny is not none %}¥{{ "%.2f"|format(product.price_cny) }}{% endif %}</td>
+    <td class="product-status-cell" data-col="product-status">{{ format_product_status(product.product_status if "product_status" in product.keys() else "", "en") }}</td>
+    <td class="row-actions sticky-actions" data-col="actions">
       {% if can("edit_products") %}
         <a href="{{ url_for('edit_product', product_id=product.id) }}" data-open-edit-product-modal>编辑</a>
       {% endif %}

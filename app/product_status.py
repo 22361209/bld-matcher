@@ -14,6 +14,25 @@ _STATUS_TERMS = {
 _STATUS_TOKEN_RE = re.compile(r"(\d+)\s*个?\s*(" + "|".join(re.escape(term) for term in _STATUS_TERMS) + r")")
 
 
+def canonical_product_status(value: object) -> str:
+    """Return the stable key used to group and filter product-status text."""
+
+    text = "".join(str(value or "").split())
+    if not text:
+        return ""
+
+    pieces: list[str] = []
+    cursor = 0
+    for match in _STATUS_TOKEN_RE.finditer(text):
+        if match.start() > cursor:
+            pieces.append(text[cursor : match.start()])
+        pieces.append(f"{int(match.group(1))}{match.group(2)}")
+        cursor = match.end()
+    if cursor < len(text):
+        pieces.append(text[cursor:])
+    return "".join(pieces)
+
+
 def product_status_language_for_price_mode(price_mode: str) -> str:
     return STATUS_LANGUAGE_EN if price_mode == "usd" else STATUS_LANGUAGE_ZH
 

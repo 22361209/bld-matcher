@@ -16,7 +16,7 @@
         <header class="workspace-header">
           <div>
             <h1>{{ "编辑产品" if product else "新增产品" }}</h1>
-            <p>一个 BLD NO. 可以维护多个 OE、多个品牌和多个车型；每行一个 OE 会更清楚。</p>
+            <p>一个 BLD NO. 可以维护多个 OE、多个品牌和多个车型；OE 与品牌均建议每行一个。</p>
           </div>
           <div class="command-actions">
             <a class="linear-button subtle" href="{{ url_for('products') }}">返回目录</a>
@@ -34,7 +34,7 @@
           </label>
           <label>
             品牌 / SERIES
-            <textarea name="series" rows="3" placeholder="例如 HONDA / MAZDA">{{ product.series if product else '' }}</textarea>
+            <textarea name="series" rows="3" placeholder="每行一个品牌，例如 HONDA">{{ product.series if product else '' }}</textarea>
           </label>
           <label class="full">
             产品名称 / ITEM

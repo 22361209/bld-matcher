@@ -95,6 +95,11 @@ class WebAppTest(unittest.TestCase):
             follow_redirects=False,
         )
 
+    def cleanup_products(self, bld_pattern):
+        with self.web.connect(self.web.DB_PATH) as conn:
+            conn.execute("DELETE FROM products WHERE bld_no LIKE ?", (bld_pattern,))
+            conn.commit()
+
     def create_internal_api_token(self, *, scopes=None, name="OpenClaw Test"):
         from app.platform.api_keys import create_internal_api_key
 
@@ -224,6 +229,136 @@ class WebAppTest(unittest.TestCase):
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
+
+    def test_product_brand_normalization_uses_preview_confirmation_and_backup(self):
+        self.login()
+        with self.web.connect(self.web.DB_PATH) as connection:
+            connection.execute(
+                """
+                INSERT INTO products (
+                  bld_no, series, item, active, source, created_at, updated_at
+                ) VALUES (
+                  'BRAND-WEB-CLEANUP', 'DODGE RAM', 'Brand cleanup test', 1,
+                  'test-fixture', '2026-07-14 10:00:00', '2026-07-14 10:00:00'
+                )
+                """
+            )
+            connection.commit()
+
+        from app.modules.products.factory import get_product_service
+
+        preview = get_product_service().preview_brand_normalization()
+        self.assertGreaterEqual(preview.changed_count, 1)
+        self.assertIn(
+            ("BRAND-WEB-CLEANUP", "DODGE RAM", "DODGE"),
+            [(change.bld_no, change.before, change.after) for change in preview.changes],
+        )
+        products_page = self.client.get("/products")
+        products_html = products_page.get_data(as_text=True)
+        self.assertEqual(products_page.status_code, 200)
+        self.assertIn(f"规范品牌 {preview.changed_count}", products_html)
+        self.assertIn(f'name="snapshot_digest" value="{preview.digest}"', products_html)
+
+        missing_confirmation = self.client.post(
+            "/products/brands/normalize",
+            data={"snapshot_digest": preview.digest},
+            headers={"Accept": "application/json"},
+        )
+        self.assertEqual(missing_confirmation.status_code, 400)
+
+        stale_preview = self.client.post(
+            "/products/brands/normalize",
+            data={
+                "confirmation": "normalize-product-brands-v1",
+                "snapshot_digest": "0" * 64,
+            },
+            headers={"Accept": "application/json"},
+        )
+        self.assertEqual(stale_preview.status_code, 409)
+        with self.web.connect(self.web.DB_PATH) as connection:
+            unchanged = connection.execute(
+                "SELECT series FROM products WHERE bld_no = 'BRAND-WEB-CLEANUP'"
+            ).fetchone()
+        self.assertEqual(unchanged["series"], "DODGE RAM")
+
+        applied_response = self.client.post(
+            "/products/brands/normalize",
+            data={
+                "confirmation": "normalize-product-brands-v1",
+                "snapshot_digest": preview.digest,
+            },
+            headers={"Accept": "application/json"},
+        )
+        self.assertEqual(applied_response.status_code, 200)
+        applied = applied_response.get_json()
+        self.assertEqual(applied["changed_count"], preview.changed_count)
+        backup_path = self.root / "data" / applied["backup"]
+        self.assertTrue(backup_path.is_file())
+        with sqlite3.connect(backup_path) as backup:
+            self.assertEqual(backup.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+            self.assertEqual(
+                backup.execute(
+                    "SELECT series FROM products WHERE bld_no = 'BRAND-WEB-CLEANUP'"
+                ).fetchone()[0],
+                "DODGE RAM",
+            )
+        with self.web.connect(self.web.DB_PATH) as connection:
+            cleaned = connection.execute(
+                "SELECT series FROM products WHERE bld_no = 'BRAND-WEB-CLEANUP'"
+            ).fetchone()
+            audit = connection.execute(
+                """
+                SELECT actor FROM audit_logs
+                WHERE action = '清洗产品品牌' AND target_key = 'BRAND-WEB-CLEANUP'
+                ORDER BY id DESC LIMIT 1
+                """
+            ).fetchone()
+            connection.execute("DELETE FROM products WHERE bld_no = 'BRAND-WEB-CLEANUP'")
+            connection.commit()
+        self.assertEqual(cleaned["series"], "DODGE")
+        self.assertEqual(audit["actor"], "007")
+
+    def test_product_brand_normalization_returns_stable_operational_error(self):
+        self.login()
+        with patch("app.modules.products.records_web.get_product_service") as service_factory:
+            service_factory.return_value.normalize_brands.side_effect = OSError(
+                "private disk path should not leak"
+            )
+            response = self.client.post(
+                "/products/brands/normalize",
+                data={
+                    "confirmation": "normalize-product-brands-v1",
+                    "snapshot_digest": "a" * 64,
+                },
+                headers={"Accept": "application/json"},
+            )
+        self.assertEqual(response.status_code, 500)
+        payload = response.get_json()
+        self.assertEqual(
+            payload,
+            {"ok": False, "error": "品牌清洗失败，数据未修改，请稍后重试。"},
+        )
+        self.assertNotIn("private disk path", response.get_data(as_text=True))
+
+    def test_product_brand_normalization_respects_global_import_lock(self):
+        self.login()
+        from app.locks import ImportLockError
+
+        with patch(
+            "app.modules.products.records_web.import_lock",
+            side_effect=ImportLockError("当前已有用户正在执行导入操作，请稍后再试"),
+        ), patch("app.modules.products.records_web.get_product_service") as service_factory:
+            response = self.client.post(
+                "/products/brands/normalize",
+                data={
+                    "confirmation": "normalize-product-brands-v1",
+                    "snapshot_digest": "a" * 64,
+                },
+                headers={"Accept": "application/json"},
+            )
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("当前已有用户正在执行导入操作", response.get_json()["error"])
+        service_factory.return_value.normalize_brands.assert_not_called()
 
     def test_material_drawings_page_lists_codes_and_previews_pdf(self):
         self.login()
@@ -2476,6 +2611,241 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("K-PAGE-120", third_html)
         self.assertNotIn("K-PAGE-099", third_html)
 
+    def test_product_column_filters_preserve_multiselect_in_pagination_and_export_form(self):
+        from app.modules.products.persistence import upsert_product
+
+        self.addCleanup(self.cleanup_products, "K-WEB-FILTER-%")
+        with self.web.connect(self.web.DB_PATH) as conn:
+            for index in range(51):
+                upsert_product(
+                    conn,
+                    {
+                        "bld_no": f"K-WEB-FILTER-{index:03d}",
+                        "series": "WEBBRAND-A\nWEBBRAND-B",
+                        "item": "Web Filter Arm",
+                        "oe_no_1": f"WEB-FILTER-{index:03d}",
+                        "product_status": "1个衬套",
+                        "active": "1",
+                    },
+                    actor="tester",
+                )
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-WEB-FILTER-EXCLUDED",
+                    "series": "WEBBRAND-C",
+                    "item": "Web Filter Arm",
+                    "oe_no_1": "WEB-FILTER-EXCLUDED",
+                    "product_status": "1个衬套",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        self.login()
+        response = self.client.get(
+            "/products",
+            query_string={
+                "bld": "K-WEB-FILTER-",
+                "brand": ["WEBBRAND-A", "WEBBRAND-B"],
+                "item": "Web Filter Arm",
+                "product_status": "1衬套",
+            },
+        )
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("第 1 / 2 页，每页 50 条", html)
+        self.assertIn("K-WEB-FILTER-000", html)
+        self.assertIn("K-WEB-FILTER-049", html)
+        self.assertNotIn("K-WEB-FILTER-050", html)
+        self.assertNotIn("K-WEB-FILTER-EXCLUDED", html)
+        self.assertEqual(html.count("data-column-filter-trigger"), 3)
+        self.assertEqual(html.count("data-column-filter-panel"), 3)
+        self.assertEqual(html.count("data-column-filter-select-all"), 3)
+        self.assertEqual(html.count("data-column-filter-select-none"), 3)
+        self.assertEqual(html.count("data-column-filter-selection"), 3)
+        self.assertEqual(html.count("data-column-filter-reset"), 3)
+        self.assertEqual(html.count("data-column-filter-apply"), 3)
+        self.assertIn("重置筛选", html)
+        self.assertIn('aria-label="启用状态筛选"', html)
+        self.assertIn('name="brand" value="WEBBRAND-A"', html)
+        self.assertIn('name="brand" value="WEBBRAND-B"', html)
+        self.assertIn('name="item" value="Web Filter Arm"', html)
+        self.assertIn('name="product_status" value="1衬套"', html)
+        self.assertIn("data-submit-wait", html)
+
+        next_href_match = re.search(r'href="([^"]*page=2[^"]*)"', html)
+        self.assertIsNotNone(next_href_match)
+        next_href = next_href_match.group(1).replace("&amp;", "&")
+        self.assertIn("brand=WEBBRAND-A&brand=WEBBRAND-B", next_href)
+        self.assertIn("item=Web+Filter+Arm", next_href)
+        self.assertIn("product_status=1%E8%A1%AC%E5%A5%97", next_href)
+        self.assertTrue(next_href.endswith("#products-results"))
+
+    def test_catalog_export_uses_all_web_filters_across_pages_and_handles_empty_results(self):
+        from openpyxl import load_workbook
+
+        from app.modules.products.persistence import upsert_product
+
+        self.addCleanup(self.cleanup_products, "K-WEB-EXPORT-%")
+        with self.web.connect(self.web.DB_PATH) as conn:
+            for index in range(51):
+                upsert_product(
+                    conn,
+                    {
+                        "bld_no": f"K-WEB-EXPORT-{index:03d}",
+                        "series": "WEBEXPORT",
+                        "item": "Web Export Arm",
+                        "oe_no_1": f"WEB-EXPORT-{index:03d}",
+                        "product_status": "2个衬套\n1个球头",
+                        "active": "1",
+                    },
+                    actor="tester",
+                )
+
+        self.login()
+        response = self.client.post(
+            "/products/export",
+            data={
+                "bld": "K-WEB-EXPORT-",
+                "brand": ["WEBEXPORT"],
+                "item": ["Web Export Arm"],
+                "product_status": ["2衬套1球头"],
+                "status": "active",
+                "export_format": "bld",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        workbook = load_workbook(io.BytesIO(response.data), read_only=True, data_only=True)
+        sheet = workbook["产品目录"]
+        exported = [row[0] for row in sheet.iter_rows(min_row=2, values_only=True)]
+        workbook.close()
+        response.close()
+
+        self.assertEqual(len(exported), 51)
+        self.assertEqual(exported[0], "K-WEB-EXPORT-000")
+        self.assertEqual(exported[-1], "K-WEB-EXPORT-050")
+
+        before = set((self.root / "outputs").glob("u*-007/catalog-export-bld-007-*.xlsx"))
+        empty = self.client.post(
+            "/products/export",
+            data={
+                "bld": "K-WEB-EXPORT-NOT-FOUND",
+                "brand": ["WEBEXPORT"],
+                "status": "active",
+                "export_format": "bld",
+            },
+            follow_redirects=False,
+        )
+        after = set((self.root / "outputs").glob("u*-007/catalog-export-bld-007-*.xlsx"))
+        self.assertEqual(empty.status_code, 302)
+        self.assertIn("K-WEB-EXPORT-NOT-FOUND", unquote(empty.headers["Location"]))
+        self.assertEqual(after, before)
+
+    def test_product_column_filter_blank_value_is_distinct_and_preserved_in_export(self):
+        from openpyxl import load_workbook
+
+        from app.modules.products.persistence import upsert_product
+
+        self.addCleanup(self.cleanup_products, "K-WEB-BLANK-%")
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-WEB-BLANK-EMPTY",
+                    "series": "",
+                    "item": "",
+                    "product_status": "",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-WEB-BLANK-LITERAL",
+                    "series": "__blank__",
+                    "item": "__blank__",
+                    "product_status": "__blank__",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        self.login()
+        blank_page = self.client.get(
+            "/products",
+            query_string=[
+                ("bld", "K-WEB-BLANK-"),
+                ("brand", ""),
+                ("item", ""),
+                ("product_status", ""),
+            ],
+        )
+        blank_html = blank_page.get_data(as_text=True)
+        self.assertEqual(blank_page.status_code, 200)
+        self.assertIn("K-WEB-BLANK-EMPTY", blank_html)
+        self.assertNotIn("K-WEB-BLANK-LITERAL", blank_html)
+        self.assertGreaterEqual(blank_html.count('name="brand" value=""'), 2)
+        self.assertGreaterEqual(blank_html.count('name="item" value=""'), 2)
+        self.assertGreaterEqual(blank_html.count('name="product_status" value=""'), 2)
+
+        literal_page = self.client.get(
+            "/products",
+            query_string={
+                "bld": "K-WEB-BLANK-",
+                "brand": "__blank__",
+                "item": "__blank__",
+                "product_status": "__blank__",
+            },
+        )
+        literal_html = literal_page.get_data(as_text=True)
+        self.assertEqual(literal_page.status_code, 200)
+        self.assertNotIn("K-WEB-BLANK-EMPTY", literal_html)
+        self.assertIn("K-WEB-BLANK-LITERAL", literal_html)
+
+        exported = self.client.post(
+            "/products/export",
+            data={
+                "bld": "K-WEB-BLANK-",
+                "brand": "",
+                "item": "",
+                "product_status": "",
+                "status": "active",
+                "export_format": "bld",
+            },
+        )
+        self.assertEqual(exported.status_code, 200)
+        workbook = load_workbook(io.BytesIO(exported.data), read_only=True, data_only=True)
+        sheet = workbook["产品目录"]
+        exported_bld_numbers = [row[0] for row in sheet.iter_rows(min_row=2, values_only=True)]
+        workbook.close()
+        exported.close()
+        self.assertEqual(exported_bld_numbers, ["K-WEB-BLANK-EMPTY"])
+
+    def test_product_column_filter_limits_return_400_without_listing_or_exporting(self):
+        self.login()
+        excessive_values = [("brand", f"UNKNOWN-{index}") for index in range(201)]
+        rejected_page = self.client.get("/products", query_string=excessive_values)
+        self.assertEqual(rejected_page.status_code, 400)
+        self.assertIn("品牌筛选项最多选择 200 个", rejected_page.get_data(as_text=True))
+        self.assertNotIn("products-table", rejected_page.get_data(as_text=True))
+
+        before = set((self.root / "outputs").glob("u*-007/catalog-export-bld-007-*.xlsx"))
+        rejected_export = self.client.post(
+            "/products/export",
+            data={
+                "item": "X" * 257,
+                "status": "active",
+                "export_format": "bld",
+            },
+        )
+        after = set((self.root / "outputs").glob("u*-007/catalog-export-bld-007-*.xlsx"))
+        self.assertEqual(rejected_export.status_code, 400)
+        self.assertIn("产品名称筛选项单项不能超过 256 个字符", rejected_export.get_data(as_text=True))
+        self.assertEqual(after, before)
+
     def test_product_drawing_upload_preview_and_batch_entry(self):
         from app.modules.products.persistence import upsert_product
 
@@ -2697,7 +3067,9 @@ class WebAppTest(unittest.TestCase):
         page = self.client.get("/products", query_string={"bld": "K-STATUS-001"})
         html = page.get_data(as_text=True)
         self.assertEqual(page.status_code, 200)
-        self.assertIn("<th>产品状态</th>", html)
+        self.assertIn('data-col="product-status"', html)
+        self.assertIn('data-column-label="产品状态"', html)
+        self.assertIn('aria-label="筛选产品状态', html)
         self.assertIn("1 ball joint 2 bushings", html)
 
         edit = self.client.get(f"/products/{product['id']}/edit")

@@ -36,10 +36,6 @@
   box-shadow: 0 0 0 2px rgba(34, 93, 145, 0.14);
 }
 
-.products-table {
-  min-width: 900px;
-}
-
 .bld-cell {
   min-width: 0;
 }

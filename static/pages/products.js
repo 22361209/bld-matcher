@@ -1,3 +1,5 @@
+import { setupProductTable } from "./product_table.js?v=20260714-1";
+
 if (document.body.dataset.page === "products.list") {
   const bldSearch = document.querySelector("#bld-search");
   const oeSearch = document.querySelector("#oe-search");
@@ -61,38 +63,7 @@ if (document.body.dataset.page === "products.list") {
   requestAnimationFrame(updateProductsTableHeaderTop);
   window.addEventListener("load", scheduleProductsTableHeaderTop);
   window.addEventListener("pageshow", scheduleProductsTableHeaderTop);
-
-  const cols = Array.from(table.querySelectorAll("col"));
-  const modelsCol = cols.find((col) => col.dataset.col === "models");
-  const storageKey = "bldProductTableModelsWidth";
-  const savedModelWidth = Number(localStorage.getItem(storageKey));
-  if (modelsCol && savedModelWidth) {
-    modelsCol.style.width = `${savedModelWidth}px`;
-  }
-
-  const modelsHeader = table.querySelector("th.resizable-heading");
-  const handle = modelsHeader?.querySelector(".resize-handle");
-  if (handle && modelsCol) {
-    handle.addEventListener("mousedown", (event) => {
-      event.preventDefault();
-      const startX = event.clientX;
-      const startWidth = modelsCol.getBoundingClientRect().width;
-
-      const onMove = (moveEvent) => {
-        const width = Math.min(420, Math.max(100, Math.round(startWidth + moveEvent.clientX - startX)));
-        modelsCol.style.width = `${width}px`;
-      };
-
-      const onUp = () => {
-        document.removeEventListener("mousemove", onMove);
-        document.removeEventListener("mouseup", onUp);
-        localStorage.setItem(storageKey, String(Math.round(modelsCol.getBoundingClientRect().width)));
-      };
-
-      document.addEventListener("mousemove", onMove);
-      document.addEventListener("mouseup", onUp);
-    });
-  }
+  setupProductTable(table);
 
   const productModal = document.querySelector("#product-modal");
   const productForm = productModal?.querySelector("form");

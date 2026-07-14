@@ -512,6 +512,13 @@
       "rule": "/products/<int:product_id>/edit"
     },
     {
+      "endpoint": "normalize_product_brands",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/products/brands/normalize"
+    },
+    {
       "endpoint": "batch_drawings",
       "methods": [
         "GET"

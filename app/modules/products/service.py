@@ -6,7 +6,20 @@ from threading import Lock
 
 from app.matcher import ProductCatalog
 
-from .domain import ProductFilters, ProductPage, ProductRecord, ProductStats, build_product_filters
+from .brand_normalization import (
+    BrandNormalizationPreview,
+    BrandNormalizationPreviewChangedError,
+    BrandNormalizationResult,
+    build_brand_normalization_preview,
+)
+from .domain import (
+    ProductFilterOptions,
+    ProductFilters,
+    ProductPage,
+    ProductRecord,
+    ProductStats,
+    build_product_filters,
+)
 from .ports import CatalogBootstrapPort, LegacyAliasPort, ProductUnitOfWorkFactory
 
 
@@ -52,6 +65,15 @@ class ProductService:
         if product is None:
             raise ProductNotFoundError(product_id)
         return product
+
+    def filter_options(
+        self,
+        filters: Mapping[str, object] | ProductFilters,
+    ) -> ProductFilterOptions:
+        self.bootstrap_port()
+        normalized = build_product_filters(filters)
+        with self.unit_of_work_factory() as unit_of_work:
+            return unit_of_work.repository.filter_options(normalized)
 
     def find_by_bld(self, bld_no: str, *, active_only: bool = True) -> ProductRecord | None:
         self.bootstrap_port()
@@ -137,18 +159,26 @@ class ProductService:
         self,
         path: Path,
         *,
-        include_inactive: bool,
+        filters: Mapping[str, object] | ProductFilters,
         export_format: str,
         actor: str,
-    ) -> None:
-        with self.unit_of_work_factory() as unit_of_work:
-            unit_of_work.repository.export_catalog(
-                path,
-                include_inactive=include_inactive,
-                export_format=export_format,
-                actor=actor,
-            )
-            unit_of_work.commit()
+    ) -> int:
+        self.bootstrap_port()
+        normalized = build_product_filters(filters)
+        try:
+            with self.unit_of_work_factory() as unit_of_work:
+                exported = unit_of_work.repository.export_catalog(
+                    path,
+                    filters=normalized,
+                    export_format=export_format,
+                    actor=actor,
+                )
+                if exported:
+                    unit_of_work.commit()
+        except Exception:
+            path.unlink(missing_ok=True)
+            raise
+        return exported
 
     def preview_prices(self, path: Path) -> dict:
         with self.unit_of_work_factory() as unit_of_work:
@@ -160,3 +190,41 @@ class ProductService:
             unit_of_work.commit()
         self.invalidate_catalog()
         return result
+
+    def preview_brand_normalization(self) -> BrandNormalizationPreview:
+        self.bootstrap_port()
+        with self.unit_of_work_factory() as unit_of_work:
+            changes = unit_of_work.repository.preview_brand_normalization()
+        return build_brand_normalization_preview(changes)
+
+    def normalize_brands(
+        self,
+        *,
+        backup_path: Path,
+        expected_digest: str,
+        actor: str,
+    ) -> BrandNormalizationResult:
+        if len(expected_digest) != 64:
+            raise ValueError("品牌清洗预览标记无效，请重新预览。")
+        if backup_path.exists():
+            raise ValueError("品牌清洗备份文件已存在，请重新预览后再试。")
+        with self.unit_of_work_factory() as unit_of_work:
+            initial_preview = build_brand_normalization_preview(
+                unit_of_work.repository.preview_brand_normalization()
+            )
+            if initial_preview.digest != expected_digest:
+                raise BrandNormalizationPreviewChangedError(expected_digest, initial_preview.digest)
+            unit_of_work.repository.lock_brand_normalization()
+            locked_preview = build_brand_normalization_preview(
+                unit_of_work.repository.preview_brand_normalization()
+            )
+            if locked_preview.digest != expected_digest:
+                raise BrandNormalizationPreviewChangedError(expected_digest, locked_preview.digest)
+            unit_of_work.repository.backup_database(backup_path)
+            changed_count = unit_of_work.repository.apply_brand_normalization(
+                list(locked_preview.changes),
+                actor=actor,
+            )
+            unit_of_work.commit()
+        self.invalidate_catalog()
+        return BrandNormalizationResult(changed_count=changed_count, backup_path=backup_path)

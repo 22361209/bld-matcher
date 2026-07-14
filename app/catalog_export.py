@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import sqlite3
 import re
+from collections.abc import Iterable
 from pathlib import Path
+from uuid import uuid4
 
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image as ExcelImage
@@ -139,26 +141,33 @@ def export_products_xlsx(
     output_path: Path,
     include_inactive: bool = True,
     export_format: str = "bld",
+    *,
+    product_rows: Iterable[sqlite3.Row] | None = None,
 ) -> Path:
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "产品目录"
 
-    sql = "SELECT * FROM products"
-    if not include_inactive:
-        sql += " WHERE active = 1"
+    if product_rows is None:
+        sql = "SELECT * FROM products"
+        if not include_inactive:
+            sql += " WHERE active = 1"
+        if export_format == "brand":
+            sql += " ORDER BY series COLLATE NOCASE, bld_no COLLATE BLD_NATURAL"
+        else:
+            sql += " ORDER BY bld_no COLLATE BLD_NATURAL"
+        product_rows = conn.execute(sql)
+
     if export_format == "brand":
-        sql += " ORDER BY series COLLATE NOCASE, bld_no COLLATE BLD_NATURAL"
         _setup_sheet(sheet, BRAND_HEADERS)
     else:
-        sql += " ORDER BY bld_no COLLATE BLD_NATURAL"
         _setup_sheet(sheet, BLD_HEADERS)
 
     image_col = 8 if export_format == "brand" else 7
     image_refs: list[tuple[int, int, Path]] = []
     image_rows: set[int] = set()
 
-    for number, row in enumerate(conn.execute(sql), start=1):
+    for number, row in enumerate(product_rows, start=1):
         image_path = _image_path(row)
         if export_format == "brand":
             sheet.append(
@@ -205,9 +214,12 @@ def export_products_xlsx(
         for item in cell:
             item.number_format = '¥#,##0.00'
 
+    temporary_path = output_path.with_name(f".{output_path.name}.{uuid4().hex}.tmp")
     try:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        workbook.save(output_path)
+        workbook.save(temporary_path)
+        temporary_path.replace(output_path)
         return output_path
     finally:
         workbook.close()
+        temporary_path.unlink(missing_ok=True)
