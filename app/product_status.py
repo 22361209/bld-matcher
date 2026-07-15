@@ -41,12 +41,15 @@ def product_status_header_for_price_mode(price_mode: str) -> str:
     return "Product Status" if product_status_language_for_price_mode(price_mode) == STATUS_LANGUAGE_EN else "产品状态"
 
 
-def format_product_status(value: object, language: str = STATUS_LANGUAGE_EN) -> str:
+def format_product_status(
+    value: object,
+    language: str = STATUS_LANGUAGE_EN,
+    *,
+    multiline: bool = True,
+) -> str:
     text = "" if value is None else str(value).strip()
     if not text:
         return ""
-    if language != STATUS_LANGUAGE_EN:
-        return text
 
     lines = []
     for line in re.split(r"[\r\n]+", text):
@@ -61,12 +64,19 @@ def format_product_status(value: object, language: str = STATUS_LANGUAGE_EN) -> 
             if unmatched:
                 pieces.append(unmatched)
             count = int(match.group(1))
-            singular, plural = _STATUS_TERMS[match.group(2)]
-            pieces.append(f"{count} {singular if count == 1 else plural}")
+            if language == STATUS_LANGUAGE_EN:
+                singular, plural = _STATUS_TERMS[match.group(2)]
+                token = f"{count} {singular if count == 1 else plural}"
+            else:
+                token = match.group(0).strip()
+            pieces.append(token)
             cursor = match.end()
             matched = True
         tail = line[cursor:].strip()
         if tail:
             pieces.append(tail)
-        lines.append(" ".join(pieces) if matched else line)
+        if matched and multiline:
+            lines.extend(pieces)
+        else:
+            lines.append(" ".join(pieces) if matched else line)
     return "\n".join(lines)

@@ -110,7 +110,7 @@ def _options_from_records(
         else:
             status = canonical_product_status(record.product_status)
             if status:
-                values.append((status, format_product_status(status, "en")))
+                values.append((status, format_product_status(status, "en", multiline=False)))
 
         if not values:
             values.append(("", "（空白）"))
@@ -127,7 +127,7 @@ def _options_from_records(
         if not value:
             label = "（空白）"
         elif field == "product_status":
-            label = format_product_status(value, "en")
+            label = format_product_status(value, "en", multiline=False)
         else:
             label = value
         buckets[key] = ProductFilterOption(value=value, label=label, count=0)

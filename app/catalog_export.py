@@ -12,6 +12,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from app.config import BASE_DIR, PRODUCT_IMAGE_DATA_PREFIX, PRODUCT_IMAGE_DIR
+from app.product_status import format_product_status
 
 
 BLD_HEADERS = ["BLD NO.", "品牌", "产品名称", "OE Reference", "Other Reference", "车型", "Product Image", "Unit Price", "产品状态", "启用状态", "更新时间"]
@@ -181,7 +182,10 @@ def export_products_xlsx(
                     row["models"],
                     "",
                     row["price_cny"],
-                    row["product_status"] if "product_status" in row.keys() else "",
+                    format_product_status(
+                        row["product_status"] if "product_status" in row.keys() else "",
+                        "zh",
+                    ),
                     "启用" if row["active"] else "停用",
                     row["updated_at"],
                 ]
@@ -197,7 +201,10 @@ def export_products_xlsx(
                     row["models"],
                     "",
                     row["price_cny"],
-                    row["product_status"] if "product_status" in row.keys() else "",
+                    format_product_status(
+                        row["product_status"] if "product_status" in row.keys() else "",
+                        "zh",
+                    ),
                     "启用" if row["active"] else "停用",
                     row["updated_at"],
                 ]
