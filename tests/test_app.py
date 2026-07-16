@@ -225,7 +225,7 @@ class WebAppTest(unittest.TestCase):
 
     def test_core_admin_pages_load(self):
         self.login()
-        for path in ["/quotes", "/contracts", "/contracts/sales", "/products", "/materials", "/material-drawings", "/shipping-notices", "/shipment-recognition", "/purchase-contracts", "/users", "/internal-api-key", "/logs", "/system-updates", "/product-data-sync"]:
+        for path in ["/quotes", "/contracts", "/contracts/sales", "/products", "/tubes", "/materials", "/material-drawings", "/shipping-notices", "/shipment-recognition", "/purchase-contracts", "/users", "/internal-api-key", "/logs", "/system-updates", "/product-data-sync"]:
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
@@ -3683,6 +3683,10 @@ class WebAppTest(unittest.TestCase):
                 "015_idempotency_response_headers",
                 "016_api_artifacts",
                 "017_runtime_jobs_ai_and_health",
+                "018_tube_items",
+                "019_tube_dimensions",
+                "020_tube_manufacturing_fields",
+                "021_flatten_tube_borrowing",
             ],
         )
 

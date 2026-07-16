@@ -28,12 +28,12 @@ export const buildColumnFilterSearchState = (rawQuery, labels) => {
 
 export const isImeCompositionEvent = (event) => Boolean(event?.isComposing || event?.keyCode === 229);
 
-const normalizeOrder = (candidate) => {
+const normalizeOrder = (candidate, availableColumns = DEFAULT_COLUMNS) => {
   const requested = Array.isArray(candidate) ? candidate : [];
   const valid = requested.filter(
-    (column, index) => DEFAULT_COLUMNS.includes(column) && requested.indexOf(column) === index
+    (column, index) => availableColumns.includes(column) && requested.indexOf(column) === index
   );
-  DEFAULT_COLUMNS.forEach((column) => {
+  availableColumns.forEach((column) => {
     if (!valid.includes(column)) valid.push(column);
   });
   return valid;
@@ -69,8 +69,8 @@ const elementsByColumn = (elements) => new Map(
     .map((element) => [element.dataset.col, element])
 );
 
-const applyColumnOrder = (table, order) => {
-  const completeOrder = [...normalizeOrder(order), "actions"];
+const applyColumnOrder = (table, order, availableColumns = DEFAULT_COLUMNS) => {
+  const completeOrder = [...normalizeOrder(order, availableColumns), "actions"];
   const colgroup = table.querySelector("colgroup");
   const headingRow = table.tHead?.rows[0];
   if (!colgroup || !headingRow) return;
@@ -95,25 +95,28 @@ const tableColumnLabel = (table, column) => (
   table.querySelector(`th[data-col="${column}"] [data-column-label]`)?.dataset.columnLabel || column
 );
 
-export function setupProductTable(table) {
+export function setupProductTable(table, options = {}) {
   if (!(table instanceof HTMLTableElement)) return;
 
+  const availableColumns = options.columns || DEFAULT_COLUMNS;
+  const storagePrefix = options.storagePrefix || "bld.products";
+  const resultsHash = options.resultsHash || "products-results";
   const storageScope = table.dataset.columnStorageScope || "guest";
-  const orderStorageKey = `bld.products.column-order.v${COLUMN_ORDER_VERSION}.u${storageScope}`;
-  const widthStorageKey = `bld.products.models-width.v1.u${storageScope}`;
+  const orderStorageKey = `${storagePrefix}.column-order.v${COLUMN_ORDER_VERSION}.u${storageScope}`;
+  const widthStorageKey = `${storagePrefix}.models-width.v1.u${storageScope}`;
   const orderStatus = document.querySelector("[data-column-order-status]");
   const filterPortal = table.closest(".app-surface") || document.body;
-  let currentOrder = [...DEFAULT_COLUMNS];
+  let currentOrder = [...availableColumns];
   const savedOrder = safeStorageGet(orderStorageKey);
   if (savedOrder) {
     try {
       const payload = JSON.parse(savedOrder);
-      if (payload.version === COLUMN_ORDER_VERSION) currentOrder = normalizeOrder(payload.columns);
+      if (payload.version === COLUMN_ORDER_VERSION) currentOrder = normalizeOrder(payload.columns, availableColumns);
     } catch (_error) {
-      currentOrder = [...DEFAULT_COLUMNS];
+      currentOrder = [...availableColumns];
     }
   }
-  applyColumnOrder(table, currentOrder);
+  applyColumnOrder(table, currentOrder, availableColumns);
 
   const announceOrder = (message) => {
     if (orderStatus) orderStatus.textContent = message;
@@ -132,7 +135,7 @@ export function setupProductTable(table) {
     const nextOrder = currentOrder.filter((item) => item !== column);
     nextOrder.splice(boundedIndex, 0, column);
     currentOrder = nextOrder;
-    applyColumnOrder(table, currentOrder);
+    applyColumnOrder(table, currentOrder, availableColumns);
     persistOrder();
     announceOrder(`${tableColumnLabel(table, column)}列已移动到第 ${currentOrder.indexOf(column) + 1} 列。`);
     return true;
@@ -233,7 +236,21 @@ export function setupProductTable(table) {
     url.searchParams.delete(key);
     url.searchParams.delete("page");
     values.forEach((value) => url.searchParams.append(key, value));
-    url.hash = "products-results";
+    url.hash = resultsHash;
+    window.location.assign(url.toString());
+  };
+
+  const navigateWithRangeFilter = (panel) => {
+    const url = new URL(window.location.href);
+    const inputs = Array.from(panel.querySelectorAll("[data-range-param]"));
+    inputs.forEach((input) => {
+      const key = input.dataset.rangeParam;
+      if (!key) return;
+      url.searchParams.delete(key);
+      if (input.value.trim()) url.searchParams.set(key, input.value.trim());
+    });
+    url.searchParams.delete("page");
+    url.hash = resultsHash;
     window.location.assign(url.toString());
   };
 
@@ -313,14 +330,21 @@ export function setupProductTable(table) {
     if (panel instanceof HTMLElement) {
       if (event.target.closest("[data-column-filter-select-all]")) setPanelSelection(panel, true);
       else if (event.target.closest("[data-column-filter-select-none]")) setPanelSelection(panel, false);
-      else if (event.target.closest("[data-column-filter-reset]")) navigateWithColumnFilter(panel.dataset.filterKey, []);
-      else if (event.target.closest("[data-column-filter-apply]")) applyColumnFilter(panel);
+      else if (event.target.closest("[data-column-filter-reset]")) {
+        if (panel.dataset.filterMode === "range") {
+          panel.querySelectorAll("[data-range-param]").forEach((input) => { input.value = ""; });
+          navigateWithRangeFilter(panel);
+        } else navigateWithColumnFilter(panel.dataset.filterKey, []);
+      } else if (event.target.closest("[data-column-filter-apply]")) {
+        if (panel.dataset.filterMode === "range") navigateWithRangeFilter(panel);
+        else applyColumnFilter(panel);
+      }
       return;
     }
     if (event.target.closest("[data-reset-product-columns]")) {
       closeColumnFilter();
-      currentOrder = [...DEFAULT_COLUMNS];
-      applyColumnOrder(table, currentOrder);
+      currentOrder = [...availableColumns];
+      applyColumnOrder(table, currentOrder, availableColumns);
       safeStorageRemove(orderStorageKey);
       announceOrder("产品目录列顺序已恢复为默认顺序。");
     }
@@ -407,7 +431,7 @@ export function setupProductTable(table) {
   const startColumnDrag = (handle, event) => {
     if (event.button !== 0) return;
     const sourceColumn = handle.closest("th")?.dataset.col;
-    if (!DEFAULT_COLUMNS.includes(sourceColumn)) return;
+    if (!availableColumns.includes(sourceColumn)) return;
     closeColumnFilter();
     const startX = event.clientX;
     const startY = event.clientY;
@@ -441,8 +465,8 @@ export function setupProductTable(table) {
         upEvent.preventDefault();
         const nextOrder = [...insertion.remaining];
         nextOrder.splice(insertion.index, 0, sourceColumn);
-        currentOrder = normalizeOrder(nextOrder);
-        applyColumnOrder(table, currentOrder);
+        currentOrder = normalizeOrder(nextOrder, availableColumns);
+        applyColumnOrder(table, currentOrder, availableColumns);
         persistOrder();
         announceOrder(`${tableColumnLabel(table, sourceColumn)}列已移动到第 ${currentOrder.indexOf(sourceColumn) + 1} 列。`);
       }

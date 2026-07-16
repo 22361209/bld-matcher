@@ -87,6 +87,31 @@ CREATE TABLE IF NOT EXISTS material_items (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS tube_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT NOT NULL UNIQUE,
+  tube_type TEXT NOT NULL DEFAULT '普通管',
+  spec_text TEXT NOT NULL DEFAULT '',
+  weight_kg REAL,
+  tolerance_mm REAL,
+  consumption_mm REAL,
+  outer_diameter_mm REAL,
+  inner_diameter_mm REAL,
+  blank_length_text TEXT DEFAULT '',
+  inner_diameter_tolerance TEXT DEFAULT '',
+  purchase_base INTEGER NOT NULL DEFAULT 1,
+  borrowed_from TEXT DEFAULT '',
+  note TEXT DEFAULT '',
+  source_sheet TEXT DEFAULT '',
+  source_row INTEGER,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_tube_items_type_active ON tube_items(tube_type, active);
+CREATE INDEX IF NOT EXISTS idx_tube_items_borrowed_from ON tube_items(borrowed_from);
+
 CREATE TABLE IF NOT EXISTS customer_price_records (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   record_type TEXT NOT NULL DEFAULT 'quote',

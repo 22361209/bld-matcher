@@ -82,19 +82,19 @@
 
 .material-table-toolbar {
   display: flex;
-  justify-content: flex-end;
+  align-items: end;
+  justify-content: space-between;
   gap: 12px;
-  padding: 0 0 12px;
-  border-bottom: 1px solid var(--linear-line);
+  padding: 0;
 }
 
 .material-table-search {
-  flex: 0 1 560px;
-  justify-content: flex-end;
+  flex: 0 0 auto;
+  justify-content: flex-start;
 }
 
 .material-table-search label {
-  flex: 1 1 300px;
+  flex: 0 0 270px;
 }
 
 .material-table-search input {
@@ -110,6 +110,82 @@
 .material-table-search .linear-button:hover {
   border-color: var(--linear-accent-hover);
   background: var(--linear-accent-hover);
+}
+
+.material-items-command {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--linear-line);
+}
+
+.material-items-heading {
+  min-height: auto;
+  padding: 0;
+  border: 0;
+}
+
+.material-items-heading h2 {
+  margin: 0;
+}
+
+.material-items-heading p {
+  margin: 4px 0 0;
+}
+
+.material-table-actions {
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+}
+
+.material-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-height: 56px;
+  padding: 10px 0 2px;
+  color: var(--linear-muted);
+  font-weight: 700;
+}
+
+.material-pagination .product-pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.material-pagination .pagination-page,
+.material-pagination .pagination-gap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  color: #53647a;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.material-pagination .pagination-page {
+  border: 1px solid #cbd6e2;
+  background: #ffffff;
+}
+
+.material-pagination .pagination-page.current {
+  color: #ffffff;
+  border-color: var(--linear-accent);
+  background: var(--linear-accent);
+}
+
+.material-pagination .linear-button.disabled {
+  cursor: default;
+  opacity: 0.45;
+  pointer-events: none;
 }
 
 .materials-history-drawer {
@@ -204,11 +280,14 @@
   }
 
   .material-table-toolbar {
-    display: block;
+    display: grid;
   }
 
   .material-table-search,
-  .material-table-search label {
+  .material-table-search label,
+  .material-table-actions {
     width: 100%;
   }
+
+  .material-table-actions { justify-content: flex-start; flex-wrap: wrap; }
 }

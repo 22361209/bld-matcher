@@ -371,6 +371,75 @@ def _add_runtime_platform_tables(conn: sqlite3.Connection) -> None:
     conn.execute("DROP TABLE shipment_recognition_jobs")
 
 
+def _add_tube_items(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tube_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          code TEXT NOT NULL UNIQUE,
+          tube_type TEXT NOT NULL DEFAULT '普通管',
+          spec_text TEXT NOT NULL DEFAULT '',
+          weight_kg REAL,
+          tolerance_mm REAL,
+          consumption_mm REAL,
+          outer_diameter_mm REAL,
+          inner_diameter_mm REAL,
+          blank_length_text TEXT DEFAULT '',
+          inner_diameter_tolerance TEXT DEFAULT '',
+          purchase_base INTEGER NOT NULL DEFAULT 1,
+          borrowed_from TEXT DEFAULT '',
+          note TEXT DEFAULT '',
+          source_sheet TEXT DEFAULT '',
+          source_row INTEGER,
+          active INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_tube_items_type_active ON tube_items(tube_type, active)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_tube_items_borrowed_from ON tube_items(borrowed_from)")
+
+
+def _add_tube_dimensions(conn: sqlite3.Connection) -> None:
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(tube_items)")}
+    if "outer_diameter_mm" not in columns:
+        conn.execute("ALTER TABLE tube_items ADD COLUMN outer_diameter_mm REAL")
+    if "inner_diameter_mm" not in columns:
+        conn.execute("ALTER TABLE tube_items ADD COLUMN inner_diameter_mm REAL")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_tube_items_diameters ON tube_items(outer_diameter_mm, inner_diameter_mm)")
+
+
+def _add_tube_manufacturing_fields(conn: sqlite3.Connection) -> None:
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(tube_items)")}
+    if "blank_length_text" not in columns:
+        conn.execute("ALTER TABLE tube_items ADD COLUMN blank_length_text TEXT DEFAULT ''")
+    if "inner_diameter_tolerance" not in columns:
+        conn.execute("ALTER TABLE tube_items ADD COLUMN inner_diameter_tolerance TEXT DEFAULT ''")
+    if "purchase_base" not in columns:
+        conn.execute("ALTER TABLE tube_items ADD COLUMN purchase_base INTEGER NOT NULL DEFAULT 1")
+
+
+def _flatten_tube_borrowing(conn: sqlite3.Connection) -> None:
+    rows = {
+        str(row["code"]): str(row["borrowed_from"] or "")
+        for row in conn.execute("SELECT code, borrowed_from FROM tube_items")
+    }
+    for code, borrowed_from in rows.items():
+        if not borrowed_from:
+            continue
+        visited = {code}
+        current = borrowed_from
+        while current and current in rows and rows[current]:
+            if current in visited:
+                current = ""
+                break
+            visited.add(current)
+            current = rows[current]
+        if current and current in rows and current != borrowed_from:
+            conn.execute("UPDATE tube_items SET borrowed_from = ? WHERE code = ?", (current, code))
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -389,6 +458,10 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("015_idempotency_response_headers", _add_idempotency_response_headers),
     ("016_api_artifacts", _add_api_artifacts),
     ("017_runtime_jobs_ai_and_health", _add_runtime_platform_tables),
+    ("018_tube_items", _add_tube_items),
+    ("019_tube_dimensions", _add_tube_dimensions),
+    ("020_tube_manufacturing_fields", _add_tube_manufacturing_fields),
+    ("021_flatten_tube_borrowing", _flatten_tube_borrowing),
 )
 
 

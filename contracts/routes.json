@@ -687,6 +687,34 @@
       "rule": "/system-updates"
     },
     {
+      "endpoint": "tube_items",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/tubes"
+    },
+    {
+      "endpoint": "edit_tube_item",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/tubes/<int:item_id>/edit"
+    },
+    {
+      "endpoint": "new_tube_item",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/tubes/new"
+    },
+    {
+      "endpoint": "save_tube_item",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/tubes/save"
+    },
+    {
       "endpoint": "users",
       "methods": [
         "GET"

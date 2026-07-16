@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% set active_page = "tubes" %}
+
+{% block page_title %}{{ "编辑管件" if item else "新增管件" }}{% endblock %}
+{% block page_id %}tubes.edit{% endblock %}
+{% block page_type %}edit{% endblock %}
+{% block page_class %}shell narrow app-surface{% endblock %}
+{% block page_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='pages/tubes.css', v=static_version('pages/tubes.css')) }}">
+{% endblock %}
+
+{% block page_content %}
+  <section class="tube-form-page">
+    <div class="workspace-header"><div><h1>{{ "编辑管件" if item else "新增管件" }}</h1></div></div>
+    <form class="form-card tube-form" action="{{ url_for('save_tube_item') }}" method="post">
+      {{ csrf_field() }}
+      <input type="hidden" name="id" value="{{ item.id if item else '' }}">
+      <label>编号<input name="code" required value="{{ item.code if item else '' }}"></label>
+      <label>类型<select name="tube_type" required>{% for option in tube_types %}<option value="{{ option }}" {% if item and item.tube_type == option %}selected{% endif %}>{{ option }}</option>{% endfor %}</select></label>
+      <label class="form-span-2">规格<input name="spec_text" required value="{{ item.spec_text if item else '' }}"></label>
+      <label>重量 kg<input name="weight_kg" inputmode="decimal" value="{{ item.weight_kg if item and item.weight_kg is not none else '' }}"></label>
+      <label>公差 mm<input name="tolerance_mm" inputmode="decimal" value="{{ item.tolerance_mm if item and item.tolerance_mm is not none else '' }}"></label>
+      <label>消耗 mm<input name="consumption_mm" inputmode="decimal" value="{{ item.consumption_mm if item and item.consumption_mm is not none else '' }}"></label>
+      <label>外径 mm<input name="outer_diameter_mm" inputmode="decimal" value="{{ item.outer_diameter_mm if item and item.outer_diameter_mm is not none else '' }}"></label>
+      <label>内径 mm<input name="inner_diameter_mm" inputmode="decimal" value="{{ item.inner_diameter_mm if item and item.inner_diameter_mm is not none else '' }}"></label>
+      <label>毛坯管长度<input name="blank_length_text" value="{{ item.blank_length_text if item else '' }}"></label>
+      <label>内径公差<input name="inner_diameter_tolerance" value="{{ item.inner_diameter_tolerance if item else '' }}"></label>
+      <label>采购基数<input name="purchase_base" type="number" min="1" step="1" value="{{ item.purchase_base if item else 1 }}"></label>
+      {% if item and item.borrowed_from %}
+        <label>借用来源编号<input name="borrowed_from" value="{{ item.borrowed_from }}" placeholder="例如 KE8036"></label>
+      {% elif not item %}
+        <label>借用来源编号<input name="borrowed_from" value="" placeholder="例如 KE8036"></label>
+      {% else %}
+        <input type="hidden" name="borrowed_from" value="">
+        <label class="form-span-2">借用编号<textarea name="borrowed_codes" rows="4" placeholder="每行一个编号，例如&#10;KE8038&#10;KE8043">{{ item.borrowed_codes or '' }}</textarea></label>
+      {% endif %}
+      <label class="form-span-2">备注<textarea name="note" rows="3">{{ item.note if item else '' }}</textarea></label>
+      <label class="checkbox-field"><input type="checkbox" name="active" value="1" {% if not item or item.active %}checked{% endif %}>启用</label>
+      <div class="form-actions form-span-2"><a class="linear-button subtle" href="{{ url_for('tube_items') }}">取消</a><button class="linear-button primary" type="submit">保存管件</button></div>
+    </form>
+  </section>
+{% endblock %}

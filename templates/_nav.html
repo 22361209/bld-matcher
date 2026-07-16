@@ -8,6 +8,7 @@
       <a class="{% if active_page == 'contracts' %}active{% endif %}" href="{{ url_for('contracts') }}">合同管理</a>
     {% endif %}
     <a class="{% if active_page == 'products' %}active{% endif %}" href="{{ url_for('products') }}">产品目录</a>
+    <a class="{% if active_page == 'tubes' %}active{% endif %}" href="{{ url_for('tube_items') }}">管件资料</a>
     <div class="nav-menu">
       <a class="{% if active_page in ['materials', 'material_items'] %}active{% endif %}" href="{{ url_for('materials') }}">生产料单</a>
       <div class="nav-menu-panel">

@@ -10,7 +10,7 @@
 {% endblock %}
 
 {% block page_content %}
-<header class="material-landing">
+{% if not show_material_items %}<header class="material-landing">
         <h1>{% if show_material_items %}材料明细{% else %}生产料单{% endif %}</h1>
         <p>{% if show_material_items %}维护生成生产料单时使用的材料明细。{% else %}上传生产计划，按启用材料明细生成采购和下料所需的料单。{% endif %}</p>
         <div class="compact-metrics material-stat-strip" aria-label="材料数据统计">
@@ -22,7 +22,7 @@
             <span>当前视图 <strong>{{ "全部" if status == "all" else ("停用" if status == "inactive" else "启用") }}</strong></span>
           {% endif %}
         </div>
-      </header>
+      </header>{% endif %}
 
       {% if material_file_stats.invalid %}
         <section class="materials-alert">
@@ -62,19 +62,37 @@
       {% if show_material_items %}
       {% set status_label = "包含停用" if status == "all" else ("只看停用" if status == "inactive" else "只看启用") %}
       <section class="data-section" id="materials-results">
-        <div class="data-section-header">
-          <div>
-            <h2>材料明细</h2>
-            <p>按母件编码和零件编码排序。规格尺寸会自动识别并统一显示。</p>
-          </div>
-          <div class="data-section-actions">
-            <span>
+        <div class="material-items-command">
+          <div class="data-section-header material-items-heading">
+            <div>
+              <h2>材料明细</h2>
+              <p>
               {% if total_material_items %}
                 第 {{ pagination.start }}-{{ pagination.end }} 条 / 共 {{ total_material_items }} 条
               {% else %}
                 0 条
               {% endif %}
-            </span>
+              </p>
+            </div>
+          </div>
+          <div class="material-table-toolbar">
+            <form class="search-form material-table-search" method="get" action="{{ url_for('material_items') }}#materials-results">
+              <label>
+                <span>搜索材料明细</span>
+                <input name="q" value="{{ query }}" placeholder="母件编码、零件编码或规格，例如 8234 / 2.5 357 / 357*1260">
+              </label>
+              <input type="hidden" id="material-status-input" name="status" value="{{ status }}">
+              <button class="linear-button" type="submit">搜索</button>
+              <details class="toolbar-popover linear-popover status-popover">
+                <summary>{{ status_label }}</summary>
+                <div class="status-menu" role="group" aria-label="材料状态筛选">
+                  <button class="status-menu-option {% if status == 'active' %}selected{% endif %}" type="submit" data-material-status="active">只看启用</button>
+                  <button class="status-menu-option {% if status == 'all' %}selected{% endif %}" type="submit" data-material-status="all">包含停用</button>
+                  <button class="status-menu-option {% if status == 'inactive' %}selected{% endif %}" type="submit" data-material-status="inactive">只看停用</button>
+                </div>
+              </details>
+            </form>
+            <div class="data-section-actions material-table-actions">
             {% if can("manage_materials") %}
               <button class="linear-button primary" type="button" data-open-material-modal>新增材料明细</button>
               <details class="toolbar-popover linear-popover">
@@ -94,26 +112,8 @@
                 </form>
               </details>
             {% endif %}
+            </div>
           </div>
-        </div>
-
-        <div class="material-table-toolbar">
-          <form class="search-form material-table-search" method="get" action="{{ url_for('material_items') }}#materials-results">
-            <label>
-              <span>搜索材料明细</span>
-              <input name="q" value="{{ query }}" placeholder="母件编码、零件编码或规格，例如 8234 / 2.5 357 / 357*1260">
-            </label>
-            <input type="hidden" id="material-status-input" name="status" value="{{ status }}">
-            <button class="linear-button" type="submit">搜索</button>
-            <details class="toolbar-popover linear-popover status-popover">
-              <summary>{{ status_label }}</summary>
-              <div class="status-menu" role="group" aria-label="材料状态筛选">
-                <button class="status-menu-option {% if status == 'active' %}selected{% endif %}" type="submit" data-material-status="active">只看启用</button>
-                <button class="status-menu-option {% if status == 'all' %}selected{% endif %}" type="submit" data-material-status="all">包含停用</button>
-                <button class="status-menu-option {% if status == 'inactive' %}selected{% endif %}" type="submit" data-material-status="inactive">只看停用</button>
-              </div>
-            </details>
-          </form>
         </div>
 
         <div class="data-table-scroll">
@@ -176,21 +176,27 @@
           </table>
         </div>
         {% if pagination.total_pages > 1 %}
-          <nav class="product-pagination bottom" aria-label="材料明细分页">
+          <nav class="product-pagination bottom material-pagination" aria-label="材料明细分页">
             <span>第 {{ pagination.page }} / {{ pagination.total_pages }} 页，每页 {{ material_page_size }} 条</span>
             <div class="product-pagination-controls">
               {% if pagination.has_prev %}
                 <a class="linear-button subtle" href="{{ pagination.prev_url }}">上一页</a>
+              {% else %}
+                <span class="linear-button subtle disabled">上一页</span>
               {% endif %}
               {% for link in pagination.links %}
                 {% if link.gap %}
                   <span class="pagination-gap">…</span>
+                {% elif link.current %}
+                  <span class="pagination-page current">{{ link.page }}</span>
                 {% else %}
-                  <a class="pagination-page {% if link.current %}current{% endif %}" href="{{ link.url }}">{{ link.page }}</a>
+                  <a class="pagination-page" href="{{ link.url }}">{{ link.page }}</a>
                 {% endif %}
               {% endfor %}
               {% if pagination.has_next %}
                 <a class="linear-button subtle" href="{{ pagination.next_url }}">下一页</a>
+              {% else %}
+                <span class="linear-button subtle disabled">下一页</span>
               {% endif %}
             </div>
           </nav>
