@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import logging
-import shutil
 from datetime import datetime
 from math import ceil
+from pathlib import Path
 from typing import Any
+from uuid import UUID, uuid4
 
 from flask import flash, redirect, render_template, request, send_file, url_for
 
-from app.config import CATALOG_PATH, DATA_DIR
-from app.helpers import unique_prefixed_path, user_file_label, user_output_dir, user_upload_path
+from app.config import CATALOG_IMPORT_TEMPLATE_PATH
+from app.helpers import unique_prefixed_path, user_file_label, user_output_dir, user_upload_dir
 from app.locks import ImportLockError, import_lock
+from app.modules.products.catalog_import import CatalogImportPreviewChangedError
 from app.modules.products.domain import (
     ProductFilters,
     ProductFilterValidationError,
@@ -103,7 +105,24 @@ def _product_pagination(filters: ProductFilters, page: int, total: int) -> dict[
     }
 
 
+def _catalog_preview_path(preview_id: str) -> Path:
+    try:
+        normalized = str(UUID(preview_id))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("导入预览已失效，请重新上传文件。") from exc
+    return user_upload_dir() / f"catalog-preview-{normalized}.xlsx"
+
+
 def register(app) -> None:
+    @app.get("/catalog/template")
+    @permission_required("import_catalog")
+    def download_catalog_template():
+        return send_file(
+            CATALOG_IMPORT_TEMPLATE_PATH,
+            as_attachment=True,
+            download_name="产品目录导入模板.xlsx",
+        )
+
     @app.post("/catalog")
     @permission_required("import_catalog")
     def upload_catalog():
@@ -115,32 +134,60 @@ def register(app) -> None:
         if not file.filename.lower().endswith(".xlsx"):
             flash("产品目录请使用 .xlsx 文件。", "error")
             return redirect(redirect_target)
-        upload_path = user_upload_path(file.filename, prefix="catalog")
-        file.save(upload_path)
-
+        preview_id = str(uuid4())
+        upload_path = _catalog_preview_path(preview_id)
         try:
-            with import_lock(actor_name(), "产品目录导入"):
-                DATA_DIR.mkdir(parents=True, exist_ok=True)
-                backup = DATA_DIR / f"catalog-backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}.xlsx"
-                if CATALOG_PATH.exists():
-                    shutil.copy2(CATALOG_PATH, backup)
-                shutil.copy2(upload_path, CATALOG_PATH)
-                try:
-                    get_product_service().import_catalog(CATALOG_PATH, actor=actor_name())
-                except Exception:
-                    if backup.exists():
-                        shutil.copy2(backup, CATALOG_PATH)
-                    raise
-        except ImportLockError as exc:
+            file.save(upload_path)
+            preview = get_product_service().preview_catalog_import(upload_path)
+        except ValueError as exc:
+            upload_path.unlink(missing_ok=True)
             flash(str(exc), "error")
             return redirect(redirect_target)
         except Exception:
-            logger.exception("Catalog import failed and the previous catalog was restored")
-            flash("目录读取失败，已恢复旧目录。", "error")
+            upload_path.unlink(missing_ok=True)
+            logger.exception("Catalog import preview failed")
+            flash("目录预览失败，请稍后重试。", "error")
             return redirect(redirect_target)
+        return render_template(
+            "catalog_import_preview.html",
+            preview=preview.web_payload(),
+            preview_id=preview_id,
+        )
 
-        flash("产品目录已导入。已有 BLD NO. 会更新，新增 BLD NO. 会加入产品库。", "success")
-        return redirect(redirect_target)
+    @app.post("/catalog/confirm")
+    @permission_required("import_catalog")
+    def confirm_catalog_import():
+        try:
+            upload_path = _catalog_preview_path(request.form.get("preview_id", ""))
+            if not upload_path.is_file():
+                raise ValueError("导入预览已失效，请重新上传文件。")
+            with import_lock(actor_name(), "产品目录导入"):
+                result = get_product_service().apply_catalog_import(
+                    upload_path,
+                    expected_digest=request.form.get("snapshot_digest", ""),
+                    update_bld_nos=set(request.form.getlist("update_bld")),
+                    actor=actor_name(),
+                )
+        except ImportLockError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("products"))
+        except CatalogImportPreviewChangedError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("products"))
+        except ValueError as exc:
+            logger.info("Catalog import rejected: %s", exc)
+            flash(str(exc), "error")
+            return redirect(url_for("products"))
+        except Exception:
+            logger.exception("Catalog import confirmation failed")
+            flash("目录导入失败，已恢复目录、产品资料和图片。", "error")
+            return redirect(url_for("products"))
+        upload_path.unlink(missing_ok=True)
+        flash(
+            f"产品目录已导入：新增 {result.created_count} 条，更新 {result.updated_count} 条，保留 {result.kept_count} 条。",
+            "success",
+        )
+        return redirect(url_for("products"))
 
     @app.get("/products")
     @login_required

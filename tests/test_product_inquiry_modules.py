@@ -3,12 +3,15 @@ from __future__ import annotations
 import sqlite3
 import tempfile
 import unittest
+from io import BytesIO
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 from unittest.mock import patch
 
 from flask import Flask
 from openpyxl import Workbook, load_workbook
+from openpyxl.drawing.image import Image as ExcelImage
+from PIL import Image
 
 from app.database import connect
 from app.matcher import normalize_code
@@ -16,6 +19,7 @@ from app.modules.products.persistence import upsert_product
 import app.modules.products.persistence as product_persistence
 import app.modules.products.repository as product_repository
 from app.modules.products import catalog_web
+from app.modules.products.catalog_import import CatalogImportStorage
 from app.modules.products.domain import ProductFilters, ProductFilterValidationError
 from app.migrations import run_migrations
 from app.modules.inquiry.domain import InquiryValidationError, extract_numbers
@@ -38,6 +42,11 @@ class ProductInquiryModuleTest(unittest.TestCase):
             lambda: SQLiteProductUnitOfWork(self.database_path),
             lambda: None,
             lambda: {},
+            CatalogImportStorage(
+                self.root / "data" / "catalog.xlsx",
+                self.root / "data" / "product_images",
+                self.root / "data" / "product_images" / "thumbs",
+            ),
         )
         self.artifact_store = SQLiteArtifactStore(self.database_path, (self.output_dir,))
         self.inquiry_service = InquiryService(
@@ -86,6 +95,180 @@ class ProductInquiryModuleTest(unittest.TestCase):
         self.assertEqual(normalize_code("1e500"), "")
         self.assertEqual(normalize_code("001234.0"), "1234")
         self.assertEqual(extract_numbers({"numbers": [oversized_digits]}), ([], [oversized_digits]))
+
+    def test_catalog_import_requires_template_fields_and_imports_price_status_and_image(self) -> None:
+        catalog_path = self.root / "catalog-import.xlsx"
+        image_path = self.root / "catalog-product.png"
+        Image.new("RGB", (320, 240), "white").save(image_path)
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "产品目录"
+        sheet.append(
+            [
+                "BLD NO.",
+                "SERIES",
+                "ITEM",
+                "OE NO.1",
+                "Models",
+                "产品状态",
+                "导入单价",
+                "OE NO.2",
+                "图片",
+            ]
+        )
+        sheet.append(
+            [
+                "K-IMPORT-001",
+                "TOYOTA",
+                "BALL JOINT",
+                "43330-09070",
+                "CAMRY",
+                "1 个球头",
+                68.5,
+                "4333009070",
+                "",
+            ]
+        )
+        sheet.add_image(ExcelImage(BytesIO(image_path.read_bytes())), "I2")
+        workbook.save(catalog_path)
+        workbook.close()
+
+        preview = self.product_service.preview_catalog_import(catalog_path)
+        result = self.product_service.apply_catalog_import(
+            catalog_path,
+            expected_digest=preview.digest,
+            update_bld_nos=set(),
+            actor="module-test",
+        )
+
+        self.assertEqual(result.created_count, 1)
+        image_dir = self.root / "data" / "product_images"
+        with connect(self.database_path) as connection:
+            product = connection.execute(
+                "SELECT * FROM products WHERE bld_no = ?",
+                ("K-IMPORT-001",),
+            ).fetchone()
+        self.assertIsNotNone(product)
+        self.assertEqual(product["price_cny"], 68.5)
+        self.assertEqual(product["product_status"], "1 个球头")
+        self.assertEqual(product["image_path"], "data_product_images/K-IMPORT-001.png")
+        self.assertTrue((image_dir / "K-IMPORT-001.png").is_file())
+
+    def test_catalog_import_rejects_missing_required_value_before_writing(self) -> None:
+        catalog_path = self.root / "catalog-invalid.xlsx"
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["BLD NO.", "SERIES", "ITEM", "OE NO.1", "Models", "产品状态", "导入单价"])
+        sheet.append(["K-IMPORT-INVALID", "TOYOTA", "", "43330", "CAMRY", "1 个球头", 68.5])
+        workbook.save(catalog_path)
+        workbook.close()
+
+        with self.assertRaisesRegex(ValueError, "第 2 行缺少：ITEM"):
+            self.product_service.preview_catalog_import(catalog_path)
+        with connect(self.database_path) as connection:
+            count = connection.execute(
+                "SELECT COUNT(*) FROM products WHERE bld_no = ?",
+                ("K-IMPORT-INVALID",),
+            ).fetchone()[0]
+        self.assertEqual(count, 0)
+
+    def test_catalog_import_rejects_nonempty_row_without_bld_no(self) -> None:
+        catalog_path = self.root / "catalog-missing-bld.xlsx"
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["BLD NO.", "SERIES", "ITEM", "OE NO.1", "Models", "产品状态", "导入单价"])
+        sheet.append(["", "TOYOTA", "BALL JOINT", "43330", "CAMRY", "1 个球头", 68.5])
+        workbook.save(catalog_path)
+        workbook.close()
+
+        with self.assertRaisesRegex(ValueError, "第 2 行缺少：BLD NO."):
+            self.product_service.preview_catalog_import(catalog_path)
+
+    def test_catalog_import_requires_per_product_selection_for_conflicts(self) -> None:
+        self.add_product("K-CONFLICT-001", "OLD-OE", item="Old item", series="TOYOTA", product_status="1 个球头")
+        catalog_path = self.root / "catalog-conflict.xlsx"
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["BLD NO.", "SERIES", "ITEM", "OE NO.1", "Models", "产品状态", "导入单价"])
+        sheet.append(["K-CONFLICT-001", "TOYOTA", "New item", "NEW-OE", "CAMRY", "2 个球头", 88])
+        workbook.save(catalog_path)
+        workbook.close()
+
+        preview = self.product_service.preview_catalog_import(catalog_path)
+        self.assertEqual(len(preview.conflicts), 1)
+        kept = self.product_service.apply_catalog_import(
+            catalog_path,
+            expected_digest=preview.digest,
+            update_bld_nos=set(),
+            actor="module-test",
+        )
+        self.assertEqual(kept.updated_count, 0)
+        self.assertEqual(kept.kept_count, 1)
+        with connect(self.database_path) as connection:
+            product = connection.execute("SELECT * FROM products WHERE bld_no = ?", ("K-CONFLICT-001",)).fetchone()
+        self.assertEqual(product["item"], "Old item")
+
+        applied = self.product_service.apply_catalog_import(
+            catalog_path,
+            expected_digest=preview.digest,
+            update_bld_nos={"K-CONFLICT-001"},
+            actor="module-test",
+        )
+        self.assertEqual(applied.updated_count, 1)
+        with connect(self.database_path) as connection:
+            product = connection.execute("SELECT * FROM products WHERE bld_no = ?", ("K-CONFLICT-001",)).fetchone()
+        self.assertEqual(product["item"], "New item")
+        self.assertEqual(product["price_cny"], 88)
+
+    def test_catalog_import_restores_media_and_catalog_when_confirmation_fails(self) -> None:
+        image_dir = self.root / "data" / "product_images"
+        image_dir.mkdir(parents=True)
+        old_image = image_dir / "K-ROLLBACK-001.png"
+        Image.new("RGB", (20, 20), "red").save(old_image)
+        old_bytes = old_image.read_bytes()
+        with connect(self.database_path) as connection:
+            upsert_product(
+                connection,
+                {
+                    "bld_no": "K-ROLLBACK-001",
+                    "series": "TOYOTA",
+                    "item": "Old item",
+                    "oe_no_1": "OLD-OE",
+                    "models": "CAMRY",
+                    "price_cny": "10",
+                    "product_status": "1 个球头",
+                    "image_path": "data_product_images/K-ROLLBACK-001.png",
+                },
+                actor="module-test",
+            )
+        new_image = self.root / "new-image.png"
+        Image.new("RGB", (20, 20), "blue").save(new_image)
+        catalog_path = self.root / "catalog-rollback.xlsx"
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["BLD NO.", "SERIES", "ITEM", "OE NO.1", "Models", "产品状态", "导入单价", "图片"])
+        sheet.append(["K-ROLLBACK-001", "TOYOTA", "New item", "NEW-OE", "CAMRY", "2 个球头", 88, ""])
+        sheet.add_image(ExcelImage(BytesIO(new_image.read_bytes())), "H2")
+        workbook.save(catalog_path)
+        workbook.close()
+
+        preview = self.product_service.preview_catalog_import(catalog_path)
+        catalog_target = self.root / "data" / "catalog.xlsx"
+        self.assertFalse(catalog_target.exists())
+        with patch.object(product_repository.SQLiteProductRepository, "export_catalog_source", side_effect=RuntimeError("fail export")):
+            with self.assertRaisesRegex(RuntimeError, "fail export"):
+                self.product_service.apply_catalog_import(
+                    catalog_path,
+                    expected_digest=preview.digest,
+                    update_bld_nos={"K-ROLLBACK-001"},
+                    actor="module-test",
+                )
+
+        with connect(self.database_path) as connection:
+            product = connection.execute("SELECT * FROM products WHERE bld_no = ?", ("K-ROLLBACK-001",)).fetchone()
+        self.assertEqual(product["item"], "Old item")
+        self.assertEqual(old_image.read_bytes(), old_bytes)
+        self.assertFalse(catalog_target.exists())
 
     def test_catalog_column_filters_are_exact_multiselect_facets(self) -> None:
         self.add_product(

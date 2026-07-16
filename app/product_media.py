@@ -15,6 +15,8 @@ from .drawings import safe_filename_part
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 IMAGE_SLOT_FIELDS = ("image_path", "image_path_2", "image_path_3", "image_path_4", "image_path_5")
 PRODUCT_IMAGE_THUMB_SIZE = (160, 120)
+PRODUCT_IMAGE_MAX_BYTES = 5 * 1024 * 1024
+PRODUCT_IMAGE_MAX_SIDE = 6000
 
 
 def image_slot_field(slot: int) -> str:
@@ -59,6 +61,9 @@ def validate_product_image_file(file: FileStorage) -> None:
     if suffix not in IMAGE_SUFFIXES:
         raise ValueError("产品图片支持 JPG、PNG、WEBP。")
     try:
+        file.stream.seek(0, 2)
+        size = file.stream.tell()
+        file.stream.seek(0)
         header = file.stream.read(16)
     finally:
         _rewind_file(file)
@@ -66,6 +71,19 @@ def validate_product_image_file(file: FileStorage) -> None:
         raise ValueError("产品图片文件为空。")
     if not _header_matches_image_suffix(header, suffix):
         raise ValueError("文件内容不是支持的图片格式。")
+    if size > PRODUCT_IMAGE_MAX_BYTES:
+        raise ValueError("单张产品图片不能超过 5 MB。")
+    try:
+        with Image.open(file.stream) as opened:
+            if max(opened.size) > PRODUCT_IMAGE_MAX_SIDE:
+                raise ValueError("产品图片任一边不能超过 6000 像素，建议长边不超过 2000 像素。")
+            opened.verify()
+    except (OSError, UnidentifiedImageError):
+        # Keep the existing header-based acceptance contract for legacy uploads.
+        # Embedded Excel pictures are decoded by openpyxl before reaching here.
+        pass
+    finally:
+        _rewind_file(file)
 
 
 def _unique_path(path: Path) -> Path:

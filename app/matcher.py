@@ -17,6 +17,9 @@ CATALOG_HEADER_ALIASES = {
     "SERIES": {"SERIES", "BRAND", "品牌"},
     "ITEM": {"ITEM", "DESCRIPTION", "PRODUCT", "产品名称", "品名"},
     "Models": {"MODELS", "MODEL", "APPLICATION", "车型", "适用车型"},
+    "产品状态": {"产品状态", "PRODUCT STATUS"},
+    "导入单价": {"导入单价", "UNIT PRICE", "PRICE", "含税单价"},
+    "图片": {"图片", "PRODUCT IMAGE", "IMAGE"},
 }
 
 LOOKALIKE_TRANSLATION = str.maketrans(
@@ -143,7 +146,7 @@ def _canonical_header(value: object) -> str:
     return re.sub(r"[^A-Z0-9\u4E00-\u9FFF]+", "", "" if value is None else str(value).upper())
 
 
-def _find_header_row(rows: list[tuple], max_scan: int = 20) -> tuple[int, list[str]]:
+def find_catalog_header_row(rows: list[tuple], max_scan: int = 20) -> tuple[int, list[str]]:
     alias_lookup = {
         _canonical_header(alias): canonical
         for canonical, aliases in CATALOG_HEADER_ALIASES.items()
@@ -172,8 +175,9 @@ def _find_header_row(rows: list[tuple], max_scan: int = 20) -> tuple[int, list[s
 
 
 class ProductCatalog:
-    def __init__(self, rows: list[dict], manual_map: dict[str, str] | None = None):
+    def __init__(self, rows: list[dict], manual_map: dict[str, str] | None = None, headers: list[str] | None = None):
         self.rows = rows
+        self.headers = headers or []
         self.manual_map = manual_map or {}
         self.by_bld: dict[str, dict] = {}
         self.by_oe: dict[str, list[dict]] = {}
@@ -206,7 +210,7 @@ class ProductCatalog:
         try:
             worksheet = workbook.active
             raw_rows = list(worksheet.iter_rows(values_only=True))
-            header_index, headers = _find_header_row(raw_rows)
+            header_index, headers = find_catalog_header_row(raw_rows)
 
             rows: list[dict] = []
             for raw in raw_rows[header_index + 1 :]:
@@ -216,7 +220,7 @@ class ProductCatalog:
                         row[header] = value
                 if compact_text(row.get("BLD NO.")):
                     rows.append(row)
-            return cls(rows, manual_map=manual_map)
+            return cls(rows, manual_map=manual_map, headers=headers)
         finally:
             workbook.close()
 

@@ -261,6 +261,9 @@ class SQLiteProductRepository:
             ).fetchone()
         )
 
+    def export_catalog_source(self, path: Path) -> None:
+        export_products_xlsx(self.connection, path, export_format="bld")
+
     def stats(self) -> ProductStats:
         values = product_stats(self.connection)
         return ProductStats(**values)

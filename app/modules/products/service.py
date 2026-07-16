@@ -3,8 +3,19 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 from threading import Lock
+from uuid import uuid4
 
 from app.matcher import ProductCatalog
+
+from .catalog_import import (
+    CatalogImportFileTransaction,
+    CatalogImportPreview,
+    CatalogImportPreviewChangedError,
+    CatalogImportResult,
+    CatalogImportStorage,
+    build_catalog_import_preview,
+    read_catalog_import,
+)
 
 from .brand_normalization import (
     BrandNormalizationPreview,
@@ -35,10 +46,12 @@ class ProductService:
         unit_of_work_factory: ProductUnitOfWorkFactory,
         bootstrap_port: CatalogBootstrapPort,
         legacy_alias_port: LegacyAliasPort,
+        catalog_import_storage: CatalogImportStorage | None = None,
     ) -> None:
         self.unit_of_work_factory = unit_of_work_factory
         self.bootstrap_port = bootstrap_port
         self.legacy_alias_port = legacy_alias_port
+        self.catalog_import_storage = catalog_import_storage
         self._catalog_lock = Lock()
         self._catalog_version: tuple[object, ...] | None = None
         self._catalog: ProductCatalog | None = None
@@ -154,6 +167,68 @@ class ProductService:
             unit_of_work.commit()
         self.invalidate_catalog()
         return imported
+
+    def preview_catalog_import(self, path: Path) -> CatalogImportPreview:
+        rows = read_catalog_import(path)
+        with self.unit_of_work_factory() as unit_of_work:
+            products = {
+                row.bld_no: product
+                for row in rows
+                if (product := unit_of_work.repository.get_by_bld(row.bld_no)) is not None
+            }
+        return build_catalog_import_preview(rows, products)
+
+    def apply_catalog_import(
+        self,
+        path: Path,
+        *,
+        expected_digest: str,
+        update_bld_nos: set[str],
+        actor: str,
+    ) -> CatalogImportResult:
+        if self.catalog_import_storage is None:
+            raise RuntimeError("产品目录导入存储尚未配置。")
+        preview = self.preview_catalog_import(path)
+        if preview.digest != expected_digest:
+            raise CatalogImportPreviewChangedError()
+        update_candidates = {conflict.row.bld_no for conflict in preview.conflicts}
+        unknown_updates = update_bld_nos - update_candidates
+        if unknown_updates:
+            raise ValueError("导入确认包含无效的冲突条目，请重新预览。")
+        selected_rows = [*preview.new_rows]
+        selected_rows.extend(conflict.row for conflict in preview.conflicts if conflict.row.bld_no in update_bld_nos)
+        existing_bld_nos = {conflict.row.bld_no: conflict.product.bld_no for conflict in preview.conflicts}
+        storage = self.catalog_import_storage
+        transaction = CatalogImportFileTransaction(
+            catalog_path=storage.catalog_path,
+            image_dir=storage.image_dir,
+            thumb_dir=storage.thumb_dir,
+        )
+        source_path = storage.catalog_path.parent / f".catalog-import-{uuid4().hex}.xlsx"
+        try:
+            with self.unit_of_work_factory() as unit_of_work:
+                image_paths = transaction.apply_images(selected_rows)
+                for row in selected_rows:
+                    data = row.values()
+                    data["bld_no"] = existing_bld_nos.get(row.bld_no, row.bld_no)
+                    if row.bld_no in image_paths:
+                        data["image_path"] = image_paths[row.bld_no]
+                    unit_of_work.repository.upsert(data, actor=actor)
+                unit_of_work.repository.export_catalog_source(source_path)
+                transaction.apply_catalog(source_path)
+                unit_of_work.commit()
+        except Exception:
+            transaction.rollback()
+            raise
+        finally:
+            source_path.unlink(missing_ok=True)
+        transaction.finalize()
+        self.invalidate_catalog()
+        return CatalogImportResult(
+            created_count=len(preview.new_rows),
+            updated_count=len(update_bld_nos),
+            kept_count=len(preview.conflicts) - len(update_bld_nos) + len(preview.unchanged_rows),
+        )
 
     def export_catalog(
         self,

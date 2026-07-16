@@ -1,0 +1,18 @@
+{
+  "date": "2026-07-16",
+  "version": "unreleased",
+  "title": "产品目录提供标准导入模板并校验必填资料",
+  "entries": [
+    "产品目录的导入入口新增标准 Excel 模板下载。",
+    "目录导入要求填写 BLD NO.、SERIES、ITEM、OE NO.1、Models、产品状态和导入单价，OE NO.2 与图片为可选项。",
+    "目录导入改为上传预览、确认执行两步；系统展示新增、无变化和每个 BLD NO. 冲突条目的字段差异。",
+    "与现有产品库 BLD NO. 相同的条目默认完整保留现有资料，只有用户逐条勾选后才使用 Excel 更新；Excel 内部重复 BLD NO. 或任一必填项缺失都会阻断导入。",
+    "确认执行会同步导入产品状态、含税单价和图片；发生错误时目录文件、产品资料和图片会一起恢复。",
+    "产品图片支持 JPG、PNG、WEBP，单张不超过 5 MB、任一边不超过 6000 像素，建议长边不超过 2000 像素。"
+  ],
+  "impact": {
+    "data": "compatible-product-fields-updated",
+    "api": "compatible",
+    "operations": "restart-required"
+  }
+}

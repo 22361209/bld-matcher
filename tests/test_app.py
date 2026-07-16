@@ -2472,7 +2472,7 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("按 BLD / 品牌 / 车型搜索", html)
         self.assertIn('<button class="linear-button primary" type="submit">搜索</button>', html)
         self.assertIn('class="embedded-submit" type="submit">上传预览', html)
-        self.assertIn('class="embedded-submit" type="submit">确认导入', html)
+        self.assertIn('class="embedded-submit" type="submit">上传并预览', html)
         self.assertIn('id="product-modal"', html)
         self.assertIn('id="product-edit-modal"', html)
         self.assertIn("data-draggable-modal-panel", html)
@@ -3467,6 +3467,69 @@ class WebAppTest(unittest.TestCase):
             response.close()
         finally:
             self.web.app.config["MAX_CONTENT_LENGTH"] = original_limit
+
+    def test_catalog_import_template_and_conflict_preview_require_explicit_update_choice(self):
+        from openpyxl import Workbook
+        from app.modules.products.persistence import upsert_product
+
+        self.login()
+        response = self.client.get("/catalog/template")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        self.assertIn("filename*=UTF-8''", response.headers["Content-Disposition"])
+        response.close()
+
+        with self.web.connect(self.web.DB_PATH) as connection:
+            upsert_product(
+                connection,
+                {
+                    "bld_no": "WEB-CATALOG-CONFLICT",
+                    "series": "TOYOTA",
+                    "item": "Old item",
+                    "oe_no_1": "OLD-OE",
+                    "models": "CAMRY",
+                    "price_cny": "10",
+                    "product_status": "1 个球头",
+                },
+                actor="test",
+            )
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["BLD NO.", "SERIES", "ITEM", "OE NO.1", "Models", "产品状态", "导入单价"])
+        sheet.append(["WEB-CATALOG-CONFLICT", "TOYOTA", "New item", "NEW-OE", "CAMRY", "2 个球头", 88])
+        stream = io.BytesIO()
+        workbook.save(stream)
+        workbook.close()
+        stream.seek(0)
+
+        preview_response = self.client.post(
+            "/catalog",
+            data={"next": "products", "catalog": (stream, "catalog.xlsx")},
+            content_type="multipart/form-data",
+        )
+        html = preview_response.get_data(as_text=True)
+        self.assertEqual(preview_response.status_code, 200)
+        self.assertIn("确认产品目录导入", html)
+        self.assertIn("使用 Excel 更新", html)
+        self.assertIn('name="update_bld" value="WEB-CATALOG-CONFLICT"', html)
+        preview_id = re.search(r'name="preview_id" value="([^"]+)"', html).group(1)
+        digest = re.search(r'name="snapshot_digest" value="([^"]+)"', html).group(1)
+
+        kept = self.client.post(
+            "/catalog/confirm",
+            data={"preview_id": preview_id, "snapshot_digest": digest},
+            follow_redirects=False,
+        )
+        self.assertEqual(kept.status_code, 302)
+        with self.web.connect(self.web.DB_PATH) as connection:
+            product = connection.execute(
+                "SELECT item FROM products WHERE bld_no = ?",
+                ("WEB-CATALOG-CONFLICT",),
+            ).fetchone()
+            connection.execute("DELETE FROM products WHERE bld_no = ?", ("WEB-CATALOG-CONFLICT",))
+            connection.commit()
+        self.assertEqual(product["item"], "Old item")
+        (self.root / "data" / "catalog.xlsx").unlink(missing_ok=True)
 
     def test_async_shipment_oversized_upload_returns_json(self):
         self.login()

@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% set active_page = "products" %}
+{% block page_title %}确认产品目录导入{% endblock %}
+{% block page_id %}products.import_preview{% endblock %}
+{% block page_type %}import-preview{% endblock %}
+{% block page_class %}shell wide app-surface{% endblock %}
+
+{% block page_content %}
+  <header class="workspace-header">
+    <div>
+      <h1>确认产品目录导入</h1>
+      <p>新 BLD NO. 会新增；每个冲突条目默认保留现有资料，勾选后才使用 Excel 更新。</p>
+    </div>
+    <div class="command-actions">
+      <a class="linear-button subtle" href="{{ url_for('products') }}">取消并返回目录</a>
+    </div>
+  </header>
+
+  <section class="metric-strip" aria-label="目录导入预览统计">
+    <div><span>新增</span><strong>{{ preview.new_count }}</strong></div>
+    <div><span>待选择更新</span><strong>{{ preview.conflict_count }}</strong></div>
+    <div><span>无变化</span><strong>{{ preview.unchanged_count }}</strong></div>
+  </section>
+
+  <form action="{{ url_for('confirm_catalog_import') }}" method="post" class="workbench-form">
+    {{ csrf_field() }}
+    <input type="hidden" name="preview_id" value="{{ preview_id }}">
+    <input type="hidden" name="snapshot_digest" value="{{ preview.digest }}">
+
+    <section class="workbench-form-section" aria-labelledby="catalog-import-new">
+      <h2 id="catalog-import-new">新增产品</h2>
+      <p class="note">以下产品确认后会直接新增。</p>
+      {% if preview.new_rows %}
+        <p>{% for row in preview.new_rows %}<code>{{ row.bld_no }}</code>{% if not loop.last %}、{% endif %}{% endfor %}</p>
+      {% else %}
+        <p class="note">没有新增产品。</p>
+      {% endif %}
+    </section>
+
+    <section class="workbench-form-section" aria-labelledby="catalog-import-conflicts">
+      <h2 id="catalog-import-conflicts">BLD NO. 冲突处理</h2>
+      <p class="note">逐条选择是否使用 Excel 更新。未勾选的产品会完整保留现有资料，不做部分覆盖。</p>
+      <div class="workspace-table-wrap">
+        <table class="workspace-table">
+          <thead>
+            <tr><th scope="col">处理</th><th scope="col">BLD NO.</th><th scope="col">变化字段</th></tr>
+          </thead>
+          <tbody>
+            {% for conflict in preview.conflicts %}
+              <tr>
+                <td>
+                  <label>
+                    <input type="checkbox" name="update_bld" value="{{ conflict.bld_no }}">
+                    使用 Excel 更新
+                  </label>
+                </td>
+                <td><code>{{ conflict.bld_no }}</code><br><small>Excel 第 {{ conflict.row_number }} 行</small></td>
+                <td>
+                  <ul>
+                    {% for field in conflict.fields %}
+                      <li><strong>{{ field.label }}</strong>：{{ field.before or "（空）" }} → {{ field.after }}</li>
+                    {% endfor %}
+                  </ul>
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="3">没有需要选择的冲突条目。</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="workbench-form-section">
+      <h2>无变化</h2>
+      <p class="note">{{ preview.unchanged_count }} 条与现有资料完全一致，确认时不重复写入。</p>
+    </section>
+
+    <div class="form-actions">
+      <a class="linear-button subtle" href="{{ url_for('products') }}">取消</a>
+      <button class="linear-button primary" type="submit">确认按所选规则导入</button>
+    </div>
+  </form>
+{% endblock %}

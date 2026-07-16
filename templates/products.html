@@ -158,16 +158,18 @@
               <form action="{{ url_for('upload_catalog') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form toolbar-upload-form">
                 {{ csrf_field() }}
                 <input type="hidden" name="next" value="products">
+                <a class="linear-button subtle" href="{{ url_for('download_catalog_template') }}">下载导入模板</a>
                 <label class="file-picker">
                   <span>产品目录 Excel</span>
                   <input class="file-picker-input" type="file" name="catalog" accept=".xlsx" required>
                   <span class="file-picker-control">
                     <span class="file-picker-button">选择文件</span>
                     <span class="file-picker-name">未选择任何文件</span>
-                    <button class="embedded-submit" type="submit">确认导入</button>
+                    <button class="embedded-submit" type="submit">上传并预览</button>
                   </span>
                 </label>
-                <span class="note">按 BLD 号合并更新已有资料并加入新增产品。</span>
+                <span class="note">必填：BLD NO.、SERIES、ITEM、OE NO.1、Models、产品状态、导入单价；OE NO.2 和图片可选。</span>
+                <span class="note">上传后先逐条确认 BLD NO. 冲突；任何校验错误都不会写入。</span>
               </form>
             </details>
             {% if brand_normalization_preview and brand_normalization_preview.changed_count %}

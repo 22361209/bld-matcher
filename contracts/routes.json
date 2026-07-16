@@ -162,6 +162,20 @@
       "rule": "/catalog"
     },
     {
+      "endpoint": "confirm_catalog_import",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/catalog/confirm"
+    },
+    {
+      "endpoint": "download_catalog_template",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/catalog/template"
+    },
+    {
       "endpoint": "contracts",
       "methods": [
         "GET"
