@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import sqlite3
 import json
+import sqlite3
 from collections.abc import Callable
 from datetime import datetime, timedelta
 
 from .platform.api_principal import LEGACY_COMPATIBILITY_SCOPES
+from .platform.sync_identity import MATERIAL_IDENTITY_FIELDS, QUOTE_MATCH_FIELDS, material_key, quote_match_key, stable_sync_id
 
 
 Migration = tuple[str, Callable[[sqlite3.Connection], None]]
@@ -440,6 +441,42 @@ def _flatten_tube_borrowing(conn: sqlite3.Connection) -> None:
             conn.execute("UPDATE tube_items SET borrowed_from = ? WHERE code = ?", (current, code))
 
 
+def _assign_cross_device_sync_keys(conn: sqlite3.Connection, *, reset: bool) -> None:
+    for table in ("quote_records", "material_items"):
+        if _columns(conn, table) and "sync_id" not in _columns(conn, table):
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN sync_id TEXT DEFAULT ''")
+    for table, identity_fields, key_factory, namespace in (
+        ("quote_records", QUOTE_MATCH_FIELDS, quote_match_key, "quote"),
+        ("material_items", MATERIAL_IDENTITY_FIELDS, material_key, "material"),
+    ):
+        table_columns = _columns(conn, table)
+        if not table_columns:
+            continue
+        if reset:
+            conn.execute(f"UPDATE {table} SET sync_id = 'rekey-' || id")
+        available_identity_fields = tuple(column for column in identity_fields if column in table_columns)
+        condition = "ORDER BY id" if reset else "WHERE COALESCE(sync_id, '') = '' ORDER BY id"
+        rows = conn.execute(
+            f"SELECT id, {', '.join(available_identity_fields)} FROM {table} {condition}"
+        ).fetchall()
+        ordinals: dict[str, int] = {}
+        for row in rows:
+            key = key_factory(dict(row))
+            ordinal = ordinals.get(key, 0) + 1
+            ordinals[key] = ordinal
+            sync_id = stable_sync_id(namespace, key, ordinal)
+            conn.execute(f"UPDATE {table} SET sync_id = ? WHERE id = ?", (sync_id, row["id"]))
+        conn.execute(f"CREATE UNIQUE INDEX IF NOT EXISTS idx_{table}_sync_id ON {table}(sync_id)")
+
+
+def _add_cross_device_sync_keys(conn: sqlite3.Connection) -> None:
+    _assign_cross_device_sync_keys(conn, reset=False)
+
+
+def _rekey_cross_device_sync_keys(conn: sqlite3.Connection) -> None:
+    _assign_cross_device_sync_keys(conn, reset=True)
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -462,6 +499,8 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("019_tube_dimensions", _add_tube_dimensions),
     ("020_tube_manufacturing_fields", _add_tube_manufacturing_fields),
     ("021_flatten_tube_borrowing", _flatten_tube_borrowing),
+    ("022_cross_device_sync_keys", _add_cross_device_sync_keys),
+    ("023_rekey_cross_device_sync_keys", _rekey_cross_device_sync_keys),
 )
 
 

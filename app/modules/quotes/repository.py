@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import uuid
 from collections.abc import Callable
 from pathlib import Path
 from types import TracebackType
@@ -72,16 +73,18 @@ class SQLiteQuoteRepository:
         cursor = self.connection.execute(
             """
             INSERT INTO quote_records
-              (customer_name, bld_no, customer_product_code, product_model, price, tax_price, net_price,
+              (sync_id, customer_name, bld_no, customer_product_code, product_model, price, tax_price, net_price,
                currency, moq, quote_date, quoted_by, source_type, source_text, attachment_path, remark,
                version, created_at, updated_at)
             VALUES
-              (:customer_name, :bld_no, :customer_product_code, :product_model, :price, :tax_price, :net_price,
+              (:sync_id, :customer_name, :bld_no, :customer_product_code, :product_model, :price, :tax_price, :net_price,
                :currency, :moq, :quote_date, :quoted_by, :source_type, :source_text, :attachment_path, :remark,
                1, :created_at, :updated_at)
             """,
-            values,
+            {**values, "sync_id": uuid.uuid4().hex},
         )
+        if cursor.lastrowid is None:
+            raise RuntimeError("Created quote did not return an ID.")
         record = self.get(int(cursor.lastrowid))
         if record is None:
             raise RuntimeError("Created quote could not be reloaded.")
@@ -97,7 +100,8 @@ class SQLiteQuoteRepository:
             sql += " WHERE " + " AND ".join(clauses)
         sql += " ORDER BY quote_date DESC, id DESC LIMIT ? OFFSET ?"
         params.extend([max(1, min(500, limit)), max(0, offset)])
-        return [_record(row) for row in self.connection.execute(sql, params).fetchall()]
+        records = [_record(row) for row in self.connection.execute(sql, params).fetchall()]
+        return [record for record in records if record is not None]
 
     def count(self, filters: QuoteFilters) -> int:
         sql = "SELECT COUNT(*) FROM quote_records"
