@@ -2189,6 +2189,89 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(len(stored["sha256"]), 64)
         self.assertEqual(audit["actor"], "WorkBuddy Inquiry V1")
 
+    def test_product_price_v1_requires_write_scope_and_prevents_stale_updates(self):
+        from app.modules.products.persistence import upsert_product
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "V1-PRICE-001",
+                    "series": "CONTRACT",
+                    "item": "Price API Arm",
+                    "oe_no_1": "V1-PRICE-OE-001",
+                    "models": "Price API Model",
+                    "price_cny": "110",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        read_token = self.create_internal_api_token(
+            scopes=["products:read"],
+            name="Product Price Read Only",
+        )
+        write_token = self.create_internal_api_token(
+            scopes=["products:read", "products:write"],
+            name="Product Price Writer",
+        )
+        read_headers = {"Authorization": f"Bearer {read_token}"}
+        write_headers = {
+            "Authorization": f"Bearer {write_token}",
+            "Idempotency-Key": "product-price-v1-001",
+        }
+        search = self.client.get(
+            "/api/v1/products/search",
+            query_string={"bld": "V1-PRICE-001", "limit": 10},
+            headers=read_headers,
+        )
+        self.assertEqual(search.status_code, 200)
+        product = search.get_json()["data"]["products"][0]
+        body = {"price_cny": 128.5, "expected_updated_at": product["updated_at"]}
+
+        denied = self.client.post(
+            f"/api/v1/products/{product['id']}/price",
+            json=body,
+            headers={**read_headers, "Idempotency-Key": "product-price-v1-denied"},
+        )
+        self.assertEqual(denied.status_code, 403)
+        self.assertEqual(denied.get_json()["error"]["code"], "auth.insufficient_scope")
+
+        updated = self.client.post(
+            f"/api/v1/products/{product['id']}/price",
+            json=body,
+            headers=write_headers,
+        )
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(updated.get_json()["data"]["product"]["price_cny"], 128.5)
+
+        replayed = self.client.post(
+            f"/api/v1/products/{product['id']}/price",
+            json=body,
+            headers=write_headers,
+        )
+        self.assertEqual(replayed.status_code, 200)
+        self.assertEqual(replayed.headers["Idempotency-Replayed"], "true")
+
+        stale = self.client.post(
+            f"/api/v1/products/{product['id']}/price",
+            json={"price_cny": 130, "expected_updated_at": "2000-01-01 00:00:00"},
+            headers={
+                "Authorization": f"Bearer {write_token}",
+                "Idempotency-Key": "product-price-v1-stale",
+            },
+        )
+        self.assertEqual(stale.status_code, 412)
+        self.assertEqual(stale.get_json()["error"]["code"], "product.version_conflict")
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            audit = conn.execute(
+                "SELECT actor FROM audit_logs WHERE action = ? ORDER BY id DESC LIMIT 1",
+                ("API 更新产品单价",),
+            ).fetchone()
+        self.assertIsNotNone(audit)
+        self.assertEqual(audit["actor"], "Product Price Writer")
+
     def test_quote_v1_contract_idempotency_and_optimistic_concurrency(self):
         token = self.create_internal_api_token(
             scopes=["api:read", "quotes:read", "quotes:write"],
@@ -2471,8 +2554,9 @@ class WebAppTest(unittest.TestCase):
         self.assertIn('action="/products#products-results"', html)
         self.assertIn("按 BLD / 品牌 / 车型搜索", html)
         self.assertIn('<button class="linear-button primary" type="submit">搜索</button>', html)
-        self.assertIn('class="embedded-submit" type="submit">上传预览', html)
-        self.assertIn('class="embedded-submit" type="submit">上传并预览', html)
+        self.assertIn('class="toolbar-popover-form catalog-import-actions"', html)
+        self.assertIn('href="/catalog/template">下载模板', html)
+        self.assertIn('data-catalog-upload-input', html)
         self.assertIn('id="product-modal"', html)
         self.assertIn('id="product-edit-modal"', html)
         self.assertIn("data-draggable-modal-panel", html)
@@ -3469,16 +3553,10 @@ class WebAppTest(unittest.TestCase):
             self.web.app.config["MAX_CONTENT_LENGTH"] = original_limit
 
     def test_catalog_import_template_and_conflict_preview_require_explicit_update_choice(self):
-        from openpyxl import Workbook
+        from openpyxl import Workbook, load_workbook
         from app.modules.products.persistence import upsert_product
 
         self.login()
-        response = self.client.get("/catalog/template")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.mimetype, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        self.assertIn("filename*=UTF-8''", response.headers["Content-Disposition"])
-        response.close()
-
         with self.web.connect(self.web.DB_PATH) as connection:
             upsert_product(
                 connection,
@@ -3493,6 +3571,33 @@ class WebAppTest(unittest.TestCase):
                 },
                 actor="test",
             )
+            upsert_product(
+                connection,
+                {
+                    "bld_no": "WEB-CATALOG-ITEM-CHOICE",
+                    "series": "TOYOTA",
+                    "item": "New item",
+                    "oe_no_1": "NEW-ITEM-OE",
+                    "models": "CAMRY",
+                    "price_cny": "10",
+                    "product_status": "1 个球头",
+                },
+                actor="test",
+            )
+        response = self.client.get("/catalog/template")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        self.assertIn("filename*=UTF-8''", response.headers["Content-Disposition"])
+        template = load_workbook(io.BytesIO(response.data))
+        try:
+            sheet = template["产品目录"]
+            self.assertEqual(sheet.cell(1, 2).value, "SERIES")
+            self.assertEqual(sheet.cell(1, 7).value, "SERIES 6")
+            self.assertEqual(sheet.cell(1, 8).value, "ITEM")
+            self.assertEqual(len(sheet.data_validations.dataValidation), 7)
+        finally:
+            template.close()
+        response.close()
         workbook = Workbook()
         sheet = workbook.active
         sheet.append(["BLD NO.", "SERIES", "ITEM", "OE NO.1", "Models", "产品状态", "导入单价"])
@@ -3527,6 +3632,7 @@ class WebAppTest(unittest.TestCase):
                 ("WEB-CATALOG-CONFLICT",),
             ).fetchone()
             connection.execute("DELETE FROM products WHERE bld_no = ?", ("WEB-CATALOG-CONFLICT",))
+            connection.execute("DELETE FROM products WHERE bld_no = ?", ("WEB-CATALOG-ITEM-CHOICE",))
             connection.commit()
         self.assertEqual(product["item"], "Old item")
         (self.root / "data" / "catalog.xlsx").unlink(missing_ok=True)
@@ -5165,17 +5271,10 @@ with connect(database_path) as conn:
         self.assertEqual(generated_sheet.cell(2, 4).value, 55)
         generated.close()
 
-    def test_uploaded_files_are_scoped_to_user(self):
+    def test_price_import_web_routes_are_removed(self):
         self.login()
-        response = self.client.post(
-            "/prices/import/preview",
-            data={"price_file": (io.BytesIO(b"not a real workbook"), "same-name.xlsx")},
-            content_type="multipart/form-data",
-            follow_redirects=False,
-        )
-        self.assertEqual(response.status_code, 302)
-        uploads = list((self.root / "uploads" / "u1-007").glob("price-*-007-same-name.xlsx"))
-        self.assertEqual(len(uploads), 1)
+        self.assertEqual(self.client.get("/prices/import").status_code, 404)
+        self.assertEqual(self.client.post("/prices/import/preview").status_code, 404)
 
     def test_import_lock_blocks_parallel_imports(self):
         from app.locks import ImportLockError, import_lock

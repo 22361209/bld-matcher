@@ -244,6 +244,23 @@
   pointer-events: none;
 }
 
+.app-surface .toolbar-popover-form.catalog-import-actions {
+  display: flex;
+  align-items: center;
+  width: auto;
+  padding: 8px;
+}
+
+.catalog-import-upload-label {
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .app-surface .catalog-import-menu:not([open]):hover > .catalog-import-actions {
+    display: flex;
+  }
+}
+
 @media (max-width: 760px) {
   .record-form,
   .product-media-edit,

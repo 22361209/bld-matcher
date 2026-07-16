@@ -21,6 +21,7 @@ from .domain import ProductRecord
 
 
 REQUIRED_FIELDS = ("BLD NO.", "SERIES", "ITEM", "OE NO.1", "Models", "产品状态", "导入单价")
+SERIES_SELECTION_HEADERS = ("SERIES", "SERIES 2", "SERIES 3", "SERIES 4", "SERIES 5", "SERIES 6")
 FIELD_LABELS = {
     "series": "SERIES",
     "item": "ITEM",
@@ -42,6 +43,20 @@ class CatalogImage:
     row_number: int
     data: bytes
     suffix: str
+
+
+@dataclass(frozen=True, slots=True)
+class CatalogImportChoices:
+    series: tuple[str, ...]
+    items: tuple[str, ...]
+
+    @property
+    def series_keys(self) -> frozenset[str]:
+        return frozenset(value.casefold() for value in self.series)
+
+    @property
+    def item_keys(self) -> frozenset[str]:
+        return frozenset(value.casefold() for value in self.items)
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,7 +186,24 @@ def _image_map(sheet, headers: list[str], header_index: int) -> dict[int, Catalo
     return images
 
 
-def read_catalog_import(path: Path) -> tuple[CatalogImportRow, ...]:
+def _validate_controlled_values(
+    *,
+    row_number: int,
+    series_values: list[str],
+    item: str,
+    choices: CatalogImportChoices,
+) -> list[str]:
+    errors: list[str] = []
+    if choices.series_keys:
+        unknown_series = [value for value in series_values if value.casefold() not in choices.series_keys]
+        if unknown_series:
+            errors.append(f"第 {row_number} 行 SERIES 只能选择模板下拉选项：{'、'.join(unknown_series)}")
+    if choices.item_keys and item.casefold() not in choices.item_keys:
+        errors.append(f"第 {row_number} 行 ITEM 只能选择模板下拉选项：{item}")
+    return errors
+
+
+def read_catalog_import(path: Path, *, choices: CatalogImportChoices) -> tuple[CatalogImportRow, ...]:
     workbook = load_workbook(path, data_only=True)
     try:
         sheet = workbook.active
@@ -194,6 +226,21 @@ def read_catalog_import(path: Path) -> tuple[CatalogImportRow, ...]:
             if missing:
                 errors.append(f"第 {row_number} 行缺少：{'、'.join(missing)}")
                 continue
+            series_values = [
+                compact_text(source.get(header))
+                for header in SERIES_SELECTION_HEADERS
+                if compact_text(source.get(header))
+            ]
+            item = compact_text(source["ITEM"])
+            row_errors = _validate_controlled_values(
+                row_number=row_number,
+                series_values=series_values,
+                item=item,
+                choices=choices,
+            )
+            if row_errors:
+                errors.extend(row_errors)
+                continue
             bld_no = compact_text(source["BLD NO."])
             key = bld_no.casefold()
             if key in seen:
@@ -209,8 +256,8 @@ def read_catalog_import(path: Path) -> tuple[CatalogImportRow, ...]:
                 CatalogImportRow(
                     row_number=row_number,
                     bld_no=bld_no,
-                    series=compact_text(source["SERIES"]),
-                    item=compact_text(source["ITEM"]),
+                    series="\n".join(dict.fromkeys(series_values)),
+                    item=item,
                     oe_no_1=compact_text(source["OE NO.1"]),
                     oe_no_2=compact_text(source.get("OE NO.2")),
                     models=compact_text(source["Models"]),

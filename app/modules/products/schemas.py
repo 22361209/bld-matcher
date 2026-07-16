@@ -44,3 +44,19 @@ class ProductSearchEnvelope(StrictApiModel):
     request_id: str
     data: ProductSearchData
     warnings: list[str] = Field(default_factory=list)
+
+
+class ProductPriceUpdateRequest(StrictApiModel):
+    price_cny: float = Field(ge=0, le=10_000_000)
+    expected_updated_at: str = Field(min_length=1, max_length=64)
+
+
+class ProductPriceUpdateData(StrictApiModel):
+    product: ProductResponse
+
+
+class ProductPriceUpdateEnvelope(StrictApiModel):
+    api_version: str = "1"
+    request_id: str
+    data: ProductPriceUpdateData
+    warnings: list[str] = Field(default_factory=list)

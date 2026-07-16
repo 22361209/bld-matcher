@@ -19,7 +19,7 @@
   "legacy_daemon_thread_counts": {},
   "legacy_file_line_counts": {
     "app/routes/inquiry.py": 11,
-    "app/routes/products.py": 13,
+    "app/routes/products.py": 11,
     "static/app.js": 206,
     "static/components/workspace.css": 984,
     "static/styles.css": 1238

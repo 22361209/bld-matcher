@@ -23,6 +23,7 @@ WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 APPROVED_API_SCOPES = {
     "api:read",
     "products:read",
+    "products:write",
     "inquiries:run",
     "artifacts:read",
     "quotes:read",

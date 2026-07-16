@@ -37,7 +37,14 @@ class ProductRepository(Protocol):
 
     def delete(self, product_id: int, *, actor: str) -> ProductRecord | None: ...
 
-    def update_prices(self, rows: list[dict], *, actor: str) -> tuple[int, int]: ...
+    def update_price(
+        self,
+        product_id: int,
+        *,
+        price_cny: float,
+        expected_updated_at: str,
+        actor: str,
+    ) -> ProductRecord | None: ...
 
     def import_catalog(self, path: Path, *, actor: str) -> int: ...
 
@@ -49,8 +56,6 @@ class ProductRepository(Protocol):
         export_format: str,
         actor: str,
     ) -> int: ...
-
-    def preview_prices(self, path: Path) -> dict: ...
 
     def preview_brand_normalization(self) -> list[BrandNormalizationChange]: ...
 

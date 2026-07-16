@@ -1,0 +1,15 @@
+{
+  "date": "2026-07-16",
+  "version": "unreleased",
+  "title": "产品目录导入使用受控 SERIES 与 ITEM 选项",
+  "entries": [
+    "导入目录改为悬停后显示“下载模板”和“上传文件”两个入口；选择文件后直接进入预览，不再与模板下载挤在同一表单内。",
+    "下载模板会根据当前产品库生成受控下拉选项。ITEM 只能单选；SERIES 可通过 SERIES 至 SERIES 6 六个选择位选择多个品牌，导入时合并保存。",
+    "服务端会拒绝不在当前产品库可选项中的 SERIES 和 ITEM，避免绕过 Excel 下拉造成分类无序。"
+  ],
+  "impact": {
+    "data": "validated-product-categories",
+    "api": "compatible",
+    "operations": "restart-required"
+  }
+}

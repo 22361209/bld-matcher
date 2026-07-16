@@ -134,42 +134,17 @@
             <button class="linear-button primary" type="button" data-open-product-modal>新增产品</button>
             <a class="linear-button subtle" href="{{ url_for('batch_drawings') }}">批量上传图纸</a>
           {% endif %}
-          {% if can("edit_products") %}
-            <details class="toolbar-popover linear-popover">
-              <summary>维护单价</summary>
-              <form action="{{ url_for('price_import_preview') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form toolbar-upload-form">
-                {{ csrf_field() }}
-                <label class="file-picker">
-                  <span>单价 Excel</span>
-                  <input class="file-picker-input" type="file" name="price_file" accept=".xls,.xlsx" required>
-                  <span class="file-picker-control">
-                    <span class="file-picker-button">选择文件</span>
-                    <span class="file-picker-name">未选择任何文件</span>
-                    <button class="embedded-submit" type="submit">上传预览</button>
-                  </span>
-                </label>
-                <span class="note">表头示例：BLD NO. / Unit Price。</span>
-              </form>
-            </details>
-          {% endif %}
           {% if can("import_catalog") %}
-            <details class="toolbar-popover linear-popover">
+            <details class="toolbar-popover linear-popover catalog-import-menu">
               <summary>导入目录</summary>
-              <form action="{{ url_for('upload_catalog') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form toolbar-upload-form">
+              <form action="{{ url_for('upload_catalog') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form catalog-import-actions">
                 {{ csrf_field() }}
                 <input type="hidden" name="next" value="products">
-                <a class="linear-button subtle" href="{{ url_for('download_catalog_template') }}">下载导入模板</a>
-                <label class="file-picker">
-                  <span>产品目录 Excel</span>
-                  <input class="file-picker-input" type="file" name="catalog" accept=".xlsx" required>
-                  <span class="file-picker-control">
-                    <span class="file-picker-button">选择文件</span>
-                    <span class="file-picker-name">未选择任何文件</span>
-                    <button class="embedded-submit" type="submit">上传并预览</button>
-                  </span>
+                <a class="linear-button subtle" href="{{ url_for('download_catalog_template') }}">下载模板</a>
+                <label class="linear-button primary catalog-import-upload-label">
+                  <input class="products-visually-hidden" type="file" name="catalog" accept=".xlsx" required data-catalog-upload-input>
+                  上传文件
                 </label>
-                <span class="note">必填：BLD NO.、SERIES、ITEM、OE NO.1、Models、产品状态、导入单价；OE NO.2 和图片可选。</span>
-                <span class="note">上传后先逐条确认 BLD NO. 冲突；任何校验错误都不会写入。</span>
               </form>
             </details>
             {% if brand_normalization_preview and brand_normalization_preview.changed_count %}

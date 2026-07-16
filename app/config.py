@@ -46,7 +46,6 @@ MANUAL_MAP_PATH = DATA_DIR / "manual_map.json"
 DB_PATH = DATA_DIR / "products.sqlite3"
 MATERIAL_DATA_PATH = DATA_DIR / "stamping_materials.xlsx"
 MATERIAL_TEMPLATE_PATH = DATA_DIR / "production_plan_template.xlsx"
-CATALOG_IMPORT_TEMPLATE_PATH = BASE_DIR / "static" / "catalog-import-template.xlsx"
 
 DEFAULT_SECRET_KEY = "local-product-matcher"
 SECRET_KEY = os.environ.get("SECRET_KEY", DEFAULT_SECRET_KEY)

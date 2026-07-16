@@ -104,7 +104,7 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 
 - 新应用使用 `/api/v1`；`GET /api/v1` 返回平台能力，`GET /api/v1/openapi.json` 返回 OpenAPI 3.1 合同。
 - API v1 使用强类型 Principal、最小权限 Scope、Pydantic Schema、稳定错误码、请求 ID 和持久幂等记录；写操作由服务端 Key 身份审计。
-- `/api/v1/products/search` 提供稳定产品查询；`/api/v1/inquiries/analyze` 与 `/export` 和网页、旧内部接口共用 InquiryService。
+- `/api/v1/products/search` 提供稳定产品查询；`POST /api/v1/products/{product_id}/price` 以产品版本时间戳和幂等键安全更新含税单价，供 AI Agent 等机器调用；`/api/v1/inquiries/analyze` 与 `/export` 和网页、旧内部接口共用 InquiryService。
 - `/api/v1/jobs/{id}`、`/result` 与 `/cancel` 提供持久任务状态、结果和幂等取消；任务绑定 API Principal，不返回内部请求路径。
 - v1 导出返回限时 artifact ID；下载绑定创建它的 API Principal，响应不包含服务器绝对路径。OpenAPI 提交快照由统一验收阻断漂移。
 - API Key 可设置 Scopes 和到期日期；历史 Key 保留兼容权限，新 Key 默认只有读取和询价权限，写权限需要管理员明确选择；管理页按默认 90 天周期提示轮换，但不自动停用。
@@ -122,7 +122,7 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 
 产品目录：
 
-- 管理员可在“导入目录”中下载标准 Excel 模板；必填列为 `BLD NO.`、`SERIES`、`ITEM`、`OE NO.1`、`Models`、`产品状态`、`导入单价`，`OE NO.2` 和`图片`可选。上传后先预览新增、无变化和逐条 BLD NO. 冲突；冲突默认完整保留现有资料，只有明确勾选后才使用 Excel 更新。Excel 内部重复 BLD NO. 或任一必填项缺失都会阻断导入。确认失败时目录文件、产品资料和图片会一起恢复。图片支持 JPG、PNG、WEBP，单张不超过 5 MB、任一边不超过 6000 像素，建议长边不超过 2000 像素。
+- 管理员将鼠标悬停在“导入目录”即可选择“下载模板”或“上传文件”。模板按当前产品库生成；必填列为 `BLD NO.`、`SERIES`、`ITEM`、`OE NO.1`、`Models`、`产品状态`、`导入单价`，`OE NO.2` 和`图片`可选。`SERIES` 通过 `SERIES` 至 `SERIES 6` 的多个下拉选择位实现多选，导入时合并为多品牌；`ITEM` 为单选下拉。导入会拒绝下拉选项之外的 SERIES 或 ITEM。上传后先预览新增、无变化和逐条 BLD NO. 冲突；冲突默认完整保留现有资料，只有明确勾选后才使用 Excel 更新。Excel 内部重复 BLD NO. 或任一必填项缺失都会阻断导入。确认失败时目录文件、产品资料和图片会一起恢复。图片支持 JPG、PNG、WEBP，单张不超过 5 MB、任一边不超过 6000 像素，建议长边不超过 2000 像素。
 - 主搜索框同时按 BLD 号、品牌、车型搜索；OE 号有独立标准化搜索框。
 - 产品目录每页 50 条，避免大量产品和图片导致滚动卡顿。
 - 除固定在最右侧的操作列外，业务列可从列头文字区域拖动换序；顺序按当前浏览器登录用户保存，并可恢复默认。
@@ -193,7 +193,7 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 
 权限：
 
-- 管理员可管理用户、日志、导入目录、导出目录、维护单价和编辑产品。
+- 管理员可管理用户、日志、导入目录、导出目录和编辑产品；单价维护仅通过受控 API 提供给机器调用。
 - 合同管理、报价记录和目录导出仅管理员可见可用。
 - 普通用户不能调用只开放给管理员的后端地址；权限由服务端装饰器拦截。
 
@@ -247,7 +247,7 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 - `app/routes/inquiry.py`：询价 Web 适配器注册入口
 - `app/modules/inquiry/api.py`：OpenClaw 询价兼容 API 与 v1 询价适配器
 - `app/modules/quotes/`：报价 Domain、Service、Repository、Web、API v1 与旧 API 兼容适配器
-- `app/modules/products/`：产品 Domain、Repository、Service、目录/价格/记录/媒体 Web 适配器、产品搜索 API 和安全数据包同步
+- `app/modules/products/`：产品 Domain、Repository、Service、目录/记录/媒体 Web 适配器、产品搜索/单价更新 API 和安全数据包同步
 - `app/modules/inquiry/`：询价 Service、按职责拆分的 Excel 引擎、匹配/下载/映射 Web 适配器、旧内部 API 与 v1 适配器
 - `app/platform/artifacts.py`：Principal 所有权、校验值和保留期 artifact 存储
 - `app/routes/products.py`：产品 Web 适配器注册入口

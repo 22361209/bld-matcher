@@ -9,10 +9,10 @@ from uuid import UUID, uuid4
 
 from flask import flash, redirect, render_template, request, send_file, url_for
 
-from app.config import CATALOG_IMPORT_TEMPLATE_PATH
 from app.helpers import unique_prefixed_path, user_file_label, user_output_dir, user_upload_dir
 from app.locks import ImportLockError, import_lock
 from app.modules.products.catalog_import import CatalogImportPreviewChangedError
+from app.modules.products.catalog_template import build_catalog_import_template
 from app.modules.products.domain import (
     ProductFilters,
     ProductFilterValidationError,
@@ -117,10 +117,15 @@ def register(app) -> None:
     @app.get("/catalog/template")
     @permission_required("import_catalog")
     def download_catalog_template():
+        try:
+            template = build_catalog_import_template(get_product_service().catalog_import_choices())
+        except ValueError as exc:
+            return str(exc), 409, {"Content-Type": "text/plain; charset=utf-8"}
         return send_file(
-            CATALOG_IMPORT_TEMPLATE_PATH,
+            template,
             as_attachment=True,
             download_name="产品目录导入模板.xlsx",
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
     @app.post("/catalog")

@@ -30,6 +30,10 @@ if (document.body.dataset.page === "products.list") {
       popover.open = false;
     });
   });
+  const catalogUploadInput = document.querySelector("[data-catalog-upload-input]");
+  catalogUploadInput?.addEventListener("change", () => {
+    if (catalogUploadInput.files?.length) catalogUploadInput.form?.requestSubmit();
+  });
 
   const table = document.querySelector("#products-table");
   const stickyCommand = document.querySelector(".products-sticky-command");

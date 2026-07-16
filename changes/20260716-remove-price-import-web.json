@@ -1,0 +1,15 @@
+{
+  "date": "2026-07-16",
+  "version": "unreleased",
+  "title": "移除网页端维护单价模块，保留受控 API 更新",
+  "entries": [
+    "产品目录页不再显示“维护单价”按钮，原单价 Excel 上传、预览和确认路由已移除。",
+    "机器调用可通过 POST /api/v1/products/{product_id}/price 更新含税单价；调用需 products:write、Idempotency-Key 和搜索结果的 expected_updated_at。",
+    "AI Agent 与外部集成继续只能通过受鉴权 API 写入单价，不能直接访问产品库。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "added-products-write-scope",
+    "operations": "restart-required"
+  }
+}

@@ -7,6 +7,7 @@ from datetime import datetime
 API_SCOPE_LABELS = {
     "api:read": "API 元数据",
     "products:read": "读取产品",
+    "products:write": "更新产品单价",
     "inquiries:run": "运行询价",
     "artifacts:read": "读取结果文件",
     "quotes:read": "读取报价",

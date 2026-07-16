@@ -88,6 +88,11 @@ class ProductInquiryModuleTest(unittest.TestCase):
                 actor="module-test",
             )
 
+    def add_catalog_import_choices(self) -> None:
+        self.add_product("K-CATALOG-CHOICE-TOYOTA", "CHOICE-TOYOTA", item="BALL JOINT", series="TOYOTA")
+        self.add_product("K-CATALOG-CHOICE-HYUNDAI", "CHOICE-HYUNDAI", item="Old item", series="HYUNDAI")
+        self.add_product("K-CATALOG-CHOICE-NEW", "CHOICE-NEW", item="New item", series="TOYOTA")
+
     def test_oversized_numeric_inquiry_code_is_rejected_without_integer_conversion_error(self) -> None:
         oversized_digits = "1" * 4301
 
@@ -97,6 +102,7 @@ class ProductInquiryModuleTest(unittest.TestCase):
         self.assertEqual(extract_numbers({"numbers": [oversized_digits]}), ([], [oversized_digits]))
 
     def test_catalog_import_requires_template_fields_and_imports_price_status_and_image(self) -> None:
+        self.add_catalog_import_choices()
         catalog_path = self.root / "catalog-import.xlsx"
         image_path = self.root / "catalog-product.png"
         Image.new("RGB", (320, 240), "white").save(image_path)
@@ -107,6 +113,7 @@ class ProductInquiryModuleTest(unittest.TestCase):
             [
                 "BLD NO.",
                 "SERIES",
+                "SERIES 2",
                 "ITEM",
                 "OE NO.1",
                 "Models",
@@ -120,6 +127,7 @@ class ProductInquiryModuleTest(unittest.TestCase):
             [
                 "K-IMPORT-001",
                 "TOYOTA",
+                "HYUNDAI",
                 "BALL JOINT",
                 "43330-09070",
                 "CAMRY",
@@ -129,7 +137,7 @@ class ProductInquiryModuleTest(unittest.TestCase):
                 "",
             ]
         )
-        sheet.add_image(ExcelImage(BytesIO(image_path.read_bytes())), "I2")
+        sheet.add_image(ExcelImage(BytesIO(image_path.read_bytes())), "J2")
         workbook.save(catalog_path)
         workbook.close()
 
@@ -150,11 +158,13 @@ class ProductInquiryModuleTest(unittest.TestCase):
             ).fetchone()
         self.assertIsNotNone(product)
         self.assertEqual(product["price_cny"], 68.5)
+        self.assertEqual(product["series"], "TOYOTA\nHYUNDAI")
         self.assertEqual(product["product_status"], "1 个球头")
         self.assertEqual(product["image_path"], "data_product_images/K-IMPORT-001.png")
         self.assertTrue((image_dir / "K-IMPORT-001.png").is_file())
 
     def test_catalog_import_rejects_missing_required_value_before_writing(self) -> None:
+        self.add_catalog_import_choices()
         catalog_path = self.root / "catalog-invalid.xlsx"
         workbook = Workbook()
         sheet = workbook.active
@@ -173,6 +183,7 @@ class ProductInquiryModuleTest(unittest.TestCase):
         self.assertEqual(count, 0)
 
     def test_catalog_import_rejects_nonempty_row_without_bld_no(self) -> None:
+        self.add_catalog_import_choices()
         catalog_path = self.root / "catalog-missing-bld.xlsx"
         workbook = Workbook()
         sheet = workbook.active
@@ -185,6 +196,7 @@ class ProductInquiryModuleTest(unittest.TestCase):
             self.product_service.preview_catalog_import(catalog_path)
 
     def test_catalog_import_requires_per_product_selection_for_conflicts(self) -> None:
+        self.add_catalog_import_choices()
         self.add_product("K-CONFLICT-001", "OLD-OE", item="Old item", series="TOYOTA", product_status="1 个球头")
         catalog_path = self.root / "catalog-conflict.xlsx"
         workbook = Workbook()
@@ -221,6 +233,7 @@ class ProductInquiryModuleTest(unittest.TestCase):
         self.assertEqual(product["price_cny"], 88)
 
     def test_catalog_import_restores_media_and_catalog_when_confirmation_fails(self) -> None:
+        self.add_catalog_import_choices()
         image_dir = self.root / "data" / "product_images"
         image_dir.mkdir(parents=True)
         old_image = image_dir / "K-ROLLBACK-001.png"
@@ -269,6 +282,19 @@ class ProductInquiryModuleTest(unittest.TestCase):
         self.assertEqual(product["item"], "Old item")
         self.assertEqual(old_image.read_bytes(), old_bytes)
         self.assertFalse(catalog_target.exists())
+
+    def test_catalog_import_rejects_series_and_item_outside_controlled_options(self) -> None:
+        self.add_catalog_import_choices()
+        catalog_path = self.root / "catalog-uncontrolled-choice.xlsx"
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["BLD NO.", "SERIES", "ITEM", "OE NO.1", "Models", "产品状态", "导入单价"])
+        sheet.append(["K-IMPORT-UNCONTROLLED", "UNKNOWN BRAND", "UNKNOWN ITEM", "43330", "CAMRY", "1 个球头", 68.5])
+        workbook.save(catalog_path)
+        workbook.close()
+
+        with self.assertRaisesRegex(ValueError, "SERIES 只能选择模板下拉选项"):
+            self.product_service.preview_catalog_import(catalog_path)
 
     def test_catalog_column_filters_are_exact_multiselect_facets(self) -> None:
         self.add_product(

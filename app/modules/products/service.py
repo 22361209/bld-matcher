@@ -9,6 +9,7 @@ from app.matcher import ProductCatalog
 
 from .catalog_import import (
     CatalogImportFileTransaction,
+    CatalogImportChoices,
     CatalogImportPreview,
     CatalogImportPreviewChangedError,
     CatalogImportResult,
@@ -38,6 +39,13 @@ class ProductNotFoundError(LookupError):
     def __init__(self, product_id: int) -> None:
         super().__init__(f"产品 {product_id} 不存在。")
         self.product_id = product_id
+
+
+class ProductVersionConflictError(RuntimeError):
+    def __init__(self, product_id: int, current_updated_at: str) -> None:
+        super().__init__("产品已被其他操作更新，请先重新读取后再更新单价。")
+        self.product_id = product_id
+        self.current_updated_at = current_updated_at
 
 
 class ProductService:
@@ -168,8 +176,15 @@ class ProductService:
         self.invalidate_catalog()
         return imported
 
+    def catalog_import_choices(self) -> CatalogImportChoices:
+        options = self.filter_options(ProductFilters(status="all"))
+        return CatalogImportChoices(
+            series=tuple(option.value for option in options.brand if option.value),
+            items=tuple(option.value for option in options.item if option.value),
+        )
+
     def preview_catalog_import(self, path: Path) -> CatalogImportPreview:
-        rows = read_catalog_import(path)
+        rows = read_catalog_import(path, choices=self.catalog_import_choices())
         with self.unit_of_work_factory() as unit_of_work:
             products = {
                 row.bld_no: product
@@ -255,16 +270,33 @@ class ProductService:
             raise
         return exported
 
-    def preview_prices(self, path: Path) -> dict:
+    def update_price(
+        self,
+        product_id: int,
+        *,
+        price_cny: float,
+        expected_updated_at: str,
+        actor: str,
+    ) -> ProductRecord:
+        self.bootstrap_port()
         with self.unit_of_work_factory() as unit_of_work:
-            return unit_of_work.repository.preview_prices(path)
-
-    def apply_prices(self, rows: list[dict], *, actor: str) -> tuple[int, int]:
-        with self.unit_of_work_factory() as unit_of_work:
-            result = unit_of_work.repository.update_prices(rows, actor=actor)
+            current = unit_of_work.repository.get(product_id)
+            if current is None:
+                raise ProductNotFoundError(product_id)
+            product = unit_of_work.repository.update_price(
+                product_id,
+                price_cny=price_cny,
+                expected_updated_at=expected_updated_at,
+                actor=actor,
+            )
+            if product is None:
+                latest = unit_of_work.repository.get(product_id)
+                if latest is None:
+                    raise ProductNotFoundError(product_id)
+                raise ProductVersionConflictError(product_id, latest.updated_at)
             unit_of_work.commit()
         self.invalidate_catalog()
-        return result
+        return product
 
     def preview_brand_normalization(self) -> BrandNormalizationPreview:
         self.bootstrap_port()

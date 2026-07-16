@@ -852,6 +852,72 @@
         "title": "PlatformInfoEnvelope",
         "type": "object"
       },
+      "ProductPriceUpdateData": {
+        "additionalProperties": false,
+        "properties": {
+          "product": {
+            "$ref": "#/components/schemas/ProductResponse"
+          }
+        },
+        "required": [
+          "product"
+        ],
+        "title": "ProductPriceUpdateData",
+        "type": "object"
+      },
+      "ProductPriceUpdateEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "api_version": {
+            "default": "1",
+            "title": "Api Version",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ProductPriceUpdateData"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "request_id",
+          "data"
+        ],
+        "title": "ProductPriceUpdateEnvelope",
+        "type": "object"
+      },
+      "ProductPriceUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_updated_at": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Expected Updated At",
+            "type": "string"
+          },
+          "price_cny": {
+            "maximum": 10000000,
+            "minimum": 0,
+            "title": "Price Cny",
+            "type": "number"
+          }
+        },
+        "required": [
+          "price_cny",
+          "expected_updated_at"
+        ],
+        "title": "ProductPriceUpdateRequest",
+        "type": "object"
+      },
       "ProductResponse": {
         "additionalProperties": false,
         "properties": {
@@ -2200,6 +2266,72 @@
         "summary": "Search the product catalog",
         "x-required-scopes": [
           "products:read"
+        ]
+      }
+    },
+    "/api/v1/products/{product_id}/price": {
+      "post": {
+        "operationId": "updateProductPrice",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "product_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 8,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductPriceUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductPriceUpdateEnvelope"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Update a product tax-inclusive unit price",
+        "x-required-scopes": [
+          "products:write"
         ]
       }
     },

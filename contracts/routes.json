@@ -113,6 +113,13 @@
       "rule": "/api/v1/openapi.json"
     },
     {
+      "endpoint": "product_v1_api.update_product_price_v1",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/v1/products/<int:product_id>/price"
+    },
+    {
       "endpoint": "product_v1_api.search_products_v1",
       "methods": [
         "GET"
@@ -419,27 +426,6 @@
         "GET"
       ],
       "rule": "/materials/template"
-    },
-    {
-      "endpoint": "price_import",
-      "methods": [
-        "GET"
-      ],
-      "rule": "/prices/import"
-    },
-    {
-      "endpoint": "price_import_apply",
-      "methods": [
-        "POST"
-      ],
-      "rule": "/prices/import/apply"
-    },
-    {
-      "endpoint": "price_import_preview",
-      "methods": [
-        "POST"
-      ],
-      "rule": "/prices/import/preview"
     },
     {
       "endpoint": "product_data_sync",

@@ -16,6 +16,7 @@ SQLite 是内部实现，不是集成接口。OpenClaw、Hermes、WorkBuddy、MC
 
 ```text
 GET  /api/v1/products/search
+POST /api/v1/products/{product_id}/price
 POST /api/v1/inquiries/analyze
 POST /api/v1/inquiries/export
 GET  /api/v1/quotes
@@ -54,6 +55,7 @@ API Key 创建时只显示一次，数据库保存哈希、名称、后缀、Sco
 建议 Scopes：
 
 - `products:read`
+- `products:write`
 - `inquiries:run`
 - `artifacts:read`
 - `quotes:read`
@@ -67,7 +69,7 @@ API Key 创建时只显示一次，数据库保存哈希、名称、后缀、Sco
 ## Mutation Safety
 
 - 创建和导出支持 `Idempotency-Key`，重复请求返回原结果。
-- 修订使用版本号或 `If-Match`，避免覆盖并发修改。
+- 修订使用版本号或 `If-Match`，避免覆盖并发修改；产品单价更新使用搜索结果的 `updated_at` 作为 `expected_updated_at`。
 - 财务、停用、覆盖和批量操作支持 `dry_run`；高风险动作需要短期确认令牌。
 - 所有修订保存 before/after、Principal、request ID、原因和时间。
 - Key 默认只读，写 Scope 单独授予。管理页按 `BLD_API_KEY_ROTATION_DAYS` 提醒轮换，但不会自动停用；应先验证新 Key 再停用旧 Key。

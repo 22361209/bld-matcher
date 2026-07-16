@@ -5,7 +5,10 @@ from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
 from types import TracebackType
+from typing import cast
 from uuid import uuid4
+
+from werkzeug.datastructures import FileStorage
 
 from app.catalog_export import export_products_xlsx
 from app.database import connect
@@ -19,7 +22,6 @@ from app.modules.products.persistence import (
 )
 from app.drawings import save_product_drawing
 from app.matcher import compact_text
-from app.price_import import parse_price_file
 from app.product_media import save_product_image
 from app.platform.audit_store import log_event
 from app.platform.clock import now_text
@@ -314,7 +316,8 @@ class SQLiteProductRepository:
         row = self.connection.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone()
         if row is None:
             raise LookupError("产品不存在。")
-        save_product_image(self.connection, row, file, slot=slot, commit=False)
+        upload = cast(FileStorage, file)
+        save_product_image(self.connection, row, upload, slot=slot, commit=False)
         log_event(
             self.connection,
             "上传产品图片",
@@ -332,7 +335,8 @@ class SQLiteProductRepository:
         row = self.connection.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone()
         if row is None:
             raise LookupError("产品不存在。")
-        save_product_drawing(self.connection, row, file, commit=False)
+        upload = cast(FileStorage, file)
+        save_product_drawing(self.connection, row, upload, commit=False)
         log_event(
             self.connection,
             "上传图纸",
@@ -387,27 +391,40 @@ class SQLiteProductRepository:
         log_event(self.connection, "删除产品", "product", product.bld_no, detail, actor=actor)
         return product
 
-    def update_prices(self, rows: list[dict], *, actor: str) -> tuple[int, int]:
-        updated = 0
-        skipped = 0
-        for row in rows:
-            if row.get("status") != "matched":
-                skipped += 1
-                continue
-            self.connection.execute(
-                "UPDATE products SET price_cny = ?, updated_at = ? WHERE bld_no = ?",
-                (row["price"], now_text(), row["bld_no"]),
-            )
-            updated += 1
+    def update_price(
+        self,
+        product_id: int,
+        *,
+        price_cny: float,
+        expected_updated_at: str,
+        actor: str,
+    ) -> ProductRecord | None:
+        product = self.get(product_id)
+        if product is None:
+            return None
+        timestamp = now_text()
+        cursor = self.connection.execute(
+            """
+            UPDATE products
+               SET price_cny = ?, updated_at = ?
+             WHERE id = ? AND updated_at = ?
+            """,
+            (price_cny, timestamp, product_id, expected_updated_at),
+        )
+        if cursor.rowcount != 1:
+            return None
+        updated = self.get(product_id)
+        if updated is None:
+            raise RuntimeError("Product price update could not be reloaded.")
         log_event(
             self.connection,
-            "批量维护单价",
+            "API 更新产品单价",
             "product",
-            "Unit Price",
-            f"更新 {updated} 条，跳过 {skipped} 条",
+            updated.bld_no,
+            f"含税单价：{product.price_cny if product.price_cny is not None else '(空)'} -> {price_cny}",
             actor=actor,
         )
-        return updated, skipped
+        return updated
 
     def import_catalog(self, path: Path, *, actor: str) -> int:
         return import_catalog(self.connection, path, replace=False, actor=actor, commit=False)
@@ -448,9 +465,6 @@ class SQLiteProductRepository:
             actor=actor,
         )
         return len(rows)
-
-    def preview_prices(self, path: Path) -> dict:
-        return parse_price_file(path, self.connection)
 
     def preview_brand_normalization(self) -> list[BrandNormalizationChange]:
         changes: list[BrandNormalizationChange] = []

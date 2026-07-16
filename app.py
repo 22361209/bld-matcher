@@ -99,8 +99,6 @@ def create_app() -> Flask:
             return redirect(url_for("product_data_sync"))
         if request.path.startswith("/materials"):
             return redirect(url_for("materials"))
-        if request.path.startswith("/prices"):
-            return redirect(url_for("price_import"))
         if request.path.startswith("/quotes"):
             return redirect(url_for("quote_web.quotes"))
         if request.path.startswith("/customer-prices"):
