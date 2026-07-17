@@ -23,7 +23,15 @@ def spec_display_lines(value: object) -> tuple[str, ...]:
 
 def tolerance_only(value: object) -> str:
     match = re.search(r"(?:±|[+-])\s*\d.*$", clean_text(value))
-    return match.group(0) if match else clean_text(value)
+    tolerance = match.group(0) if match else clean_text(value)
+    if "/" not in tolerance:
+        return tolerance
+    sign = tolerance[0] if tolerance[:1] in {"±", "+", "-"} else ""
+    return "\n".join(
+        part if part[:1] in {"±", "+", "-"} or not sign else f"{sign}{part}"
+        for part in (part.strip() for part in tolerance.split("/"))
+        if part
+    )
 
 
 def clean_text(value: object) -> str:

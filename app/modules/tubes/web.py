@@ -28,6 +28,10 @@ def _tube_filters() -> dict[str, object]:
     return {
         "query": request.args.get("q", "").strip(),
         "tube_types": tuple(value for value in TUBE_TYPES if value in request.args.getlist("type")),
+        "blank_lengths": tuple(value for value in request.args.getlist("blank_length") if value),
+        "inner_tolerances": tuple(value for value in request.args.getlist("inner_tolerance") if value),
+        "purchase_bases": tuple(value for value in request.args.getlist("purchase_base") if _number(value) is not None),
+        "materials": tuple(value for value in request.args.getlist("material") if value == "—"),
         "tolerances": tuple(value for value in (_number(item) for item in request.args.getlist("tolerance")) if value is not None),
         "consumptions": tuple(value for value in (_number(item) for item in request.args.getlist("consumption")) if value is not None),
         "weight_eq": _number(request.args.get("weight_eq")),
@@ -42,7 +46,15 @@ def _page_url(filters: dict[str, object], page: int) -> str:
     pairs: list[tuple[str, object]] = []
     if filters["query"]:
         pairs.append(("q", filters["query"]))
-    for key, parameter in (("tube_types", "type"), ("tolerances", "tolerance"), ("consumptions", "consumption")):
+    for key, parameter in (
+        ("tube_types", "type"),
+        ("blank_lengths", "blank_length"),
+        ("inner_tolerances", "inner_tolerance"),
+        ("purchase_bases", "purchase_base"),
+        ("materials", "material"),
+        ("tolerances", "tolerance"),
+        ("consumptions", "consumption"),
+    ):
         pairs.extend((parameter, value) for value in cast(tuple[object, ...], filters[key]))
     for key in ("weight_eq", "weight_min", "weight_max", "outer_diameter", "inner_diameter"):
         if filters[key] is not None:
@@ -85,6 +97,10 @@ def register(app) -> None:
             tube_items=result["records"],
             tube_types=TUBE_TYPES,
             selected_types=filters["tube_types"],
+            selected_blank_lengths=filters["blank_lengths"],
+            selected_inner_tolerances=filters["inner_tolerances"],
+            selected_purchase_bases=filters["purchase_bases"],
+            selected_materials=filters["materials"],
             selected_tolerances=filters["tolerances"],
             selected_consumptions=filters["consumptions"],
             weight_eq=filters["weight_eq"],
@@ -93,6 +109,9 @@ def register(app) -> None:
             outer_diameter=filters["outer_diameter"],
             inner_diameter=filters["inner_diameter"],
             type_counts=result["counts"],
+            blank_length_options=result["blank_length_options"],
+            inner_tolerance_options=result["inner_tolerance_options"],
+            purchase_base_options=result["purchase_base_options"],
             tolerance_options=result["tolerance_options"],
             consumption_options=result["consumption_options"],
             spec_display_lines=spec_display_lines,

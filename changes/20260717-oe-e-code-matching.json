@@ -1,0 +1,13 @@
+{
+  "date": "2026-07-17",
+  "version": "unreleased",
+  "title": "询价保留含 E 的 OE 编码",
+  "entries": [
+    "询价匹配将含 E 的号码视为 OE 编码，不再将其按科学计数法转换；例如 545001E000 可匹配目录中的 54500-1E000。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "compatible",
+    "operations": "restart-required"
+  }
+}

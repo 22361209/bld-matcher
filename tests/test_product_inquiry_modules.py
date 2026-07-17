@@ -14,7 +14,7 @@ from openpyxl.drawing.image import Image as ExcelImage
 from PIL import Image
 
 from app.database import connect
-from app.matcher import normalize_code
+from app.matcher import ProductCatalog, normalize_code
 from app.modules.products.persistence import upsert_product
 import app.modules.products.persistence as product_persistence
 import app.modules.products.repository as product_repository
@@ -97,9 +97,22 @@ class ProductInquiryModuleTest(unittest.TestCase):
         oversized_digits = "1" * 4301
 
         self.assertEqual(normalize_code(oversized_digits), "")
-        self.assertEqual(normalize_code("1e500"), "")
+        self.assertEqual(normalize_code("1e500"), "1E500")
         self.assertEqual(normalize_code("001234.0"), "1234")
         self.assertEqual(extract_numbers({"numbers": [oversized_digits]}), ([], [oversized_digits]))
+
+    def test_oe_codes_with_e_are_not_treated_as_scientific_notation(self) -> None:
+        catalog = ProductCatalog(
+            [{"BLD NO.": "K8057LB", "OE NO.1": "54500-1E000", "OE NO.2": ""}]
+        )
+
+        match = catalog.match("", "545001E000/545001E100\n545001E000")
+
+        self.assertEqual(normalize_code("545001E000"), "545001E000")
+        self.assertIsNotNone(match)
+        self.assertEqual(match.bld_no, "K8057LB")
+        self.assertEqual(match.matched_codes, ("545001E000", "545001E000"))
+        self.assertEqual(match.unmatched_codes, ("545001E100",))
 
     def test_catalog_import_requires_template_fields_and_imports_price_status_and_image(self) -> None:
         self.add_catalog_import_choices()

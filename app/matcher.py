@@ -71,7 +71,7 @@ def normalize_code(value: object) -> str:
     text = "" if value is None else str(value).strip()
     if len(text) > MAX_MATCH_CODE_LENGTH:
         return ""
-    if isinstance(value, str) and re.fullmatch(r"\d+(?:\.0+|(?:\.\d+)?[Ee][+-]?\d+)", text):
+    if isinstance(value, str) and re.fullmatch(r"\d+\.0+", text):
         try:
             numeric_value = Decimal(text)
         except InvalidOperation:

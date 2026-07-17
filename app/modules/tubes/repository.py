@@ -63,7 +63,14 @@ class TubeRepository:
                 f"({prefix}code LIKE ? OR REPLACE(REPLACE(REPLACE(REPLACE({prefix}spec_text, ' ', ''), '*', '×'), 'x', '×'), 'X', '×') LIKE ? OR {prefix}borrowed_from LIKE ? OR {prefix}note LIKE ? OR EXISTS (SELECT 1 FROM tube_items AS alias WHERE alias.active = 1 AND alias.borrowed_from = {prefix}code AND alias.code LIKE ?))"
             )
             parameters.extend([needle, spec_needle, needle, needle, needle])
-        for column, key in (("tube_type", "tube_types"), ("tolerance_mm", "tolerances"), ("consumption_mm", "consumptions")):
+        for column, key in (
+            ("tube_type", "tube_types"),
+            ("blank_length_text", "blank_lengths"),
+            ("inner_diameter_tolerance", "inner_tolerances"),
+            ("purchase_base", "purchase_bases"),
+            ("tolerance_mm", "tolerances"),
+            ("consumption_mm", "consumptions"),
+        ):
             values = cast(tuple[object, ...], filters.get(key, ()))
             if values:
                 clauses.append(f"{prefix}{column} IN ({', '.join('?' for _ in values)})")
@@ -89,6 +96,16 @@ class TubeRepository:
             {"value": float(row["value"]), "label": f"{float(row['value']):g}", "count": int(row["count"])}
             for row in self.connection.execute(
                 f"SELECT item.{column} AS value, COUNT(*) AS count FROM tube_items AS item WHERE item.active = 1 AND (item.borrowed_from = '' OR NOT EXISTS (SELECT 1 FROM tube_items AS source WHERE source.active = 1 AND source.code = item.borrowed_from)) AND item.{column} IS NOT NULL GROUP BY item.{column} ORDER BY item.{column}"
+            )
+        ]
+
+    def value_counts(self, column: str) -> list[dict[str, object]]:
+        if column not in {"blank_length_text", "inner_diameter_tolerance", "purchase_base"}:
+            raise ValueError("不支持的管件筛选列。")
+        return [
+            {"value": str(row["value"]), "label": str(row["value"]), "count": int(row["count"])}
+            for row in self.connection.execute(
+                f"SELECT item.{column} AS value, COUNT(*) AS count FROM tube_items AS item WHERE item.active = 1 AND (item.borrowed_from = '' OR NOT EXISTS (SELECT 1 FROM tube_items AS source WHERE source.active = 1 AND source.code = item.borrowed_from)) AND item.{column} IS NOT NULL AND item.{column} != '' GROUP BY item.{column} ORDER BY item.{column}"
             )
         ]
 
