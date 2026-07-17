@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
@@ -31,6 +32,15 @@ class MutationRequest(StrictApiModel):
 
 
 class ApiPlatformTest(unittest.TestCase):
+    def test_connect_closes_after_context_exit(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            database_path = Path(temporary_directory) / "connection.sqlite3"
+            with connect(database_path) as connection:
+                connection.execute("SELECT 1")
+
+            with self.assertRaises(sqlite3.ProgrammingError):
+                connection.execute("SELECT 1")
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.db_path = Path(self.tmp.name) / "platform.sqlite3"

@@ -208,7 +208,7 @@ class SQLiteProductSyncRepository:
                     f"SELECT {', '.join(columns)} FROM incoming.products ORDER BY bld_no COLLATE BLD_NATURAL"
                 ).fetchall()
             ]
-            with connection:
+            try:
                 for row in rows:
                     local_row = connection.execute(
                         "SELECT * FROM main.products WHERE bld_no = ?",
@@ -248,6 +248,10 @@ class SQLiteProductSyncRepository:
                     f"新增 {new_count} 条，更新 {updated_count} 条，跳过无变化 {unchanged_count} 条，跳过包内旧数据 {conflict_count} 条，停用本机独有 {deactivated_count} 条；保留当前系统账号、API Key 和日志。",
                     actor=actor,
                 )
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
             return ProductSyncResult(
                 new_count=new_count,
                 updated_count=updated_count,

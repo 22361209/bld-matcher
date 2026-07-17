@@ -1,0 +1,14 @@
+{
+  "date": "2026-07-17",
+  "version": "unreleased",
+  "title": "修复 SQLite 上下文连接未关闭问题",
+  "entries": [
+    "通过数据库连接上下文执行的操作在提交或回滚后会关闭连接，避免 Windows 上临时数据库和运行时数据库文件被遗留句柄锁定。",
+    "产品数据包导入保留原有的单事务语义，改为显式提交或回滚，避免在继续使用连接时提前关闭。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "unchanged",
+    "operations": "restart-required"
+  }
+}

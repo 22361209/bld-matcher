@@ -12,6 +12,14 @@ _INIT_LOCK = threading.Lock()
 _INITIALIZED_DB_PATHS: set[Path] = set()
 
 
+class _ClosingConnection(sqlite3.Connection):
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            return super().__exit__(exc_type, exc_value, traceback)
+        finally:
+            self.close()
+
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS products (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -235,7 +243,7 @@ CREATE INDEX IF NOT EXISTS idx_api_artifacts_expires ON api_artifacts(expires_at
 def connect(database_path: Path) -> sqlite3.Connection:
     database_path.parent.mkdir(parents=True, exist_ok=True)
     needs_init = not database_path.exists()
-    connection = sqlite3.connect(database_path, timeout=5.0)
+    connection = sqlite3.connect(database_path, timeout=5.0, factory=_ClosingConnection)
     connection.row_factory = sqlite3.Row
     connection.create_collation("BLD_NATURAL", compare_bld_no)
     try:
