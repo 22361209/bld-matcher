@@ -1,0 +1,14 @@
+{
+  "date": "2026-07-17",
+  "version": "unreleased",
+  "title": "报价与合同页移除说明栏",
+  "entries": [
+    "报价记录页移除顶部标题和说明栏，统计区直接开始；筛选及新增/导入操作移至报价列表标题下方，与表格相邻，筛选仅保留客户和 BLD号。",
+    "合同管理页移除顶部标题和说明栏，合同类型切换区直接开始。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "unchanged",
+    "operations": "restart-required"
+  }
+}

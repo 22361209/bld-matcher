@@ -13,13 +13,6 @@
       {% set contract_label = "销售合同" if is_sales else "采购合同" %}
       {% set party_a_label = "供方（甲方）" if is_sales else "采购方（甲方）" %}
       {% set party_b_label = "需方（乙方）" if is_sales else "供应方（乙方）" %}
-      <header class="workspace-header contract-management-hero">
-        <div>
-          <h1>合同管理</h1>
-          <p>采购合同和销售合同分别生成、分别归档。</p>
-        </div>
-      </header>
-
       <section class="contract-entry-switch" aria-label="合同类型">
         <a class="linear-button {% if not is_sales %}primary{% else %}subtle{% endif %}" href="{{ url_for('contracts') }}">采购合同</a>
         <a class="linear-button {% if is_sales %}primary{% else %}subtle{% endif %}" href="{{ url_for('sales_contracts') }}">销售合同</a>

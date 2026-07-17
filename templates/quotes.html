@@ -9,12 +9,6 @@
 {% endblock %}
 
 {% block page_content %}
-<header class="workspace-header">
-        <div>
-          <h1>报价记录</h1>
-          <p>集中保存人工和 Hermes 录入的客户报价，按客户、BLD号、日期、币种和报价人查询。</p>
-        </div>
-      </header>
       <section class="metric-strip" aria-label="报价记录统计">
         <div><span>总记录</span><strong>{{ stats.total }}</strong></div>
         <div><span>客户数</span><strong>{{ stats.customers }}</strong></div>
@@ -22,44 +16,42 @@
         <div><span>当前结果</span><strong>{{ total_records }}</strong></div>
       </section>
 
-      <section class="workspace-command quote-command">
-        <form class="search-form quote-search" method="get" action="{{ url_for('quote_web.quotes') }}#quote-results">
-          <label>
-            <span>客户</span>
-            <input name="customer_name" value="{{ filters.customer_name }}" placeholder="例如 博世">
-          </label>
-          <label>
-            <span>BLD号</span>
-            <input name="bld_no" value="{{ filters.bld_no }}" placeholder="例如 K48620">
-          </label>
-          <label>
-            <span>开始日期</span>
-            <input type="date" name="date_from" value="{{ filters.date_from }}">
-          </label>
-          <label>
-            <span>结束日期</span>
-            <input type="date" name="date_to" value="{{ filters.date_to }}">
-          </label>
-          <label>
-            <span>币种</span>
-            <select name="currency">
-              <option value="" {% if not filters.currency %}selected{% endif %}>全部</option>
-              {% for item in ["CNY", "USD", "EUR"] %}
-                <option value="{{ item }}" {% if filters.currency == item %}selected{% endif %}>{{ item }}</option>
-              {% endfor %}
-            </select>
-          </label>
-          <label>
-            <span>报价人</span>
-            <input name="quoted_by" value="{{ filters.quoted_by }}" placeholder="例如 007">
-          </label>
-          <button class="linear-button primary" type="submit">搜索</button>
-          <a class="linear-button subtle" href="{{ url_for('quote_web.quotes') }}">重置</a>
-        </form>
+      {% if latest %}
+        <section class="workspace-flow quote-latest">
+          <h2>最近一次报价</h2>
+          <p>
+            {{ latest.customer_name }} / {{ latest.bld_no or latest.product_model }}：
+            {% if latest.tax_price is not none %}<strong>含税 {{ latest.currency }} {{ "%.4f"|format(latest.tax_price) }}</strong>{% endif %}
+            {% if latest.net_price is not none %}<strong>不含税 {{ latest.currency }} {{ "%.4f"|format(latest.net_price) }}</strong>{% endif %}
+            ，{{ latest.quote_date }}，{{ latest.quoted_by or "-" }}
+          </p>
+        </section>
+      {% endif %}
 
-        {% if can("manage_customer_prices") %}
+      <section class="data-section" id="quote-results">
+        <div class="data-section-header">
+          <div>
+            <h2>报价列表</h2>
+            <p>当前筛选 {{ total_records }} 条；输入客户和BLD号可查看历史报价和最近一次报价。</p>
+          </div>
+        </div>
+        <div class="workspace-command quote-command">
+          <form class="search-form quote-search" method="get" action="{{ url_for('quote_web.quotes') }}#quote-results">
+            <label>
+              <span>客户</span>
+              <input name="customer_name" value="{{ filters.customer_name }}" placeholder="例如 博世">
+            </label>
+            <label>
+              <span>BLD号</span>
+              <input name="bld_no" value="{{ filters.bld_no }}" placeholder="例如 K48620">
+            </label>
+            <button class="linear-button primary" type="submit">搜索</button>
+            <a class="linear-button subtle" href="{{ url_for('quote_web.quotes') }}">重置</a>
+          </form>
+          {% if can("manage_customer_prices") %}
+          <div class="command-actions quote-actions">
           <details class="toolbar-popover linear-popover quote-new">
-            <summary>新增报价</summary>
+            <summary class="linear-button primary">新增报价</summary>
             <form action="{{ url_for('quote_web.save_quote') }}" method="post" class="toolbar-popover-form quote-form">
               {{ csrf_field() }}
               <label>
@@ -125,10 +117,8 @@
               </div>
             </form>
           </details>
-        {% endif %}
-        {% if can("manage_customer_prices") %}
           <details class="toolbar-popover linear-popover">
-            <summary>导入报价记录</summary>
+            <summary class="linear-button primary">导入报价记录</summary>
             <form action="{{ url_for('quote_web.quote_import_preview') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form toolbar-upload-form">
               {{ csrf_field() }}
               <label>
@@ -155,27 +145,8 @@
               <span class="note">Excel 表头需包含 BLD号，以及含税单价/不含税单价至少一列；客户和币种以上方填写为准。</span>
             </form>
           </details>
-        {% endif %}
-      </section>
-
-      {% if latest %}
-        <section class="workspace-flow quote-latest">
-          <h2>最近一次报价</h2>
-          <p>
-            {{ latest.customer_name }} / {{ latest.bld_no or latest.product_model }}：
-            {% if latest.tax_price is not none %}<strong>含税 {{ latest.currency }} {{ "%.4f"|format(latest.tax_price) }}</strong>{% endif %}
-            {% if latest.net_price is not none %}<strong>不含税 {{ latest.currency }} {{ "%.4f"|format(latest.net_price) }}</strong>{% endif %}
-            ，{{ latest.quote_date }}，{{ latest.quoted_by or "-" }}
-          </p>
-        </section>
-      {% endif %}
-
-      <section class="data-section" id="quote-results">
-        <div class="data-section-header">
-          <div>
-            <h2>报价列表</h2>
-            <p>当前筛选 {{ total_records }} 条；输入客户和BLD号可查看历史报价和最近一次报价。</p>
           </div>
+          {% endif %}
         </div>
         <div class="data-table-scroll">
           <table class="data-table quote-table">

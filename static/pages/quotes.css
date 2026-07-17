@@ -1,9 +1,5 @@
-.quote-command {
-  align-items: flex-start;
-}
-
 .quote-search {
-  grid-template-columns: repeat(6, minmax(130px, 1fr)) auto auto;
+  grid-template-columns: repeat(2, minmax(180px, 1fr)) auto auto;
 }
 
 .quote-search label {
@@ -17,6 +13,25 @@
 
 .quote-new {
   flex: 0 0 auto;
+}
+
+.quote-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.app-surface .quote-actions .linear-popover > summary {
+  border-color: var(--linear-accent);
+  background: var(--linear-accent);
+  color: #ffffff;
+}
+
+.app-surface .quote-actions .linear-popover > summary:hover,
+.app-surface .quote-actions .linear-popover[open] > summary {
+  border-color: var(--linear-accent-hover);
+  background: var(--linear-accent-hover);
+  color: #ffffff;
 }
 
 .quote-edit {
