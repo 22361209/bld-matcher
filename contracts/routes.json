@@ -162,6 +162,34 @@
       "rule": "/api/v1/quotes/latest"
     },
     {
+      "endpoint": "business_data_sync",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/business-data-sync"
+    },
+    {
+      "endpoint": "apply_business_data_sync",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/business-data-sync/apply"
+    },
+    {
+      "endpoint": "export_business_data_sync",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/business-data-sync/export"
+    },
+    {
+      "endpoint": "preview_business_data_sync",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/business-data-sync/preview"
+    },
+    {
       "endpoint": "upload_catalog",
       "methods": [
         "POST"

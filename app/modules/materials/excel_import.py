@@ -11,6 +11,7 @@ from app.database import connect
 from app.matcher import compact_text
 from app.platform.audit_store import log_event
 from app.platform.clock import now_text
+from app.platform.sync_identity import material_key, stable_sync_id
 
 from .specification import _material_values_from_data
 
@@ -34,6 +35,7 @@ def import_materials_from_excel(
         sheet = workbook["材料数据"]
         timestamp = now_text()
         rows: list[dict[str, Any]] = []
+        ordinals: dict[str, int] = {}
         for row_number, values in enumerate(
             sheet.iter_rows(min_row=2, max_col=11, values_only=True),
             start=2,
@@ -61,7 +63,10 @@ def import_materials_from_excel(
                 source_row=row_number,
                 require_detail_fields=False,
             )
-            row.update({"created_at": timestamp, "updated_at": timestamp})
+            key = material_key(row)
+            ordinal = ordinals.get(key, 0) + 1
+            ordinals[key] = ordinal
+            row.update({"sync_id": stable_sync_id("material", key, ordinal), "created_at": timestamp, "updated_at": timestamp})
             rows.append(row)
     finally:
         workbook.close()
@@ -73,10 +78,10 @@ def import_materials_from_excel(
         """
         INSERT INTO material_items
           (model, code, category, car, part, spec_text, pieces, thickness, width, length,
-           active, source, source_row, created_at, updated_at)
+           active, source, source_row, sync_id, created_at, updated_at)
         VALUES
           (:model, :code, :category, :car, :part, :spec_text, :pieces, :thickness, :width,
-           :length, :active, :source, :source_row, :created_at, :updated_at)
+           :length, :active, :source, :source_row, :sync_id, :created_at, :updated_at)
         """,
         rows,
     )

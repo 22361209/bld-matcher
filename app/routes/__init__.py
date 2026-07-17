@@ -4,6 +4,7 @@ from __future__ import annotations
 def register_routes(app) -> None:
     from app.api.v1 import register as register_api_v1
     from app.modules.admin import register as register_admin
+    from app.modules.business_sync import register as register_business_sync
     from app.modules.contracts import register as register_contracts
     from app.modules.inquiry import register as register_inquiry_api
     from app.modules.materials import register as register_materials
@@ -23,6 +24,7 @@ def register_routes(app) -> None:
     register_contracts(app)
     register_quotes(app)
     register_admin(app)
+    register_business_sync(app)
     inquiry.register(app)
     products.register(app)
     register_shipping(app)

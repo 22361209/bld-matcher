@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TYPECHECK_PATHS = (
     "app/platform",
     "app/modules/admin",
+    "app/modules/business_sync",
     "app/modules/contracts",
     "app/modules/inquiry/alias_web.py",
     "app/modules/inquiry/download_web.py",

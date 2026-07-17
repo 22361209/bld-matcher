@@ -7,6 +7,7 @@ from typing import Any, cast
 
 from app.platform.audit_store import log_event
 from app.platform.clock import now_text
+from app.platform.sync_identity import MATERIAL_IDENTITY_FIELDS, material_key, stable_sync_id
 
 from .specification import _material_values_from_data, _parse_material_spec_query
 
@@ -80,14 +81,20 @@ def upsert_material_item(
             )
     else:
         values["created_at"] = timestamp
+        key = material_key(values)
+        existing_rows = connection.execute(
+            f"SELECT {', '.join(MATERIAL_IDENTITY_FIELDS)} FROM material_items"
+        ).fetchall()
+        ordinal = 1 + sum(material_key(dict(row)) == key for row in existing_rows)
+        values["sync_id"] = stable_sync_id("material", key, ordinal)
         cursor = connection.execute(
             """
             INSERT INTO material_items
               (model, code, category, car, part, spec_text, pieces, thickness, width, length,
-               active, source, source_row, created_at, updated_at)
+               active, source, source_row, sync_id, created_at, updated_at)
             VALUES
               (:model, :code, :category, :car, :part, :spec_text, :pieces, :thickness, :width,
-               :length, :active, :source, :source_row, :created_at, :updated_at)
+               :length, :active, :source, :source_row, :sync_id, :created_at, :updated_at)
             """,
             values,
         )
