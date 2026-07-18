@@ -8,6 +8,10 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='pages/quotes.css', v=static_version('pages/quotes.css')) }}">
 {% endblock %}
 
+{% block page_scripts %}
+  <script type="module" src="{{ url_for('static', filename='pages/quotes.js', v=static_version('pages/quotes.js')) }}"></script>
+{% endblock %}
+
 {% block page_content %}
       <section class="metric-strip" aria-label="报价记录统计">
         <div><span>总记录</span><strong>{{ stats.total }}</strong></div>
@@ -172,8 +176,12 @@
                   <td>
                     <a href="{{ url_for('quote_web.quotes', customer_name=record.customer_name, bld_no=record.bld_no or record.product_model) }}#quote-results">历史</a>
                     {% if can("manage_customer_prices") %}
-                      <details class="linear-popover quote-edit">
-                        <summary>修正</summary>
+                      <button class="quote-edit-trigger" type="button" data-open-quote-edit="quote-edit-{{ record.id }}">修正</button>
+                      <dialog class="quote-edit-dialog" id="quote-edit-{{ record.id }}" aria-labelledby="quote-edit-title-{{ record.id }}">
+                        <div class="quote-edit-dialog-header">
+                          <h2 id="quote-edit-title-{{ record.id }}">修正报价记录</h2>
+                          <button class="quote-edit-close" type="button" data-close-quote-edit aria-label="关闭修正报价窗口">关闭</button>
+                        </div>
                         <form action="{{ url_for('quote_web.edit_quote', quote_id=record.id) }}" method="post" class="toolbar-popover-form quote-form">
                           {{ csrf_field() }}
                           <input type="hidden" name="version" value="{{ record.version }}">
@@ -194,9 +202,10 @@
                           <label class="span-2"><span>备注</span><textarea name="remark" rows="2">{{ record.remark }}</textarea></label>
                           <div class="form-actions span-2">
                             <button class="linear-button primary" type="submit">保存修正</button>
+                            <button class="linear-button subtle" type="button" data-close-quote-edit>取消</button>
                           </div>
                         </form>
-                      </details>
+                      </dialog>
                     {% endif %}
                   </td>
                 </tr>

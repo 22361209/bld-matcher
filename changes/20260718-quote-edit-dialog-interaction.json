@@ -1,0 +1,13 @@
+{
+  "date": "2026-07-18",
+  "version": "unreleased",
+  "title": "报价修正窗口可稳定打开",
+  "entries": [
+    "报价列表的“修正”改为居中的对话窗口，不再受表格横向滚动区域裁切；点击后可直接编辑并保存该条报价。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "compatible",
+    "operations": "restart-required"
+  }
+}

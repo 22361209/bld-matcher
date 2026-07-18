@@ -34,12 +34,69 @@
   color: #ffffff;
 }
 
-.quote-edit {
-  margin-top: 8px;
+.quote-edit-trigger {
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--linear-accent);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
 }
 
-.quote-edit .toolbar-popover-form {
-  right: 0;
+.quote-edit-trigger:focus-visible,
+.quote-edit-close:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px var(--linear-focus);
+}
+
+.quote-edit-dialog {
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(780px, calc(100vh - 32px));
+  margin: auto;
+  padding: 18px;
+  overflow: auto;
+  border: 1px solid var(--linear-line-strong);
+  border-radius: 10px;
+  box-shadow: 0 20px 48px rgba(17, 24, 39, 0.24);
+}
+
+.quote-edit-dialog::backdrop {
+  background: rgba(15, 23, 42, 0.4);
+}
+
+.quote-edit-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.quote-edit-dialog-header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.quote-edit-close {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--linear-muted);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.app-surface .quote-edit-dialog .toolbar-popover-form {
+  position: static;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .quote-import-column-form {

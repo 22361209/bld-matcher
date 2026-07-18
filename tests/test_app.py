@@ -1944,6 +1944,9 @@ class WebAppTest(unittest.TestCase):
         self.assertNotIn("不应由网页保存的原文", html)
         self.assertIn("修正", html)
         self.assertNotIn("data-open-customer-price-delete", html)
+        self.assertIn('data-open-quote-edit="quote-edit-', html)
+        self.assertIn('class="quote-edit-dialog"', html)
+        self.assertIn('src="/static/pages/quotes.js?', html)
         edit_form = re.search(r'<form action="/quotes/\d+/edit".*?</form>', html, re.S).group()
         for system_field in ("quoted_by", "source_type", "source_text", "attachment_path"):
             self.assertNotIn(f'name="{system_field}"', edit_form)
