@@ -68,6 +68,8 @@ def _page_url(filters: dict[str, str], page: int) -> str:
 def _pagination(filters: dict[str, str], page: int, total: int) -> dict[str, object]:
     total_pages = max(1, ceil(total / QUOTE_PAGE_SIZE))
     page = min(max(1, page), total_pages)
+    start = ((page - 1) * QUOTE_PAGE_SIZE) + 1 if total else 0
+    end = min(total, page * QUOTE_PAGE_SIZE)
     window = {1, total_pages, page - 1, page, page + 1}
     links = []
     previous_page = 0
@@ -79,6 +81,8 @@ def _pagination(filters: dict[str, str], page: int, total: int) -> dict[str, obj
     return {
         "page": page,
         "total_pages": total_pages,
+        "start": start,
+        "end": end,
         "has_prev": page > 1,
         "has_next": page < total_pages,
         "prev_url": _page_url(filters, page - 1) if page > 1 else "",

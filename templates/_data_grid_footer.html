@@ -1,0 +1,43 @@
+<footer class="data-grid-footer">
+  <div class="data-grid-summary" aria-label="{{ data_grid_label }}统计">
+    {% if data_grid_total %}
+      <strong>{{ pagination.start }}–{{ pagination.end }}</strong>
+      <span>/ 共 {{ data_grid_total }} 条</span>
+    {% else %}
+      <strong>0</strong><span>条</span>
+    {% endif %}
+    {% if data_grid_page_size %}
+      <span>· 第 {{ pagination.page }} / {{ pagination.total_pages }} 页，每页 {{ data_grid_page_size }} 条</span>
+    {% endif %}
+  </div>
+  <div class="data-grid-tools">
+    <span class="data-grid-resize-hint">拖动列边缘调整列宽</span>
+    <button class="data-grid-reset" type="button" data-reset-column-widths>重置列宽</button>
+    <span class="data-grid-visually-hidden" aria-live="polite" data-column-resize-status></span>
+  </div>
+  {% if pagination.total_pages > 1 %}
+    <nav class="data-grid-pagination" aria-label="{{ data_grid_label }}分页">
+      {% if pagination.has_prev %}
+        <a class="linear-button subtle" href="{{ pagination.prev_url }}">上一页</a>
+      {% else %}
+        <span class="linear-button subtle disabled">上一页</span>
+      {% endif %}
+      <div class="data-grid-pages">
+        {% for item in pagination.links %}
+          {% if item.gap %}
+            <span class="data-grid-gap">…</span>
+          {% elif item.current %}
+            <span class="data-grid-page current" aria-current="page">{{ item.page }}</span>
+          {% else %}
+            <a class="data-grid-page" href="{{ item.url }}">{{ item.page }}</a>
+          {% endif %}
+        {% endfor %}
+      </div>
+      {% if pagination.has_next %}
+        <a class="linear-button subtle" href="{{ pagination.next_url }}">下一页</a>
+      {% else %}
+        <span class="linear-button subtle disabled">下一页</span>
+      {% endif %}
+    </nav>
+  {% endif %}
+</footer>

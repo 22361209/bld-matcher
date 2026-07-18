@@ -1,0 +1,247 @@
+/* Shared scrollable, resizable data-grid frame. */
+
+.data-grid {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--linear-line);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+[data-grid-scroll] {
+  width: 100%;
+  max-width: 100%;
+  max-height: min(68vh, 760px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  border: 0;
+}
+
+.data-grid .data-table {
+  min-width: 0;
+  margin: 0;
+}
+
+.data-grid .data-table th {
+  top: 0;
+  z-index: 5;
+  box-shadow: inset 0 -1px 0 var(--linear-line);
+}
+
+.data-grid .data-table th.sticky-actions {
+  z-index: 7;
+}
+
+.data-grid .data-table th:not(:last-child),
+.data-grid .data-table td:not(:last-child) {
+  border-right: 1px solid #e4ebf2;
+}
+
+.data-grid .data-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.data-grid-footer {
+  display: flex;
+  min-height: 48px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px;
+  border-top: 1px solid var(--linear-line);
+  background: #f8fafc;
+  color: var(--linear-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.data-grid-summary,
+.data-grid-tools,
+.data-grid-pagination,
+.data-grid-pages {
+  display: flex;
+  align-items: center;
+}
+
+.data-grid-summary {
+  flex: 0 0 auto;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.data-grid-summary strong {
+  color: var(--linear-text);
+  font-size: 13px;
+}
+
+.data-grid-tools {
+  min-width: 0;
+  flex: 1 1 auto;
+  justify-content: center;
+  gap: 8px;
+}
+
+.data-grid-resize-hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-grid-reset {
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--linear-accent);
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.data-grid-reset:hover,
+.data-grid-reset:focus-visible {
+  border-color: #c5d4e2;
+  background: #edf4fa;
+  color: var(--linear-accent-hover);
+}
+
+.data-grid-pagination {
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.data-grid-pages {
+  gap: 4px;
+}
+
+.data-grid-page,
+.data-grid-gap {
+  display: inline-flex;
+  min-width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: #53647a;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.data-grid-page {
+  border: 1px solid #cbd6e2;
+  background: #ffffff;
+}
+
+.data-grid-page:hover,
+.data-grid-page:focus-visible {
+  border-color: var(--linear-accent);
+  color: var(--linear-accent);
+}
+
+.data-grid-page.current {
+  border-color: var(--linear-accent);
+  background: var(--linear-accent);
+  color: #ffffff;
+}
+
+.data-grid-page.current:hover,
+.data-grid-page.current:focus-visible {
+  color: #ffffff;
+}
+
+.data-grid-pagination .linear-button {
+  min-height: 28px;
+  padding: 4px 8px;
+}
+
+.data-grid-pagination .linear-button.disabled {
+  cursor: default;
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.data-column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -5px;
+  z-index: 9;
+  width: 10px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.data-column-resize-handle::after {
+  position: absolute;
+  top: 22%;
+  right: 4px;
+  width: 1px;
+  height: 56%;
+  border-radius: 1px;
+  background: #a7b7c7;
+  content: "";
+  opacity: 0;
+  transition: opacity 120ms ease, background-color 120ms ease;
+}
+
+.data-grid th:hover > .data-column-resize-handle::after,
+.data-column-resize-handle:hover::after,
+.data-column-resize-handle:focus-visible::after,
+.data-column-resize-handle.active::after {
+  background: var(--linear-accent);
+  opacity: 1;
+}
+
+.data-column-resize-handle:focus-visible {
+  outline: 0;
+  box-shadow: inset -2px 0 0 var(--linear-accent);
+}
+
+.data-grid-resizing,
+.data-grid-resizing * {
+  cursor: col-resize;
+  user-select: none;
+}
+
+.data-grid-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 760px) {
+  [data-grid-scroll] {
+    max-height: min(62vh, 640px);
+  }
+
+  .data-grid-footer {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .data-grid-tools {
+    flex: 0 0 auto;
+    margin-left: auto;
+  }
+
+  .data-grid-resize-hint {
+    display: none;
+  }
+
+  .data-grid-pagination {
+    width: 100%;
+    justify-content: center;
+  }
+}

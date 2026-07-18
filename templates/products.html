@@ -182,7 +182,8 @@
       </section>
 
       <section class="data-section" id="products-results">
-        <div class="data-table-scroll">
+        <div class="data-grid" data-resizable-grid data-grid-key="products">
+        <div class="data-table-scroll" data-grid-scroll>
         <table class="resizable-table data-table products-table" id="products-table" data-column-storage-scope="{{ g.user['id'] if g.user else 'guest' }}">
           <colgroup>
             <col data-col="bld" class="col-width-104">
@@ -203,7 +204,7 @@
               <th data-col="item">{{ product_column_heading("item", "产品名称", "item", product_filter_options.get("item", []), selected_item_filters) }}</th>
               <th data-col="oe1">{{ product_column_heading("oe1", "OE 号") }}</th>
               <th data-col="oe2">{{ product_column_heading("oe2", "品牌号码") }}</th>
-              <th class="resizable-heading" data-col="models">{{ product_column_heading("models", "车型") }}<span class="resize-handle" aria-hidden="true"></span></th>
+              <th data-col="models">{{ product_column_heading("models", "车型") }}</th>
               <th data-col="image">{{ product_column_heading("image", "产品图片") }}</th>
               <th data-col="price">{{ product_column_heading("price", "含税单价") }}</th>
               <th data-col="product-status">{{ product_column_heading("product-status", "产品状态", "product_status", product_filter_options.get("product_status", []), selected_product_status_filters) }}</th>
@@ -216,32 +217,12 @@
         </table>
         {% if total_products == 0 %}
           <p class="empty-message">没有符合条件的产品。</p>
-        {% elif pagination.total_pages > 1 %}
-          <div class="product-pagination bottom">
-            <span>第 {{ pagination.page }} / {{ pagination.total_pages }} 页，每页 {{ product_page_size }} 条</span>
-            <div class="product-pagination-controls" aria-label="产品分页">
-              {% if pagination.has_prev %}
-                <a class="linear-button subtle" href="{{ pagination.prev_url }}">上一页</a>
-              {% else %}
-                <span class="linear-button subtle disabled">上一页</span>
-              {% endif %}
-              {% for item in pagination.links %}
-                {% if item.gap %}
-                  <span class="pagination-gap">...</span>
-                {% elif item.current %}
-                  <span class="pagination-page current">{{ item.page }}</span>
-                {% else %}
-                  <a class="pagination-page" href="{{ item.url }}">{{ item.page }}</a>
-                {% endif %}
-              {% endfor %}
-              {% if pagination.has_next %}
-                <a class="linear-button subtle" href="{{ pagination.next_url }}">下一页</a>
-              {% else %}
-                <span class="linear-button subtle disabled">下一页</span>
-              {% endif %}
-            </div>
-          </div>
         {% endif %}
+        </div>
+        {% set data_grid_label = "产品" %}
+        {% set data_grid_total = total_products %}
+        {% set data_grid_page_size = product_page_size %}
+        {% include "_data_grid_footer.html" %}
         </div>
       </section>
 {% endblock %}

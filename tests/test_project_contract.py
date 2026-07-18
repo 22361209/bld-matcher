@@ -185,6 +185,17 @@ def dynamic_route():
         for marker in page_only_markers:
             self.assertNotIn(marker, global_script)
 
+    def test_primary_data_lists_share_resizable_grid_protocol(self):
+        for template_name in ("products.html", "materials.html", "tubes.html", "quotes.html"):
+            template = (contract.ROOT / "templates" / template_name).read_text(encoding="utf-8")
+            self.assertIn("data-resizable-grid", template, template_name)
+            self.assertIn("data-grid-scroll", template, template_name)
+            self.assertIn('include "_data_grid_footer.html"', template, template_name)
+
+        base = (contract.ROOT / "templates" / "base.html").read_text(encoding="utf-8")
+        self.assertIn("components/data_grid.css", base)
+        self.assertIn("components/data_grid.js", base)
+
     def test_split_page_assets_are_declared_by_owning_templates(self):
         asset_owners = {
             "index.html": (

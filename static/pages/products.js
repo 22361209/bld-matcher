@@ -1,4 +1,4 @@
-import { setupProductTable } from "./product_table.js?v=20260714-1";
+import { setupProductTable } from "./product_table.js?v=20260718-1";
 
 if (document.body.dataset.page === "products.list") {
   const bldSearch = document.querySelector("#bld-search");
@@ -36,37 +36,6 @@ if (document.body.dataset.page === "products.list") {
   });
 
   const table = document.querySelector("#products-table");
-  const stickyCommand = document.querySelector(".products-sticky-command");
-  let productHeaderFrame = 0;
-  let lastProductHeaderTop = -1;
-  const updateProductsTableHeaderTop = () => {
-    if (!table || !stickyCommand) return;
-    const navOffset = Number.parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue("--revealed-nav-height")
-    ) || 0;
-    const commandRect = stickyCommand.getBoundingClientRect();
-    const tableRect = table.getBoundingClientRect();
-    const commandIsPinned = commandRect.top <= navOffset + 1;
-    const headerWouldTouchCommand = tableRect.top <= commandRect.bottom;
-    const headerTop = commandIsPinned && headerWouldTouchCommand ? Math.round(navOffset + commandRect.height) : 0;
-    if (headerTop === lastProductHeaderTop) return;
-    lastProductHeaderTop = headerTop;
-    table.style.setProperty("--products-table-header-top", `${headerTop}px`);
-  };
-  const scheduleProductsTableHeaderTop = () => {
-    if (productHeaderFrame) return;
-    productHeaderFrame = requestAnimationFrame(() => {
-      productHeaderFrame = 0;
-      updateProductsTableHeaderTop();
-    });
-  };
-  window.addEventListener("scroll", scheduleProductsTableHeaderTop, { passive: true });
-  window.addEventListener("resize", scheduleProductsTableHeaderTop);
-  window.addEventListener("app-nav-offset-change", scheduleProductsTableHeaderTop);
-  updateProductsTableHeaderTop();
-  requestAnimationFrame(updateProductsTableHeaderTop);
-  window.addEventListener("load", scheduleProductsTableHeaderTop);
-  window.addEventListener("pageshow", scheduleProductsTableHeaderTop);
   setupProductTable(table);
 
   const productModal = document.querySelector("#product-modal");

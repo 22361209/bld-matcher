@@ -16,6 +16,7 @@ import unittest
 import zipfile
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import unquote
 from unittest.mock import patch
 
@@ -229,6 +230,47 @@ class WebAppTest(unittest.TestCase):
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
+
+    def test_tube_page_refetches_after_clamping_an_out_of_range_page(self):
+        self.login()
+        offsets: list[int] = []
+        last_page_record = SimpleNamespace(
+            id=178,
+            code="TUBE-LAST-PAGE",
+            tube_type="测试管件",
+            spec_text="Ø35 × 30",
+            blank_length_text="100",
+            inner_diameter_tolerance=None,
+            purchase_base=1,
+            weight_kg=1.25,
+            tolerance_mm=0.1,
+            consumption_mm=2.0,
+            borrowed_codes="",
+            borrowed_from="",
+        )
+
+        class FakeTubeService:
+            def list_items(self, *, filters, limit, offset):
+                offsets.append(offset)
+                return {
+                    "records": [last_page_record] if offset == 100 else [],
+                    "total": 178,
+                    "counts": {},
+                    "blank_length_options": [],
+                    "inner_tolerance_options": [],
+                    "purchase_base_options": [],
+                    "tolerance_options": [],
+                    "consumption_options": [],
+                }
+
+        with patch("app.modules.tubes.web.get_tube_service", return_value=FakeTubeService()):
+            response = self.client.get("/tubes?page=999")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.get_data(as_text=True)
+        self.assertEqual(offsets, [99800, 100])
+        self.assertIn("TUBE-LAST-PAGE", body)
+        self.assertIn("101–178", body)
 
     def test_product_brand_normalization_uses_preview_confirmation_and_backup(self):
         self.login()

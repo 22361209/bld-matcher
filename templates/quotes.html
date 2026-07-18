@@ -130,20 +130,21 @@
           </div>
           {% endif %}
         </div>
-        <div class="data-table-scroll">
-          <table class="data-table quote-table">
+        <div class="data-grid" data-resizable-grid data-grid-key="quotes">
+        <div class="data-table-scroll" data-grid-scroll>
+          <table class="data-table quote-table" id="quotes-table" data-column-storage-scope="{{ g.user['id'] if g.user else 'guest' }}">
             <colgroup>
-              <col class="col-width-92">
-              <col class="col-width-128">
-              <col class="col-width-142">
-              <col class="col-width-130">
-              <col class="col-width-92">
-              <col class="col-width-92">
-              <col class="col-width-70">
-              <col class="col-width-92">
-              <col class="col-width-90">
-              <col class="col-width-150">
-              <col class="col-width-86">
+              <col class="col-width-92" data-col="date">
+              <col class="col-width-128" data-col="customer">
+              <col class="col-width-142" data-col="bld">
+              <col class="col-width-130" data-col="customer-code">
+              <col class="col-width-92" data-col="tax-price">
+              <col class="col-width-92" data-col="net-price">
+              <col class="col-width-70" data-col="currency">
+              <col class="col-width-92" data-col="quoted-by">
+              <col class="col-width-90" data-col="source">
+              <col class="col-width-150" data-col="remark">
+              <col class="col-width-86" data-col="actions">
             </colgroup>
             <thead>
               <tr>
@@ -216,20 +217,10 @@
             </tbody>
           </table>
         </div>
-        {% if pagination.total_pages > 1 %}
-          <nav class="product-pagination bottom" aria-label="报价记录分页">
-            <div class="product-pagination-controls">
-              {% if pagination.has_prev %}<a class="linear-button subtle" href="{{ pagination.prev_url }}">上一页</a>{% endif %}
-              {% for link in pagination.links %}
-                {% if link.gap %}
-                  <span class="pagination-gap">...</span>
-                {% else %}
-                  <a class="pagination-page {% if link.current %}current{% endif %}" href="{{ link.url }}">{{ link.page }}</a>
-                {% endif %}
-              {% endfor %}
-              {% if pagination.has_next %}<a class="linear-button subtle" href="{{ pagination.next_url }}">下一页</a>{% endif %}
-            </div>
-          </nav>
-        {% endif %}
+        {% set data_grid_label = "报价记录" %}
+        {% set data_grid_total = total_records %}
+        {% set data_grid_page_size = page_size %}
+        {% include "_data_grid_footer.html" %}
+        </div>
       </section>
 {% endblock %}

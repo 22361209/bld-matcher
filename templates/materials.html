@@ -116,19 +116,20 @@
           </div>
         </div>
 
-        <div class="data-table-scroll">
-          <table class="data-table">
+        <div class="data-grid" data-resizable-grid data-grid-key="materials">
+        <div class="data-table-scroll" data-grid-scroll>
+          <table class="data-table" id="materials-table" data-column-storage-scope="{{ g.user['id'] if g.user else 'guest' }}">
             <colgroup>
-              <col class="col-width-62">
-              <col class="col-width-80">
-              <col class="col-width-78">
-              <col class="col-width-104">
-              <col class="col-width-88">
-              <col class="col-width-150">
-              <col class="col-width-64">
-              <col class="col-width-76">
-              <col class="col-width-50">
-              <col class="col-width-64">
+              <col class="col-width-62" data-col="model">
+              <col class="col-width-80" data-col="code">
+              <col class="col-width-78" data-col="category">
+              <col class="col-width-104" data-col="car">
+              <col class="col-width-88" data-col="part">
+              <col class="col-width-150" data-col="specification">
+              <col class="col-width-64" data-col="pieces">
+              <col class="col-width-76" data-col="unit-weight">
+              <col class="col-width-50" data-col="status">
+              <col class="col-width-64" data-col="actions">
             </colgroup>
             <thead>
               <tr>
@@ -175,32 +176,11 @@
             </tbody>
           </table>
         </div>
-        {% if pagination.total_pages > 1 %}
-          <nav class="product-pagination bottom material-pagination" aria-label="材料明细分页">
-            <span>第 {{ pagination.page }} / {{ pagination.total_pages }} 页，每页 {{ material_page_size }} 条</span>
-            <div class="product-pagination-controls">
-              {% if pagination.has_prev %}
-                <a class="linear-button subtle" href="{{ pagination.prev_url }}">上一页</a>
-              {% else %}
-                <span class="linear-button subtle disabled">上一页</span>
-              {% endif %}
-              {% for link in pagination.links %}
-                {% if link.gap %}
-                  <span class="pagination-gap">…</span>
-                {% elif link.current %}
-                  <span class="pagination-page current">{{ link.page }}</span>
-                {% else %}
-                  <a class="pagination-page" href="{{ link.url }}">{{ link.page }}</a>
-                {% endif %}
-              {% endfor %}
-              {% if pagination.has_next %}
-                <a class="linear-button subtle" href="{{ pagination.next_url }}">下一页</a>
-              {% else %}
-                <span class="linear-button subtle disabled">下一页</span>
-              {% endif %}
-            </div>
-          </nav>
-        {% endif %}
+        {% set data_grid_label = "材料明细" %}
+        {% set data_grid_total = total_material_items %}
+        {% set data_grid_page_size = material_page_size %}
+        {% include "_data_grid_footer.html" %}
+        </div>
       </section>
       {% endif %}
 

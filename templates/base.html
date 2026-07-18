@@ -7,6 +7,7 @@
     <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=static_version('styles.css')) }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='components/workspace.css', v=static_version('components/workspace.css')) }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='components/data_grid.css', v=static_version('components/data_grid.css')) }}">
     {% block page_head %}{% endblock %}
   </head>
   <body class="{% block body_class %}{% endblock %}" data-page="{% block page_id %}shared.page{% endblock %}" data-page-type="{% block page_type %}workbench{% endblock %}">
@@ -33,6 +34,7 @@
       {% block page_content %}{% endblock %}
     </main>
     {% block page_modals %}{% endblock %}
+    <script type="module" src="{{ url_for('static', filename='components/data_grid.js', v=static_version('components/data_grid.js')) }}"></script>
     <script type="module" src="{{ url_for('static', filename='app.js', v=static_version('app.js')) }}"></script>
     {% if g.user %}<script type="module" src="{{ url_for('static', filename='nav.js', v=static_version('nav.js')) }}"></script>{% endif %}
     {% block page_scripts %}{% endblock %}

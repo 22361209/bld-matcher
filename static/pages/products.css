@@ -182,68 +182,6 @@
   backdrop-filter: blur(10px);
 }
 
-.products-sticky-command + .data-section .data-table th {
-  top: var(--products-table-header-top, 0px);
-  z-index: 20;
-}
-
-.products-sticky-command + .data-section .data-table-scroll {
-  overflow-x: visible;
-}
-
-.product-pagination {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  flex-wrap: wrap;
-  color: #6b778c;
-  font-weight: 700;
-}
-
-.product-pagination.bottom {
-  justify-content: center;
-  min-height: 56px;
-  padding: 10px 0 2px;
-}
-
-.product-pagination-controls {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.pagination-page,
-.pagination-gap {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 34px;
-  height: 34px;
-  border-radius: 8px;
-  color: #53647a;
-  font-weight: 800;
-  text-decoration: none;
-}
-
-.pagination-page {
-  border: 1px solid #cbd6e2;
-  background: #ffffff;
-}
-
-.pagination-page.current {
-  color: #ffffff;
-  border-color: #225d91;
-  background: #225d91;
-}
-
-.linear-button.disabled {
-  cursor: default;
-  opacity: 0.45;
-  pointer-events: none;
-}
-
 .app-surface .toolbar-popover-form.catalog-import-actions {
   display: flex;
   align-items: center;
@@ -278,10 +216,6 @@
   .record-form select {
     min-width: 0;
     max-width: 100%;
-  }
-
-  .products-sticky-command + .data-section .data-table-scroll {
-    overflow-x: auto;
   }
 }
 

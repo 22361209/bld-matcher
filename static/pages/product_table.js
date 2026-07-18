@@ -103,7 +103,6 @@ export function setupProductTable(table, options = {}) {
   const resultsHash = options.resultsHash || "products-results";
   const storageScope = table.dataset.columnStorageScope || "guest";
   const orderStorageKey = `${storagePrefix}.column-order.v${COLUMN_ORDER_VERSION}.u${storageScope}`;
-  const widthStorageKey = `${storagePrefix}.models-width.v1.u${storageScope}`;
   const orderStatus = document.querySelector("[data-column-order-status]");
   const filterPortal = table.closest(".app-surface") || document.body;
   let currentOrder = [...availableColumns];
@@ -478,45 +477,8 @@ export function setupProductTable(table, options = {}) {
     window.addEventListener("blur", onBlur);
   };
 
-  const columns = elementsByColumn(table.querySelectorAll("col"));
-  const modelsCol = columns.get("models");
-  const savedModelWidth = Number(safeStorageGet(widthStorageKey) || safeStorageGet("bldProductTableModelsWidth"));
-  if (modelsCol && savedModelWidth) modelsCol.style.width = `${savedModelWidth}px`;
-  const startModelsResize = (event) => {
-    if (event.button !== 0 || !modelsCol) return;
-    event.preventDefault();
-    event.stopPropagation();
-    closeColumnFilter();
-    const startX = event.clientX;
-    const startWidth = modelsCol.getBoundingClientRect().width;
-    let resizing = true;
-    let widthToPersist = null;
-    const onMove = (moveEvent) => {
-      const width = Math.min(420, Math.max(100, Math.round(startWidth + moveEvent.clientX - startX)));
-      modelsCol.style.width = `${width}px`;
-      widthToPersist = width;
-    };
-    const cleanup = () => {
-      if (!resizing) return;
-      resizing = false;
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-      window.removeEventListener("blur", onBlur);
-      if (widthToPersist !== null) safeStorageSet(widthStorageKey, String(widthToPersist));
-    };
-    const onUp = () => cleanup();
-    const onBlur = () => cleanup();
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-    window.addEventListener("blur", onBlur);
-  };
-
   filterPortal.addEventListener("mousedown", (event) => {
     if (!(event.target instanceof Element)) return;
-    if (event.target.closest("th[data-col='models'] .resize-handle")) {
-      startModelsResize(event);
-      return;
-    }
     const handle = event.target.closest("[data-column-drag-handle]");
     if (handle instanceof HTMLElement) startColumnDrag(handle, event);
   });
