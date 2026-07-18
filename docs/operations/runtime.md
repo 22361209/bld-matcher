@@ -9,7 +9,7 @@ Web     -> Flask/Gunicorn，接收页面和 API 请求、提交持久任务
 Worker  -> scripts.run_worker，领取任务、刷新租约/心跳、写进度与结果
 ```
 
-两者必须使用同一份 `.env`、SQLite 数据库、`uploads/` 和 `outputs/`。Web 不会在请求线程中执行货物识别。
+两者必须使用同一份 `.env`、SQLite 数据库、`uploads/` 和 `outputs/`。货物识别 Web 页面已退役；保留的命令行/服务任务仍只由独立 Worker 执行，不进入 Web 请求线程。
 
 ## Local Start
 
@@ -144,6 +144,6 @@ BLD_HEARTBEAT_RETENTION_DAYS
 1. 对运行数据库做 SQLite 一致性备份，并确认运行数据目录不在 Git 操作范围内。
 2. 更新代码后先执行 `scripts.init_database`，再同时更新 Web 与 Worker。
 3. 等待两个 healthcheck 成功，并运行 `scripts.runtime_probe`。
-4. 最后执行货物识别排队、刷新状态和取消/完成的最小业务验收。
+4. 最后执行持久任务 Worker、识别 Handler、取消/完成和输出补偿的自动化验收；不再验收已退役的识别 Web 页面。
 
 迁移 017 会把旧识别任务迁入通用任务表并删除旧表。迁移后回滚到旧代码必须同时恢复迁移前数据库备份；不要只回滚容器镜像。产品数据同步与 NAS 数据方向仍遵守 `AGENTS.md`，本手册不授权任何运行数据覆盖。

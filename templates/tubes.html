@@ -33,6 +33,12 @@
 {% block page_head %}<link rel="stylesheet" href="{{ url_for('static', filename='pages/product_table.css', v=static_version('pages/product_table.css')) }}"><link rel="stylesheet" href="{{ url_for('static', filename='pages/tubes.css', v=static_version('pages/tubes.css')) }}">{% endblock %}
 
 {% block page_content %}
+  <header class="workspace-header">
+    <div>
+      <h1>管件资料</h1>
+      <p>按编号、规格和尺寸条件检索管件，维护毛坯、材质、重量与借用关系。</p>
+    </div>
+  </header>
   {% set type_options = [] %}{% for option in tube_types %}{% set _ = type_options.append({'value': option, 'label': option, 'count': type_counts.get(option, 0)}) %}{% endfor %}
   {% set material_options = [{'value': '—', 'label': '—', 'count': total}] %}
   <section class="data-section" id="tube-results">

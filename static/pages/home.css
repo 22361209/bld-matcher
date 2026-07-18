@@ -7,6 +7,175 @@
   background: rgba(255, 255, 255, 0.74);
 }
 
+.inquiry-home-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 294px;
+  gap: 18px;
+  align-items: start;
+}
+
+.inquiry-home-main {
+  min-width: 0;
+}
+
+.inquiry-home-main .search-hero {
+  min-height: 116px;
+}
+
+.inquiry-home-main .search-command {
+  width: 100%;
+  margin: 0 0 12px;
+  border: 1px solid var(--precision-line);
+  border-top: 3px solid var(--precision-cobalt);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--precision-shadow);
+}
+
+.inquiry-home-main .search-command-note {
+  color: var(--precision-muted);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+
+.inquiry-home-main .file-picker-control {
+  min-height: 46px;
+}
+
+.inquiry-home-main .file-picker-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.inquiry-catalog-panel {
+  position: sticky;
+  top: 78px;
+  display: grid;
+  margin-top: 26px;
+  border: 1px solid #3e494f;
+  border-top: 3px solid var(--precision-signal);
+  border-radius: 4px;
+  color: #e9edeb;
+  background: var(--precision-ink);
+  box-shadow: 0 18px 42px rgba(20, 29, 34, 0.16);
+}
+
+.inquiry-side-section {
+  padding: 18px;
+}
+
+.inquiry-side-section + .inquiry-side-section {
+  border-top: 1px solid #465158;
+}
+
+.inquiry-side-kicker {
+  color: #83a9be;
+  font-family: "DIN Alternate", "Avenir Next Condensed", sans-serif;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.16em;
+}
+
+.inquiry-side-section h2 {
+  margin: 5px 0 14px;
+  color: #fff;
+  font-size: 15px;
+}
+
+.inquiry-catalog-file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 13px;
+}
+
+.inquiry-catalog-file > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.inquiry-catalog-file strong {
+  overflow: hidden;
+  color: #f7f9f8;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inquiry-catalog-file span,
+.inquiry-flow-guide small {
+  color: #9ba7ac;
+  font-size: 9px;
+}
+
+.inquiry-catalog-file .inquiry-ready-state {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border: 1px solid #5b7f69;
+  border-radius: 2px;
+  color: #afd2bd;
+  font-weight: 750;
+}
+
+.inquiry-side-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid #465158;
+  border-left: 1px solid #465158;
+}
+
+.inquiry-side-metrics div {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  border-right: 1px solid #465158;
+  border-bottom: 1px solid #465158;
+}
+
+.inquiry-side-metrics span {
+  color: #98a4a9;
+  font-size: 9px;
+}
+
+.inquiry-side-metrics strong {
+  color: #fff;
+  font-family: "DIN Alternate", "Avenir Next Condensed", sans-serif;
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.inquiry-flow-guide ol {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.inquiry-flow-guide li {
+  display: grid;
+  grid-template-columns: 29px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.inquiry-flow-guide li b {
+  color: #75a1ba;
+  font-family: "DIN Alternate", "Avenir Next Condensed", sans-serif;
+  font-size: 12px;
+}
+
+.inquiry-flow-guide li span {
+  display: grid;
+  gap: 2px;
+}
+
+.inquiry-flow-guide li strong {
+  color: #eef2f0;
+  font-size: 11px;
+}
+
 .quick-oe-heading {
   display: flex;
   justify-content: space-between;
@@ -263,5 +432,33 @@
 
   .quick-oe-image-placeholder {
     display: none;
+  }
+}
+
+@media (max-width: 1040px) {
+  .inquiry-home-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .inquiry-catalog-panel {
+    position: static;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 0 0 20px;
+  }
+
+  .inquiry-side-section + .inquiry-side-section {
+    border-top: 0;
+    border-left: 1px solid #465158;
+  }
+}
+
+@media (max-width: 640px) {
+  .inquiry-catalog-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .inquiry-side-section + .inquiry-side-section {
+    border-top: 1px solid #465158;
+    border-left: 0;
   }
 }

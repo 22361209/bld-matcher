@@ -10,31 +10,25 @@
 }
 
 .material-landing {
-  display: grid;
-  justify-items: center;
-  gap: 8px;
-  padding: 24px 0 12px;
-  text-align: center;
+  align-items: flex-end;
+  text-align: left;
 }
 
 .material-landing h1 {
   margin: 0;
-  color: #1d2734;
-  font-size: clamp(36px, 6vw, 62px);
-  font-weight: 800;
-  letter-spacing: 0;
-  line-height: 1.05;
+  color: var(--precision-ink);
+  font-size: 28px;
+  font-weight: 780;
 }
 
 .material-landing p {
-  margin: 0;
-  color: var(--linear-muted);
-  font-size: 16px;
-  line-height: 1.45;
+  margin: 7px 0 0;
+  color: var(--precision-muted);
+  font-size: 12px;
 }
 
 .material-stat-strip {
-  max-width: 820px;
+  max-width: 640px;
 }
 
 .material-command-center {
@@ -203,7 +197,7 @@
 
 @media (max-width: 760px) {
   .material-landing {
-    padding-top: 28px;
+    align-items: start;
   }
 
   .material-generate-row {

@@ -1,5 +1,10 @@
 <nav class="app-nav">
-  <div class="nav-links">
+  <a class="nav-brand" href="{{ url_for('index') }}" aria-label="BLD 业务工作台首页">
+    <span class="nav-brand-mark">BLD</span>
+    <span class="nav-brand-copy"><strong>业务工作台</strong><small>AUTO PARTS OPERATIONS</small></span>
+  </a>
+  <div class="nav-primary">
+    <div class="nav-links">
     <a class="{% if active_page == 'match' %}active{% endif %}" href="{{ url_for('index') }}">询价处理</a>
     {% if can("view_customer_prices") %}
       <a class="{% if active_page == 'quotes' %}active{% endif %}" href="{{ url_for('quote_web.quotes') }}">报价记录</a>
@@ -16,18 +21,14 @@
       </div>
     </div>
     <a class="{% if active_page == 'material_drawings' %}active{% endif %}" href="{{ url_for('material_drawings') }}">物料图纸</a>
-    {% if can("generate_shipping_notice") %}
-      <a class="{% if active_page == 'shipping_notice' %}active{% endif %}" href="{{ url_for('shipping_notice') }}">发货通知</a>
-    {% endif %}
-    {% if can("recognize_shipments") %}
-      <a class="{% if active_page == 'shipment_recognition' %}active{% endif %}" href="{{ url_for('shipment_recognition') }}">货物识别</a>
-    {% endif %}
+    </div>
   </div>
   <div class="nav-user">
     {% if can("manage_users") or can("view_logs") %}
       <details class="admin-menu" data-admin-menu>
         <summary class="user-badge admin-menu-trigger {% if active_page in ['users', 'internal_api_key', 'logs', 'system_updates', 'product_data_sync', 'business_data_sync'] %}active{% endif %}">
-          {{ g.user.username }} · {{ ROLE_LABELS.get(g.user.role, g.user.role) }}
+          <span class="nav-user-code">{{ g.user.username[:3] | upper }}</span>
+          <span class="nav-user-copy"><strong>{{ g.user.username }}</strong><small>{{ ROLE_LABELS.get(g.user.role, g.user.role) }}</small></span>
         </summary>
         <div class="admin-menu-panel">
           {% if can("manage_users") %}
@@ -45,7 +46,7 @@
         </div>
       </details>
     {% else %}
-      <span class="user-badge">{{ g.user.username }} · {{ ROLE_LABELS.get(g.user.role, g.user.role) }}</span>
+      <span class="user-badge"><span class="nav-user-code">{{ g.user.username[:3] | upper }}</span><span class="nav-user-copy"><strong>{{ g.user.username }}</strong><small>{{ ROLE_LABELS.get(g.user.role, g.user.role) }}</small></span></span>
     {% endif %}
     <form action="{{ url_for('logout') }}" method="post">{{ csrf_field() }}<button class="ghost compact" type="submit">退出</button></form>
   </div>

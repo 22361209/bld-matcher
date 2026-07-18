@@ -179,7 +179,6 @@ def dynamic_route():
             "shipment-folder-picker",
             "data-price-mode",
             "data-open-download-modal",
-            "data-open-shipping-template",
             "data-purchase-contract-form",
         )
         for marker in page_only_markers:
@@ -231,11 +230,6 @@ def dynamic_route():
             "quotes.html": ("pages/quotes.css",),
             "result.html": ("pages/inquiry.css", "pages/inquiry_result.js"),
             "select_match_column.html": ("pages/inquiry.css",),
-            "shipment_recognition.html": (
-                "pages/shipment_recognition.css",
-                "pages/shipment_recognition.js",
-            ),
-            "shipping_notice.html": ("pages/shipping_notice.css", "pages/shipping_notice.js"),
             "system_updates.html": ("pages/system_updates.css",),
         }
         for template_name, assets in asset_owners.items():

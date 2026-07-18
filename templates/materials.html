@@ -10,9 +10,11 @@
 {% endblock %}
 
 {% block page_content %}
-{% if not show_material_items %}<header class="material-landing">
-        <h1>{% if show_material_items %}材料明细{% else %}生产料单{% endif %}</h1>
-        <p>{% if show_material_items %}维护生成生产料单时使用的材料明细。{% else %}上传生产计划，按启用材料明细生成采购和下料所需的料单。{% endif %}</p>
+      <header class="workspace-header material-landing">
+        <div>
+          <h1>{% if show_material_items %}材料明细{% else %}生产料单{% endif %}</h1>
+          <p>{% if show_material_items %}维护生产料单所使用的材料、规格、重量和启停状态。{% else %}上传生产计划，按启用材料明细生成采购和下料所需的料单。{% endif %}</p>
+        </div>
         <div class="compact-metrics material-stat-strip" aria-label="材料数据统计">
           <span>总明细 <strong>{{ material_stats["items"] }}</strong></span>
           <span>启用明细 <strong>{{ material_stats.active }}</strong></span>
@@ -22,7 +24,7 @@
             <span>当前视图 <strong>{{ "全部" if status == "all" else ("停用" if status == "inactive" else "启用") }}</strong></span>
           {% endif %}
         </div>
-      </header>{% endif %}
+      </header>
 
       {% if material_file_stats.invalid %}
         <section class="materials-alert">

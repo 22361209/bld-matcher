@@ -1,12 +1,6 @@
-from __future__ import annotations
+"""Shipping domain services retained after the legacy Web pages were retired.
 
-from .recognition_web import register as register_recognition
-from .web import register as register_shipping_notices
-
-
-def register(app) -> None:
-    register_shipping_notices(app)
-    register_recognition(app)
-
-
-__all__ = ["register"]
+The shipping-notice generator and shipment-recognition worker remain available
+to trusted scripts and future authenticated APIs. They are intentionally no
+longer registered as browser routes.
+"""

@@ -11,17 +11,11 @@
 {% endblock %}
 
 {% block page_content %}
-<header class="search-hero">
+<div class="inquiry-home-layout">
+  <div class="inquiry-home-main">
+      <header class="search-hero">
         <h1><span>BLD</span> 询价处理</h1>
-        <p>上传客户询价表，自动在产品目录中新增匹配的 BLD NO.</p>
-        {% if catalog_summary %}
-          <div class="compact-metrics" aria-label="产品目录统计">
-            <span>启用产品 <strong>{{ product_stats.active }}</strong></span>
-            <span>号码索引 <strong>{{ catalog_summary.oe_keys }}</strong></span>
-            <span>BLD 索引 <strong>{{ catalog_summary.bld_keys }}</strong></span>
-            <span>停用产品 <strong>{{ product_stats.inactive }}</strong></span>
-          </div>
-        {% endif %}
+        <p>输入 OE、品牌号码或 BLD 号快速查询，也可以上传客户询价表批量匹配。</p>
       </header>
 
       <section class="search-command">
@@ -184,6 +178,36 @@
           </section>
         </div>
       </details>
+  </div>
+
+  <aside class="inquiry-catalog-panel" aria-label="询价工作台状态">
+    <section class="inquiry-side-section">
+      <span class="inquiry-side-kicker">CATALOG STATUS</span>
+      <h2>产品目录状态</h2>
+      <div class="inquiry-catalog-file">
+        <div><strong>{{ catalog_path.name if catalog_summary else "尚未导入" }}</strong><span>当前匹配目录</span></div>
+        <span class="inquiry-ready-state">{{ "已就绪" if catalog_summary else "待导入" }}</span>
+      </div>
+      {% if catalog_summary %}
+        <div class="inquiry-side-metrics">
+          <div><span>启用产品</span><strong>{{ product_stats.active }}</strong></div>
+          <div><span>号码索引</span><strong>{{ catalog_summary.oe_keys }}</strong></div>
+          <div><span>BLD 索引</span><strong>{{ catalog_summary.bld_keys }}</strong></div>
+          <div><span>停用产品</span><strong>{{ product_stats.inactive }}</strong></div>
+        </div>
+      {% endif %}
+    </section>
+    <section class="inquiry-side-section inquiry-flow-guide">
+      <span class="inquiry-side-kicker">MATCHING FLOW</span>
+      <h2>三步完成询价</h2>
+      <ol>
+        <li><b>01</b><span><strong>输入或上传</strong><small>号码快查或客户 Excel</small></span></li>
+        <li><b>02</b><span><strong>选择匹配列</strong><small>由用户确认真实业务列</small></span></li>
+        <li><b>03</b><span><strong>核对并下载</strong><small>网页预览后选择价格模式</small></span></li>
+      </ol>
+    </section>
+  </aside>
+</div>
 {% endblock %}
 
 {% block page_scripts %}

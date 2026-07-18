@@ -34,7 +34,6 @@ TYPECHECK_PATHS = (
     "app/modules/products/sync_service.py",
     "app/modules/products/sync_web.py",
     "app/modules/shipping/recognition_service.py",
-    "app/modules/shipping/recognition_web.py",
     "app/modules/shipping/recognition_worker.py",
     "scripts/cleanup_runtime.py",
     "scripts/run_worker.py",
