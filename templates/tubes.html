@@ -36,7 +36,6 @@
   {% set type_options = [] %}{% for option in tube_types %}{% set _ = type_options.append({'value': option, 'label': option, 'count': type_counts.get(option, 0)}) %}{% endfor %}
   {% set material_options = [{'value': '—', 'label': '—', 'count': total}] %}
   <section class="data-section" id="tube-results">
-    <div class="data-section-header"><div><h2>管件明细</h2><p>当前 {{ total }} 条记录。</p></div></div>
     <div class="workspace-command tube-command">
       <form class="search-form" method="get" action="{{ url_for('tube_items') }}#tube-results">
         {% for value in selected_types %}<input type="hidden" name="type" value="{{ value }}">{% endfor %}{% for value in selected_blank_lengths %}<input type="hidden" name="blank_length" value="{{ value }}">{% endfor %}{% for value in selected_inner_tolerances %}<input type="hidden" name="inner_tolerance" value="{{ value }}">{% endfor %}{% for value in selected_purchase_bases %}<input type="hidden" name="purchase_base" value="{{ value }}">{% endfor %}{% for value in selected_materials %}<input type="hidden" name="material" value="{{ value }}">{% endfor %}{% for value in selected_tolerances %}<input type="hidden" name="tolerance" value="{{ value }}">{% endfor %}{% for value in selected_consumptions %}<input type="hidden" name="consumption" value="{{ value }}">{% endfor %}

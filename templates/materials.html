@@ -63,18 +63,6 @@
       {% set status_label = "包含停用" if status == "all" else ("只看停用" if status == "inactive" else "只看启用") %}
       <section class="data-section" id="materials-results">
         <div class="material-items-command">
-          <div class="data-section-header material-items-heading">
-            <div>
-              <h2>材料明细</h2>
-              <p>
-              {% if total_material_items %}
-                第 {{ pagination.start }}-{{ pagination.end }} 条 / 共 {{ total_material_items }} 条
-              {% else %}
-                0 条
-              {% endif %}
-              </p>
-            </div>
-          </div>
           <div class="material-table-toolbar">
             <form class="search-form material-table-search" method="get" action="{{ url_for('material_items') }}#materials-results">
               <label>

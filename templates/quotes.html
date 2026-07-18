@@ -26,12 +26,6 @@
       {% endif %}
 
       <section class="data-section" id="quote-results">
-        <div class="data-section-header">
-          <div>
-            <h2>报价列表</h2>
-            <p>当前筛选 {{ total_records }} 条；输入客户和BLD号可查看历史报价和最近一次报价。</p>
-          </div>
-        </div>
         <div class="workspace-command quote-command">
           <form class="search-form quote-search" method="get" action="{{ url_for('quote_web.quotes') }}#quote-results">
             <label>

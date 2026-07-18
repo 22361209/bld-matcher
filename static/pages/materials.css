@@ -114,24 +114,8 @@
 
 .material-items-command {
   display: grid;
-  gap: 12px;
-  margin-bottom: 14px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--linear-line);
-}
-
-.material-items-heading {
-  min-height: auto;
-  padding: 0;
-  border: 0;
-}
-
-.material-items-heading h2 {
   margin: 0;
-}
-
-.material-items-heading p {
-  margin: 4px 0 0;
+  padding: 12px 0;
 }
 
 .material-table-actions {

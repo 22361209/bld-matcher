@@ -11,6 +11,7 @@
 .tube-choice-filter-inner-tolerance .products-column-filter-option span { white-space: pre-line; }
 .tube-command .search-form { flex-basis: 760px; }
 .tube-command .search-form label { min-width: 150px; }
+.tube-command { border-bottom: 0; }
 .tube-range-fields { display: grid; gap: 10px; margin: 12px 0; }
 .tube-range-fields label { display: grid; gap: 5px; color: var(--linear-muted); font-size: 12px; }
 .tube-range-fields input { width: 100%; }
