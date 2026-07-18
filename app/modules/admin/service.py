@@ -87,9 +87,9 @@ class AdminService:
             unit_of_work.commit()
         return token, ApiKeyPage(status=status, keys=keys)
 
-    def disable_api_key(self, *, actor: str, key_id: int | None) -> bool:
+    def delete_api_key(self, *, actor: str, key_id: int | None) -> bool:
         with self.unit_of_work_factory() as unit_of_work:
-            changed = unit_of_work.repository.disable_api_key(actor=actor, key_id=key_id)
+            changed = unit_of_work.repository.delete_api_key(actor=actor, key_id=key_id)
             unit_of_work.commit()
         return changed
 

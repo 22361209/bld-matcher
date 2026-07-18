@@ -9,7 +9,7 @@ from app.database import connect
 from app.modules.admin.persistence import get_user, get_user_by_username, list_audit_logs, list_log_actors, list_users, save_user
 from app.platform.api_keys import (
     create_internal_api_key,
-    disable_internal_api_key,
+    delete_internal_api_key,
     internal_api_key_status,
     list_internal_api_keys,
 )
@@ -69,8 +69,8 @@ class SQLiteAdminRepository:
             commit=False,
         )
 
-    def disable_api_key(self, *, actor: str, key_id: int | None) -> bool:
-        return disable_internal_api_key(
+    def delete_api_key(self, *, actor: str, key_id: int | None) -> bool:
+        return delete_internal_api_key(
             self.connection,
             actor=actor,
             key_id=key_id,

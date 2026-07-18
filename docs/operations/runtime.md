@@ -133,7 +133,7 @@ BLD_HEARTBEAT_RETENTION_DAYS
 
 ## API Key Rotation
 
-`BLD_API_KEY_ROTATION_DAYS` 默认 90 天。管理页在达到建议日期后标记“建议轮换”，但不会自动停用 Key。轮换步骤是先创建最小 Scope 的新 Key、更新调用方并验证，再单独停用旧 Key。
+`BLD_API_KEY_ROTATION_DAYS` 默认 90 天。管理页在达到建议日期后标记“建议轮换”，但不会自动删除 Key。轮换步骤是先创建最小 Scope 的新 Key、更新调用方并验证，再单独删除旧 Key。
 
 ## Structured Logs
 

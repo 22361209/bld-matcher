@@ -1,0 +1,14 @@
+{
+  "date": "2026-07-19",
+  "version": "unreleased",
+  "title": "内部 API Key 改用删除操作并显示中文权限",
+  "entries": [
+    "内部 API Key 列表将单条停用改为删除；删除前会确认，删除后 Key 立即失效且不能恢复，也可以删除全部 Key。",
+    "API Key 列表移除状态列，Scopes 改为中文权限说明；生成表单仍保留技术 Scope 标识，便于精确配置权限。"
+  ],
+  "impact": {
+    "data": "删除所选或全部 internal_api_keys 记录；审计日志保留。",
+    "api": "compatible",
+    "operations": "restart-required"
+  }
+}

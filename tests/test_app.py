@@ -1653,7 +1653,7 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(result.status_code, 409)
         self.assertEqual(result.get_json()["error"]["code"], "job.not_ready")
 
-    def test_admin_can_generate_and_disable_internal_api_key(self):
+    def test_admin_can_generate_and_delete_internal_api_key(self):
         self.login()
         page = self.client.get("/internal-api-key")
         html = page.get_data(as_text=True)
@@ -1693,6 +1693,12 @@ class WebAppTest(unittest.TestCase):
         second_token = second_match.group(1)
         self.assertNotIn(token, html)
         self.assertIn(second_token, html)
+        self.assertNotIn("<th>状态</th>", html)
+        scope_list = re.search(r'<span class="api-key-scope-list">(.*?)</span>', html, re.DOTALL)
+        self.assertIsNotNone(scope_list)
+        self.assertIn("读取报价", scope_list.group(1))
+        self.assertNotIn("quotes:read", scope_list.group(1))
+        self.assertIn("删除", html)
 
         with self.web.connect(self.web.DB_PATH) as conn:
             first_key = conn.execute(
@@ -1732,8 +1738,10 @@ class WebAppTest(unittest.TestCase):
         )
         self.assertEqual(second_api_response.status_code, 200)
 
-        disabled = self.client.post("/internal-api-key/disable", data={"key_id": str(first_key["id"])})
-        self.assertEqual(disabled.status_code, 302)
+        deleted = self.client.post("/internal-api-key/delete", data={"key_id": str(first_key["id"])})
+        self.assertEqual(deleted.status_code, 302)
+        with self.web.connect(self.web.DB_PATH) as conn:
+            self.assertIsNone(conn.execute("SELECT id FROM internal_api_keys WHERE id = ?", (first_key["id"],)).fetchone())
         rejected = self.client.post(
             "/api/internal/inquiry/analyze",
             json={"numbers": ["NO-MATCH-VISUAL"]},
@@ -1746,6 +1754,17 @@ class WebAppTest(unittest.TestCase):
             headers={"Authorization": f"Bearer {second_token}"},
         )
         self.assertEqual(still_accepted.status_code, 200)
+
+        delete_all = self.client.post("/internal-api-key/delete", data={})
+        self.assertEqual(delete_all.status_code, 302)
+        with self.web.connect(self.web.DB_PATH) as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM internal_api_keys").fetchone()[0], 0)
+        all_rejected = self.client.post(
+            "/api/internal/inquiry/analyze",
+            json={"numbers": ["NO-MATCH-VISUAL"]},
+            headers={"Authorization": f"Bearer {second_token}"},
+        )
+        self.assertEqual(all_rejected.status_code, 401)
 
     def test_purchase_contract_can_generate_pdf(self):
         from PIL import Image

@@ -267,11 +267,11 @@
       "rule": "/internal-api-key"
     },
     {
-      "endpoint": "disable_internal_api_key_route",
+      "endpoint": "delete_internal_api_key_route",
       "methods": [
         "POST"
       ],
-      "rule": "/internal-api-key/disable"
+      "rule": "/internal-api-key/delete"
     },
     {
       "endpoint": "generate_internal_api_key_route",

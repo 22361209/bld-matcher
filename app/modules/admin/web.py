@@ -93,13 +93,13 @@ def register(app) -> None:
         response.headers["Cache-Control"] = "no-store"
         return response
 
-    @app.post("/internal-api-key/disable")
+    @app.post("/internal-api-key/delete")
     @permission_required("manage_users")
-    def disable_internal_api_key_route():
+    def delete_internal_api_key_route():
         key_id_text = request.form.get("key_id", "").strip()
         key_id = int(key_id_text) if key_id_text.isdigit() else None
-        changed = get_admin_service().disable_api_key(actor=actor_name(), key_id=key_id)
-        flash("Internal API Key 已停用。" if changed else "当前没有可停用的 Internal API Key。", "success")
+        changed = get_admin_service().delete_api_key(actor=actor_name(), key_id=key_id)
+        flash("Internal API Key 已删除。" if changed else "当前没有可删除的 Internal API Key。", "success")
         return redirect(url_for("internal_api_key"))
 
     @app.get("/logs")

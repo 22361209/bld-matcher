@@ -186,35 +186,28 @@ def create_internal_api_key(
     return token
 
 
-def disable_internal_api_key(
+def delete_internal_api_key(
     conn: sqlite3.Connection,
     *,
     actor: str = "",
     key_id: int | None = None,
     commit: bool = True,
 ) -> bool:
-    timestamp = now_text()
     if key_id is None:
-        cursor = conn.execute(
-            "UPDATE internal_api_keys SET active = 0, updated_at = ? WHERE active = 1",
-            (timestamp,),
-        )
-        target_key = "OpenClaw"
+        cursor = conn.execute("DELETE FROM internal_api_keys")
+        target_key = "全部 API Key"
     else:
         row = conn.execute("SELECT name FROM internal_api_keys WHERE id = ?", (key_id,)).fetchone()
-        cursor = conn.execute(
-            "UPDATE internal_api_keys SET active = 0, updated_at = ? WHERE id = ? AND active = 1",
-            (timestamp, key_id),
-        )
+        cursor = conn.execute("DELETE FROM internal_api_keys WHERE id = ?", (key_id,))
         target_key = row["name"] if row else str(key_id)
     changed = cursor.rowcount > 0
     if changed:
         log_event(
             conn,
-            "Disable internal API key",
+            "Delete internal API key",
             "internal_api_key",
             target_key,
-            "Internal API key disabled.",
+            "Internal API key deleted.",
             actor=actor,
         )
         if commit:

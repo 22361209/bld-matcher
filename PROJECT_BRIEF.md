@@ -108,11 +108,11 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 - `/api/v1/products/search` 提供稳定产品查询；`POST /api/v1/products/{product_id}/price` 以产品版本时间戳和幂等键安全更新含税单价，供 AI Agent 等机器调用；`/api/v1/inquiries/analyze` 与 `/export` 和网页、旧内部接口共用 InquiryService。
 - `/api/v1/jobs/{id}`、`/result` 与 `/cancel` 提供持久任务状态、结果和幂等取消；任务绑定 API Principal，不返回内部请求路径。
 - v1 导出返回限时 artifact ID；下载绑定创建它的 API Principal，响应不包含服务器绝对路径。OpenAPI 提交快照由统一验收阻断漂移。
-- API Key 可设置 Scopes 和到期日期；历史 Key 保留兼容权限，新 Key 默认只有读取和询价权限，写权限需要管理员明确选择；管理页按默认 90 天周期提示轮换，但不自动停用。
+- API Key 可设置 Scopes 和到期日期；历史 Key 保留兼容权限，新 Key 默认只有读取和询价权限，写权限需要管理员明确选择；管理页按默认 90 天周期提示轮换，但不自动删除。
 - `/api/internal/*` 与 `/api/quotes` 是兼容接口，继续可用但不再扩展新能力。
 
 - 文档在 `OPENCLAW_API.md`，接口前缀为 `/api/internal/`。
-- 管理员菜单里有“内部 API Key”页面，可生成多条 Key 并按条停用；完整 Key 只在创建响应显示一次，数据库只保留哈希和遮罩后缀，历史明文字段会在迁移时清空并删除。
+- 管理员菜单里有“内部 API Key”页面，可生成多条 Key 并按条删除；删除会立即使 Key 失效且不可恢复。完整 Key 只在创建响应显示一次，数据库只保留哈希和遮罩后缀，历史明文字段会在迁移时清空并删除。
 - `/api/internal/*` 必须带 `Authorization: Bearer <key>`，不允许匿名调用；`.env` 的 `INTERNAL_API_TOKEN` 仅作为应急 fallback。
 - `/api/internal/inquiry/numbers`：号码数组或文字号码查询；默认仅分析，传 `export: true` 才生成新 Excel，输出到 `outputs/openclaw/`。
 - `/api/internal/inquiry/file`：传本机 Excel 路径或上传文件；默认仅分析，传 `export: true` 才在原文件基础上追加结果列。

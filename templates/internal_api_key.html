@@ -12,7 +12,7 @@
 <header class="workspace-header">
         <div>
           <h1>内部 API Key</h1>
-          <p>供 OpenClaw 或其他内部工具调用 API。可以同时保留多条 Key，并按需单独停用。</p>
+          <p>供 OpenClaw 或其他内部工具调用 API。可以同时保留多条 Key，并按需单独删除。</p>
         </div>
         <div class="workspace-meta">
           <span>状态</span>
@@ -36,7 +36,7 @@
       <section class="workbench-split">
         <article class="workbench-section">
           <h2>生成 API Key</h2>
-          <p class="note">生成新 Key 不会停用旧 Key。调用时使用 <code>Authorization: Bearer &lt;key&gt;</code>。</p>
+          <p class="note">生成新 Key 不会删除旧 Key。调用时使用 <code>Authorization: Bearer &lt;key&gt;</code>。</p>
           <form action="{{ url_for('generate_internal_api_key_route') }}" method="post" class="workbench-form">
             {{ csrf_field() }}
             <label>
@@ -73,9 +73,9 @@
             <div><dt>最近创建</dt><dd>{{ status.created_at or "暂无" }}</dd></div>
             <div><dt>最近使用</dt><dd>{{ status.last_used_at or "暂无" }}</dd></div>
           </dl>
-          <form action="{{ url_for('disable_internal_api_key_route') }}" method="post" class="command-actions">
+          <form action="{{ url_for('delete_internal_api_key_route') }}" method="post" class="command-actions">
             {{ csrf_field() }}
-            <button class="linear-button subtle" type="submit" {% if not status.enabled %}disabled{% endif %}>停用全部活跃 Key</button>
+            <button class="linear-button danger" type="submit" data-confirm="确认删除全部 API Key？所有调用方会立刻失去访问权限，且不能恢复。" {% if not keys %}disabled{% endif %}>删除全部 API Key</button>
           </form>
         </article>
       </section>
@@ -94,7 +94,6 @@
                 <tr>
                   <th>名称</th>
                   <th>Key</th>
-                  <th>状态</th>
                   <th>轮换建议</th>
                   <th>Scopes</th>
                   <th>到期时间</th>
@@ -109,7 +108,6 @@
                   <tr>
                     <td>{{ key.name }}</td>
                     <td><code>{{ key.preview }}</code></td>
-                    <td>{% if key.expired %}已过期{% elif key.active %}启用{% else %}停用{% endif %}</td>
                     <td>
                       {% if key.rotation_due %}
                         <strong class="api-key-rotation due">建议轮换</strong>
@@ -119,17 +117,23 @@
                         <span class="api-key-rotation">不适用</span>
                       {% endif %}
                     </td>
-                    <td><span class="api-key-scope-list">{{ key.scopes|join(", ") }}</span></td>
+                    <td>
+                      <span class="api-key-scope-list">
+                        {% for scope in key.scopes %}
+                          {{ scope_labels.get(scope, scope) }}{% if not loop.last %}、{% endif %}
+                        {% endfor %}
+                      </span>
+                    </td>
                     <td>{{ key.expires_at or "长期有效" }}</td>
                     <td>{{ key.created_by or "暂无" }}</td>
                     <td>{{ key.created_at or "暂无" }}</td>
                     <td>{{ key.last_used_at or "暂无" }}</td>
                     <td>
                       <div class="command-actions">
-                        <form action="{{ url_for('disable_internal_api_key_route') }}" method="post">
+                        <form action="{{ url_for('delete_internal_api_key_route') }}" method="post">
                           {{ csrf_field() }}
                           <input type="hidden" name="key_id" value="{{ key.id }}">
-                          <button class="linear-button subtle compact" type="submit" {% if not key.active %}disabled{% endif %}>停用</button>
+                          <button class="linear-button danger compact" type="submit" data-confirm="确认删除 API Key “{{ key.name }}”（{{ key.preview }}）？删除后会立刻失效，且不能恢复。">删除</button>
                         </form>
                       </div>
                     </td>
