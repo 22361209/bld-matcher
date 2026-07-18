@@ -118,8 +118,10 @@ def get_quote_v1(quote_id: int):
 @api_schema(QuoteCreateRequest)
 @_quote_api_errors
 def create_quote_v1(*, payload: QuoteCreateRequest):
+    actor = api_actor_name()
     values = payload.model_dump(exclude={"on_behalf_of"}, exclude_unset=True, mode="python")
-    record = get_quote_service().create(values, actor=api_actor_name())
+    values.update({"quoted_by": actor, "source_type": "api"})
+    record = get_quote_service().create(values, actor=actor)
     return _quote_response(record, status=201)
 
 
@@ -182,8 +184,11 @@ def _legacy_error(message: str, status: int = 400):
 @quote_legacy_api.post("/api/quotes")
 @internal_api_required
 def api_create_quote():
+    actor = api_actor_name()
+    values = _legacy_payload()
+    values.update({"quoted_by": actor, "source_type": "api"})
     try:
-        record = get_quote_service().create(_legacy_payload(), actor=api_actor_name())
+        record = get_quote_service().create(values, actor=actor)
     except QuoteValidationError as exc:
         return _legacy_error(exc.message)
     except Exception:

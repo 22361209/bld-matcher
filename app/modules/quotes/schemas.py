@@ -10,7 +10,7 @@ from app.platform.api_schemas import StrictApiModel
 
 
 Currency = Literal["CNY", "USD", "EUR"]
-SourceType = Literal["manual", "wechat", "excel", "pdf", "image"]
+SourceType = Literal["manual", "api", "excel", "wechat", "pdf", "image"]
 
 
 class QuoteCreateRequest(StrictApiModel):
@@ -24,8 +24,17 @@ class QuoteCreateRequest(StrictApiModel):
     currency: Currency = "CNY"
     moq: int | None = Field(default=None, ge=0)
     quote_date: date | None = None
-    quoted_by: str = Field(default="", max_length=200)
-    source_type: SourceType = "manual"
+    quoted_by: str = Field(
+        default="",
+        max_length=200,
+        deprecated=True,
+        description="兼容旧调用方；创建时忽略该值并使用 API Principal。",
+    )
+    source_type: SourceType = Field(
+        default="manual",
+        deprecated=True,
+        description="兼容旧调用方；创建时忽略该值并固定记录为 api。",
+    )
     source_text: str = Field(default="", max_length=20_000)
     remark: str = Field(default="", max_length=5_000)
     on_behalf_of: str = Field(default="", max_length=200)
@@ -49,8 +58,6 @@ class QuotePatchRequest(StrictApiModel):
     currency: Currency | None = None
     moq: int | None = Field(default=None, ge=0)
     quote_date: date | None = None
-    quoted_by: str | None = Field(default=None, max_length=200)
-    source_type: SourceType | None = None
     source_text: str | None = Field(default=None, max_length=20_000)
     remark: str | None = Field(default=None, max_length=5_000)
     on_behalf_of: str = Field(default="", max_length=200)

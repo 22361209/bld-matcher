@@ -1876,11 +1876,16 @@ class WebAppTest(unittest.TestCase):
         self.assertIn('<summary class="linear-button primary">新增报价</summary>', html)
         self.assertIn('<summary class="linear-button primary">导入报价记录</summary>', html)
         self.assertIn('action="/quotes#quote-results"', html)
+        new_quote_form = re.search(r'<form action="/quotes/save".*?</form>', html, re.S).group()
         self.assertIn('name="customer_name"', html)
         self.assertIn('name="bld_no"', html)
         self.assertIn('name="customer_product_code"', html)
         self.assertIn('name="tax_price"', html)
         self.assertIn('name="net_price"', html)
+        for system_field in ("quoted_by", "source_type", "source_text", "attachment_path"):
+            self.assertNotIn(f'name="{system_field}"', new_quote_form)
+        self.assertNotIn("<th>原文</th>", html)
+        self.assertNotIn("附件路径", html)
         self.assertNotIn('name="date_from"', search_form)
         self.assertNotIn('name="date_to"', search_form)
         self.assertNotIn('name="currency"', search_form)
@@ -1904,9 +1909,10 @@ class WebAppTest(unittest.TestCase):
                 "net_price": "4.73",
                 "currency": "USD",
                 "quote_date": "2026-06-10",
-                "quoted_by": "007",
-                "source_type": "manual",
-                "source_text": "博世 K48620 USD 5.35",
+                "quoted_by": "spoofed-web-user",
+                "source_type": "image",
+                "source_text": "不应由网页保存的原文",
+                "attachment_path": "/tmp/should-not-be-saved.pdf",
             },
             follow_redirects=False,
         )
@@ -1935,15 +1941,28 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("最近一次报价", html)
         self.assertIn("含税 USD 5.5500", html)
         self.assertIn("不含税 USD 4.9100", html)
-        self.assertIn("博世 K48620 USD 5.35", html)
+        self.assertNotIn("不应由网页保存的原文", html)
         self.assertIn("修正", html)
         self.assertNotIn("data-open-customer-price-delete", html)
+        edit_form = re.search(r'<form action="/quotes/\d+/edit".*?</form>', html, re.S).group()
+        for system_field in ("quoted_by", "source_type", "source_text", "attachment_path"):
+            self.assertNotIn(f'name="{system_field}"', edit_form)
 
         with self.web.connect(self.web.DB_PATH) as conn:
-            quote_id = conn.execute(
+            latest_record = conn.execute(
                 "SELECT id FROM quote_records WHERE customer_name = ? AND bld_no = ? ORDER BY quote_date DESC, id DESC",
                 ("博世", "K48620"),
-            ).fetchone()["id"]
+            ).fetchone()
+            first_record = conn.execute(
+                "SELECT quoted_by, source_type, source_text, attachment_path FROM quote_records "
+                "WHERE customer_name = ? AND bld_no = ? ORDER BY quote_date, id LIMIT 1",
+                ("博世", "K48620"),
+            ).fetchone()
+        quote_id = latest_record["id"]
+        self.assertEqual(
+            dict(first_record),
+            {"quoted_by": "007", "source_type": "manual", "source_text": "", "attachment_path": ""},
+        )
 
         response = self.client.post(
             f"/quotes/{quote_id}/edit",
@@ -1955,8 +1974,10 @@ class WebAppTest(unittest.TestCase):
                 "net_price": "5.00",
                 "currency": "USD",
                 "quote_date": "2026-06-11",
-                "quoted_by": "sales",
-                "source_type": "wechat",
+                "quoted_by": "spoofed-editor",
+                "source_type": "pdf",
+                "source_text": "spoofed-edit-source",
+                "attachment_path": "/tmp/spoofed-edit.pdf",
                 "remark": "人工复核",
             },
             follow_redirects=False,
@@ -1969,6 +1990,10 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(revised["customer_product_code"], "BOSCH-K48620")
         self.assertEqual(revised["tax_price"], 5.65)
         self.assertEqual(revised["net_price"], 5.00)
+        self.assertEqual(revised["quoted_by"], "007")
+        self.assertEqual(revised["source_type"], "manual")
+        self.assertEqual(revised["source_text"], "")
+        self.assertEqual(revised["attachment_path"], "")
         self.assertEqual(revisions, 1)
 
         response = self.client.post(
@@ -2040,6 +2065,16 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(quote["customer_product_code"], "CUST-48620")
         self.assertEqual(quote["tax_price"], 5.35)
         self.assertEqual(quote["net_price"], 4.73)
+        self.assertEqual(quote["quoted_by"], "OpenClaw Test")
+        self.assertEqual(quote["source_type"], "api")
+
+        immutable = self.client.put(
+            f"/api/quotes/{quote['id']}",
+            json={"quoted_by": "spoofed", "source_type": "manual"},
+            headers=headers,
+        )
+        self.assertEqual(immutable.status_code, 400)
+        self.assertIn("由系统维护", immutable.get_json()["error"])
 
         response = self.client.get(
             "/api/quotes/latest",
@@ -2325,9 +2360,23 @@ class WebAppTest(unittest.TestCase):
         created_body = created.get_json()
         quote = created_body["data"]["quote"]
         self.assertEqual(quote["version"], 1)
+        self.assertEqual(quote["quoted_by"], "WorkBuddy Quote V1")
+        self.assertEqual(quote["source_type"], "api")
         self.assertEqual(created.headers["ETag"], '"1"')
         self.assertNotIn("attachment_path", quote)
         quote_id = quote["id"]
+
+        immutable = self.client.patch(
+            f"/api/v1/quotes/{quote_id}",
+            json={"quoted_by": "spoofed", "source_type": "manual"},
+            headers={
+                **authorization,
+                "Idempotency-Key": "quote-update-v1-immutable",
+                "If-Match": '"1"',
+            },
+        )
+        self.assertEqual(immutable.status_code, 422)
+        self.assertEqual(immutable.get_json()["error"]["code"], "request.invalid")
 
         replayed = self.client.post(
             "/api/v1/quotes",
@@ -2415,7 +2464,13 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("/api/v1/quotes/{quote_id}", document["paths"])
         create_operation = document["paths"]["/api/v1/quotes"]["post"]
         patch_operation = document["paths"]["/api/v1/quotes/{quote_id}"]["patch"]
+        create_schema = document["components"]["schemas"]["QuoteCreateRequest"]
+        patch_schema = document["components"]["schemas"]["QuotePatchRequest"]
         self.assertEqual(create_operation["x-required-scopes"], ["quotes:write"])
+        self.assertTrue(create_schema["properties"]["quoted_by"]["deprecated"])
+        self.assertTrue(create_schema["properties"]["source_type"]["deprecated"])
+        self.assertNotIn("quoted_by", patch_schema["properties"])
+        self.assertNotIn("source_type", patch_schema["properties"])
         self.assertIn("requestBody", create_operation)
         self.assertTrue(
             any(parameter["name"] == "Idempotency-Key" for parameter in create_operation["parameters"])
@@ -2466,6 +2521,9 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(row["currency"], "USD")
         self.assertEqual(row["tax_price"], 12.34)
         self.assertEqual(row["net_price"], 10.92)
+        self.assertEqual(row["quoted_by"], "007")
+        self.assertEqual(row["source_type"], "excel")
+        self.assertEqual(row["source_text"], "")
 
     def test_quote_api_oversized_request_returns_json(self):
         response = self.client.post(

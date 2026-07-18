@@ -1174,6 +1174,8 @@
           },
           "quoted_by": {
             "default": "",
+            "deprecated": true,
+            "description": "兼容旧调用方；创建时忽略该值并使用 API Principal。",
             "maxLength": 200,
             "title": "Quoted By",
             "type": "string"
@@ -1192,10 +1194,13 @@
           },
           "source_type": {
             "default": "manual",
+            "deprecated": true,
+            "description": "兼容旧调用方；创建时忽略该值并固定记录为 api。",
             "enum": [
               "manual",
-              "wechat",
+              "api",
               "excel",
+              "wechat",
               "pdf",
               "image"
             ],
@@ -1505,19 +1510,6 @@
             "default": null,
             "title": "Quote Date"
           },
-          "quoted_by": {
-            "anyOf": [
-              {
-                "maxLength": 200,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Quoted By"
-          },
           "remark": {
             "anyOf": [
               {
@@ -1543,25 +1535,6 @@
             ],
             "default": null,
             "title": "Source Text"
-          },
-          "source_type": {
-            "anyOf": [
-              {
-                "enum": [
-                  "manual",
-                  "wechat",
-                  "excel",
-                  "pdf",
-                  "image"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Source Type"
           },
           "tax_price": {
             "anyOf": [
@@ -1665,8 +1638,9 @@
           "source_type": {
             "enum": [
               "manual",
-              "wechat",
+              "api",
               "excel",
+              "wechat",
               "pdf",
               "image"
             ],

@@ -1,0 +1,14 @@
+{
+  "date": "2026-07-18",
+  "version": "unreleased",
+  "title": "精简报价录入并自动记录来源",
+  "entries": [
+    "新增和修正报价弹窗移除报价人、来源、原文和附件路径，只保留需要人工录入的业务字段；报价列表不再显示原文和附件路径。",
+    "网页、Excel 导入和 API 新增报价时，服务端分别自动记录当前登录账号或 API Key 身份，并标记为 manual、excel 或 api 来源；页面、导入文件和 API 请求不能伪造这些创建信息。"
+  ],
+  "impact": {
+    "data": "new quote attribution is server-derived; existing records are unchanged",
+    "api": "behavioral-change; create attribution is server-derived, api source is added, and attribution cannot be revised; see ADR 0009",
+    "operations": "restart-required"
+  }
+}

@@ -8,7 +8,7 @@ from datetime import date, datetime
 
 
 QUOTE_CURRENCIES = frozenset({"CNY", "USD", "EUR"})
-QUOTE_SOURCE_TYPES = frozenset({"manual", "wechat", "excel", "pdf", "image"})
+QUOTE_SOURCE_TYPES = frozenset({"manual", "api", "excel", "wechat", "pdf", "image"})
 
 
 class QuoteValidationError(ValueError):
@@ -248,7 +248,7 @@ def build_quote_draft(
     if source_type not in QUOTE_SOURCE_TYPES:
         raise QuoteValidationError(
             "quote.invalid_source_type",
-            "source_type 只允许 manual/wechat/excel/pdf/image。",
+            "source_type 只允许 manual/api/excel/wechat/pdf/image。",
             field="source_type",
         )
 

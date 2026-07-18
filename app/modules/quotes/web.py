@@ -17,6 +17,24 @@ from .service import QuoteImportBusyError, QuoteImportError, QuoteNotFoundError,
 logger = logging.getLogger(__name__)
 quote_web = Blueprint("quote_web", __name__)
 QUOTE_PAGE_SIZE = 100
+WEB_EDITABLE_QUOTE_FIELDS = (
+    "customer_name",
+    "bld_no",
+    "customer_product_code",
+    "tax_price",
+    "net_price",
+    "currency",
+    "quote_date",
+    "remark",
+)
+
+
+def _web_quote_data() -> dict[str, str]:
+    return {
+        field: request.form.get(field, "")
+        for field in WEB_EDITABLE_QUOTE_FIELDS
+        if field in request.form
+    }
 
 
 def _filters() -> dict[str, str]:
@@ -133,8 +151,11 @@ def quotes():
 @quote_web.post("/quotes/save", endpoint="save_quote")
 @permission_required("manage_customer_prices")
 def save_quote():
+    actor = actor_name()
+    values = _web_quote_data()
+    values.update({"quoted_by": actor, "source_type": "manual"})
     try:
-        get_quote_service().create(dict(request.form), actor=actor_name())
+        get_quote_service().create(values, actor=actor)
     except QuoteValidationError as exc:
         flash(f"保存失败：{exc.message}", "error")
         return redirect(url_for("quote_web.quotes"))
@@ -161,7 +182,7 @@ def edit_quote(quote_id: int):
     try:
         get_quote_service().update(
             quote_id,
-            dict(request.form),
+            _web_quote_data(),
             actor=actor_name(),
             expected_version=expected_version,
         )

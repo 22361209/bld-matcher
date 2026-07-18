@@ -10,17 +10,12 @@ from openpyxl import load_workbook
 from .matcher import compact_text
 
 
-QUOTE_SOURCE_TYPES = {"manual", "wechat", "excel", "pdf", "image"}
-
 HEADER_ALIASES = {
     "bld_no": {"BLD号", "BLD NO.", "BLD NO", "BLD"},
     "customer_product_code": {"客户产品编码", "客户编码", "客户料号", "CUSTOMER CODE", "CUSTOMER PART NO"},
     "tax_price": {"含税单价", "含税价格", "TAX PRICE", "TAX INCLUDED PRICE"},
     "net_price": {"不含税单价", "未税单价", "不含税价格", "NET PRICE"},
     "quote_date": {"日期", "报价日期", "DATE", "QUOTE DATE"},
-    "quoted_by": {"报价人", "QUOTED BY", "SALES"},
-    "source_type": {"来源", "SOURCE", "SOURCE TYPE"},
-    "source_text": {"原文", "SOURCE TEXT", "ORIGINAL TEXT"},
     "remark": {"备注", "NOTE", "REMARK"},
 }
 
@@ -100,15 +95,11 @@ def parse_quote_import_file(path: Path, *, customer_name: str, currency: str) ->
         if not bld_no and tax_price is None and net_price is None:
             continue
 
-        source_type = compact_text(_cell(row, columns, "source_type")).lower() or "excel"
         errors = []
         if not bld_no:
             errors.append("BLD号不能为空")
         if tax_price is None and net_price is None:
             errors.append("含税单价或不含税单价至少填写一个")
-        if source_type not in QUOTE_SOURCE_TYPES:
-            errors.append("来源只允许 manual/wechat/excel/pdf/image")
-
         data = {
             "customer_name": customer_name,
             "bld_no": bld_no,
@@ -117,9 +108,7 @@ def parse_quote_import_file(path: Path, *, customer_name: str, currency: str) ->
             "net_price": net_price,
             "currency": currency,
             "quote_date": compact_text(_cell(row, columns, "quote_date")),
-            "quoted_by": compact_text(_cell(row, columns, "quoted_by")),
-            "source_type": source_type,
-            "source_text": compact_text(_cell(row, columns, "source_text")),
+            "source_type": "excel",
             "remark": compact_text(_cell(row, columns, "remark")),
         }
         status = "invalid" if errors else "valid"

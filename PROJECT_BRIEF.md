@@ -197,6 +197,7 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 - `/quotes` 提供报价记录页面，可新增报价、按客户/型号/日期/币种/报价人筛选、查看同一客户和型号的历史报价，并显示最近一次报价。
 - 新集成通过 `/api/v1/quotes` 调用报价；读取使用 `quotes:read`，写入使用 `quotes:write`，创建必须带 `Idempotency-Key`，修订还必须带当前 ETag 对应的 `If-Match`。
 - `/api/quotes`、`/api/quotes/latest` 和 `/api/quotes/<id>` 继续作为旧消费者兼容接口，所有入口与网页、Excel 导入共用 `QuoteService`。
+- 新增和修正报价弹窗只录入业务字段，不显示报价人、来源、原文或附件路径；网页、Excel 导入和 API 新增分别由服务端自动记录可信账号及 `manual`、`excel`、`api` 来源，客户端提交的报价人和来源不会覆盖系统识别结果，也不能在修订中修改。
 - 报价数据写入 `quote_records`，整数 `version` 防止并发覆盖；修订 before/after 写入 `quote_record_revisions`，报价不提供删除接口。
 
 权限：

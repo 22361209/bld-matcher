@@ -86,28 +86,6 @@
                 <span>报价日期</span>
                 <input type="date" name="quote_date">
               </label>
-              <label>
-                <span>报价人</span>
-                <input name="quoted_by" value="{{ g.user.username }}">
-              </label>
-              <label>
-                <span>来源</span>
-                <select name="source_type">
-                  <option value="manual">manual</option>
-                  <option value="wechat">wechat</option>
-                  <option value="excel">excel</option>
-                  <option value="pdf">pdf</option>
-                  <option value="image">image</option>
-                </select>
-              </label>
-              <label class="span-2">
-                <span>原文</span>
-                <textarea name="source_text" rows="2" placeholder="例如 博世 K48620 USD 5.35"></textarea>
-              </label>
-              <label class="span-2">
-                <span>附件路径</span>
-                <input name="attachment_path">
-              </label>
               <label class="span-2">
                 <span>备注</span>
                 <textarea name="remark" rows="2"></textarea>
@@ -160,7 +138,6 @@
               <col class="col-width-70">
               <col class="col-width-92">
               <col class="col-width-90">
-              <col class="col-width-190">
               <col class="col-width-150">
               <col class="col-width-86">
             </colgroup>
@@ -175,7 +152,6 @@
                 <th>币种</th>
                 <th>报价人</th>
                 <th>来源</th>
-                <th>原文</th>
                 <th>备注</th>
                 <th>操作</th>
               </tr>
@@ -192,11 +168,7 @@
                   <td>{{ record.currency }}</td>
                   <td>{{ record.quoted_by }}</td>
                   <td>{{ record.source_type }}</td>
-                  <td>{{ record.source_text }}</td>
-                  <td>
-                    {% if record.remark %}<div>{{ record.remark }}</div>{% endif %}
-                    {% if record.attachment_path %}<div class="muted-cell">{{ record.attachment_path }}</div>{% endif %}
-                  </td>
+                  <td>{{ record.remark }}</td>
                   <td>
                     <a href="{{ url_for('quote_web.quotes', customer_name=record.customer_name, bld_no=record.bld_no or record.product_model) }}#quote-results">历史</a>
                     {% if can("manage_customer_prices") %}
@@ -219,17 +191,6 @@
                             </select>
                           </label>
                           <label><span>报价日期</span><input type="date" name="quote_date" value="{{ record.quote_date }}"></label>
-                          <label><span>报价人</span><input name="quoted_by" value="{{ record.quoted_by }}"></label>
-                          <label>
-                            <span>来源</span>
-                            <select name="source_type">
-                              {% for item in ["manual", "wechat", "excel", "pdf", "image"] %}
-                                <option value="{{ item }}" {% if record.source_type == item %}selected{% endif %}>{{ item }}</option>
-                              {% endfor %}
-                            </select>
-                          </label>
-                          <label class="span-2"><span>原文</span><textarea name="source_text" rows="2">{{ record.source_text }}</textarea></label>
-                          <label class="span-2"><span>附件路径</span><input name="attachment_path" value="{{ record.attachment_path }}"></label>
                           <label class="span-2"><span>备注</span><textarea name="remark" rows="2">{{ record.remark }}</textarea></label>
                           <div class="form-actions span-2">
                             <button class="linear-button primary" type="submit">保存修正</button>
@@ -241,7 +202,7 @@
                 </tr>
               {% endfor %}
               {% if not records %}
-                <tr><td colspan="12">没有找到报价记录。</td></tr>
+                <tr><td colspan="11">没有找到报价记录。</td></tr>
               {% endif %}
             </tbody>
           </table>

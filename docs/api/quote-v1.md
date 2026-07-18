@@ -24,6 +24,8 @@ PATCH /api/v1/quotes/{quote_id}
 
 列表支持 `customer_name`、`bld_no`、`date_from`、`date_to`、`currency`、`quoted_by`、`limit` 和 `offset`。API v1 不接受或返回本机 `attachment_path`。
 
+报价人和来源由服务端按可信入口确定：网页手工新增记录为当前登录账号和 `manual`，Excel 导入为当前登录账号和 `excel`，API 新增为 API Key 对应的 Principal 和 `api`。为兼容旧调用方，创建请求仍可携带已废弃的 `quoted_by` 和 `source_type`，但服务端不会采用调用方提供的值；修订请求不再接受这两个系统字段。兼容性决定见 [ADR 0009](../adr/0009-server-owned-quote-attribution.md)。
+
 ## Create
 
 创建必须使用调用方生成的稳定幂等键：
@@ -44,8 +46,6 @@ Content-Type: application/json
   "net_price": 11.22,
   "currency": "USD",
   "quote_date": "2026-07-11",
-  "source_type": "wechat",
-  "source_text": "Customer message",
   "on_behalf_of": "sales note"
 }
 ```

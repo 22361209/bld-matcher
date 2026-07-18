@@ -143,6 +143,22 @@ class QuoteModuleTest(unittest.TestCase):
         self.assertEqual(records[0].version, 2)
         self.assertEqual(conflicts[0].current_version, 2)
 
+    def test_system_attribution_cannot_be_modified(self):
+        created = self.service.create(self.quote_data(), actor="creator")
+
+        with self.assertRaisesRegex(QuoteValidationError, "由系统维护"):
+            self.service.update(
+                created.id,
+                {"quoted_by": "spoofed", "source_type": "manual"},
+                actor="api-principal",
+                expected_version=created.version,
+            )
+
+        unchanged = self.service.get_record(created.id)
+        self.assertEqual(unchanged.version, 1)
+        self.assertEqual(unchanged.quoted_by, "creator")
+        self.assertEqual(unchanged.source_type, "manual")
+
     def test_import_runs_through_same_domain_and_transaction(self):
         rows = [
             {**self.quote_data(bld_no="IMPORT-001"), "status": "valid"},
@@ -153,6 +169,8 @@ class QuoteModuleTest(unittest.TestCase):
         self.assertEqual((imported, skipped), (1, 1))
         page = self.service.list_records({"bld_no": "IMPORT-"})
         self.assertEqual([record.bld_no for record in page.records], ["IMPORT-001"])
+        self.assertEqual(page.records[0].quoted_by, "importer")
+        self.assertEqual(page.records[0].source_type, "excel")
 
     def test_historical_quote_table_gains_version_without_losing_rows(self):
         historical_path = Path(self.tmp.name) / "historical-quotes.sqlite3"

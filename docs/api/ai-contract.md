@@ -72,6 +72,7 @@ API Key 创建时只显示一次，数据库保存哈希、名称、后缀、Sco
 - 修订使用版本号或 `If-Match`，避免覆盖并发修改；产品单价更新使用搜索结果的 `updated_at` 作为 `expected_updated_at`。
 - 财务、停用、覆盖和批量操作支持 `dry_run`；高风险动作需要短期确认令牌。
 - 所有修订保存 before/after、Principal、request ID、原因和时间。
+- 报价记录的 `quoted_by` 和 `source_type` 是服务端归因字段：创建时按登录账号、导入账号或 API Principal 自动确定，之后不可由客户端修订。
 - Key 默认只读，写 Scope 单独授予。管理页按 `BLD_API_KEY_ROTATION_DAYS` 提醒轮换，但不会自动停用；应先验证新 Key 再停用旧 Key。
 - 幂等记录默认保留 24 小时；相同 Principal、端点、方法和 Key 的同一请求重放原响应，不同请求返回稳定冲突错误。
 

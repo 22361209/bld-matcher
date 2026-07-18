@@ -20,6 +20,7 @@ from .ports import ImportLockBusyError, ImportLockPort, QuoteImportPort, QuoteUn
 
 
 logger = logging.getLogger(__name__)
+SYSTEM_MANAGED_QUOTE_FIELDS = frozenset({"quoted_by", "source_type"})
 
 
 class QuoteNotFoundError(LookupError):
@@ -126,6 +127,13 @@ class QuoteService:
                     expected_version=expected_version,
                     current_version=before.version,
                 )
+            immutable_fields = SYSTEM_MANAGED_QUOTE_FIELDS.intersection(data)
+            if immutable_fields:
+                raise QuoteValidationError(
+                    "quote.system_fields_immutable",
+                    "quoted_by 和 source_type 由系统维护，不能修改。",
+                    field=sorted(immutable_fields)[0],
+                )
             draft = build_quote_draft(data, actor=actor, existing=before)
             after = unit_of_work.repository.update(
                 quote_id,
@@ -183,7 +191,16 @@ class QuoteService:
                 if row.get("status") != "valid":
                     skipped += 1
                     continue
-                draft = build_quote_draft(row, actor=actor)
+                values = dict(row)
+                values.update(
+                    {
+                        "quoted_by": actor,
+                        "source_type": "excel",
+                        "source_text": "",
+                        "attachment_path": "",
+                    }
+                )
+                draft = build_quote_draft(values, actor=actor)
                 record = unit_of_work.repository.add(draft)
                 unit_of_work.repository.audit("新增报价记录", record, actor=actor)
                 imported += 1

@@ -54,8 +54,6 @@
                 <th>不含税单价</th>
                 <th>币种</th>
                 <th>报价日期</th>
-                <th>报价人</th>
-                <th>来源</th>
                 <th>错误</th>
               </tr>
             </thead>
@@ -71,8 +69,6 @@
                   <td>{% if row.net_price is not none %}{{ "%.4f"|format(row.net_price) }}{% endif %}</td>
                   <td>{{ row.currency }}</td>
                   <td>{{ row.quote_date }}</td>
-                  <td>{{ row.quoted_by }}</td>
-                  <td>{{ row.source_type }}</td>
                   <td>{{ row.error }}</td>
                 </tr>
               {% endfor %}
