@@ -22,6 +22,7 @@
 }
 
 .products-column-label {
+  box-sizing: border-box;
   min-width: 0;
   min-height: 24px;
   padding: 2px 4px;
@@ -32,7 +33,9 @@
   font: inherit;
   font-weight: 700;
   line-height: 1.25;
+  overflow: hidden;
   text-align: left;
+  text-overflow: ellipsis;
   white-space: nowrap;
   cursor: grab;
 }
@@ -51,6 +54,7 @@
 }
 
 .products-static-column-label {
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   min-height: 24px;
@@ -59,6 +63,7 @@
 }
 
 .products-column-filter-trigger {
+  box-sizing: border-box;
   position: relative;
   flex: 0 0 auto;
   width: 24px;

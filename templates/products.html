@@ -90,7 +90,7 @@
 
 {% block page_content %}
       {% set status_label = "包含停用" if status == "all" else ("只看停用" if status == "inactive" else "只看启用") %}
-      <section class="workspace-command products-sticky-command">
+      <section class="workspace-command products-command">
         <form class="search-form" method="get" action="{{ url_for('products') }}#products-results">
           <label>
             <span>按 BLD / 品牌 / 车型搜索</span>
@@ -178,7 +178,7 @@
       <section class="data-section" id="products-results">
         <div class="data-grid" data-resizable-grid data-grid-key="products">
         <div class="data-table-scroll" data-grid-scroll>
-        <table class="resizable-table data-table products-table" id="products-table" data-column-storage-scope="{{ g.user['id'] if g.user else 'guest' }}">
+        <table class="data-table products-table" id="products-table" data-grid-heading-overflow data-column-storage-scope="{{ g.user['id'] if g.user else 'guest' }}">
           <colgroup>
             <col data-col="bld" class="col-width-104">
             <col data-col="series" class="col-width-82">
@@ -216,7 +216,7 @@
         {% set data_grid_label = "产品" %}
         {% set data_grid_total = total_products %}
         {% set data_grid_page_size = product_page_size %}
-        {% set data_grid_footer_context = "总产品 " ~ stats.products ~ " · 启用 " ~ stats.active ~ " · 停用 " ~ stats.inactive ~ " · 当前 " ~ ("全部" if status == "all" else ("停用" if status == "inactive" else "启用")) %}
+        {% set data_grid_footer_context = "总产品 " ~ stats.products ~ " · 启用 " ~ stats.active ~ " · 停用 " ~ stats.inactive %}
         {% include "_data_grid_footer.html" %}
         </div>
       </section>

@@ -168,6 +168,7 @@
         {% set data_grid_label = "材料明细" %}
         {% set data_grid_total = total_material_items %}
         {% set data_grid_page_size = material_page_size %}
+        {% set data_grid_footer_context = "总明细 " ~ material_stats["items"] ~ " · 启用 " ~ material_stats.active ~ " · 停用 " ~ material_stats.inactive %}
         {% include "_data_grid_footer.html" %}
         </div>
       </section>

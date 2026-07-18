@@ -192,6 +192,22 @@ def dynamic_route():
             self.assertIn("data-grid-scroll", template, template_name)
             self.assertIn('include "_data_grid_footer.html"', template, template_name)
 
+        products_template = (contract.ROOT / "templates" / "products.html").read_text(encoding="utf-8")
+        self.assertNotIn("resizable-table", products_template)
+        self.assertIn("data-grid-heading-overflow", products_template)
+        for template_name in ("products.html", "materials.html", "tubes.html", "quotes.html"):
+            template = (contract.ROOT / "templates" / template_name).read_text(encoding="utf-8")
+            self.assertIn("data_grid_footer_context", template, template_name)
+
+        self.assertNotIn('~ " · 当前 "', products_template)
+        materials_template = (contract.ROOT / "templates" / "materials.html").read_text(encoding="utf-8")
+        self.assertIn('"总明细 "', materials_template)
+        self.assertIn('" · 启用 "', materials_template)
+        self.assertIn('" · 停用 "', materials_template)
+        tubes_template = (contract.ROOT / "templates" / "tubes.html").read_text(encoding="utf-8")
+        self.assertIn('"总管件 "', tubes_template)
+        self.assertIn("data-grid-heading-overflow", tubes_template)
+
         base = (contract.ROOT / "templates" / "base.html").read_text(encoding="utf-8")
         self.assertIn("components/data_grid.css", base)
         self.assertIn("components/data_grid.js", base)

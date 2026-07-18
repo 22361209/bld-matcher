@@ -231,6 +231,109 @@ class WebAppTest(unittest.TestCase):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
 
+    def test_primary_data_grid_footers_render_statistics_and_zero_ranges(self):
+        self.login()
+        product_service = SimpleNamespace(
+            search=lambda filters, limit, offset: SimpleNamespace(records=[], total=0),
+            stats=lambda: SimpleNamespace(
+                as_dict=lambda: {"products": 17, "active": 13, "inactive": 4, "aliases": 2}
+            ),
+            filter_options=lambda filters: SimpleNamespace(
+                web_payload=lambda: {"brand": [], "item": [], "product_status": []}
+            ),
+            preview_brand_normalization=lambda: None,
+        )
+        quote_service = SimpleNamespace(
+            list_records=lambda filters, limit, offset: SimpleNamespace(records=[], total=0),
+            stats=lambda: SimpleNamespace(
+                as_dict=lambda: {"total": 19, "customers": 5, "models": 11}
+            ),
+        )
+
+        class FooterTubeService:
+            def list_items(self, *, filters, limit, offset):
+                return {
+                    "records": [],
+                    "total": 0,
+                    "counts": {"sentinel": 23},
+                    "blank_length_options": [],
+                    "inner_tolerance_options": [],
+                    "purchase_base_options": [],
+                    "tolerance_options": [],
+                    "consumption_options": [],
+                }
+
+        material_service = SimpleNamespace(
+            list_items=lambda query, status, limit, offset: SimpleNamespace(
+                records=[],
+                total=0,
+                stats={"items": 29, "active": 21, "inactive": 8, "models": 9},
+            ),
+            source_stats=lambda: {},
+            source_path=lambda: None,
+        )
+        cases = (
+            (
+                "/products",
+                {"bld": "__FOOTER_ZERO__"},
+                "产品",
+                "总产品 17 · 启用 13 · 停用 4",
+            ),
+            (
+                "/quotes",
+                {"customer_name": "__FOOTER_ZERO__"},
+                "报价记录",
+                "总记录 19 · 客户 5 · BLD号 11",
+            ),
+            (
+                "/tubes",
+                {"q": "__FOOTER_ZERO__"},
+                "管件明细",
+                "总管件 23",
+            ),
+            (
+                "/materials/items",
+                {"q": "__FOOTER_ZERO__"},
+                "材料明细",
+                "总明细 29 · 启用 21 · 停用 8",
+            ),
+        )
+        with (
+            patch(
+                "app.modules.products.catalog_web.get_product_service",
+                return_value=product_service,
+            ),
+            patch(
+                "app.modules.quotes.web.get_quote_service",
+                return_value=quote_service,
+            ),
+            patch(
+                "app.modules.tubes.web.get_tube_service",
+                return_value=FooterTubeService(),
+            ),
+            patch(
+                "app.modules.materials.web.get_material_service",
+                return_value=material_service,
+            ),
+        ):
+            for path, query_string, label, statistics in cases:
+                with self.subTest(path=path):
+                    response = self.client.get(path, query_string=query_string)
+                    self.assertEqual(response.status_code, 200)
+                    html = response.get_data(as_text=True)
+                    footer_match = re.search(r'<footer class="data-grid-footer">.*?</footer>', html, re.S)
+                    self.assertIsNotNone(footer_match)
+                    footer = footer_match.group()
+                    self.assertIn(
+                        f'<span class="data-grid-visually-hidden">{label}统计：</span>{statistics}',
+                        footer,
+                    )
+                    self.assertRegex(
+                        footer,
+                        rf'<span class="data-grid-visually-hidden">{label}当前范围：</span>\s*'
+                        r"<strong>0</strong><span>条</span>",
+                    )
+
     def test_tube_page_refetches_after_clamping_an_out_of_range_page(self):
         self.login()
         offsets: list[int] = []

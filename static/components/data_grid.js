@@ -1,6 +1,8 @@
 const MIN_COLUMN_WIDTH = 56;
 const MAX_COLUMN_WIDTH = 640;
 const WIDTH_STORAGE_VERSION = 1;
+const GRID_VIEWPORT_GUTTER = 16;
+const MIN_GRID_VIEWPORT_HEIGHT = 120;
 
 export const clampColumnWidth = (value) => {
   const width = Number(value);
@@ -17,6 +19,28 @@ export const normalizeStoredWidths = (candidate, columnKeys) => {
     }
     return widths;
   }, {});
+};
+
+export const viewportFilledGridHeight = (viewportHeight, gridTop) => {
+  const viewport = Number(viewportHeight);
+  const top = Number(gridTop);
+  if (!Number.isFinite(viewport) || !Number.isFinite(top)) return 0;
+  const maximumHeight = Math.max(0, Math.floor(viewport - GRID_VIEWPORT_GUTTER));
+  const minimumHeight = Math.min(MIN_GRID_VIEWPORT_HEIGHT, maximumHeight);
+  const availableHeight = Math.max(0, Math.floor(viewport - top - GRID_VIEWPORT_GUTTER));
+  return Math.min(maximumHeight, Math.max(minimumHeight, availableHeight));
+};
+
+export const bindViewportFill = ({ grid, windowTarget }) => {
+  const fillViewport = () => {
+    grid.style.setProperty(
+      "--data-grid-viewport-height",
+      `${viewportFilledGridHeight(windowTarget.innerHeight, grid.getBoundingClientRect().top)}px`
+    );
+  };
+  grid.classList.add("data-grid-viewport-fill");
+  fillViewport();
+  windowTarget.addEventListener("resize", fillViewport, { passive: true });
 };
 
 export const bindResizeSession = ({ handle, windowTarget, onMove, onFinish }) => {
@@ -104,6 +128,8 @@ export function setupDataGrid(grid) {
   const status = grid.querySelector("[data-column-resize-status]");
   const initialWidths = {};
   const currentWidths = {};
+
+  bindViewportFill({ grid, windowTarget: window });
 
   headings.forEach((heading, index) => {
     initialWidths[columnKeys[index]] = clampColumnWidth(heading.getBoundingClientRect().width);

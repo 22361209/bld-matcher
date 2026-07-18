@@ -1,7 +1,7 @@
 <footer class="data-grid-footer">
   <div class="data-grid-footer-context">
     {% if data_grid_footer_context %}
-      <span class="data-grid-context" aria-label="{{ data_grid_label }}统计">{{ data_grid_footer_context }}</span>
+      <span class="data-grid-context"><span class="data-grid-visually-hidden">{{ data_grid_label }}统计：</span>{{ data_grid_footer_context }}</span>
     {% endif %}
   </div>
   {% if pagination.total_pages > 1 %}
@@ -31,7 +31,8 @@
   {% else %}
     <span aria-hidden="true"></span>
   {% endif %}
-  <div class="data-grid-summary" aria-label="{{ data_grid_label }}当前范围">
+  <div class="data-grid-summary">
+    <span class="data-grid-visually-hidden">{{ data_grid_label }}当前范围：</span>
     {% if data_grid_total %}
       <strong>{{ pagination.start }}–{{ pagination.end }}</strong><span> / {{ data_grid_total }}</span>
     {% else %}

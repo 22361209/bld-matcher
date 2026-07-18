@@ -2,9 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  bindViewportFill,
   bindResizeSession,
   clampColumnWidth,
   normalizeStoredWidths,
+  viewportFilledGridHeight,
 } from "../../static/components/data_grid.js";
 
 test("column widths stay inside the supported range", () => {
@@ -23,6 +25,38 @@ test("stored widths only restore known, valid columns", () => {
     { code: 120, description: 240 }
   );
   assert.deepEqual(normalizeStoredWidths(null, ["code"]), {});
+});
+
+test("viewport-filling grids stay bounded and retain a usable short-window fallback", () => {
+  assert.equal(viewportFilledGridHeight(900, 140), 744);
+  assert.equal(viewportFilledGridHeight(500, 400), 120);
+  assert.equal(viewportFilledGridHeight(300, 400), 120);
+  assert.equal(viewportFilledGridHeight(80, 100), 64);
+  assert.equal(viewportFilledGridHeight("invalid", 100), 0);
+});
+
+test("viewport-filling grids refresh on resize without growing on page scroll", () => {
+  const windowTarget = new EventTarget();
+  windowTarget.innerHeight = 300;
+  let gridTop = 400;
+  let viewportHeight = "";
+  const grid = {
+    classList: { add: () => {} },
+    style: { setProperty: (_name, value) => { viewportHeight = value; } },
+    getBoundingClientRect: () => ({ top: gridTop }),
+  };
+
+  bindViewportFill({ grid, windowTarget });
+  assert.equal(viewportHeight, "120px");
+
+  gridTop = 120;
+  windowTarget.dispatchEvent(new Event("scroll"));
+  assert.equal(viewportHeight, "120px");
+
+  windowTarget.innerHeight = 900;
+  gridTop = 140;
+  windowTarget.dispatchEvent(new Event("resize"));
+  assert.equal(viewportHeight, "744px");
 });
 
 test("resize sessions clean up once for every supported interruption", () => {
