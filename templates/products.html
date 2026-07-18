@@ -89,13 +89,6 @@
 {% endblock %}
 
 {% block page_content %}
-      <section class="metric-strip" aria-label="产品目录统计">
-        <div><span>总产品</span><strong>{{ stats.products }}</strong></div>
-        <div><span>启用产品</span><strong>{{ stats.active }}</strong></div>
-        <div><span>停用产品</span><strong>{{ stats.inactive }}</strong></div>
-        <div><span>当前视图</span><strong>{{ "全部" if status == "all" else ("停用" if status == "inactive" else "启用") }}</strong></div>
-      </section>
-
       {% set status_label = "包含停用" if status == "all" else ("只看停用" if status == "inactive" else "只看启用") %}
       <section class="workspace-command products-sticky-command">
         <form class="search-form" method="get" action="{{ url_for('products') }}#products-results">
@@ -123,6 +116,7 @@
         </form>
         <div class="secondary-actions command-actions">
           <button class="linear-button subtle" type="button" data-reset-product-columns>恢复默认列顺序</button>
+          <button class="linear-button subtle" type="button" data-reset-column-widths-for="products">重置列宽</button>
           <span class="products-visually-hidden" aria-live="polite" data-column-order-status></span>
           {% if can("edit_products") %}
             <button class="linear-button primary" type="button" data-open-product-modal>新增产品</button>
@@ -222,6 +216,7 @@
         {% set data_grid_label = "产品" %}
         {% set data_grid_total = total_products %}
         {% set data_grid_page_size = product_page_size %}
+        {% set data_grid_footer_context = "总产品 " ~ stats.products ~ " · 启用 " ~ stats.active ~ " · 停用 " ~ stats.inactive ~ " · 当前 " ~ ("全部" if status == "all" else ("停用" if status == "inactive" else "启用")) %}
         {% include "_data_grid_footer.html" %}
         </div>
       </section>

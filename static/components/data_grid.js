@@ -200,7 +200,7 @@ export function setupDataGrid(grid) {
     });
   });
 
-  grid.querySelector("[data-reset-column-widths]")?.addEventListener("click", () => {
+  const resetWidths = () => {
     columnKeys.forEach((key) => {
       currentWidths[key] = initialWidths[key];
     });
@@ -213,6 +213,12 @@ export function setupDataGrid(grid) {
       );
     });
     announce("所有列宽已恢复为默认值。");
+  };
+  grid.querySelectorAll("[data-reset-column-widths]").forEach((button) => {
+    button.addEventListener("click", resetWidths);
+  });
+  document.querySelectorAll(`[data-reset-column-widths-for="${gridKey}"]`).forEach((button) => {
+    button.addEventListener("click", resetWidths);
   });
 }
 

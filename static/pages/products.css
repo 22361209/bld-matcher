@@ -19,7 +19,7 @@
   width: 66px;
   height: 48px;
   object-fit: contain;
-  border: 1px solid #d8e0e8;
+  border: 1px solid transparent;
   border-radius: 6px;
   background: #ffffff;
 }
@@ -32,8 +32,8 @@
 }
 
 .image-link:hover .product-thumb {
-  border-color: #225d91;
-  box-shadow: 0 0 0 2px rgba(34, 93, 145, 0.14);
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .bld-cell {
