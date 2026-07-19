@@ -118,7 +118,7 @@ class WebAppTest(unittest.TestCase):
         html = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
         self.assertIn("BLD", html)
-        self.assertLess(html.index('class="messages'), html.index('class="search-hero"'))
+        self.assertLess(html.index('class="messages'), html.index('class="inquiry-page-heading"'))
         self.assertIn('class="embedded-submit" type="submit">开始匹配', html)
         self.assertIn('class="embedded-input-control"', html)
         self.assertIn('class="embedded-submit" type="submit">搜索', html)
@@ -127,7 +127,8 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(nav_positions, sorted(nav_positions))
         self.assertNotIn("发货通知", html)
         self.assertNotIn("货物识别", html)
-        self.assertIn('class="inquiry-catalog-panel"', html)
+        self.assertIn('class="inquiry-match-workbench"', html)
+        self.assertIn('class="inquiry-side-stack"', html)
 
     def test_quick_inquiry_results_can_filter_by_match_source(self):
         from app.modules.products.persistence import upsert_product
@@ -3947,7 +3948,7 @@ with connect(database_path) as conn:
         self.assertIn("data-history-loader", html)
         self.assertIn("展开后加载", html)
         self.assertIn("data-file-drop-zone", html)
-        self.assertIn("可拖入询价文件", html)
+        self.assertIn("也可以把客户询价表拖到这里", html)
         self.assertIn("输入 OE或 BLD 号", html)
         self.assertIn("file-picker-clear", html)
         self.assertNotIn("old-root-result.xlsx", html)
