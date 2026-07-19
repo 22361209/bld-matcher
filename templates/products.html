@@ -89,16 +89,6 @@
 {% endblock %}
 
 {% block page_content %}
-      <header class="workspace-header">
-        <div>
-          <h1>产品目录</h1>
-          <p>检索 BLD、OE、品牌与车型，维护产品图片、图纸、含税单价和产品状态。</p>
-        </div>
-        <div class="workspace-meta">
-          <span>目录规模</span>
-          <strong>{{ stats.products }} 个产品 · {{ stats.active }} 个启用</strong>
-        </div>
-      </header>
       {% set status_label = "包含停用" if status == "all" else ("只看停用" if status == "inactive" else "只看启用") %}
       <section class="workspace-command products-command">
         <form class="search-form" method="get" action="{{ url_for('products') }}#products-results">

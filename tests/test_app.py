@@ -249,6 +249,17 @@ class WebAppTest(unittest.TestCase):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
 
+    def test_product_list_omits_redundant_workspace_header(self):
+        self.login()
+
+        response = self.client.get("/products")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('class="workspace-command products-command"', html)
+        self.assertNotIn('<header class="workspace-header">', html)
+        self.assertNotIn("目录规模", html)
+
     def test_primary_data_grid_footers_render_statistics_and_zero_ranges(self):
         self.login()
         product_service = SimpleNamespace(
