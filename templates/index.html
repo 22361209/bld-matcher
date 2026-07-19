@@ -6,44 +6,25 @@
 {% block page_class %}shell wide app-surface search-workspace{% endblock %}
 {% block page_head %}
   <link rel="stylesheet" href="{{ url_for('static', filename='pages/inquiry.css', v=static_version('pages/inquiry.css')) }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='pages/inquiry_home.css', v=static_version('pages/inquiry_home.css')) }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='pages/home.css', v=static_version('pages/home.css')) }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='pages/history.css', v=static_version('pages/history.css')) }}">
 {% endblock %}
 
 {% block page_content %}
-<header class="inquiry-page-heading">
-  <div class="inquiry-heading-copy">
-    <span class="inquiry-page-index">01</span>
-    <div>
-      <p class="inquiry-eyebrow">INQUIRY MATCHING</p>
-      <h1>询价处理</h1>
-      <p>把号码快查与 Excel 批量询价收拢为一个清晰入口；输入、选列、核对结果，三步完成。</p>
-    </div>
-  </div>
-  <div class="inquiry-heading-actions">
-    <a class="linear-button primary" href="{{ url_for('products') }}">进入产品目录</a>
-  </div>
-</header>
-
-<div class="inquiry-home-layout">
-  <article class="inquiry-match-workbench">
-      <header class="inquiry-match-header">
-        <div>
-          <span class="inquiry-panel-kicker">START A MATCH</span>
-          <h2>开始一次匹配</h2>
-        </div>
-        <div class="inquiry-mode-summary" aria-label="支持的匹配方式">
-          <span class="active">号码快查</span>
-          <span>Excel 批量询价</span>
-        </div>
+<header class="search-hero">
+        <h1><span>BLD</span> 询价处理</h1>
+        <p>上传客户询价表，自动在产品目录中新增匹配的 BLD NO.</p>
+        {% if catalog_summary %}
+          <div class="compact-metrics" aria-label="产品目录统计">
+            <span>启用产品 <strong>{{ product_stats.active }}</strong></span>
+            <span>号码索引 <strong>{{ catalog_summary.oe_keys }}</strong></span>
+            <span>BLD 索引 <strong>{{ catalog_summary.bld_keys }}</strong></span>
+            <span>停用产品 <strong>{{ product_stats.inactive }}</strong></span>
+          </div>
+        {% endif %}
       </header>
 
-      <section class="inquiry-query-zone">
-        <div class="inquiry-query-label">
-          <span>输入 OE、品牌号码或 BLD 号</span>
-          <span>可粘贴多个号码，支持换行与空格</span>
-        </div>
+      <section class="search-command">
         <div class="search-command-note">
           {% if catalog_summary %}
             当前目录：{{ catalog_path.name }}
@@ -54,24 +35,15 @@
         {% if can("generate_match") %}
           <form action="{{ url_for('match_inquiry') }}" method="post" enctype="multipart/form-data" class="search-command-row upload-command" data-submit-wait data-submit-wait-text="正在上传并分析，请稍候..." data-submit-wait-button-text="处理中...">
             {{ csrf_field() }}
-            <div class="file-picker-field inquiry-file-picker" data-file-drop-zone data-file-drop-accept=".xls,.xlsx">
+            <div class="file-picker-field">
+              <span>可拖入询价文件</span>
               <div class="file-picker inline-file-picker" data-file-drop-zone data-file-drop-accept=".xls,.xlsx">
                 <input id="inquiry-file-input" class="file-picker-input" type="file" name="inquiry" accept=".xls,.xlsx">
-                <div class="inquiry-code-control">
-                  <span class="inquiry-code-prefix">CODE</span>
+                <div class="file-picker-control">
+                  <label class="file-picker-button" for="inquiry-file-input">选择文件</label>
                   <input class="file-picker-text" name="quick_oe" value="{{ quick_oe }}" maxlength="5000" placeholder="输入 OE或 BLD 号">
+                  <button class="file-picker-clear" type="button" disabled>清除</button>
                   <button class="embedded-submit" type="submit">开始匹配</button>
-                </div>
-                <div class="inquiry-drop-zone">
-                  <div>
-                    <strong>也可以把客户询价表拖到这里</strong>
-                    <span>系统读取后仍由你选择匹配列，不会自动猜测。</span>
-                  </div>
-                  <div class="inquiry-drop-actions">
-                    <span>XLS · XLSX</span>
-                    <label class="file-picker-button" for="inquiry-file-input">选择文件</label>
-                    <button class="file-picker-clear" type="button" disabled>清除</button>
-                  </div>
                 </div>
                 <div class="file-picker-drop-hint" data-file-drop-status data-submit-wait-message aria-live="polite"></div>
               </div>
@@ -146,12 +118,6 @@
         {% endif %}
       </section>
 
-      <ol class="inquiry-flow-strip" aria-label="询价流程">
-        <li><b>01</b><span><strong>输入或上传</strong><small>号码快查或客户 Excel</small></span></li>
-        <li><b>02</b><span><strong>选择匹配列</strong><small>由用户确认真实业务列</small></span></li>
-        <li><b>03</b><span><strong>核对并下载</strong><small>网页预览后选择价格模式</small></span></li>
-      </ol>
-
       <details
         class="inquiry-history-drawer"
         {% if history_query %}open{% endif %}
@@ -218,36 +184,6 @@
           </section>
         </div>
       </details>
-  </article>
-
-  <aside class="inquiry-side-stack" aria-label="询价工作台状态">
-    <section class="inquiry-side-card">
-      <span class="inquiry-panel-kicker">CATALOG STATUS</span>
-      <h2>产品目录状态</h2>
-      <div class="inquiry-catalog-file">
-        <div><strong>{{ catalog_path.name if catalog_summary else "尚未导入" }}</strong><span>当前匹配目录</span></div>
-        <span class="inquiry-ready-state">{{ "已就绪" if catalog_summary else "待导入" }}</span>
-      </div>
-      {% if catalog_summary %}
-        <div class="inquiry-side-metrics">
-          <div><span>启用产品</span><strong>{{ product_stats.active }}</strong></div>
-          <div><span>号码索引</span><strong>{{ catalog_summary.oe_keys }}</strong></div>
-          <div><span>BLD 索引</span><strong>{{ catalog_summary.bld_keys }}</strong></div>
-          <div><span>停用产品</span><strong>{{ product_stats.inactive }}</strong></div>
-        </div>
-      {% endif %}
-    </section>
-    <section class="inquiry-side-card">
-      <span class="inquiry-panel-kicker">QUICK ACCESS</span>
-      <h2>常用入口</h2>
-      <div class="inquiry-quick-links">
-        <a href="{{ url_for('products') }}">产品目录与图纸</a>
-        {% if can("view_customer_prices") %}<a href="{{ url_for('quote_web.quotes') }}">报价记录</a>{% endif %}
-        {% if can("generate_purchase_contract") %}<a href="{{ url_for('contracts') }}">合同管理</a>{% endif %}
-      </div>
-    </section>
-  </aside>
-</div>
 {% endblock %}
 
 {% block page_scripts %}
