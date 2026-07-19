@@ -1,0 +1,57 @@
+/* Compact work-area anchors for search-first pages. */
+
+.context-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  width: var(--context-panel-width, 760px);
+  max-width: 100%;
+  margin: 16px auto 10px;
+  padding: 8px 0 10px;
+  border-bottom: 1px solid var(--linear-line);
+}
+
+.context-strip-copy {
+  min-width: 0;
+}
+
+.context-strip-kicker {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--precision-cobalt);
+  font-family: "DIN Alternate", "Avenir Next Condensed", sans-serif;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.14em;
+}
+
+.context-strip h1 {
+  margin: 0;
+  color: var(--precision-ink);
+  font-size: 18px;
+  font-weight: 780;
+}
+
+.context-strip p {
+  margin: 3px 0 0;
+  color: var(--precision-muted);
+  font-size: 12px;
+}
+
+.context-strip .compact-metrics {
+  justify-content: flex-end;
+  margin: 0;
+}
+
+@media (max-width: 760px) {
+  .context-strip {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .context-strip .compact-metrics {
+    justify-content: flex-start;
+  }
+}

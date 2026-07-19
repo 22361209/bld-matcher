@@ -1,5 +1,6 @@
 body[data-page="inquiry.home"] .search-workspace {
   --search-panel-width: 640px;
+  --context-panel-width: 640px;
 }
 
 .quick-oe-results {

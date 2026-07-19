@@ -6,11 +6,26 @@
 {% block page_class %}shell wide app-surface search-workspace{% endblock %}
 {% block page_head %}
   <link rel="stylesheet" href="{{ url_for('static', filename='pages/inquiry.css', v=static_version('pages/inquiry.css')) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='pages/context_strip.css', v=static_version('pages/context_strip.css')) }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='pages/home.css', v=static_version('pages/home.css')) }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='pages/history.css', v=static_version('pages/history.css')) }}">
 {% endblock %}
 
 {% block page_content %}
+      <section class="context-strip inquiry-context" aria-label="询价处理工作区">
+        <div class="context-strip-copy">
+          <span class="context-strip-kicker">INQUIRY DESK</span>
+          <h1><span>BLD</span> 询价处理</h1>
+          <p>上传客户询价表，自动在产品目录中新增匹配的 BLD NO.</p>
+        </div>
+        {% if catalog_summary %}
+          <div class="compact-metrics" aria-label="产品目录统计">
+            <span>启用 <strong>{{ product_stats.active }}</strong></span>
+            <span>OE <strong>{{ catalog_summary.oe_keys }}</strong></span>
+            <span>BLD <strong>{{ catalog_summary.bld_keys }}</strong></span>
+          </div>
+        {% endif %}
+      </section>
       <section class="search-command">
         <div class="search-command-note">
           {% if catalog_summary %}

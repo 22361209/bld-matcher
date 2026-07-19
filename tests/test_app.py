@@ -129,6 +129,8 @@ class WebAppTest(unittest.TestCase):
         self.assertNotIn("货物识别", html)
         self.assertNotIn('class="search-hero"', html)
         self.assertNotIn('class="workspace-header"', html)
+        self.assertIn('class="context-strip inquiry-context"', html)
+        self.assertIn("INQUIRY DESK", html)
 
     def test_page_templates_omit_redundant_workspace_headers(self):
         template_dir = Path(__file__).resolve().parents[1] / "templates"
@@ -3406,6 +3408,8 @@ class WebAppTest(unittest.TestCase):
         html = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn('class="context-strip material-context"', html)
+        self.assertIn("MATERIAL PLANNING", html)
         self.assertIn('href="/materials/items"', html)
         self.assertNotIn('id="materials-results"', html)
         self.assertIn('class="embedded-submit" type="submit">生成并下载', html)
