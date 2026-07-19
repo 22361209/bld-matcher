@@ -13,16 +13,6 @@
 {% endblock %}
 
 {% block page_content %}
-      <header class="workspace-header">
-        <div>
-          <h1>报价记录</h1>
-          <p>按客户与 BLD 号检索历史报价，维护可信来源、币种和含税/不含税价格。</p>
-        </div>
-        <div class="workspace-meta">
-          <span>当前范围</span>
-          <strong>{{ stats.total }} 条记录 · {{ stats.customers }} 个客户</strong>
-        </div>
-      </header>
       {% if latest %}
         <section class="workspace-flow quote-latest">
           <h2>最近一次报价</h2>

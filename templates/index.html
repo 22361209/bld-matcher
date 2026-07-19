@@ -11,19 +11,6 @@
 {% endblock %}
 
 {% block page_content %}
-<header class="search-hero">
-        <h1><span>BLD</span> 询价处理</h1>
-        <p>上传客户询价表，自动在产品目录中新增匹配的 BLD NO.</p>
-        {% if catalog_summary %}
-          <div class="compact-metrics" aria-label="产品目录统计">
-            <span>启用产品 <strong>{{ product_stats.active }}</strong></span>
-            <span>号码索引 <strong>{{ catalog_summary.oe_keys }}</strong></span>
-            <span>BLD 索引 <strong>{{ catalog_summary.bld_keys }}</strong></span>
-            <span>停用产品 <strong>{{ product_stats.inactive }}</strong></span>
-          </div>
-        {% endif %}
-      </header>
-
       <section class="search-command">
         <div class="search-command-note">
           {% if catalog_summary %}

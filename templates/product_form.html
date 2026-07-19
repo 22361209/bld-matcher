@@ -12,18 +12,6 @@
 {% endblock %}
 
 {% block page_content %}
-{% if not embedded %}
-        <header class="workspace-header">
-          <div>
-            <h1>{{ "编辑产品" if product else "新增产品" }}</h1>
-            <p>一个 BLD NO. 可以维护多个 OE、多个品牌和多个车型；OE 与品牌均建议每行一个。</p>
-          </div>
-          <div class="command-actions">
-            <a class="linear-button subtle" href="{{ url_for('products') }}">返回目录</a>
-          </div>
-        </header>
-      {% endif %}
-
       <section class="workbench-form-section">
         <form action="{{ url_for('save_product') }}" method="post" enctype="multipart/form-data" class="record-form">
           {{ csrf_field() }}

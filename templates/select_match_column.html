@@ -9,17 +9,11 @@
 {% endblock %}
 
 {% block page_content %}
-<header class="workspace-header">
-        <div>
-          <h1>选择匹配列</h1>
-          <p>没有识别到明确的 OE 号码表头，请选择客户号码所在的列。</p>
-        </div>
-      </header>
-
       <section class="data-section">
         <div class="match-column-command">
           <div class="match-column-summary">
             <h2>文件预览：{{ preview.sheet }}</h2>
+            <p class="note">没有识别到明确的 OE 号码表头。</p>
             <p>请选择客户号码所在列后继续生成。</p>
             {% if cleanup_message %}
               <p class="note">{{ cleanup_message }}</p>

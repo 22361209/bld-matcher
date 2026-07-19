@@ -6,12 +6,6 @@
 {% block page_class %}shell wide app-surface{% endblock %}
 
 {% block page_content %}
-<header class="workspace-header">
-        <div>
-          <h1>账号管理</h1>
-          <p>管理员可以新增账号、修改登录名、角色、启用状态，并重置密码。</p>
-        </div>
-      </header>
       <section class="workbench-split">
         <article class="workbench-section">
           <h2>{{ "编辑账号" if editing else "新增账号" }}</h2>

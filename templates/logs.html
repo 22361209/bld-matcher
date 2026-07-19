@@ -6,13 +6,6 @@
 {% block page_class %}shell wide app-surface{% endblock %}
 
 {% block page_content %}
-<header class="workspace-header">
-        <div>
-          <h1>操作日志</h1>
-          <p>记录目录导入、产品新增/编辑/停用、人工映射变更。</p>
-        </div>
-      </header>
-
       <section class="workspace-command">
         <form class="search-form" method="get" action="{{ url_for('logs') }}">
           <label>

@@ -9,17 +9,10 @@
 {% endblock %}
 
 {% block page_content %}
-{% set is_sales = contract_mode == "sales" %}
+      {% set is_sales = contract_mode == "sales" %}
       {% set contract_label = "销售合同" if is_sales else "采购合同" %}
       {% set party_a_label = "供方（甲方）" if is_sales else "采购方（甲方）" %}
       {% set party_b_label = "需方（乙方）" if is_sales else "供应方（乙方）" %}
-      <header class="workspace-header contract-workspace-header">
-        <div>
-          <h1>合同管理</h1>
-          <p>录入{{ contract_label }}条款与产品明细，核对金额后生成可归档 PDF。</p>
-        </div>
-        <div class="workspace-meta"><span>当前模式</span><strong>{{ contract_label }}</strong></div>
-      </header>
       <section class="contract-entry-switch" aria-label="合同类型">
         <a class="linear-button {% if not is_sales %}primary{% else %}subtle{% endif %}" href="{{ url_for('contracts') }}">采购合同</a>
         <a class="linear-button {% if is_sales %}primary{% else %}subtle{% endif %}" href="{{ url_for('sales_contracts') }}">销售合同</a>

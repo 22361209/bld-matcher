@@ -9,17 +9,6 @@
 {% endblock %}
 
 {% block page_content %}
-<header class="workspace-header">
-        <div>
-          <h1>内部 API Key</h1>
-          <p>供 OpenClaw 或其他内部工具调用 API。可以同时保留多条 Key，并按需单独停用。</p>
-        </div>
-        <div class="workspace-meta">
-          <span>状态</span>
-          <strong>{{ "已启用" if status.enabled else "未启用" }}</strong>
-          {% if status.preview %}<span>{{ status.preview }}</span>{% endif %}
-        </div>
-      </header>
       {% if generated_token %}
         <section class="api-key-reveal" aria-label="新生成的 API Key">
           <div>
