@@ -1699,6 +1699,10 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("读取报价", scope_list.group(1))
         self.assertNotIn("quotes:read", scope_list.group(1))
         self.assertIn("删除", html)
+        self.assertIn("交给 AI Agent 的接入约束", html)
+        self.assertIn('data-copy-agent-guide', html)
+        self.assertIn("新集成不得调用 /api/internal/inquiry/*", html)
+        self.assertIn("不得依赖、请求或暴露 output_path、source_path、本机绝对路径", html)
 
         with self.web.connect(self.web.DB_PATH) as conn:
             first_key = conn.execute(

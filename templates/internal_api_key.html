@@ -152,15 +152,36 @@
       <section class="data-section">
         <div class="data-section-header">
           <div>
-            <h2>调用格式</h2>
-            <p>工具只需要带一个启用中的 Key，即可调用内部 API。</p>
+            <h2>交给 AI Agent 的接入约束</h2>
+            <p>复制以下内容即可交给 Agent。API Key 请通过其受控密钥配置单独注入，不要粘贴到对话、日志或结果文件中。</p>
           </div>
+          <button class="linear-button subtle compact" type="button" data-copy-agent-guide>复制接入说明</button>
         </div>
-        <pre class="api-key-example">Authorization: Bearer bld_sk_xxxxx
-POST /api/internal/inquiry/numbers
-POST /api/internal/inquiry/file
-POST /api/internal/inquiry/analyze</pre>
-        <p class="note">新应用从 <code>GET /api/v1</code> 和 <code>GET /api/v1/openapi.json</code> 开始接入。</p>
+        <pre id="api-agent-guide" class="api-key-agent-guide"># BLD Matcher API 接入契约（给 AI Agent）
+
+## 密钥与基础地址
+- BASE_URL：{{ request.url_root }}
+- API Key 仅从受控环境变量或密钥管理器读取；不得写入对话、提示词、日志、导出文件或用户可见回复。
+- 每个请求必须带：Authorization: Bearer &lt;API_KEY&gt;
+
+## 强制接入顺序
+1. 先请求 GET ${BASE_URL}api/v1，确认 capabilities；需要 Scope：api:read。
+2. 再请求 GET ${BASE_URL}api/v1/openapi.json，按其中声明的路径、Schema、必需 Scope 和幂等要求调用。
+3. 只使用 OpenAPI 中明确存在的 /api/v1 接口；不得猜测路径、字段或绕过权限。
+
+## 权限与业务边界
+- 按最小权限工作：读取、询价、报价、产品价格、任务等 Scope 必须逐项匹配 OpenAPI。
+- 除非用户明确授权且 Key 已具备写 Scope，否则不得调用任何创建、修改、取消或导出类操作。
+- 写入或导出接口若要求 Idempotency-Key，必须为同一业务请求复用同一键；不要把同一键用于不同请求体。
+
+## 结果与文件边界
+- 新集成不得调用 /api/internal/inquiry/*；它们只为兼容旧消费者保留。
+- 不得依赖、请求或暴露 output_path、source_path、本机绝对路径或数据库实现信息。
+- 需要文件时，使用 v1 响应中的 artifact.download_url；必须用创建该 artifact 的同一 Key 下载，artifact 有时效和所有者隔离。
+
+## 失败处理
+- 读取 API 的稳定错误码和响应体后再决定下一步；权限不足、字段校验失败或资源不存在时不得自行绕过或降级到网页、数据库或旧接口。
+- API Key 删除、过期或权限不足时停止调用并提示管理员重新配置；不得尝试猜测、替换或索取其他 Key。</pre>
       </section>
 {% endblock %}
 

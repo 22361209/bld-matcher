@@ -1,0 +1,14 @@
+{
+  "date": "2026-07-19",
+  "version": "unreleased",
+  "title": "内部 API Key 页面增加 AI Agent 接入契约",
+  "entries": [
+    "内部 API Key 页面提供可一键复制的 AI Agent 接入约束，明确 Bearer 认证、v1 OpenAPI 优先、最小 Scope、幂等和 artifact 下载边界。",
+    "接入说明明确禁止新集成使用旧内部接口、暴露绝对路径或在对话和日志中泄露 API Key。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "compatible",
+    "operations": "restart-required"
+  }
+}
