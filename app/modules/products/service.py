@@ -109,8 +109,7 @@ class ProductService:
         with self.unit_of_work_factory() as unit_of_work:
             return unit_of_work.repository.stats()
 
-    def catalog(self) -> ProductCatalog | None:
-        self.bootstrap_port()
+    def _load_catalog(self) -> ProductCatalog | None:
         legacy_aliases = self.legacy_alias_port()
         with self.unit_of_work_factory() as unit_of_work:
             version = unit_of_work.repository.catalog_version()
@@ -126,6 +125,14 @@ class ProductService:
             self._catalog = ProductCatalog(rows, manual_map=aliases) if rows else None
             self._catalog_version = version
             return self._catalog
+
+    def catalog(self) -> ProductCatalog | None:
+        self.bootstrap_port()
+        return self._load_catalog()
+
+    def warm_catalog(self) -> ProductCatalog | None:
+        """Build the read-only in-memory index after single-process initialization."""
+        return self._load_catalog()
 
     def invalidate_catalog(self) -> None:
         with self._catalog_lock:

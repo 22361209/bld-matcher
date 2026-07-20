@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping
+from typing import TYPE_CHECKING, Mapping
 
 from app.platform.artifacts import ArtifactRecord, SQLiteArtifactStore
 
@@ -23,6 +23,9 @@ from .domain import (
 )
 from .infrastructure import WorkbookInquiryEngine
 from .ports import CatalogProvider, InquiryUnitOfWorkFactory
+
+if TYPE_CHECKING:
+    from app.matcher import ProductCatalog
 
 
 class InquiryWorkbookError(RuntimeError):
@@ -265,8 +268,14 @@ class InquiryService:
             artifact=artifact,
         )
 
-    def quick_search(self, query: str) -> list[dict]:
-        return quick_search(self.catalog_port.catalog(), query)
+    def quick_search(
+        self,
+        query: str,
+        *,
+        catalog: ProductCatalog | None = None,
+    ) -> list[dict]:
+        active_catalog = catalog if catalog is not None else self.catalog_port.catalog()
+        return quick_search(active_catalog, query)
 
     def catalog_available(self) -> bool:
         return self.catalog_port.catalog() is not None

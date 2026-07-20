@@ -1,3 +1,21 @@
+import {
+  quickInquiryUrl,
+  shouldUseQuickInquiryNavigation,
+} from "./inquiry_quick_navigation.js";
+
+document.querySelectorAll("form[data-quick-inquiry-form]").forEach((form) => {
+  form.addEventListener("submit", (event) => {
+    const fileInput = form.querySelector("input[type='file'][name='inquiry']");
+    const queryInput = form.querySelector("input[name='quick_oe']");
+    const hasFile = fileInput instanceof HTMLInputElement && Boolean(fileInput.files?.length);
+    const query = queryInput instanceof HTMLInputElement ? queryInput.value : "";
+    if (!shouldUseQuickInquiryNavigation({ query, hasFile })) return;
+
+    event.preventDefault();
+    window.location.assign(quickInquiryUrl(window.location.href, query));
+  }, { capture: true });
+});
+
 document.querySelectorAll("[data-quick-results]").forEach((panel) => {
   const cards = Array.from(panel.querySelectorAll("[data-quick-card]"));
   const filters = Array.from(panel.querySelectorAll("[data-quick-filter]"));
