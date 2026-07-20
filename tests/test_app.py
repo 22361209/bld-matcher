@@ -146,6 +146,11 @@ class WebAppTest(unittest.TestCase):
                 if template_path.name != "index.html":
                     self.assertNotIn("search-hero", template)
 
+    def test_navigation_dropdowns_match_their_trigger_width(self):
+        precision_css = (Path(__file__).resolve().parents[1] / "static" / "components" / "precision.css").read_text(encoding="utf-8")
+
+        self.assertIn(".nav-menu-panel {\n  top: calc(100% - 1px);\n  min-width: 100%;", precision_css)
+
     def test_quick_inquiry_results_can_filter_by_match_source(self):
         from app.modules.products.persistence import upsert_product
 

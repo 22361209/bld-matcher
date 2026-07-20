@@ -200,7 +200,7 @@ body {
 
 .nav-menu-panel {
   top: calc(100% - 1px);
-  min-width: 150px;
+  min-width: 100%;
   padding: 6px;
   border-color: #465158;
   border-radius: 4px;
