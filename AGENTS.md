@@ -10,8 +10,20 @@ Use a visible macOS Terminal window for:
 
 - `sudo ...`
 - SSH commands that may request a password or key passphrase
-- NAS deployment commands that run Docker with `sudo`
+- NAS deployment commands that run Docker with unrestricted `sudo`
 - any command likely to stop at `Password:` or similar
+
+Exception: the NAS `deploy` user has a root-owned, limited passwordless sudo
+wrapper for this project:
+
+```bash
+sudo -n /usr/local/sbin/rebuild-bld-matcher rebuild
+sudo -n /usr/local/sbin/rebuild-bld-matcher status
+```
+
+Hidden shell sessions may use that wrapper because `sudo -n` fails immediately
+instead of prompting for a password. Do not use hidden sessions for any other
+NAS sudo command.
 
 Preferred pattern:
 
@@ -70,11 +82,12 @@ cd /volume1/docker/bld-matcher
 git fetch origin main
 git reset --hard origin/main
 git status -sb
-sudo /usr/local/bin/docker-compose up -d --build
-sudo /usr/local/bin/docker-compose ps
+sudo -n /usr/local/sbin/rebuild-bld-matcher rebuild
+sudo -n /usr/local/sbin/rebuild-bld-matcher status
 ```
 
-Use visible Terminal for the NAS `sudo` commands.
+Use visible Terminal for NAS `sudo` commands only when the limited wrapper is
+missing or insufficient.
 
 ## Engineering Contract
 

@@ -228,10 +228,10 @@ git push nas main
 NAS 运行目录更新：
 
 ```bash
-ssh -tt -i ~/.ssh/bld_matcher_deploy deploy@192.168.110.93 'cd /volume1/docker/bld-matcher && git fetch origin main && git reset --hard origin/main && git status -sb && sudo /usr/local/bin/docker-compose up -d --build && sudo /usr/local/bin/docker-compose ps'
+ssh -i ~/.ssh/bld_matcher_deploy deploy@192.168.110.93 'cd /volume1/docker/bld-matcher && git fetch origin main && git reset --hard origin/main && git status -sb && sudo -n /usr/local/sbin/rebuild-bld-matcher rebuild && sudo -n /usr/local/sbin/rebuild-bld-matcher status'
 ```
 
-需要 `sudo` 时必须打开可见 macOS Terminal，让用户直接输入密码。
+NAS `deploy` 用户已配置受限免密 sudo wrapper：`/usr/local/sbin/rebuild-bld-matcher`。常规重建和状态检查必须优先用 `sudo -n` 调用该 wrapper；只有 wrapper 缺失或不足以完成任务时，才打开可见 Terminal 让用户输入 sudo 密码。
 
 如果大量产品图片被新增或替换，部署后可生成缩略图：
 
