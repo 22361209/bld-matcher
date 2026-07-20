@@ -1,0 +1,14 @@
+{
+  "date": "2026-07-20",
+  "version": "602e990",
+  "title": "优化询价页面 OE 快速查询性能",
+  "entries": [
+    "快速查询改为复用目录加载时预计算的号码、品牌号别名和标准化结果，保留完整 OE、前缀、片段、PSA、O/0 容错及人工映射的现有规则与排序。",
+    "减少每次询价查询重复解析整份产品目录的开销。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "compatible",
+    "operations": "restart-required"
+  }
+}
