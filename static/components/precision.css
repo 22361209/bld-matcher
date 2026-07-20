@@ -209,7 +209,8 @@ body {
 .nav-menu-panel {
   top: calc(100% - 1px);
   min-width: 100%;
-  padding: 6px;
+  box-sizing: border-box;
+  padding: 4px;
   border-color: #465158;
   border-radius: 4px;
   background: var(--precision-ink);
@@ -217,10 +218,16 @@ body {
 }
 
 .nav-menu-panel a {
-  min-height: 36px;
-  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0;
   border-radius: 2px;
   color: #c7ced1;
+  font-size: 13px;
+  font-weight: 680;
+  line-height: 1;
 }
 
 .nav-menu-panel a:hover,
