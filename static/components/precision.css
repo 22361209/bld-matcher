@@ -18,7 +18,7 @@
   --precision-shadow: 0 15px 38px rgba(28, 38, 44, 0.08);
   color: var(--precision-ink);
   background: var(--precision-canvas);
-  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: var(--app-font-sans);
 }
 
 body {

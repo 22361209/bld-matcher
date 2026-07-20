@@ -1,0 +1,15 @@
+{
+  "date": "2026-07-20",
+  "version": "unreleased",
+  "title": "全站自托管统一中文界面字体",
+  "entries": [
+    "全站界面改用项目自托管的 Noto Sans SC 可变 Web Font；Mac 和 Windows 浏览器下载相同字体与字重，减少苹方和微软雅黑造成的字形、字宽与视觉字号差异。",
+    "字体以 Unicode 分包 WOFF2 本地提供，首次访问按页面实际字符加载所需分包；字体文件加载失败时仍会回退到浏览器无衬线字体，不影响页面可用性。",
+    "字体资源随应用源码发布，使用 SIL Open Font License 1.1；本次不涉及运行数据、权限或 API 变化。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "compatible",
+    "operations": "restart-required when switching deployed source"
+  }
+}

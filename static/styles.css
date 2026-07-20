@@ -1,12 +1,12 @@
 :root {
   --revealed-nav-height: 0px;
+  --app-font-sans: "Noto Sans SC Variable", "Noto Sans SC", sans-serif;
   color-scheme: light;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--app-font-sans);
   color: #19202a;
   background: #f5f7fa;
   scrollbar-gutter: stable;
 }
-
 .col-width-46 { width: 46px; }
 .col-width-50 { width: 50px; }
 .col-width-56 { width: 56px; }

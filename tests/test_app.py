@@ -164,6 +164,22 @@ class WebAppTest(unittest.TestCase):
         self.assertIn('panel.style.setProperty("--nav-menu-panel-width"', nav_js)
         self.assertIn('addEventListener("scroll", positionMobileMenuPanels', nav_js)
 
+    def test_shared_web_font_is_self_hosted_and_loaded_by_the_page_shell(self):
+        root = Path(__file__).resolve().parents[1]
+        base_template = (root / "templates" / "base.html").read_text(encoding="utf-8")
+        font_css = "\n".join(
+            (root / "static" / "components" / filename).read_text(encoding="utf-8")
+            for filename in ("font_faces_00.css", "font_faces_01.css")
+        )
+        font_directory = root / "static" / "fonts" / "noto-sans-sc"
+
+        self.assertIn("components/font_faces_00.css", base_template)
+        self.assertIn("components/font_faces_01.css", base_template)
+        self.assertIn("font-family: 'Noto Sans SC Variable';", font_css)
+        self.assertNotIn("url(./files/", font_css)
+        self.assertGreater(len(list(font_directory.glob("*.woff2"))), 100)
+        self.assertIn("SIL Open Font License", (font_directory / "LICENSE").read_text(encoding="utf-8"))
+
     def test_quick_inquiry_results_can_filter_by_match_source(self):
         from app.modules.products.persistence import upsert_product
 
