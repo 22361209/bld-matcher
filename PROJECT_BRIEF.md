@@ -73,13 +73,6 @@ git status --short
 lsof -nP -iTCP:5055 -sTCP:LISTEN
 ```
 
-## 界面平台显示规则
-
-- macOS 和 Linux 使用共享组件的默认字号、控件尺寸和间距；不得为了单个平台的字体渲染差异修改这些默认值。
-- Windows 的文字栅格化在密集工作台列表中会显得更小。`static/platform.js` 仅在浏览器识别为 Windows 时为根元素写入 `data-platform="windows"`；Windows 专用规则必须以 `html[data-platform="windows"]` 为前缀，放在 `static/components/precision.css`。
-- 当前 Windows 专用调整覆盖共享数据表、搜索/命令表单、常用操作按钮和分页/统计区的字号及相应控件宽高、内边距。合同和打印单据版式不随平台缩放。
-- 新增平台差异时，先保留 macOS/Linux 默认效果；不得以 User-Agent 服务器分支、模板分支或页面级复制 CSS 实现。验收至少包括 Windows 实机和一个默认平台，确认没有根级横向溢出。
-
 ## 数据归属
 
 运行数据不进 Git。NAS 和本机都可能是较新版本，数据同步前必须比较；只有用户明确说“以 NAS 覆盖本机”或“以本机覆盖 NAS”时，才按指定方向覆盖：

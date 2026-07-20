@@ -636,56 +636,6 @@ html[data-platform="windows"] .data-grid .data-table th {
   height: 39px;
 }
 
-html[data-platform="windows"] .linear-button {
-  min-height: 40px;
-  padding: 9px 16px;
-  font-size: 15px;
-}
-
-html[data-platform="windows"] .search-form label,
-html[data-platform="windows"] .command-form label {
-  font-size: 14px;
-}
-
-html[data-platform="windows"] .search-form input,
-html[data-platform="windows"] .command-form input,
-html[data-platform="windows"] .app-surface select {
-  height: 40px;
-  font-size: 18px;
-}
-
-html[data-platform="windows"] .search-form input {
-  width: min(432px, 100%);
-}
-
-html[data-platform="windows"] .command-form input {
-  min-width: min(352px, 100%);
-}
-
-html[data-platform="windows"] .search-form .choice-card {
-  font-size: 17px;
-}
-
-html[data-platform="windows"] .data-grid-footer {
-  min-height: 60px;
-  font-size: 14px;
-}
-
-html[data-platform="windows"] .data-grid-summary strong {
-  font-size: 17px;
-}
-
-html[data-platform="windows"] .data-grid-page,
-html[data-platform="windows"] .data-grid-gap {
-  min-width: 38px;
-  min-height: 38px;
-}
-
-html[data-platform="windows"] .data-grid-pagination .linear-button {
-  min-height: 38px;
-  padding: 6px 11px;
-}
-
 .data-table tbody tr:nth-child(even),
 .workspace-table tbody tr:nth-child(even) {
   background: #fafbfa;
