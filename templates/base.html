@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='components/workspace.css', v=static_version('components/workspace.css')) }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='components/data_grid.css', v=static_version('components/data_grid.css')) }}">
     {% block page_head %}{% endblock %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='components/precision.css', v=static_version('components/precision.css')) }}">
   </head>
   <body class="{% block body_class %}{% endblock %}" data-page="{% block page_id %}shared.page{% endblock %}" data-page-type="{% block page_type %}workbench{% endblock %}">
     <main class="{% block page_class %}shell wide{% endblock %}">

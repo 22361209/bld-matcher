@@ -10,20 +10,18 @@
 {% endblock %}
 
 {% block page_content %}
-{% if not show_material_items %}<header class="material-landing">
-        <h1>{% if show_material_items %}材料明细{% else %}生产料单{% endif %}</h1>
-        <p>{% if show_material_items %}维护生成生产料单时使用的材料明细。{% else %}上传生产计划，按启用材料明细生成采购和下料所需的料单。{% endif %}</p>
+      {% if not show_material_items %}
+      <header class="material-landing">
+          <h1>生产料单</h1>
+          <p>上传生产计划，按启用材料明细生成采购和下料所需料单。</p>
         <div class="compact-metrics material-stat-strip" aria-label="材料数据统计">
           <span>总明细 <strong>{{ material_stats["items"] }}</strong></span>
           <span>启用明细 <strong>{{ material_stats.active }}</strong></span>
           <span>停用明细 <strong>{{ material_stats.inactive }}</strong></span>
           <span>启用母件 <strong>{{ material_stats.models }}</strong></span>
-          {% if show_material_items %}
-            <span>当前视图 <strong>{{ "全部" if status == "all" else ("停用" if status == "inactive" else "启用") }}</strong></span>
-          {% endif %}
         </div>
-      </header>{% endif %}
-
+      </header>
+      {% endif %}
       {% if material_file_stats.invalid %}
         <section class="materials-alert">
           材料数据文件读取失败：{{ material_file_stats.error or "文件里必须包含“材料数据”工作表。" }}

@@ -17,16 +17,6 @@
   padding: 28px 0 24px;
 }
 
-.contract-entry-switch {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: center;
-  justify-content: center;
-  width: min(var(--purchase-paper-width), 100%);
-  margin: 0 auto 22px;
-}
-
 .contract-history-section {
   width: 100%;
   margin: 12px 0 0;

@@ -9,15 +9,6 @@
 {% endblock %}
 
 {% block page_content %}
-<header class="workspace-header">
-        <div>
-          <h1>产品数据同步</h1>
-          <p>用于两端系统之间交换产品库，可选择是否带图纸和产品图片。</p>
-        </div>
-        <div class="command-actions">
-          <a class="linear-button subtle" href="{{ url_for('products') }}">返回产品目录</a>
-        </div>
-      </header>
       <section class="sync-panel-grid" aria-label="产品数据同步操作">
         <form action="{{ url_for('export_product_data_package') }}" method="post" class="sync-panel">
           {{ csrf_field() }}

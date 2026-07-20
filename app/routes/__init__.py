@@ -11,7 +11,6 @@ def register_routes(app) -> None:
     from app.modules.tubes import register as register_tubes
     from app.modules.products import register as register_products_api
     from app.modules.quotes import register as register_quotes
-    from app.modules.shipping import register as register_shipping
     from app.platform.runtime_web import register as register_runtime
 
     from . import home, inquiry, products
@@ -27,6 +26,5 @@ def register_routes(app) -> None:
     register_business_sync(app)
     inquiry.register(app)
     products.register(app)
-    register_shipping(app)
     register_products_api(app)
     register_api_v1(app)

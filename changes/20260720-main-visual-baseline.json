@@ -1,0 +1,14 @@
+{
+  "date": "2026-07-20",
+  "version": "unreleased",
+  "title": "保留合并前 Main 经典视觉基线",
+  "entries": [
+    "全站新设计合并前的 Main 视觉已固定为 main-classic-20260720 分支和同名标签，可在不覆盖业务数据、上传文件、输出文件或环境配置的前提下立即切换源码界面。",
+    "新增经典视觉基线说明，记录浅灰工作台、蓝色强调、轻量导航、页面标题与中等密度表单/表格的组成规则，以及安全回退方式。"
+  ],
+  "impact": {
+    "data": "none；运行数据继续以 main 工作树现有数据为准",
+    "api": "compatible",
+    "operations": "restart-required when switching deployed source"
+  }
+}

@@ -11,9 +11,15 @@
 {% block page_content %}
 <section class="panel login-panel">
         <div class="login-brand">
-          <h1>BLD 工作台</h1>
-          <p class="note">产品目录、询价、发货与业务协作系统</p>
+          <span class="login-brand-mark">BLD</span>
+          <div>
+            <span class="login-kicker">AUTO PARTS OPERATIONS</span>
+            <h1>业务工作台</h1>
+            <p>询价、产品目录与生产资料，在同一套精密业务系统中协同。</p>
+          </div>
         </div>
+        <div class="login-form-area">
+          <div class="login-form-heading"><span>SECURE ACCESS</span><h2>登录系统</h2><p>使用内部账号继续。</p></div>
         {% with messages = get_flashed_messages(with_categories=true) %}
           {% if messages %}
             <section class="messages">
@@ -36,5 +42,6 @@
           </label>
           <button type="submit">登录</button>
         </form>
+        </div>
       </section>
 {% endblock %}

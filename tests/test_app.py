@@ -11,7 +11,6 @@ import subprocess
 import sys
 import tarfile
 import tempfile
-import time
 import unittest
 import zipfile
 from importlib.util import module_from_spec, spec_from_file_location
@@ -119,13 +118,51 @@ class WebAppTest(unittest.TestCase):
         html = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
         self.assertIn("BLD", html)
-        self.assertLess(html.index('class="messages'), html.index('class="search-hero"'))
+        self.assertIn('class="search-command"', html)
         self.assertIn('class="embedded-submit" type="submit">开始匹配', html)
         self.assertIn('class="embedded-input-control"', html)
         self.assertIn('class="embedded-submit" type="submit">搜索', html)
-        nav_order = ["询价处理", "报价记录", "合同管理", "产品目录", "生产料单", "货物识别"]
+        nav_order = ["询价处理", "报价记录", "合同管理", "产品目录", "管件资料", "生产料单", "物料图纸"]
         nav_positions = [html.index(label) for label in nav_order]
         self.assertEqual(nav_positions, sorted(nav_positions))
+        self.assertNotIn("发货通知", html)
+        self.assertNotIn("货物识别", html)
+        self.assertIn('class="search-hero"', html)
+        self.assertNotIn('class="workspace-header"', html)
+        self.assertIn('class="nav-menu contract-nav-menu" data-nav-menu', html)
+        self.assertIn('type="button" aria-haspopup="menu" aria-expanded="false" aria-label="选择合同类型" data-nav-menu-trigger>合同管理</button>', html)
+        self.assertIn('href="/contracts" role="menuitem">采购合同</a>', html)
+        self.assertIn('href="/contracts/sales" role="menuitem">销售合同</a>', html)
+
+    def test_page_templates_keep_only_approved_spacious_homepage_headers(self):
+        template_dir = Path(__file__).resolve().parents[1] / "templates"
+        page_templates = sorted(template_dir.glob("*.html"))
+
+        self.assertTrue(page_templates)
+        for template_path in page_templates:
+            with self.subTest(template=template_path.name):
+                template = template_path.read_text(encoding="utf-8")
+                self.assertNotIn("workspace-header", template)
+                self.assertEqual(template.count("search-hero"), 1 if template_path.name == "index.html" else 0)
+
+        materials_template = (template_dir / "materials.html").read_text(encoding="utf-8")
+        self.assertIn('class="material-landing"', materials_template)
+
+    def test_navigation_dropdowns_stay_anchored_in_narrow_scrollable_navigation(self):
+        precision_css = (Path(__file__).resolve().parents[1] / "static" / "components" / "precision.css").read_text(encoding="utf-8")
+        nav_js = (Path(__file__).resolve().parents[1] / "static" / "nav.js").read_text(encoding="utf-8")
+
+        self.assertIn(".nav-menu-panel {\n  top: calc(100% - 1px);\n  min-width: 100%;", precision_css)
+        self.assertIn("justify-content: center;", precision_css)
+        self.assertIn("font-size: 13px;", precision_css)
+        self.assertIn("@media (max-width: 760px)", precision_css)
+        self.assertIn("position: fixed;\n    top: var(--nav-menu-panel-top, 0px);", precision_css)
+        self.assertIn("width: var(--nav-menu-panel-width, auto);", precision_css)
+        self.assertIn('window.matchMedia("(max-width: 760px)")', nav_js)
+        self.assertIn('panel.style.setProperty("--nav-menu-panel-top"', nav_js)
+        self.assertIn('panel.style.setProperty("--nav-menu-panel-left"', nav_js)
+        self.assertIn('panel.style.setProperty("--nav-menu-panel-width"', nav_js)
+        self.assertIn('addEventListener("scroll", positionMobileMenuPanels', nav_js)
 
     def test_quick_inquiry_results_can_filter_by_match_source(self):
         from app.modules.products.persistence import upsert_product
@@ -226,10 +263,37 @@ class WebAppTest(unittest.TestCase):
 
     def test_core_admin_pages_load(self):
         self.login()
-        for path in ["/quotes", "/contracts", "/contracts/sales", "/products", "/tubes", "/materials", "/material-drawings", "/shipping-notices", "/shipment-recognition", "/purchase-contracts", "/users", "/internal-api-key", "/logs", "/system-updates", "/product-data-sync", "/business-data-sync"]:
+        paths = (
+            "/quotes",
+            "/contracts",
+            "/contracts/sales",
+            "/products",
+            "/tubes",
+            "/materials",
+            "/material-drawings",
+            "/purchase-contracts",
+            "/users",
+            "/internal-api-key",
+            "/logs",
+            "/system-updates",
+            "/product-data-sync",
+            "/business-data-sync",
+        )
+        for path in paths:
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
+
+    def test_product_list_omits_redundant_workspace_header(self):
+        self.login()
+
+        response = self.client.get("/products")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('class="workspace-command products-command"', html)
+        self.assertNotIn('<header class="workspace-header">', html)
+        self.assertNotIn("目录规模", html)
 
     def test_primary_data_grid_footers_render_statistics_and_zero_ranges(self):
         self.login()
@@ -913,211 +977,23 @@ class WebAppTest(unittest.TestCase):
             row = conn.execute("SELECT active FROM products WHERE bld_no = ?", ("SYNC-LOCAL-ONLY",)).fetchone()
         self.assertEqual(row["active"], 0)
 
-    def test_shipment_recognition_requires_photos(self):
+    def test_retired_shipping_pages_and_actions_return_not_found(self):
         self.login()
-        response = self.client.post(
-            "/shipment-recognition/run",
-            data={"provider": "tesseract"},
-            follow_redirects=True,
+        requests = (
+            ("get", "/shipping-notices"),
+            ("post", "/shipping-notices/templates/upload"),
+            ("post", "/shipping-notices/templates/batch"),
+            ("post", "/shipping-notices/preview"),
+            ("post", "/shipping-notices/generate"),
+            ("get", "/shipment-recognition"),
+            ("post", "/shipment-recognition/run"),
+            ("get", "/shipment-recognition/status/retired-job"),
+            ("post", "/shipment-recognition/jobs/retired-job/cancel"),
         )
-        html = response.get_data(as_text=True)
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("请选择 jpg、png、webp、bmp、tif、heic 或 heif 照片", html)
-
-    def test_shipping_notice_template_preview_and_generate(self):
-        from openpyxl import Workbook, load_workbook
-
-        template_book = Workbook()
-        template_sheet = template_book.active
-        template_sheet.title = "通知模板"
-        template_sheet.append(["客户", "商品编码", "数量", "备注"])
-        template_sheet.append(["ABC", "", "", "固定"])
-        template_buffer = io.BytesIO()
-        template_book.save(template_buffer)
-        template_book.close()
-        template_buffer.seek(0)
-
-        self.login()
-        upload = self.client.post(
-            "/shipping-notices/templates/upload",
-            data={
-                "customer": "ABC客户",
-                "template_name": "标准模板",
-                "template": (template_buffer, "abc-template.xlsx"),
-            },
-            content_type="multipart/form-data",
-            follow_redirects=False,
-        )
-        self.assertEqual(upload.status_code, 302)
-        template_id = re.search(r"template_id=([^&]+)", upload.headers["Location"]).group(1)
-
-        page = self.client.get(f"/shipping-notices?template_id={template_id}")
-        html = page.get_data(as_text=True)
-        self.assertEqual(page.status_code, 200)
-        self.assertIn("发货通知", html)
-        self.assertIn("选择客户模板", html)
-        self.assertIn("模板管理", html)
-        self.assertIn("data-open-shipping-template-action-modal", html)
-        self.assertIn("ABC客户", html)
-        self.assertIn("data-file-drop-zone", html)
-        self.assertIn("shipping-history-drawer", html)
-
-        data_book = Workbook()
-        data_sheet = data_book.active
-        data_sheet.title = "发货数据"
-        data_sheet.append(["商品编码", "数量"])
-        data_sheet.append(["K8001LA", 12])
-        data_sheet.append(["K8001RA", 8])
-        data_buffer = io.BytesIO()
-        data_book.save(data_buffer)
-        data_book.close()
-        data_buffer.seek(0)
-
-        preview = self.client.post(
-            "/shipping-notices/preview",
-            data={
-                "template_id": template_id,
-                "shipment_data": (data_buffer, "shipment.xlsx"),
-            },
-            content_type="multipart/form-data",
-        )
-        preview_html = preview.get_data(as_text=True)
-        self.assertEqual(preview.status_code, 200)
-        self.assertIn("发货通知预览", preview_html)
-        self.assertIn("生成前预览", preview_html)
-        self.assertIn("K8001LA", preview_html)
-        upload_match = re.search(r'name="upload_path" value="([^"]+)"', preview_html)
-        self.assertIsNotNone(upload_match)
-
-        generated = self.client.post(
-            "/shipping-notices/generate",
-            data={"template_id": template_id, "upload_path": upload_match.group(1)},
-            follow_redirects=False,
-        )
-        self.assertEqual(generated.status_code, 302)
-        output_name = unquote(re.search(r"generated=([^&]+)", generated.headers["Location"]).group(1))
-        output_path = self.root / "outputs" / output_name
-        self.assertTrue(output_path.exists())
-        workbook = load_workbook(output_path, data_only=True)
-        sheet = workbook.active
-        self.assertEqual(sheet.cell(2, 2).value, "K8001LA")
-        self.assertEqual(sheet.cell(2, 3).value, 12)
-        self.assertEqual(sheet.cell(3, 2).value, "K8001RA")
-        self.assertEqual(sheet.cell(3, 3).value, 8)
-        workbook.close()
-
-    def test_shipping_notice_batch_template_upload(self):
-        from openpyxl import Workbook
-
-        self.login()
-        workbook = Workbook()
-        sheet = workbook.active
-        sheet.append(["商品编码", "数量"])
-        sheet.append(["", ""])
-        template_buffer = io.BytesIO()
-        workbook.save(template_buffer)
-        workbook.close()
-
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "w") as archive:
-            archive.writestr("批量客户-发货模板.xlsx", template_buffer.getvalue())
-        zip_buffer.seek(0)
-        batch = self.client.post(
-            "/shipping-notices/templates/batch",
-            data={"template_zip": (zip_buffer, "templates.zip")},
-            content_type="multipart/form-data",
-            follow_redirects=True,
-        )
-        batch_html = batch.get_data(as_text=True)
-        self.assertEqual(batch.status_code, 200)
-        self.assertIn("已导入 1 个模板", batch_html)
-        self.assertIn("批量客户", batch_html)
-
-    def test_shipment_recognition_async_job_completes(self):
-        self.login()
-        received_args = {}
-
-        def fake_recognize_photo(job, args):
-            received_args.update({"model": args.model, "base_url": args.base_url})
-            return {
-                "relative_name": job.relative_name,
-                "path": str(job.path),
-                "status": "ok",
-                "seconds": 0.01,
-                "model": "fake-qwen-vl",
-                "usage": {"prompt_tokens": 11, "completion_tokens": 7, "total_tokens": 18},
-                "result": {
-                    "photo_summary": "测试照片",
-                    "labels": [
-                        {
-                            "label_index": 1,
-                            "visible": True,
-                            "label_type": "part",
-                            "numbers": ["54501-8Y50B"],
-                            "part_no": "54501-8Y50B",
-                            "bld_no": "",
-                            "oe_no": "",
-                            "customer_code": "",
-                            "product_name": "CONTROL ARM",
-                            "models": "TEST CAR",
-                            "quantity": 10,
-                            "carton_size": "",
-                            "barcode": "",
-                            "confidence": 0.95,
-                            "notes": "",
-                        }
-                    ],
-                },
-                "error": "",
-            }
-
-        png_bytes = (
-            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
-            b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\xff\xff?"
-            b"\x00\x05\xfe\x02\xfeA\x89\xa3\x95\x00\x00\x00\x00IEND\xaeB`\x82"
-        )
-        from argparse import Namespace
-        from scripts.run_worker import build_worker
-
-        with patch(
-            "app.modules.shipping.recognition_service.recognizer.build_runtime_args",
-            return_value=Namespace(limit=10, model=None, base_url=None),
-        ), patch(
-            "app.modules.shipping.recognition_service.recognizer.recognize_photo",
-            side_effect=fake_recognize_photo,
-        ):
-            response = self.client.post(
-                "/shipment-recognition/run",
-                data={
-                    "provider": "openai-compatible",
-                    "model": "attacker-model",
-                    "base_url": "https://attacker.invalid/v1",
-                    "shipment_photos": (io.BytesIO(png_bytes), "IMG_0001.png"),
-                },
-                headers={"Accept": "application/json", "X-Requested-With": "fetch"},
-                content_type="multipart/form-data",
-            )
-            payload = response.get_json()
-            self.assertEqual(response.status_code, 202)
-            self.assertTrue(payload["ok"])
-            build_worker(worker_id="test-shipment-worker").run_once(job_id=payload["job_id"])
-
-            status_payload = None
-            for _ in range(30):
-                status = self.client.get(payload["status_url"], headers={"Accept": "application/json"})
-                status_payload = status.get_json()
-                if status_payload["job"]["status"] == "completed":
-                    break
-                time.sleep(0.1)
-
-        self.assertIsNotNone(status_payload)
-        job = status_payload["job"]
-        self.assertEqual(job["status"], "completed")
-        self.assertEqual(job["result"]["photos"], 1)
-        self.assertEqual(job["result"]["labels"], 1)
-        self.assertEqual(job["result"]["total_tokens"], 18)
-        self.assertTrue(job["result"]["excel_url"].startswith("/download/"))
-        self.assertEqual(received_args, {"model": None, "base_url": None})
+        for method, path in requests:
+            with self.subTest(path=path):
+                response = getattr(self.client, method)(path)
+                self.assertEqual(response.status_code, 404)
 
     def test_shipment_recognition_prepares_heic_images(self):
         from PIL import Image
@@ -1800,6 +1676,7 @@ class WebAppTest(unittest.TestCase):
         self.assertNotIn("采购合同和销售合同分别生成、分别归档。", html)
         self.assertIn("采购合同", html)
         self.assertIn("销售合同", html)
+        self.assertNotIn('class="contract-entry-switch"', html)
         self.assertIn('class="contract-history-drawer" id="contract-history">', html)
         self.assertIn("历史合同记录", html)
         self.assertNotIn("销售合同模板后续接入", html)
@@ -3576,6 +3453,7 @@ class WebAppTest(unittest.TestCase):
         html = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn('class="material-landing"', html)
         self.assertIn('href="/materials/items"', html)
         self.assertNotIn('id="materials-results"', html)
         self.assertIn('class="embedded-submit" type="submit">生成并下载', html)
@@ -3875,29 +3753,6 @@ class WebAppTest(unittest.TestCase):
             connection.commit()
         self.assertEqual(product["item"], "Old item")
         (self.root / "data" / "catalog.xlsx").unlink(missing_ok=True)
-
-    def test_async_shipment_oversized_upload_returns_json(self):
-        self.login()
-        original_limit = self.web.app.config["MAX_CONTENT_LENGTH"]
-        self.web.app.config["MAX_CONTENT_LENGTH"] = 100
-        try:
-            response = self.client.post(
-                "/shipment-recognition/run",
-                data={
-                    "provider": "tesseract",
-                    "shipment_photos": (io.BytesIO(b"x" * 200), "photo.jpg"),
-                },
-                headers={"Accept": "application/json", "X-Requested-With": "fetch"},
-                content_type="multipart/form-data",
-                follow_redirects=False,
-            )
-            payload = response.get_json()
-            self.assertEqual(response.status_code, 413)
-            self.assertEqual(payload["ok"], False)
-            self.assertIn("上传文件不能超过", payload["error"])
-            response.close()
-        finally:
-            self.web.app.config["MAX_CONTENT_LENGTH"] = original_limit
 
     def test_migrations_are_recorded(self):
         with self.web.connect(self.web.DB_PATH) as conn:

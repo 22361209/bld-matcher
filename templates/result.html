@@ -12,23 +12,17 @@
 {% endblock %}
 
 {% block page_content %}
-<header class="workspace-header">
-        <div>
-          <h1>匹配结果</h1>
-          <p>共 {{ summary.total }} 行，命中 {{ summary.matched }} 行，未找到 {{ summary.unmatched }} 行。</p>
-          {% if output_pending %}
-            <p class="note">Excel 文件将在点击下载时生成：{{ output_path.name }}</p>
-          {% else %}
-            <p class="note">已生成文件：{{ output_path.name }}</p>
-          {% endif %}
-        </div>
-      </header>
-
       <section class="data-section">
         <div class="data-section-header">
           <div>
             <h2>匹配明细</h2>
+            <p>共 {{ summary.total }} 行，命中 {{ summary.matched }} 行，未找到 {{ summary.unmatched }} 行。</p>
             <p>按源表行号显示匹配结果和说明。</p>
+            {% if output_pending %}
+              <p class="note">Excel 文件将在点击下载时生成：{{ output_path.name }}</p>
+            {% else %}
+              <p class="note">已生成文件：{{ output_path.name }}</p>
+            {% endif %}
           </div>
           <div class="data-section-actions">
             <span>{{ summary.rows|length }} 条</span>

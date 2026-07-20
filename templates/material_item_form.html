@@ -6,15 +6,6 @@
 {% block page_class %}shell wide app-surface{% endblock %}
 
 {% block page_content %}
-<header class="workspace-header">
-        <div>
-          <h1>{{ "编辑材料明细" if item else "新增材料明细" }}</h1>
-          <p>母件编码用于匹配生产计划；规格尺寸会自动识别厚度、宽度、长度。</p>
-        </div>
-        <div class="command-actions">
-          <a class="linear-button subtle" href="{{ url_for('material_items', q=item.model if item else '') }}">返回材料明细</a>
-        </div>
-      </header>
       <section class="workbench-form-section">
         <form action="{{ url_for('save_material_item') }}" method="post" class="record-form" data-enter-navigation>
           {{ csrf_field() }}

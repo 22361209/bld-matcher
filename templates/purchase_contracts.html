@@ -9,15 +9,10 @@
 {% endblock %}
 
 {% block page_content %}
-{% set is_sales = contract_mode == "sales" %}
+      {% set is_sales = contract_mode == "sales" %}
       {% set contract_label = "销售合同" if is_sales else "采购合同" %}
       {% set party_a_label = "供方（甲方）" if is_sales else "采购方（甲方）" %}
       {% set party_b_label = "需方（乙方）" if is_sales else "供应方（乙方）" %}
-      <section class="contract-entry-switch" aria-label="合同类型">
-        <a class="linear-button {% if not is_sales %}primary{% else %}subtle{% endif %}" href="{{ url_for('contracts') }}">采购合同</a>
-        <a class="linear-button {% if is_sales %}primary{% else %}subtle{% endif %}" href="{{ url_for('sales_contracts') }}">销售合同</a>
-      </section>
-
       {% set history_action = url_for('sales_contracts') if is_sales else url_for('contracts') %}
       {% set history_has_filter = contract_filters.contract_q or contract_filters.contract_type != "all" %}
       <details class="contract-history-drawer" id="contract-history"{% if history_has_filter %} open{% endif %}>

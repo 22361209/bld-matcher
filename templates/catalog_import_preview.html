@@ -6,16 +6,6 @@
 {% block page_class %}shell wide app-surface{% endblock %}
 
 {% block page_content %}
-  <header class="workspace-header">
-    <div>
-      <h1>确认产品目录导入</h1>
-      <p>新 BLD NO. 会新增；每个冲突条目默认保留现有资料，勾选后才使用 Excel 更新。</p>
-    </div>
-    <div class="command-actions">
-      <a class="linear-button subtle" href="{{ url_for('products') }}">取消并返回目录</a>
-    </div>
-  </header>
-
   <section class="metric-strip" aria-label="目录导入预览统计">
     <div><span>新增</span><strong>{{ preview.new_count }}</strong></div>
     <div><span>待选择更新</span><strong>{{ preview.conflict_count }}</strong></div>

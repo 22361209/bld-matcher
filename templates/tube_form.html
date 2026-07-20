@@ -11,7 +11,6 @@
 
 {% block page_content %}
   <section class="tube-form-page">
-    <div class="workspace-header"><div><h1>{{ "编辑管件" if item else "新增管件" }}</h1></div></div>
     <form class="form-card tube-form" action="{{ url_for('save_tube_item') }}" method="post">
       {{ csrf_field() }}
       <input type="hidden" name="id" value="{{ item.id if item else '' }}">

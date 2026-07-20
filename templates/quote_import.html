@@ -6,15 +6,6 @@
 {% block page_class %}shell wide app-surface{% endblock %}
 
 {% block page_content %}
-<header class="workspace-header">
-        <div>
-          <h1>导入报价记录</h1>
-          <p>确认预览后写入报价记录表。</p>
-        </div>
-        <div class="command-actions">
-          <a class="linear-button subtle" href="{{ url_for('quote_web.quotes') }}">返回报价记录</a>
-        </div>
-      </header>
       <section class="metric-strip" aria-label="报价记录导入统计">
         <div><span>总行数</span><strong>{{ preview.counts.total }}</strong></div>
         <div><span>可导入</span><strong>{{ preview.counts.valid }}</strong></div>

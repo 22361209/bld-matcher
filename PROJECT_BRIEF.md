@@ -1,6 +1,6 @@
 # BLD Project Brief
 
-更新时间：2026-07-18
+更新时间：2026-07-19
 
 这是给新接手 Codex 或开发者的短版项目说明。先读 `AGENTS.md`，再读本文件。详细历史在 `项目交接说明.md`，需要查旧决策时用 `rg` 搜索，不要默认整篇读取。
 
@@ -15,8 +15,7 @@ BLD 是一个局域网内部使用的 Flask 业务系统，主要用于：
 - 询价结果 Excel 和图纸压缩包下载
 - 生产料单生成和冲压材料明细维护
 - 管件资料查看、分类检索和手工新建
-- 发货通知客户模板管理和发货数据 Excel 生成
-- 发货照片标签识别和 Excel 汇总草稿
+- 保留的发货通知领域服务与货物照片识别命令行/Worker 能力（不再提供 Web 页面）
 - 合同管理和采购/销售合同 PDF 生成
 - 多用户账号、权限和操作日志
 
@@ -160,23 +159,13 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 - 页面列出编号、产品名称、成品规格、毛坯管长度、内径公差、采购基数、材质占位、重量、公差（mm）、消耗（mm）和借用编号；支持产品名称、公差、消耗、重量区间及外径/内径组合筛选，业务列支持拖拽换序，管理员可手工新增或编辑。
 - 初始数据使用 `scripts/import_tubes_from_workbook.py` 从管件尺寸工作簿导入；导入记录保留来源工作表和行号，借用关系单独保存。
 
-发货通知：
+退役能力和保留边界：
 
-- 导航栏“发货通知”用于按客户模板生成发货通知 Excel。
-- 支持单个模板上传和 zip 批量模板上传。
-- 模板按客户分组选择，允许同一个客户维护多个模板。
-- 模板 Excel 需要包含商品编码和数量列，或使用 `{{商品编码}}`、`{{数量}}` 占位符。
-- 选择模板后可预览模板前几行；上传发货数据后先预览商品编码和数量，再确认生成 Excel。
-
-发货照片识别：
-
+- 发货通知与货物识别的导航入口、Web 页面及页面提交路由已经退役；访问 `/shipping-notices`、`/shipment-recognition` 及其旧子路由返回 404。
+- 不删除既有运行数据、迁移记录、输出文件、发货通知领域服务、识别领域服务、持久任务 Worker 或命令行工具；页面退役不授权清理历史数据。
 - `tools/shipment_photo_recognition.py` 可读取 NAS 挂载目录或本机照片文件夹，识别货物白色标签并生成 Excel 和 JSON。
-- 导航栏“货物识别”是试验入口，页面支持选择多张照片或拖入照片文件夹，上传后保存到当前用户 `uploads/u*/shipment_photos/`；Web 只提交 `background_jobs` 持久任务，独立 Worker 执行识别，页面可刷新续查并取消，检查点会续租，过期租约可恢复，正常停机会把未提交任务重新排队。
-- 第一版不写入产品库、不匹配现有目录；按标签内容汇总日期、标签号码、BLD号、产品名称、数量、车型和箱数。
-- 箱数按识别出的标签张数计算；数量只使用标签上明确写出的数量，看不清时为 0 并保留低置信备注。
 - 支持 jpg、png、webp、bmp、tif、heic/heif 图片；HEIC 解码依赖 `pillow-heif`。
-- 默认支持 OpenAI-compatible 视觉 Chat Completions 接口；Provider、地址、模型、密钥、代理和 allowlist 只从运行环境读取，页面请求不能覆盖。统一 Provider 执行超时、2 MiB 响应上限、可中断有限重试、并发限制和同 origin 安全重定向校验；命令行仍可用 `--provider tesseract` 做本机 OCR 草稿。
-- 每次逻辑 AI 调用关联任务记录供应商、模型、尝试次数、Token、估算费用、耗时和成功/失败/中断结果；Excel“照片清单”和页面继续展示本次可用指标。
+- 默认支持 OpenAI-compatible 视觉 Chat Completions 接口；Provider、地址、模型、密钥、代理和 allowlist 只从运行环境读取，命令行仍可用 `--provider tesseract` 做本机 OCR 草稿。
 
 合同管理：
 
@@ -209,14 +198,15 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 页面与业务边界：
 
 - 所有完整页面继承 `templates/base.html`，以唯一 `page_id` 和六类 `page_type` 进入统一页面协议；模板禁止内联脚本、事件处理器和样式。
+- 当前页面使用“精密工业工作台”视觉系统：深石墨导航、冷灰画布、白色数据表面、BLD 蓝主操作与信号橙提示；登录、工作台、列表、编辑、导入预览和系统管理页共享同一视觉层级。
 - 产品目录、材料明细、管件资料和报价记录使用统一数据表框体：表头固定在框体内，内容支持双向滚动，列间使用浅色细分隔线，底栏整合当前范围、筛选总数和分页；所有列宽可拖动调整并按当前登录用户保存在浏览器中，拖动中断时会自动恢复页面交互状态。
 - CSS 按 `static/styles.css` 基础层、`static/components/` 共享组件层和 `static/pages/` 页面层归属；页面资产由所属模板加载，共享层禁止业务选择器，项目门禁执行文件容量、零 ID 选择器与禁止新增 `!important`。
-- 全部现有业务、登录、产品同步和货物识别由领域 Service/Repository 负责事务、审计和文件补偿；Web、API 与 Worker 适配器不直接访问 SQLite。
+- 全部现有业务、登录、产品同步与保留的货物识别能力由领域 Service/Repository 负责事务、审计和文件补偿；Web、API 与 Worker 适配器不直接访问 SQLite。
 - 产品与询价 Web 路由已按职责拆分；单个路由适配器最多 320 行、15 个 endpoint，统一验收禁止动态路由注册绕过检查。
 - 询价 Excel 按读取、清理、分析、价格和导出职责位于 `app/modules/inquiry/excel/`；`app/excel_io.py` 仅保留旧导入兼容门面，门禁分别限制处理模块 360 行和兼容门面 80 行。
 - 合同文档按默认条款、表单解析、金额规则、PDF 样式及采购/销售渲染职责位于 `app/modules/contracts/`；`app/purchase_contract.py` 仅保留旧导入兼容门面，采购与销售 PDF 输出受结构和像素基准保护。
 - 材料持久化按规格解析、明细 SQL 与 Excel 导入/启动引导职责位于 `app/modules/materials/`；`persistence.py` 仅保留旧导入兼容门面，数据库 Schema 与迁移不因拆分而变化。
-- 材料 Excel 更新采用原子替换；数据库导入失败会恢复旧文件。合同、发货通知、模板和物料图纸若审计失败，会删除本次未完成输出。
+- 材料 Excel 更新采用原子替换；数据库导入失败会恢复旧文件。合同、保留的发货服务和物料图纸若审计失败，会删除本次未完成输出。
 - `app/database.py` 只保留 Schema、连接与迁移；路由数据库直连、daemon 后台线程和异常文本外泄债务已清零。
 - `/health/ready` 通过只读连接检查数据库、迁移、最小业务条件与 Worker 心跳，不负责初始化；运行数据清理由默认 dry-run 的 `scripts/cleanup_runtime.py` 统一规划，详见 `docs/operations/runtime.md`。
 
@@ -263,7 +253,7 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 - `app/routes/products.py`：产品 Web 适配器注册入口
 - `app/modules/materials/`：生产料单、材料明细、物料图纸、原子文件更新和事务补偿
 - `app/modules/contracts/`：采购/销售合同产品补全、PDF 生成、历史和审计
-- `app/modules/shipping/`：发货通知、持久货物识别任务、Excel 生成和审计补偿
+- `app/modules/shipping/`：保留的发货通知领域服务、持久货物识别任务、Excel 生成和审计补偿；不注册 Web 页面
 - `app/modules/admin/`：登录、账号、API Key、操作日志和系统更新
 - `app/database.py`：SQLite Schema、连接和迁移入口，不保存业务查询
 - `app/matcher.py`：产品匹配逻辑
@@ -276,6 +266,7 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 - `templates/_product_rows.html`：产品目录行模板
 - `static/styles.css`：token、reset 和基础页面壳
 - `static/components/workspace.css`：跨页面工作台、搜索、表格和文件选择组件
+- `static/components/precision.css`：精密工业工作台视觉 token 映射、导航和共享表面
 - `static/pages/`：由所属模板显式加载的页面 CSS/JavaScript
 - `tests/test_app.py`：主要回归测试
 - `PROJECT_CONSTITUTION.md`：长期架构、安全、页面、API 和变更治理硬规则

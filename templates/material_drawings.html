@@ -9,12 +9,6 @@
 {% endblock %}
 
 {% block page_content %}
-<header class="workspace-header">
-        <div>
-          <h1>物料图纸</h1>
-          <p>按产品编码查找并连续查看物料 PDF 图纸。</p>
-        </div>
-      </header>
       {%- macro pdf_preview_src(name) -%}{{ url_for('preview_material_drawing', name=name) }}#page=1&zoom=100{%- endmacro %}
 
       <section class="workspace-command material-drawings-command">

@@ -645,69 +645,6 @@
       "rule": "/sales-contracts/generate"
     },
     {
-      "endpoint": "shipment_recognition",
-      "methods": [
-        "GET"
-      ],
-      "rule": "/shipment-recognition"
-    },
-    {
-      "endpoint": "cancel_shipment_recognition",
-      "methods": [
-        "POST"
-      ],
-      "rule": "/shipment-recognition/jobs/<job_id>/cancel"
-    },
-    {
-      "endpoint": "run_shipment_recognition",
-      "methods": [
-        "POST"
-      ],
-      "rule": "/shipment-recognition/run"
-    },
-    {
-      "endpoint": "shipment_recognition_status",
-      "methods": [
-        "GET"
-      ],
-      "rule": "/shipment-recognition/status/<job_id>"
-    },
-    {
-      "endpoint": "shipping_notice",
-      "methods": [
-        "GET"
-      ],
-      "rule": "/shipping-notices"
-    },
-    {
-      "endpoint": "generate_shipping_notice",
-      "methods": [
-        "POST"
-      ],
-      "rule": "/shipping-notices/generate"
-    },
-    {
-      "endpoint": "preview_shipping_notice",
-      "methods": [
-        "POST"
-      ],
-      "rule": "/shipping-notices/preview"
-    },
-    {
-      "endpoint": "batch_upload_shipping_notice_templates",
-      "methods": [
-        "POST"
-      ],
-      "rule": "/shipping-notices/templates/batch"
-    },
-    {
-      "endpoint": "upload_shipping_notice_template",
-      "methods": [
-        "POST"
-      ],
-      "rule": "/shipping-notices/templates/upload"
-    },
-    {
       "endpoint": "system_updates",
       "methods": [
         "GET"
