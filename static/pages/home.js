@@ -87,8 +87,8 @@ if (quickForm instanceof HTMLFormElement && quickResultsHost instanceof HTMLElem
   const setLoading = (loading, message = "") => {
     quickResultsHost.setAttribute("aria-busy", loading ? "true" : "false");
     if (submitButton instanceof HTMLButtonElement) {
-      submitButton.dataset.originalText ||= submitButton.textContent || "开始匹配";
-      submitButton.textContent = loading ? "匹配中..." : submitButton.dataset.originalText;
+      submitButton.dataset.originalText ||= submitButton.textContent || "开始查询";
+      submitButton.textContent = loading ? "查询中..." : submitButton.dataset.originalText;
     }
     if (status instanceof HTMLElement) status.textContent = message;
   };
@@ -113,7 +113,7 @@ if (quickForm instanceof HTMLFormElement && quickResultsHost instanceof HTMLElem
     const requestId = requestGate.begin();
     requestController?.abort();
     requestController = new AbortController();
-    setLoading(true, "正在匹配...");
+    setLoading(true, "正在查询...");
     try {
       const response = await fetch(
         quickInquiryFragmentUrl(fragmentEndpoint, window.location.href, query, filter),

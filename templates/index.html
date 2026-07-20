@@ -13,7 +13,6 @@
 {% block page_content %}
       <header class="search-hero">
         <h1><span>BLD</span> 询价处理</h1>
-        <p>上传客户询价表，自动在产品目录中新增匹配的 BLD NO.</p>
         {% if catalog_summary %}
           <div class="compact-metrics" aria-label="产品目录统计">
             <span>启用产品 <strong>{{ product_stats.active }}</strong></span>
@@ -24,13 +23,11 @@
         {% endif %}
       </header>
       <section class="search-command">
-        <div class="search-command-note">
-          {% if catalog_summary %}
-            当前目录：{{ catalog_path.name }}
-          {% else %}
+        {% if not catalog_summary %}
+          <div class="search-command-note">
             还没有可用目录，请到产品目录页导入 .xlsx 产品目录。
-          {% endif %}
-        </div>
+          </div>
+        {% endif %}
         {% if can("generate_match") %}
           <form action="{{ url_for('match_inquiry') }}" method="post" enctype="multipart/form-data" class="search-command-row upload-command" data-quick-inquiry-form data-submit-wait data-submit-wait-text="正在上传并分析，请稍候..." data-submit-wait-button-text="处理中...">
             {{ csrf_field() }}
@@ -42,7 +39,7 @@
                   <label class="file-picker-button" for="inquiry-file-input">选择文件</label>
                   <input class="file-picker-text" name="quick_oe" value="{{ quick_oe }}" maxlength="5000" placeholder="输入 OE或 BLD 号">
                   <button class="file-picker-clear" type="button" disabled>清除</button>
-                  <button class="embedded-submit" type="submit">开始匹配</button>
+                  <button class="embedded-submit" type="submit">开始查询</button>
                 </div>
                 <div class="file-picker-drop-hint" data-file-drop-status data-submit-wait-message aria-live="polite"></div>
               </div>

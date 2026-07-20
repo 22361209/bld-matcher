@@ -87,7 +87,6 @@ def register(app) -> None:
             show_material_items=False,
             material_file_stats=service.source_stats(),
             material_stats=service.stats(),
-            material_path=service.source_path(),
             material_history_files=material_history_files,
             material_history_query=material_history_query,
         )
@@ -120,7 +119,6 @@ def register(app) -> None:
             total_material_items=page.total,
             material_page_size=MATERIAL_PAGE_SIZE,
             pagination=pagination,
-            material_path=service.source_path(),
             query=query,
             status=status,
         )

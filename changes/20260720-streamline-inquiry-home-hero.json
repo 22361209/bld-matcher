@@ -1,0 +1,15 @@
+{
+  "date": "2026-07-20",
+  "version": "unreleased",
+  "title": "精简询价首页主入口",
+  "entries": [
+    "询价首页移除了产品目录文件名与主标题下的功能说明，让上传和号码查询入口更聚焦；目录不可用时仍会显示导入提示。",
+    "主操作按钮改为“开始查询”，进行单号码查询时同步显示“查询中”。",
+    "主标题中的 BLD 保持与导航 Logo 相同的字形基调，并加宽字距和横向比例以改善视觉平衡。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "compatible",
+    "operations": "restart-required when deployed source is refreshed"
+  }
+}

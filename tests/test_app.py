@@ -119,7 +119,9 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("BLD", html)
         self.assertIn('class="search-command"', html)
-        self.assertIn('class="embedded-submit" type="submit">开始匹配', html)
+        self.assertIn('class="embedded-submit" type="submit">开始查询', html)
+        self.assertNotIn("当前目录：", html)
+        self.assertNotIn("上传客户询价表，自动在产品目录中新增匹配的 BLD NO.", html)
         self.assertIn('class="embedded-input-control"', html)
         self.assertIn('class="embedded-submit" type="submit">搜索', html)
         nav_order = ["询价处理", "报价记录", "合同管理", "产品目录", "管件资料", "生产料单", "物料图纸"]
@@ -3485,6 +3487,12 @@ class WebAppTest(unittest.TestCase):
         self.assertIn('href="/materials/items"', html)
         self.assertNotIn('id="materials-results"', html)
         self.assertIn('class="embedded-submit" type="submit">生成并下载', html)
+        self.assertIn('data-file-drop-zone data-file-drop-accept=".xlsx"', html)
+        self.assertIn('class="file-picker-clear" type="button" disabled>清除', html)
+        self.assertIn('class="material-template-link" href="/materials/template">下载生产计划模板</a>', html)
+        self.assertNotIn("生产计划 Excel", html)
+        self.assertNotIn("材料文件：", html)
+        self.assertNotIn("上传生产计划，按启用材料明细生成采购和下料所需料单。", html)
 
         response = self.client.get("/materials/items")
         html = response.get_data(as_text=True)

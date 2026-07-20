@@ -13,7 +13,6 @@
       {% if not show_material_items %}
       <header class="material-landing">
           <h1>生产料单</h1>
-          <p>上传生产计划，按启用材料明细生成采购和下料所需料单。</p>
         <div class="compact-metrics material-stat-strip" aria-label="材料数据统计">
           <span>总明细 <strong>{{ material_stats["items"] }}</strong></span>
           <span>启用明细 <strong>{{ material_stats.active }}</strong></span>
@@ -30,24 +29,21 @@
 
       {% if not show_material_items %}
       <section class="material-command-center">
-        <div class="search-command-note material-file-note">
-          <span>材料文件：{{ material_path.name if material_path else "未上传" }}</span>
-          <span>{{ material_file_stats.updated_at or "未记录更新时间" }}</span>
-          <a href="{{ url_for('download_material_template') }}">下载生产计划模板</a>
-        </div>
         {% if can("generate_material_sheet") %}
           <form action="{{ url_for('generate_materials') }}" method="post" enctype="multipart/form-data" class="search-command-row material-generate-row">
             {{ csrf_field() }}
             <div class="file-picker-field">
-              <span>生产计划 Excel</span>
-              <label class="file-picker">
-                <input class="file-picker-input" type="file" name="plan" accept=".xlsx" required>
-                <span class="file-picker-control">
-                  <span class="file-picker-button">选择文件</span>
+              <a class="material-template-link" href="{{ url_for('download_material_template') }}">下载生产计划模板</a>
+              <div class="file-picker inline-file-picker" data-file-drop-zone data-file-drop-accept=".xlsx">
+                <input id="material-plan-file-input" class="file-picker-input" type="file" name="plan" accept=".xlsx" required>
+                <div class="file-picker-control">
+                  <label class="file-picker-button" for="material-plan-file-input">选择文件</label>
                   <span class="file-picker-name">未选择任何文件</span>
+                  <button class="file-picker-clear" type="button" disabled>清除</button>
                   <button class="embedded-submit" type="submit">生成并下载</button>
-                </span>
-              </label>
+                </div>
+                <div class="file-picker-drop-hint" data-file-drop-status aria-live="polite"></div>
+              </div>
             </div>
           </form>
         {% else %}

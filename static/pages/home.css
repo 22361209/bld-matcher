@@ -30,6 +30,12 @@ body[data-page="inquiry.home"] main.search-workspace .search-hero h1 {
   line-height: 1.05;
 }
 
+body[data-page="inquiry.home"] main.search-workspace .search-hero h1 span {
+  display: inline-block;
+  letter-spacing: 0.05em;
+  transform: scaleX(1.06);
+}
+
 body[data-page="inquiry.home"] main.search-workspace .search-hero p {
   margin: 0;
   font-size: 16px;

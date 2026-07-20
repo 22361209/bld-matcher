@@ -4,7 +4,7 @@
   min-width: 210px;
 }
 .materials-clean-page {
-  --material-panel-width: 860px;
+  --material-panel-width: 640px;
   --material-action-width: 132px;
   --material-command-gap: 10px;
 }
@@ -33,13 +33,6 @@ body[data-page="materials.workspace"] main.materials-clean-page .material-landin
   line-height: 1.05;
 }
 
-body[data-page="materials.workspace"] main.materials-clean-page .material-landing p {
-  margin: 0;
-  color: var(--linear-muted);
-  font-size: 16px;
-  line-height: 1.45;
-}
-
 body[data-page="materials.workspace"] main.materials-clean-page .material-stat-strip {
   max-width: 820px;
 }
@@ -47,27 +40,21 @@ body[data-page="materials.workspace"] main.materials-clean-page .material-stat-s
 .material-command-center {
   display: grid;
   gap: 10px;
-  width: min(760px, 100%);
+  width: min(var(--material-panel-width), 100%);
   max-width: 100%;
   margin: 0 auto 18px;
   padding: 2px 0 18px;
   border-bottom: 1px solid var(--linear-line);
 }
 
-.material-file-note {
-  display: flex;
-  justify-content: center;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-
-.material-file-note a {
+.material-template-link {
+  justify-self: start;
   color: var(--linear-accent);
   font-weight: 700;
   text-decoration: none;
 }
 
-.material-file-note a:hover {
+.material-template-link:hover {
   color: var(--linear-accent-hover);
 }
 

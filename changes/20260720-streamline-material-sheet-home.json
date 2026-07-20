@@ -1,0 +1,15 @@
+{
+  "date": "2026-07-20",
+  "version": "unreleased",
+  "title": "精简生产料单首页入口",
+  "entries": [
+    "生产料单首页移除了材料源文件名、更新时间和标题说明；料单继续按已启用的材料明细生成，不会在生成时读取材料 Excel。",
+    "生产计划上传框与询价页统一为 640px 宽度，支持拖入 .xlsx 文件，并在选择或拖入文件后提供“清除”按钮。",
+    "“最近料单”展开面板同步收窄为与询价页历史文件相同的宽度，生产计划模板下载入口位于上传框左侧标题位置。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "compatible",
+    "operations": "restart-required when deployed source is refreshed"
+  }
+}
