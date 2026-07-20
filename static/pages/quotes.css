@@ -44,10 +44,18 @@
   border: 0;
   background: transparent;
   color: var(--linear-accent);
-  font: inherit;
+  font-family: inherit;
+  font-size: 13px;
   font-weight: 700;
+  line-height: 1.35;
   cursor: pointer;
   text-decoration: underline;
+}
+
+.quote-table td:last-child > a {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 .quote-edit-trigger:focus-visible,
