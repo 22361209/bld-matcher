@@ -1,0 +1,14 @@
+/* Import preview pages: business data sync, catalog import preview, etc. */
+
+.workbench-form.wide {
+  max-width: none;
+}
+
+.workbench-form.wide .workspace-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.workbench-form.wide .workspace-table {
+  width: 100%;
+}

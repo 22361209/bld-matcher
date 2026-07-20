@@ -1,0 +1,14 @@
+{
+  "date": "2026-07-20",
+  "version": "unreleased",
+  "title": "加宽导入预览冲突表布局",
+  "entries": [
+    "业务数据同步和目录导入预览的冲突处理表格不再受 520px 表单宽度限制，使用完整内容区宽度展示。",
+    "表格容器支持横向滚动，避免列数较多时换行或溢出页面。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "compatible",
+    "operations": "none"
+  }
+}

@@ -12,7 +12,7 @@
     <div><span>无变化</span><strong>{{ preview.unchanged_count }}</strong></div>
   </section>
 
-  <form action="{{ url_for('confirm_catalog_import') }}" method="post" class="workbench-form">
+  <form action="{{ url_for('confirm_catalog_import') }}" method="post" class="workbench-form wide">
     {{ csrf_field() }}
     <input type="hidden" name="preview_id" value="{{ preview_id }}">
     <input type="hidden" name="snapshot_digest" value="{{ preview.digest }}">
