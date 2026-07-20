@@ -81,56 +81,67 @@ def _pagination(filters: dict[str, object], page: int, total: int) -> dict[str, 
     return {"page": current_page, "total_pages": total_pages, "start": start, "end": end, "links": links, "has_prev": current_page > 1, "has_next": current_page < total_pages, "prev_url": _page_url(filters, current_page - 1) if current_page > 1 else "", "next_url": _page_url(filters, current_page + 1) if current_page < total_pages else ""}
 
 
+def _tube_list_context() -> dict[str, object]:
+    filters = _tube_filters()
+    page = max(1, request.args.get("page", 1, type=int) or 1)
+    service = get_tube_service()
+    result = service.list_items(
+        filters=filters,
+        limit=TUBE_PAGE_SIZE,
+        offset=(page - 1) * TUBE_PAGE_SIZE,
+    )
+    total = cast(int, result["total"])
+    pagination = _pagination(filters, page, total)
+    current_page = cast(int, pagination["page"])
+    if current_page != page:
+        result = service.list_items(
+            filters=filters,
+            limit=TUBE_PAGE_SIZE,
+            offset=(current_page - 1) * TUBE_PAGE_SIZE,
+        )
+    return {
+        "tube_items": result["records"],
+        "tube_types": TUBE_TYPES,
+        "selected_types": filters["tube_types"],
+        "selected_blank_lengths": filters["blank_lengths"],
+        "selected_inner_tolerances": filters["inner_tolerances"],
+        "selected_purchase_bases": filters["purchase_bases"],
+        "selected_materials": filters["materials"],
+        "selected_tolerances": filters["tolerances"],
+        "selected_consumptions": filters["consumptions"],
+        "weight_eq": filters["weight_eq"],
+        "weight_min": filters["weight_min"],
+        "weight_max": filters["weight_max"],
+        "outer_diameter": filters["outer_diameter"],
+        "inner_diameter": filters["inner_diameter"],
+        "type_counts": result["counts"],
+        "blank_length_options": result["blank_length_options"],
+        "inner_tolerance_options": result["inner_tolerance_options"],
+        "purchase_base_options": result["purchase_base_options"],
+        "tolerance_options": result["tolerance_options"],
+        "consumption_options": result["consumption_options"],
+        "spec_display_lines": spec_display_lines,
+        "tolerance_only": tolerance_only,
+        "query": filters["query"],
+        "total": total,
+        "page_size": TUBE_PAGE_SIZE,
+        "pagination": pagination,
+        "tube_canonical_url": _page_url(filters, current_page).split("#", 1)[0],
+    }
+
+
 def register(app) -> None:
     @app.get("/tubes")
     @login_required
     def tube_items():
-        filters = _tube_filters()
-        page = max(1, request.args.get("page", 1, type=int) or 1)
-        service = get_tube_service()
-        result = service.list_items(
-            filters=filters,
-            limit=TUBE_PAGE_SIZE,
-            offset=(page - 1) * TUBE_PAGE_SIZE,
-        )
-        total = cast(int, result["total"])
-        pagination = _pagination(filters, page, total)
-        current_page = cast(int, pagination["page"])
-        if current_page != page:
-            result = service.list_items(
-                filters=filters,
-                limit=TUBE_PAGE_SIZE,
-                offset=(current_page - 1) * TUBE_PAGE_SIZE,
-            )
-        return render_template(
-            "tubes.html",
-            tube_items=result["records"],
-            tube_types=TUBE_TYPES,
-            selected_types=filters["tube_types"],
-            selected_blank_lengths=filters["blank_lengths"],
-            selected_inner_tolerances=filters["inner_tolerances"],
-            selected_purchase_bases=filters["purchase_bases"],
-            selected_materials=filters["materials"],
-            selected_tolerances=filters["tolerances"],
-            selected_consumptions=filters["consumptions"],
-            weight_eq=filters["weight_eq"],
-            weight_min=filters["weight_min"],
-            weight_max=filters["weight_max"],
-            outer_diameter=filters["outer_diameter"],
-            inner_diameter=filters["inner_diameter"],
-            type_counts=result["counts"],
-            blank_length_options=result["blank_length_options"],
-            inner_tolerance_options=result["inner_tolerance_options"],
-            purchase_base_options=result["purchase_base_options"],
-            tolerance_options=result["tolerance_options"],
-            consumption_options=result["consumption_options"],
-            spec_display_lines=spec_display_lines,
-            tolerance_only=tolerance_only,
-            query=filters["query"],
-            total=total,
-            page_size=TUBE_PAGE_SIZE,
-            pagination=pagination,
-        )
+        return render_template("tubes.html", **_tube_list_context())
+
+    @app.get("/tubes/fragment")
+    @login_required
+    def tube_items_fragment():
+        response = app.make_response(render_template("_tube_results.html", **_tube_list_context()))
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     @app.get("/tubes/new")
     @permission_required("manage_materials")

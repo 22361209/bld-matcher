@@ -1,0 +1,161 @@
+{% if latest %}
+  <section class="workspace-flow quote-latest">
+    <h2>最近一次报价</h2>
+    <p>
+      {{ latest.customer_name }} / {{ latest.bld_no or latest.product_model }}：
+      {% if latest.tax_price is not none %}<strong>含税 {{ latest.currency }} {{ "%.4f"|format(latest.tax_price) }}</strong>{% endif %}
+      {% if latest.net_price is not none %}<strong>不含税 {{ latest.currency }} {{ "%.4f"|format(latest.net_price) }}</strong>{% endif %}
+      ，{{ latest.quote_date }}，{{ latest.quoted_by or "-" }}
+    </p>
+  </section>
+{% endif %}
+
+<section class="data-section" id="quote-results" data-quote-results data-canonical-url="{{ canonical_url }}">
+  <div class="workspace-command quote-command">
+    <form class="search-form quote-search" method="get" action="{{ url_for('quote_web.quotes') }}" data-quote-search-form>
+      <label>
+        <span>客户</span>
+        <input name="customer_name" value="{{ filters.customer_name }}" placeholder="例如 博世">
+      </label>
+      <label>
+        <span>BLD号</span>
+        <input name="bld_no" value="{{ filters.bld_no }}" placeholder="例如 K48620">
+      </label>
+      <button class="linear-button primary" type="submit">搜索</button>
+      <a class="linear-button subtle" href="{{ url_for('quote_web.quotes') }}" data-quote-results-link>重置</a>
+    </form>
+    <div class="command-actions quote-actions">
+      <button class="linear-button subtle" type="button" data-reset-column-widths-for="quotes">重置列宽</button>
+      <span class="submit-wait-message" aria-live="polite" data-quote-inline-status></span>
+    {% if can("manage_customer_prices") %}
+      <details class="toolbar-popover linear-popover quote-new">
+      <summary class="linear-button primary">新增报价</summary>
+      <form action="{{ url_for('quote_web.save_quote') }}" method="post" class="toolbar-popover-form quote-form">
+        {{ csrf_field() }}
+        <label>
+          <span>客户</span>
+          <input name="customer_name" required>
+        </label>
+        <label>
+          <span>BLD号</span>
+          <input name="bld_no" required>
+        </label>
+        <label>
+          <span>客户产品编码</span>
+          <input name="customer_product_code">
+        </label>
+        <label>
+          <span>含税单价</span>
+          <input type="number" step="0.0001" name="tax_price">
+        </label>
+        <label>
+          <span>不含税单价</span>
+          <input type="number" step="0.0001" name="net_price">
+        </label>
+        <label>
+          <span>币种</span>
+          <select name="currency" required>
+            <option value="CNY">CNY</option>
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+          </select>
+        </label>
+        <label>
+          <span>报价日期</span>
+          <input type="date" name="quote_date">
+        </label>
+        <label class="span-2">
+          <span>备注</span>
+          <textarea name="remark" rows="2"></textarea>
+        </label>
+        <div class="form-actions span-2">
+          <button class="linear-button primary" type="submit">保存</button>
+        </div>
+      </form>
+      </details>
+    <details class="toolbar-popover linear-popover">
+      <summary class="linear-button primary">导入报价记录</summary>
+      <form action="{{ url_for('quote_web.quote_import_preview') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form toolbar-upload-form">
+        {{ csrf_field() }}
+        <label>
+          <span>客户</span>
+          <input name="customer_name" required>
+        </label>
+        <label>
+          <span>币种</span>
+          <select name="currency" required>
+            <option value="CNY">CNY</option>
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+          </select>
+        </label>
+        <label class="file-picker">
+          <span>报价记录 Excel</span>
+          <input class="file-picker-input" type="file" name="quote_file" accept=".xls,.xlsx" required>
+          <span class="file-picker-control">
+            <span class="file-picker-button">选择文件</span>
+            <span class="file-picker-name">未选择任何文件</span>
+            <button class="embedded-submit" type="submit">上传预览</button>
+          </span>
+        </label>
+        <span class="note">Excel 表头需包含 BLD号，以及含税单价/不含税单价至少一列；客户和币种以上方填写为准。</span>
+      </form>
+      </details>
+    {% endif %}
+    </div>
+  </div>
+  <div class="data-grid" data-resizable-grid data-grid-key="quotes">
+  <div class="data-table-scroll" data-grid-scroll>
+    <table class="data-table quote-table" id="quotes-table" data-column-storage-scope="{{ g.user['id'] if g.user else 'guest' }}">
+      <colgroup>
+        <col class="col-width-92" data-col="date">
+        <col class="col-width-128" data-col="customer">
+        <col class="col-width-142" data-col="bld">
+        <col class="col-width-130" data-col="customer-code">
+        <col class="col-width-92" data-col="tax-price">
+        <col class="col-width-92" data-col="net-price">
+        <col class="col-width-70" data-col="currency">
+        <col class="col-width-92" data-col="quoted-by">
+        <col class="col-width-90" data-col="source">
+        <col class="col-width-150" data-col="remark">
+        <col class="col-width-86" data-col="actions">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>日期</th><th>客户</th><th>BLD号</th><th>客户产品编码</th><th>含税单价</th><th>不含税单价</th><th>币种</th><th>报价人</th><th>来源</th><th>备注</th><th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for record in records %}
+          <tr>
+            <td>{{ record.quote_date }}</td><td><strong>{{ record.customer_name }}</strong></td><td>{{ record.bld_no or record.product_model }}</td><td>{{ record.customer_product_code }}</td><td>{% if record.tax_price is not none %}{{ "%.4f"|format(record.tax_price) }}{% endif %}</td><td>{% if record.net_price is not none %}{{ "%.4f"|format(record.net_price) }}{% endif %}</td><td>{{ record.currency }}</td><td>{{ record.quoted_by }}</td><td>{{ record.source_type }}</td><td>{{ record.remark }}</td>
+            <td>
+              <a href="{{ url_for('quote_web.quotes', customer_name=record.customer_name, bld_no=record.bld_no or record.product_model) }}" data-quote-results-link>历史</a>
+              {% if can("manage_customer_prices") %}
+                <button class="quote-edit-trigger" type="button" data-open-quote-edit="quote-edit-{{ record.id }}">修正</button>
+                <dialog class="quote-edit-dialog" id="quote-edit-{{ record.id }}" aria-labelledby="quote-edit-title-{{ record.id }}">
+                  <div class="quote-edit-dialog-header"><h2 id="quote-edit-title-{{ record.id }}">修正报价记录</h2><button class="quote-edit-close" type="button" data-close-quote-edit aria-label="关闭修正报价窗口">关闭</button></div>
+                  <form action="{{ url_for('quote_web.edit_quote', quote_id=record.id) }}" method="post" class="toolbar-popover-form quote-form">
+                    {{ csrf_field() }}
+                    <input type="hidden" name="version" value="{{ record.version }}">
+                    <label><span>客户</span><input name="customer_name" value="{{ record.customer_name }}" required></label><label><span>BLD号</span><input name="bld_no" value="{{ record.bld_no or record.product_model }}" required></label><label><span>客户产品编码</span><input name="customer_product_code" value="{{ record.customer_product_code }}"></label><label><span>含税单价</span><input type="number" step="0.0001" name="tax_price" value="{{ record.tax_price if record.tax_price is not none else '' }}"></label><label><span>不含税单价</span><input type="number" step="0.0001" name="net_price" value="{{ record.net_price if record.net_price is not none else '' }}"></label>
+                    <label><span>币种</span><select name="currency">{% for item in ["CNY", "USD", "EUR"] %}<option value="{{ item }}" {% if record.currency == item %}selected{% endif %}>{{ item }}</option>{% endfor %}</select></label><label><span>报价日期</span><input type="date" name="quote_date" value="{{ record.quote_date }}"></label><label class="span-2"><span>备注</span><textarea name="remark" rows="2">{{ record.remark }}</textarea></label>
+                    <div class="form-actions span-2"><button class="linear-button primary" type="submit">保存修正</button><button class="linear-button subtle" type="button" data-close-quote-edit>取消</button></div>
+                  </form>
+                </dialog>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        {% if not records %}<tr><td colspan="11">没有找到报价记录。</td></tr>{% endif %}
+      </tbody>
+    </table>
+  </div>
+  {% set data_grid_label = "报价记录" %}
+  {% set data_grid_total = total_records %}
+  {% set data_grid_page_size = page_size %}
+  {% set data_grid_footer_context = "总记录 " ~ stats.total ~ " · 客户 " ~ stats.customers ~ " · BLD号 " ~ stats.models %}
+  {% set inline_results_links = true %}
+  {% include "_data_grid_footer.html" %}
+  </div>
+</section>

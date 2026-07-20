@@ -92,7 +92,7 @@ if (document.body.dataset.page === "products.list") {
     notifyDataGrids("setup");
   };
 
-  const loadProducts = async (targetHref, { history = "push", message = "" } = {}) => {
+  const loadProducts = async (targetHref, { history = "push" } = {}) => {
     if (!(resultsHost instanceof HTMLElement) || !resultsHost.dataset.productsFragmentUrl) {
       window.location.assign(targetHref);
       return false;
@@ -113,7 +113,7 @@ if (document.body.dataset.page === "products.list") {
       gridTop: currentGridScroll?.scrollTop || 0,
     };
     resultsHost.setAttribute("aria-busy", "true");
-    setStatus("正在更新产品目录…", "active");
+    setStatus();
 
     try {
       const response = await fetch(
@@ -160,7 +160,6 @@ if (document.body.dataset.page === "products.list") {
         }
         window.scrollTo(scrollState.windowX, scrollState.windowY);
       });
-      setStatus(message || "产品目录已更新。", "done");
       return true;
     } catch (error) {
       if (error?.name === "AbortError" || !requestGate.isCurrent(generation)) return false;
@@ -283,7 +282,6 @@ if (document.body.dataset.page === "products.list") {
       closeProductModal();
       await loadProducts(payload.redirect_url || window.location.href, {
         history: "push",
-        message: payload.message || "产品已保存。",
       });
     } catch (error) {
       setProductFormStatus(error?.message || "保存结果不确定，请刷新目录确认。", "error");
@@ -425,7 +423,6 @@ if (document.body.dataset.page === "products.list") {
     closeProductEditModal();
     await loadProducts(window.location.href, {
       history: "replace",
-      message: event.data.message || "产品目录已更新。",
     });
   });
   window.addEventListener("popstate", () => {

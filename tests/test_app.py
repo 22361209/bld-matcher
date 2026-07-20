@@ -2006,6 +2006,30 @@ class WebAppTest(unittest.TestCase):
                 self.assertTrue(response.headers["Location"].endswith("/"))
         self.client.post("/logout")
 
+    def test_quote_and_tube_result_fragments_keep_list_state_without_a_document_shell(self):
+        self.login()
+        cases = (
+            ("/quotes/fragment", {"customer_name": "博世", "page": "2"}, "data-quote-results", "data-quote-results-host"),
+            ("/tubes/fragment", {"q": "KE8036", "page": "2"}, "data-tube-results", "data-tube-results-host"),
+        )
+        for path, query_string, result_marker, host_marker in cases:
+            with self.subTest(path=path):
+                response = self.client.get(
+                    path,
+                    query_string=query_string,
+                    headers={"Accept": "text/html", "X-Requested-With": "fetch"},
+                )
+                html = response.get_data(as_text=True)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(result_marker, html)
+                self.assertNotIn(host_marker, html)
+                self.assertNotIn("<!doctype html>", html.lower())
+                self.assertEqual(response.headers["Cache-Control"], "no-store")
+
+        tube_page = self.client.get("/tubes")
+        self.assertIn('data-tube-results-host', tube_page.get_data(as_text=True))
+        self.assertIn('src="/static/pages/tubes.js?v=', tube_page.get_data(as_text=True))
+
     def test_quote_records_page_can_create_search_and_edit(self):
         self.login()
         response = self.client.get("/quotes")
@@ -2018,7 +2042,9 @@ class WebAppTest(unittest.TestCase):
         self.assertLess(html.index('class="search-form quote-search"'), html.index('class="data-table-scroll"'))
         self.assertIn('<summary class="linear-button primary">新增报价</summary>', html)
         self.assertIn('<summary class="linear-button primary">导入报价记录</summary>', html)
-        self.assertIn('action="/quotes#quote-results"', html)
+        self.assertIn('data-quote-results-host', html)
+        self.assertIn('data-quote-results-fragment-url="/quotes/fragment"', html)
+        self.assertIn('action="/quotes" data-quote-search-form', html)
         new_quote_form = re.search(r'<form action="/quotes/save".*?</form>', html, re.S).group()
         self.assertIn('name="customer_name"', html)
         self.assertIn('name="bld_no"', html)

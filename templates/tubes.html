@@ -1,53 +1,13 @@
 {% extends "base.html" %}
 {% set active_page = "tubes" %}
-
-{% macro plain_heading(label) %}
-  <button class="products-column-label" type="button" data-column-drag-handle data-column-label="{{ label }}" aria-label="移动{{ label }}列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">{{ label }}</button>
-{% endmacro %}
-
-{% macro choice_heading(column_id, label, filter_key, options, selected) %}
-  <div class="products-column-heading">{{ plain_heading(label) }}<button class="products-column-filter-trigger{% if selected %} active{% endif %}" type="button" data-column-filter-trigger aria-label="筛选{{ label }}" aria-haspopup="dialog" aria-expanded="false" aria-controls="tubes-filter-{{ column_id }}"><span aria-hidden="true"></span></button></div>
-  <div class="products-column-filter tube-choice-filter-{{ column_id }}" id="tubes-filter-{{ column_id }}" role="dialog" aria-label="筛选{{ label }}" data-column-filter-panel data-filter-key="{{ filter_key }}" hidden>
-    <div class="products-column-filter-header"><strong>筛选{{ label }}</strong><button type="button" data-column-filter-close aria-label="关闭{{ label }}筛选">×</button></div>
-    <label class="products-column-filter-search"><span>搜索候选项</span><input type="search" autocomplete="off" placeholder="输入关键词" data-column-filter-search></label>
-    <div class="products-column-filter-bulk"><button class="linear-button subtle" type="button" data-column-filter-select-all>全选</button><button class="linear-button subtle" type="button" data-column-filter-select-none>全不选</button><span data-column-filter-selection aria-live="polite"></span></div>
-    <div class="products-column-filter-options" role="group" aria-label="{{ label }}候选项">{% for option in options %}<label class="products-column-filter-option" data-column-filter-option><input type="checkbox" value="{{ option.value }}" {% if not selected or option.value in selected %}checked{% endif %}><span>{{ option.label }}</span><small>{{ option.count }}</small></label>{% endfor %}</div>
-    <p class="products-column-filter-no-match" data-column-filter-no-match hidden>没有匹配项。</p><p class="products-column-filter-validation" data-column-filter-validation aria-live="polite"></p>
-    <div class="products-column-filter-actions"><button class="linear-button subtle" type="button" data-column-filter-reset>重置筛选</button><button class="linear-button primary" type="button" data-column-filter-apply>应用</button></div>
-  </div>
-{% endmacro %}
-
-{% macro range_heading(column_id, label, fields, active) %}
-  <div class="products-column-heading">{{ plain_heading(label) }}<button class="products-column-filter-trigger{% if active %} active{% endif %}" type="button" data-column-filter-trigger aria-label="筛选{{ label }}" aria-haspopup="dialog" aria-expanded="false" aria-controls="tubes-filter-{{ column_id }}"><span aria-hidden="true"></span></button></div>
-  <div class="products-column-filter tube-range-filter" id="tubes-filter-{{ column_id }}" role="dialog" aria-label="筛选{{ label }}" data-column-filter-panel data-filter-mode="range" hidden>
-    <div class="products-column-filter-header"><strong>筛选{{ label }}</strong><button type="button" data-column-filter-close aria-label="关闭{{ label }}筛选">×</button></div>
-    <div class="tube-range-fields">{% for field in fields %}<label><span>{{ field.label }}</span><input type="number" step="0.001" inputmode="decimal" value="{{ field.value if field.value is not none else '' }}" data-range-param="{{ field.key }}"></label>{% endfor %}</div>
-    <div class="products-column-filter-actions"><button class="linear-button subtle" type="button" data-column-filter-reset>重置筛选</button><button class="linear-button primary" type="button" data-column-filter-apply>应用</button></div>
-  </div>
-{% endmacro %}
-
 {% block page_title %}管件资料{% endblock %}
 {% block page_id %}tubes.list{% endblock %}
 {% block page_type %}list{% endblock %}
 {% block page_class %}shell wide app-surface{% endblock %}
 {% block page_head %}<link rel="stylesheet" href="{{ url_for('static', filename='pages/product_table.css', v=static_version('pages/product_table.css')) }}"><link rel="stylesheet" href="{{ url_for('static', filename='pages/tubes.css', v=static_version('pages/tubes.css')) }}">{% endblock %}
-
-{% block page_content %}
-  {% set type_options = [] %}{% for option in tube_types %}{% set _ = type_options.append({'value': option, 'label': option, 'count': type_counts.get(option, 0)}) %}{% endfor %}
-  {% set material_options = [{'value': '—', 'label': '—', 'count': total}] %}
-  <section class="data-section" id="tube-results">
-    <div class="workspace-command tube-command">
-      <form class="search-form" method="get" action="{{ url_for('tube_items') }}#tube-results">
-        {% for value in selected_types %}<input type="hidden" name="type" value="{{ value }}">{% endfor %}{% for value in selected_blank_lengths %}<input type="hidden" name="blank_length" value="{{ value }}">{% endfor %}{% for value in selected_inner_tolerances %}<input type="hidden" name="inner_tolerance" value="{{ value }}">{% endfor %}{% for value in selected_purchase_bases %}<input type="hidden" name="purchase_base" value="{{ value }}">{% endfor %}{% for value in selected_materials %}<input type="hidden" name="material" value="{{ value }}">{% endfor %}{% for value in selected_tolerances %}<input type="hidden" name="tolerance" value="{{ value }}">{% endfor %}{% for value in selected_consumptions %}<input type="hidden" name="consumption" value="{{ value }}">{% endfor %}
-        {% for key, value in [('weight_eq', weight_eq), ('weight_min', weight_min), ('weight_max', weight_max)] %}{% if value is not none %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endif %}{% endfor %}
-        <label><span>编号 / 借用编号 / 规格</span><input name="q" value="{{ query }}" placeholder="例如 KE8036 / Ø35 / 法兰"></label><label><span>外径 mm</span><input name="outer_diameter" inputmode="decimal" value="{{ outer_diameter if outer_diameter is not none else '' }}" placeholder="例如 35"></label><label><span>内径 mm</span><input name="inner_diameter" inputmode="decimal" value="{{ inner_diameter if inner_diameter is not none else '' }}" placeholder="可选，例如 30"></label><button class="linear-button primary" type="submit">搜索</button>
-      </form>
-      <div class="command-actions"><button class="linear-button subtle" type="button" data-reset-column-widths-for="tubes">重置列宽</button>{% if query or selected_types or selected_blank_lengths or selected_inner_tolerances or selected_purchase_bases or selected_materials or selected_tolerances or selected_consumptions or weight_eq is not none or weight_min is not none or weight_max is not none or outer_diameter is not none or inner_diameter is not none %}<a class="linear-button subtle" href="{{ url_for('tube_items') }}#tube-results">清除</a>{% endif %}{% if can("manage_materials") %}<a class="linear-button primary" href="{{ url_for('new_tube_item') }}">新增管件</a>{% endif %}</div>
-    </div>
-    <div class="data-grid" data-resizable-grid data-grid-key="tubes"><div class="data-table-scroll" data-grid-scroll><table class="data-table products-table tube-table" id="tubes-table" data-grid-heading-overflow data-column-storage-scope="{{ g.user['id'] if g.user else 'guest' }}"><colgroup><col data-col="code"><col data-col="type"><col data-col="spec"><col data-col="blank-length"><col data-col="inner-tolerance"><col data-col="purchase-base"><col data-col="material"><col data-col="weight"><col data-col="tolerance"><col data-col="consumption"><col data-col="borrow">{% if can("manage_materials") %}<col data-col="actions">{% endif %}</colgroup><thead><tr>
-      <th data-col="code">{{ plain_heading("编号") }}</th><th data-col="type">{{ choice_heading("type", "产品名称", "type", type_options, selected_types) }}</th><th data-col="spec">{{ range_heading("spec", "成品规格", [{'label':'外径 mm','key':'outer_diameter','value':outer_diameter},{'label':'内径 mm（可留空）','key':'inner_diameter','value':inner_diameter}], outer_diameter is not none or inner_diameter is not none) }}</th><th data-col="blank-length">{{ choice_heading("blank-length", "毛坯管长度", "blank_length", blank_length_options, selected_blank_lengths) }}</th><th data-col="inner-tolerance">{{ choice_heading("inner-tolerance", "内径公差", "inner_tolerance", inner_tolerance_options, selected_inner_tolerances) }}</th><th data-col="purchase-base">{{ choice_heading("purchase-base", "采购基数", "purchase_base", purchase_base_options, selected_purchase_bases) }}</th><th data-col="material">{{ choice_heading("material", "材质", "material", material_options, selected_materials) }}</th><th data-col="weight">{{ range_heading("weight", "重量 kg", [{'label':'等于','key':'weight_eq','value':weight_eq},{'label':'大于等于','key':'weight_min','value':weight_min},{'label':'小于等于','key':'weight_max','value':weight_max}], weight_eq is not none or weight_min is not none or weight_max is not none) }}</th><th data-col="tolerance">{{ choice_heading("tolerance", "公差 mm", "tolerance", tolerance_options, selected_tolerances) }}</th><th data-col="consumption">{{ choice_heading("consumption", "消耗 mm", "consumption", consumption_options, selected_consumptions) }}</th><th data-col="borrow">{{ plain_heading("借用编号") }}</th>{% if can("manage_materials") %}<th data-col="actions">操作</th>{% endif %}
-    </tr></thead><tbody>{% for item in tube_items %}<tr><td data-col="code"><strong>{{ item.code }}</strong></td><td data-col="type">{{ item.tube_type }}</td><td data-col="spec">{% for line in spec_display_lines(item.spec_text) %}<span class="tube-spec-line">{{ line }}</span>{% endfor %}</td><td data-col="blank-length">{{ item.blank_length_text or "—" }}</td><td data-col="inner-tolerance">{% set inner_tolerance = tolerance_only(item.inner_diameter_tolerance) %}{% if inner_tolerance %}{% for line in inner_tolerance.split('\n') %}<span class="tube-inner-tolerance-line">{{ line }}</span>{% endfor %}{% else %}—{% endif %}</td><td data-col="purchase-base">{{ item.purchase_base }}</td><td data-col="material">—</td><td data-col="weight">{{ "%.3f"|format(item.weight_kg) if item.weight_kg is not none else "—" }}</td><td data-col="tolerance">{{ "%.2f"|format(item.tolerance_mm) if item.tolerance_mm is not none else "—" }}</td><td data-col="consumption">{{ "%.2f"|format(item.consumption_mm) if item.consumption_mm is not none else "—" }}</td><td data-col="borrow">{% set borrowed_codes = item.borrowed_codes or item.borrowed_from %}{% if borrowed_codes %}{% for borrowed_code in borrowed_codes.split("、") %}<span class="tube-borrow-code">{{ borrowed_code }}</span>{% endfor %}{% else %}—{% endif %}</td>{% if can("manage_materials") %}<td data-col="actions"><a href="{{ url_for('edit_tube_item', item_id=item.id) }}">编辑</a></td>{% endif %}</tr>{% else %}<tr><td colspan="{% if can('manage_materials') %}12{% else %}11{% endif %}">没有找到管件记录。</td></tr>{% endfor %}</tbody></table></div>
-    {% set data_grid_label = "管件明细" %}{% set data_grid_total = total %}{% set data_grid_page_size = page_size %}{% set data_grid_footer_context = "总管件 " ~ (type_counts.values()|sum) %}{% include "_data_grid_footer.html" %}</div>
-  </section>
-{% endblock %}
 {% block page_scripts %}<script type="module" src="{{ url_for('static', filename='pages/tubes.js', v=static_version('pages/tubes.js')) }}"></script>{% endblock %}
+{% block page_content %}
+  <div data-tube-results-host data-tube-results-fragment-url="{{ url_for('tube_items_fragment') }}" aria-live="polite">
+    {% include "_tube_results.html" %}
+  </div>
+{% endblock %}

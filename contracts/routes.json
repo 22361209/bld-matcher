@@ -631,6 +631,13 @@
       "rule": "/quotes/<int:quote_id>/edit"
     },
     {
+      "endpoint": "quote_web.quotes_fragment",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/quotes/fragment"
+    },
+    {
       "endpoint": "quote_web.quote_import_apply",
       "methods": [
         "POST"
@@ -678,6 +685,13 @@
         "GET"
       ],
       "rule": "/tubes/<int:item_id>/edit"
+    },
+    {
+      "endpoint": "tube_items_fragment",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/tubes/fragment"
     },
     {
       "endpoint": "new_tube_item",

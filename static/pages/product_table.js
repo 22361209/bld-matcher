@@ -107,7 +107,7 @@ export function setupProductTable(table, options = {}) {
   const storageScope = table.dataset.columnStorageScope || "guest";
   const orderStorageKey = `${storagePrefix}.column-order.v${COLUMN_ORDER_VERSION}.u${storageScope}`;
   const orderStatus = document.querySelector("[data-column-order-status]");
-  const filterPortal = table.closest("[data-products-results]") || table.closest(".app-surface") || document.body;
+  const filterPortal = table.closest("[data-products-results], [data-table-results]") || table.closest(".app-surface") || document.body;
   let currentOrder = [...availableColumns];
   const savedOrder = safeStorageGet(orderStorageKey);
   if (savedOrder) {

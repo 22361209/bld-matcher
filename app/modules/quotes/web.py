@@ -4,7 +4,7 @@ import logging
 from math import ceil
 from pathlib import Path
 
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask import Blueprint, flash, make_response, redirect, render_template, request, url_for
 
 from app.helpers import user_upload_path
 from app.security import actor_name, permission_required, safe_referrer
@@ -100,6 +100,10 @@ def old_customer_prices_redirect():
 @quote_web.get("/quotes", endpoint="quotes")
 @permission_required("view_customer_prices")
 def quotes():
+    return render_template("quotes.html", **_quote_list_context())
+
+
+def _quote_list_context() -> dict[str, object]:
     filters = _filters()
     requested_page = _request_page()
     try:
@@ -140,16 +144,24 @@ def quotes():
         stats = {"total": 0, "customers": 0, "models": 0}
         pagination = _pagination(filters, 1, 0)
         total = 0
-    return render_template(
-        "quotes.html",
-        records=records,
-        latest=latest,
-        filters=filters,
-        total_records=total,
-        stats=stats,
-        pagination=pagination,
-        page_size=QUOTE_PAGE_SIZE,
-    )
+    return {
+        "records": records,
+        "latest": latest,
+        "filters": filters,
+        "total_records": total,
+        "stats": stats,
+        "pagination": pagination,
+        "page_size": QUOTE_PAGE_SIZE,
+        "canonical_url": _page_url(filters, int(pagination["page"])).split("#", 1)[0],
+    }
+
+
+@quote_web.get("/quotes/fragment", endpoint="quotes_fragment")
+@permission_required("view_customer_prices")
+def quotes_fragment():
+    response = make_response(render_template("_quote_results.html", **_quote_list_context()))
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @quote_web.post("/quotes/save", endpoint="save_quote")

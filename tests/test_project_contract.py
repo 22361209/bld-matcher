@@ -187,10 +187,16 @@ def dynamic_route():
     def test_primary_data_lists_share_resizable_grid_protocol(self):
         product_shell = (contract.ROOT / "templates" / "products.html").read_text(encoding="utf-8")
         product_results = (contract.ROOT / "templates" / "_products_results.html").read_text(encoding="utf-8")
+        quote_results = (contract.ROOT / "templates" / "_quote_results.html").read_text(encoding="utf-8")
+        tube_results = (contract.ROOT / "templates" / "_tube_results.html").read_text(encoding="utf-8")
+        result_templates = {
+            "products.html": product_results,
+            "quotes.html": quote_results,
+            "tubes.html": tube_results,
+        }
         for template_name in ("products.html", "materials.html", "tubes.html", "quotes.html"):
             template = (contract.ROOT / "templates" / template_name).read_text(encoding="utf-8")
-            if template_name == "products.html":
-                template += product_results
+            template += result_templates.get(template_name, "")
             self.assertIn("data-resizable-grid", template, template_name)
             self.assertIn("data-grid-scroll", template, template_name)
             self.assertIn('include "_data_grid_footer.html"', template, template_name)
@@ -200,8 +206,7 @@ def dynamic_route():
         self.assertIn("data-grid-heading-overflow", products_template)
         for template_name in ("products.html", "materials.html", "tubes.html", "quotes.html"):
             template = (contract.ROOT / "templates" / template_name).read_text(encoding="utf-8")
-            if template_name == "products.html":
-                template += product_results
+            template += result_templates.get(template_name, "")
             self.assertIn("data_grid_footer_context", template, template_name)
 
         self.assertNotIn('~ " · 当前 "', products_template)
@@ -209,7 +214,7 @@ def dynamic_route():
         self.assertIn('"总明细 "', materials_template)
         self.assertIn('" · 启用 "', materials_template)
         self.assertIn('" · 停用 "', materials_template)
-        tubes_template = (contract.ROOT / "templates" / "tubes.html").read_text(encoding="utf-8")
+        tubes_template = (contract.ROOT / "templates" / "tubes.html").read_text(encoding="utf-8") + tube_results
         self.assertIn('"总管件 "', tubes_template)
         self.assertIn("data-grid-heading-overflow", tubes_template)
 
