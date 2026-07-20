@@ -5,25 +5,22 @@
 {% block page_type %}workbench{% endblock %}
 {% block page_class %}shell wide app-surface materials-clean-page{% endblock %}
 {% block page_head %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='pages/context_strip.css', v=static_version('pages/context_strip.css')) }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='pages/materials.css', v=static_version('pages/materials.css')) }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='pages/history.css', v=static_version('pages/history.css')) }}">
 {% endblock %}
 
 {% block page_content %}
       {% if not show_material_items %}
-      <section class="context-strip material-context" aria-label="生产料单工作区">
-        <div class="context-strip-copy">
-          <span class="context-strip-kicker">MATERIAL PLANNING</span>
+      <header class="material-landing">
           <h1>生产料单</h1>
           <p>上传生产计划，按启用材料明细生成采购和下料所需料单。</p>
-        </div>
         <div class="compact-metrics material-stat-strip" aria-label="材料数据统计">
-          <span>明细 <strong>{{ material_stats["items"] }}</strong></span>
-          <span>启用 <strong>{{ material_stats.active }}</strong></span>
-          <span>母件 <strong>{{ material_stats.models }}</strong></span>
+          <span>总明细 <strong>{{ material_stats["items"] }}</strong></span>
+          <span>启用明细 <strong>{{ material_stats.active }}</strong></span>
+          <span>停用明细 <strong>{{ material_stats.inactive }}</strong></span>
+          <span>启用母件 <strong>{{ material_stats.models }}</strong></span>
         </div>
-      </section>
+      </header>
       {% endif %}
       {% if material_file_stats.invalid %}
         <section class="materials-alert">

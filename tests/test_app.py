@@ -127,10 +127,8 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(nav_positions, sorted(nav_positions))
         self.assertNotIn("发货通知", html)
         self.assertNotIn("货物识别", html)
-        self.assertNotIn('class="search-hero"', html)
+        self.assertIn('class="search-hero"', html)
         self.assertNotIn('class="workspace-header"', html)
-        self.assertIn('class="context-strip inquiry-context"', html)
-        self.assertIn("INQUIRY DESK", html)
 
     def test_page_templates_omit_redundant_workspace_headers(self):
         template_dir = Path(__file__).resolve().parents[1] / "templates"
@@ -141,7 +139,8 @@ class WebAppTest(unittest.TestCase):
             with self.subTest(template=template_path.name):
                 template = template_path.read_text(encoding="utf-8")
                 self.assertNotIn("workspace-header", template)
-                self.assertNotIn("search-hero", template)
+                if template_path.name != "index.html":
+                    self.assertNotIn("search-hero", template)
 
     def test_quick_inquiry_results_can_filter_by_match_source(self):
         from app.modules.products.persistence import upsert_product
@@ -3408,8 +3407,7 @@ class WebAppTest(unittest.TestCase):
         html = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn('class="context-strip material-context"', html)
-        self.assertIn("MATERIAL PLANNING", html)
+        self.assertIn('class="material-landing"', html)
         self.assertIn('href="/materials/items"', html)
         self.assertNotIn('id="materials-results"', html)
         self.assertIn('class="embedded-submit" type="submit">生成并下载', html)
