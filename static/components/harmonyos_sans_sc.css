@@ -1,0 +1,27 @@
+/*
+ * HarmonyOS Sans SC is bundled unchanged under the HarmonyOS Sans Fonts
+ * License Agreement. See static/fonts/harmonyos-sans-sc/LICENSE.txt.
+ */
+@font-face {
+  font-family: 'HarmonyOS Sans SC';
+  src: url('../fonts/harmonyos-sans-sc/HarmonyOS_Sans_SC_Regular.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 100 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'HarmonyOS Sans SC';
+  src: url('../fonts/harmonyos-sans-sc/HarmonyOS_Sans_SC_Medium.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 500 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'HarmonyOS Sans SC';
+  src: url('../fonts/harmonyos-sans-sc/HarmonyOS_Sans_SC_Bold.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 700 900;
+  font-display: swap;
+}

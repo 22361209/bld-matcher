@@ -167,18 +167,30 @@ class WebAppTest(unittest.TestCase):
     def test_shared_web_font_is_self_hosted_and_loaded_by_the_page_shell(self):
         root = Path(__file__).resolve().parents[1]
         base_template = (root / "templates" / "base.html").read_text(encoding="utf-8")
-        font_css = "\n".join(
-            (root / "static" / "components" / filename).read_text(encoding="utf-8")
-            for filename in ("font_faces_00.css", "font_faces_01.css")
-        )
-        font_directory = root / "static" / "fonts" / "noto-sans-sc"
+        font_css = (root / "static" / "components" / "harmonyos_sans_sc.css").read_text(encoding="utf-8")
+        font_directory = root / "static" / "fonts" / "harmonyos-sans-sc"
 
-        self.assertIn("components/font_faces_00.css", base_template)
-        self.assertIn("components/font_faces_01.css", base_template)
-        self.assertIn("font-family: 'Noto Sans SC Variable';", font_css)
-        self.assertNotIn("url(./files/", font_css)
-        self.assertGreater(len(list(font_directory.glob("*.woff2"))), 100)
-        self.assertIn("SIL Open Font License", (font_directory / "LICENSE").read_text(encoding="utf-8"))
+        self.assertIn("components/harmonyos_sans_sc.css", base_template)
+        self.assertNotIn("components/font_faces_00.css", base_template)
+        self.assertNotIn("components/font_faces_01.css", base_template)
+        self.assertEqual(font_css.count("font-family: 'HarmonyOS Sans SC';"), 3)
+        self.assertIn("font-weight: 100 400;", font_css)
+        self.assertIn("font-weight: 500 600;", font_css)
+        self.assertIn("font-weight: 700 900;", font_css)
+        self.assertEqual(
+            {path.name for path in font_directory.glob("*.woff2")},
+            {
+                "HarmonyOS_Sans_SC_Regular.woff2",
+                "HarmonyOS_Sans_SC_Medium.woff2",
+                "HarmonyOS_Sans_SC_Bold.woff2",
+            },
+        )
+        license_notice = (font_directory / "LICENSE.txt").read_text(encoding="utf-8")
+        self.assertIn("HarmonyOS Sans Fonts License Agreement", license_notice)
+        self.assertIn("prominent notice in the software", license_notice)
+        notice = (root / "NOTICE").read_text(encoding="utf-8")
+        self.assertIn("HarmonyOS Sans SC fonts", notice)
+        self.assertIn("HarmonyOS Sans Fonts License Agreement", notice)
 
     def test_quick_inquiry_results_can_filter_by_match_source(self):
         from app.modules.products.persistence import upsert_product

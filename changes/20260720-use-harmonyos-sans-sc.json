@@ -1,0 +1,15 @@
+{
+  "date": "2026-07-20",
+  "version": "unreleased",
+  "title": "全站统一为 HarmonyOS Sans SC 中文界面字体",
+  "entries": [
+    "全站界面从 Noto Sans SC 切换为项目自托管的 HarmonyOS Sans SC；Mac 和 Windows 浏览器下载相同字体文件，避免依赖系统苹方或微软雅黑造成的字形、字宽与视觉字号差异。",
+    "仅提供 Regular（100-400）、Medium（500-600）与 Bold（700-900）三个未修改静态字重：正文与表单使用 Regular，标签、表头、按钮与关键编号使用 Medium，强强调才使用 Bold；不使用 Thin、Light 或 Black。",
+    "字体资源随应用源码发布，保留 HarmonyOS Sans Fonts License Agreement 及项目根目录 NOTICE 中的显著使用说明；本次不涉及运行数据、权限或 API 变化。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "compatible",
+    "operations": "restart-required when switching deployed source"
+  }
+}

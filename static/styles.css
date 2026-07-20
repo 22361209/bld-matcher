@@ -1,6 +1,6 @@
 :root {
   --revealed-nav-height: 0px;
-  --app-font-sans: "Noto Sans SC Variable", "Noto Sans SC", sans-serif;
+  --app-font-sans: "HarmonyOS Sans SC", sans-serif;
   color-scheme: light;
   font-family: var(--app-font-sans);
   color: #19202a;
