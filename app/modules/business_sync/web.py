@@ -36,6 +36,15 @@ def _uploaded_path() -> Path | None:
     return path if root in path.parents and path.is_file() and path.name.endswith(PACKAGE_SUFFIX) else None
 
 
+def _selected_conflicts() -> dict[str, set[str]]:
+    selected = {key: set() for key in DATASETS}
+    for value in request.form.getlist("use_package"):
+        key, separator, identity = value.partition(":")
+        if separator and key in DATASETS and identity:
+            selected[key].add(identity)
+    return selected
+
+
 def register(app) -> None:
     @app.get("/business-data-sync")
     @permission_required("sync_product_data")
@@ -92,6 +101,7 @@ def register(app) -> None:
                     backup_path=DATA_DIR / "local-backups" / f"before-business-sync-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.sqlite3",
                     actor=actor,
                     expected_token=request.form.get("preview_token", ""),
+                    selected_conflicts=_selected_conflicts(),
                 )
         except ImportLockError as exc:
             flash(str(exc), "error")

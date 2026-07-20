@@ -15,5 +15,5 @@ class BusinessSyncService:
     def preview(self, package_path: Path) -> dict[str, object]:
         return self.repository.preview(package_path)
 
-    def apply(self, package_path: Path, *, backup_path: Path, actor: str, expected_token: str) -> dict[str, dict[str, int]]:
-        return self.repository.apply(package_path, backup_path=backup_path, actor=actor, expected_token=expected_token)
+    def apply(self, package_path: Path, *, backup_path: Path, actor: str, expected_token: str, selected_conflicts: dict[str, set[str]] | None = None) -> dict[str, dict[str, int]]:
+        return self.repository.apply(package_path, backup_path=backup_path, actor=actor, expected_token=expected_token, selected_conflicts=selected_conflicts or {})

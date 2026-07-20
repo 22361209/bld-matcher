@@ -109,6 +109,8 @@ class BusinessSyncServiceTest(unittest.TestCase):
         package = self._package()
         with connect(self.target) as connection:
             self._seed(connection, updated_at="2026-07-18 10:00:00", quote_remark="target")
+            connection.execute("UPDATE products SET image_path = 'target-image.jpg' WHERE bld_no = 'SYNC-PRODUCT'")
+            connection.execute("UPDATE quote_records SET attachment_path = 'target-quote.pdf' WHERE sync_id = 'quote-sync-id'")
             connection.commit()
 
         service = BusinessSyncService(BusinessSyncRepository(self.target))
@@ -116,17 +118,62 @@ class BusinessSyncServiceTest(unittest.TestCase):
         summary = cast(dict[str, dict[str, object]], preview["summary"])
         self.assertEqual(cast(dict[str, int], summary["products"]["counts"])["conflict"], 1)
         self.assertEqual(cast(dict[str, int], summary["quotes"]["counts"])["conflict"], 1)
+        self.assertEqual(cast(list[dict[str, object]], summary["products"]["conflicts"])[0]["label"], "SYNC-PRODUCT")
+        self.assertEqual(cast(list[dict[str, object]], summary["quotes"]["conflicts"])[0]["label"], "同步客户 · SYNC-PRODUCT · — · 2026-07-17")
         result = service.apply(
             package,
             backup_path=self.root / "backup.sqlite3",
             actor="test",
             expected_token=cast(str, preview["token"]),
+            selected_conflicts={"products": {"SYNC-PRODUCT"}, "quotes": {"quote-sync-id"}},
         )
-        self.assertEqual(result["products"]["conflict"], 1)
-        self.assertEqual(result["quotes"]["conflict"], 1)
+        self.assertEqual(result["products"]["updated"], 1)
+        self.assertEqual(result["quotes"]["updated"], 1)
         with connect(self.target) as connection:
-            self.assertEqual(connection.execute("SELECT updated_at FROM products WHERE bld_no = 'SYNC-PRODUCT'").fetchone()[0], "2026-07-18 10:00:00")
-            self.assertEqual(connection.execute("SELECT remark FROM quote_records WHERE sync_id = 'quote-sync-id'").fetchone()[0], "target")
+            product = connection.execute("SELECT updated_at, image_path FROM products WHERE bld_no = 'SYNC-PRODUCT'").fetchone()
+            quote = connection.execute("SELECT remark, attachment_path FROM quote_records WHERE sync_id = 'quote-sync-id'").fetchone()
+        self.assertEqual(tuple(product), ("2026-07-17 10:00:00", "target-image.jpg"))
+        self.assertEqual(tuple(quote), ("source", "target-quote.pdf"))
+
+    def test_export_omits_local_media_paths(self) -> None:
+        with connect(self.source) as connection:
+            self._seed(connection)
+            connection.execute("UPDATE products SET image_path = 'source-image.jpg', drawing_path = 'source-drawing.pdf'")
+            connection.execute("UPDATE quote_records SET attachment_path = 'source-quote.pdf'")
+            connection.commit()
+        package = self.root / "business.tar.gz"
+        repository = BusinessSyncRepository(self.source)
+        repository.export(output_path=package, selected=("products", "quotes"), actor="test")
+        _manifest, payload = repository.read(package)
+        self.assertEqual(payload["products"][0]["image_path"], "")
+        self.assertEqual(payload["products"][0]["drawing_path"], "")
+        self.assertEqual(payload["quotes"][0]["attachment_path"], "")
+
+    def test_selected_material_conflict_overwrites_matching_current_record(self) -> None:
+        package = self._package()
+        with connect(self.target) as connection:
+            self._seed(connection)
+            connection.execute("UPDATE material_items SET sync_id = 'target-material-id', pieces = 9")
+            connection.commit()
+
+        service = BusinessSyncService(BusinessSyncRepository(self.target))
+        preview = service.preview(package)
+        summary = cast(dict[str, dict[str, object]], preview["summary"])
+        conflict = cast(list[dict[str, object]], summary["materials"]["conflicts"])[0]
+        self.assertEqual(conflict["label"], "SYNC-MODEL · SYNC-PART · — · — · — · —")
+        self.assertEqual(cast(list[dict[str, str]], conflict["fields"])[0], {"label": "下料只数", "before": "9.0", "after": "1.0"})
+
+        result = service.apply(
+            package,
+            backup_path=self.root / "backup.sqlite3",
+            actor="test",
+            expected_token=cast(str, preview["token"]),
+            selected_conflicts={"materials": {"material-sync-id"}},
+        )
+        self.assertEqual(result["materials"]["updated"], 1)
+        with connect(self.target) as connection:
+            material = connection.execute("SELECT sync_id, pieces FROM material_items").fetchone()
+        self.assertEqual(tuple(material), ("material-sync-id", 1))
 
     def test_first_sync_adopts_matching_quote_and_material_identity(self) -> None:
         package = self._package()

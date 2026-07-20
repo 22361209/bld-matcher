@@ -167,6 +167,42 @@
   flex: 0 0 auto;
 }
 
+.sync-conflicts {
+  margin-top: 16px;
+  overflow-x: auto;
+  border: 1px solid #edc6c0;
+  border-radius: 8px;
+  background: #fffafa;
+}
+
+.sync-conflicts h2 {
+  margin: 0;
+  padding: 12px 14px;
+  color: #9d3328;
+  font-size: 14px;
+}
+
+.sync-conflicts table {
+  width: 100%;
+  min-width: 680px;
+  border-collapse: collapse;
+  background: #ffffff;
+  color: var(--linear-text);
+  font-size: 13px;
+}
+
+.sync-conflicts th,
+.sync-conflicts td {
+  padding: 9px 14px;
+  border-top: 1px solid #f0dfdc;
+  text-align: left;
+}
+
+.sync-conflicts th {
+  color: var(--linear-muted);
+  font-weight: 800;
+}
+
 @media (max-width: 760px) {
   .sync-panel-grid {
     grid-template-columns: 1fr;
