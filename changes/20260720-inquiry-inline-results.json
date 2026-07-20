@@ -1,0 +1,15 @@
+{
+  "date": "2026-07-20",
+  "version": "unreleased",
+  "title": "询价单号码改为页面内更新结果",
+  "entries": [
+    "单个 OE、品牌号码或 BLD 号查询不再刷新整张询价首页，只更新快速查询结果区域。",
+    "查询地址仍同步到浏览器 URL，刷新、分享、前进和后退可以恢复相同结果；网络或会话异常时回退到原整页查询。",
+    "多号码粘贴与 Excel 上传继续使用原有询价处理流程。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "compatible",
+    "operations": "restart-required"
+  }
+}

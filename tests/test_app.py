@@ -4081,6 +4081,91 @@ with connect(database_path) as conn:
         self.assertIn("data-quick-oe-image", html)
         self.assertIn('id="quick-oe-image-modal"', html)
 
+    def test_quick_inquiry_fragment_is_authenticated_and_returns_only_results(self):
+        from app.modules.admin.persistence import save_user
+        from app.modules.products.persistence import upsert_product
+
+        self.client.post("/logout")
+        denied = self.client.get(
+            "/inquiry/quick-search",
+            query_string={"quick_oe": "INLINE-OE-001"},
+            headers={"Accept": "text/html", "X-Requested-With": "fetch"},
+        )
+        self.assertEqual(denied.status_code, 401)
+        self.assertEqual(denied.get_json()["ok"], False)
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-INLINE-001",
+                    "series": "HYUNDAI",
+                    "item": "INLINE RESULT",
+                    "oe_no_1": "INLINE-OE-001",
+                    "models": "Sportage",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            save_user(
+                conn,
+                {
+                    "username": "viewer-inline-query",
+                    "display_name": "Viewer Inline Query",
+                    "password": "viewer-pw",
+                    "role": "viewer",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            conn.commit()
+
+        self.login()
+        homepage = self.client.get("/").get_data(as_text=True)
+        self.assertIn('data-quick-results-host', homepage)
+        self.assertIn('data-quick-results-url="/inquiry/quick-search"', homepage)
+
+        response = self.client.get(
+            "/inquiry/quick-search",
+            query_string={"quick_oe": "INLINE-OE-001", "quick_filter": "oe"},
+            headers={"Accept": "text/html", "X-Requested-With": "fetch"},
+        )
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.content_type.startswith("text/html"))
+        self.assertIn('data-quick-results data-initial-filter="oe"', html)
+        self.assertIn("K-INLINE-001", html)
+        self.assertIn("OE 精准命中", html)
+        self.assertNotIn("<!doctype html>", html.lower())
+        self.assertNotIn("data-quick-results-host", html)
+
+        self.assertEqual(self.client.get("/inquiry/quick-search").status_code, 400)
+        self.assertEqual(
+            self.client.get(
+                "/inquiry/quick-search",
+                query_string={"quick_oe": "A" * 5001},
+            ).status_code,
+            400,
+        )
+
+        self.client.post("/logout")
+        login = self.client.post(
+            "/login",
+            data={"username": "viewer-inline-query", "password": "viewer-pw", "next": "/"},
+            follow_redirects=False,
+        )
+        self.assertEqual(login.status_code, 302)
+        forbidden = self.client.get(
+            "/inquiry/quick-search",
+            query_string={"quick_oe": "INLINE-OE-001"},
+            headers={"Accept": "text/html", "X-Requested-With": "fetch"},
+        )
+        self.assertEqual(forbidden.status_code, 403)
+        self.assertEqual(forbidden.get_json()["ok"], False)
+        self.client.post("/logout")
+        self.login()
+
     def test_quick_brand_code_lookup_on_homepage(self):
         from app.modules.products.persistence import upsert_product
 

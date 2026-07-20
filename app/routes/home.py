@@ -7,10 +7,10 @@ from flask import flash, jsonify, redirect, render_template, request, send_file,
 
 from app.config import CATALOG_PATH, OUTPUT_DIR
 from app.helpers import all_recent_outputs, download_name, user_output_dir, user_recent_outputs
-from app.matcher import catalog_summary
+from app.matcher import ProductCatalog, catalog_summary
 from app.modules.inquiry.factory import get_inquiry_service
 from app.modules.products.factory import get_product_service
-from app.security import can, login_required
+from app.security import can, login_required, permission_required
 
 
 QUICK_FILTER_LABELS = {
@@ -18,6 +18,17 @@ QUICK_FILTER_LABELS = {
     "oe": "只看OE号",
     "brand": "只看品牌号",
 }
+QUICK_QUERY_MAX_CHARS = 5000
+
+
+def _quick_filter(value: str) -> str:
+    return value if value in QUICK_FILTER_LABELS else ""
+
+
+def _quick_results(query: str, *, catalog: ProductCatalog | None) -> list[dict]:
+    if not query or catalog is None:
+        return []
+    return get_inquiry_service().quick_search(query, catalog=catalog)
 
 
 def _is_inquiry_result(path: Path) -> bool:
@@ -86,17 +97,13 @@ def register(app) -> None:
     def index():
         history_query = request.args.get("history_q", "").strip()
         quick_oe = request.args.get("quick_oe", "").strip()
-        quick_filter = request.args.get("quick_filter", "").strip()
-        if quick_filter not in QUICK_FILTER_LABELS:
-            quick_filter = ""
+        quick_filter = _quick_filter(request.args.get("quick_filter", "").strip())
         product_service = get_product_service()
         catalog = product_service.catalog()
         stats = product_service.stats().as_dict()
         history_files = _load_history_rows(history_query) if history_query else []
         quick_results = (
-            get_inquiry_service().quick_search(quick_oe, catalog=catalog)
-            if can("generate_match") and quick_oe and catalog is not None
-            else []
+            _quick_results(quick_oe, catalog=catalog) if can("generate_match") else []
         )
         return render_template(
             "index.html",
@@ -110,6 +117,22 @@ def register(app) -> None:
             history_query=history_query,
             history_files=history_files,
             history_loaded=bool(history_query),
+        )
+
+    @app.get("/inquiry/quick-search")
+    @permission_required("generate_match")
+    def inquiry_quick_search():
+        quick_oe = request.args.get("quick_oe", "").strip()
+        if not quick_oe or len(quick_oe) > QUICK_QUERY_MAX_CHARS:
+            return "查询号码长度无效。", 400
+        quick_filter = _quick_filter(request.args.get("quick_filter", "").strip())
+        catalog = get_product_service().catalog()
+        return render_template(
+            "_quick_inquiry_results.html",
+            quick_oe=quick_oe,
+            quick_filter=quick_filter,
+            quick_filter_labels=QUICK_FILTER_LABELS,
+            quick_results=_quick_results(quick_oe, catalog=catalog),
         )
 
     @app.get("/history-files")

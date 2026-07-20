@@ -260,6 +260,13 @@
       "rule": "/history-files"
     },
     {
+      "endpoint": "inquiry_quick_search",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/inquiry/quick-search"
+    },
+    {
       "endpoint": "internal_api_key",
       "methods": [
         "GET"

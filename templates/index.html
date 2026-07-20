@@ -48,70 +48,14 @@
               </div>
             </div>
           </form>
-          {% if quick_oe %}
-            <section class="quick-oe-results" aria-label="快速号码查询结果" data-quick-results data-initial-filter="{{ quick_filter }}">
-              <div class="quick-oe-heading">
-                <div>
-                  <h2>快速号码查询</h2>
-                  <p><span data-quick-filter-prefix>{% if quick_filter %}{{ quick_filter_labels[quick_filter] }} · {% endif %}</span><span data-quick-result-count>{{ quick_results|length }}</span> 条查询结果</p>
-                </div>
-                <div class="quick-oe-filters" aria-label="快速号码查询筛选">
-                  {% for filter_key, filter_label in quick_filter_labels.items() %}
-                    {% if quick_filter == filter_key %}
-                      <a class="quick-oe-filter active" href="{{ url_for('index', quick_oe=quick_oe) }}" data-quick-filter="{{ filter_key }}" data-filter-label="{{ filter_label }}" aria-pressed="true">{{ filter_label }}</a>
-                    {% else %}
-                      <a class="quick-oe-filter" href="{{ url_for('index', quick_oe=quick_oe, quick_filter=filter_key) }}" data-quick-filter="{{ filter_key }}" data-filter-label="{{ filter_label }}" aria-pressed="false">{{ filter_label }}</a>
-                    {% endif %}
-                  {% endfor %}
-                </div>
-              </div>
-              {% if quick_results %}
-                <div class="quick-oe-grid">
-                  {% for result in quick_results %}
-                    <article class="quick-oe-card {% if not result.product %}unmatched{% endif %}" data-quick-card data-match-type="{{ result.match_type or '' }}">
-                      <div class="quick-oe-code">{{ result.query }}</div>
-                      {% if result.product %}
-                        {% set image_url = product_image_url(result.product) %}
-                        {% set thumb_url = product_image_thumb_url(result.product) %}
-                        {% if image_url %}
-                          <a class="quick-oe-image" href="{{ image_url }}" data-quick-oe-image data-caption="{{ result.product.bld_no }}">
-                            <img src="{{ thumb_url or image_url }}" alt="{{ result.product.bld_no }} 产品图片" loading="lazy" decoding="async">
-                          </a>
-                        {% else %}
-                          <span class="quick-oe-image-placeholder"></span>
-                        {% endif %}
-                        <div class="quick-oe-content">
-                          <div class="quick-oe-main">
-                            <strong>{{ result.product.bld_no }}</strong>
-                            <span>{{ result.reason }}</span>
-                            {% if result.hit_code %}
-                              <span class="quick-oe-hit">命中{{ result.hit_label }}：<b>{{ result.hit_code }}</b></span>
-                            {% endif %}
-                          </div>
-                          <div class="quick-oe-meta">
-                            {% if result.product.series %}<span>{{ result.product.series }}</span>{% endif %}
-                            {% if result.product.item %}<span>{{ result.product.item }}</span>{% endif %}
-                            {% if result.product.price_cny is not none %}<span>¥{{ "%.2f"|format(result.product.price_cny) }}</span>{% endif %}
-                          </div>
-                          {% if result.product.models %}
-                            <p class="quick-oe-models">{{ result.product.models }}</p>
-                          {% endif %}
-                        </div>
-                      {% else %}
-                        <div class="quick-oe-main">
-                          <strong>未找到匹配</strong>
-                          <span>{{ result.reason }}</span>
-                        </div>
-                      {% endif %}
-                    </article>
-                  {% endfor %}
-                </div>
-                <p class="empty-message quick-oe-filter-empty" data-quick-filter-empty hidden>没有符合筛选的结果。</p>
-              {% else %}
-                <p class="empty-message">没有可查询的号码。</p>
-              {% endif %}
-            </section>
-          {% endif %}
+          <div
+            class="quick-results-host"
+            data-quick-results-host
+            data-quick-results-url="{{ url_for('inquiry_quick_search') }}"
+            aria-live="polite"
+          >
+            {% if quick_oe %}{% include "_quick_inquiry_results.html" %}{% endif %}
+          </div>
         {% else %}
           <p class="muted-text">当前账号没有生成匹配结果权限。</p>
         {% endif %}
