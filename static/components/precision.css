@@ -616,6 +616,26 @@ label {
   font-size: 11px;
 }
 
+/* Windows rasterization renders this dense table typography visibly smaller than macOS. */
+html[data-platform="windows"] .data-table th,
+html[data-platform="windows"] .workspace-table th {
+  font-size: 14px;
+}
+
+html[data-platform="windows"] .data-table td,
+html[data-platform="windows"] .workspace-table td {
+  font-size: 15px;
+}
+
+html[data-platform="windows"] .data-table a,
+html[data-platform="windows"] .data-table .link-button {
+  font-size: 17px;
+}
+
+html[data-platform="windows"] .data-grid .data-table th {
+  height: 39px;
+}
+
 .data-table tbody tr:nth-child(even),
 .workspace-table tbody tr:nth-child(even) {
   background: #fafbfa;
