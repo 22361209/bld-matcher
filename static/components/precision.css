@@ -186,6 +186,14 @@ body {
   content: "";
 }
 
+.app-surface .nav-menu:hover > a,
+.app-surface .nav-menu:hover > button,
+.app-surface .nav-menu:focus-within > a,
+.app-surface .nav-menu:focus-within > button {
+  background: rgba(255, 255, 255, 0.055);
+  color: #fff;
+}
+
 .nav-menu {
   align-items: stretch;
   padding: 0;

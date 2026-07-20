@@ -1640,6 +1640,7 @@ class WebAppTest(unittest.TestCase):
         self.assertNotIn("采购合同和销售合同分别生成、分别归档。", html)
         self.assertIn("采购合同", html)
         self.assertIn("销售合同", html)
+        self.assertNotIn('class="contract-entry-switch"', html)
         self.assertIn('class="contract-history-drawer" id="contract-history">', html)
         self.assertIn("历史合同记录", html)
         self.assertNotIn("销售合同模板后续接入", html)
