@@ -111,13 +111,17 @@ class ProductService:
 
     def catalog(self) -> ProductCatalog | None:
         self.bootstrap_port()
-        with self.unit_of_work_factory() as unit_of_work:
-            version, rows, aliases = unit_of_work.repository.catalog_snapshot()
         legacy_aliases = self.legacy_alias_port()
+        with self.unit_of_work_factory() as unit_of_work:
+            version = unit_of_work.repository.catalog_version()
         version = (*version, tuple(sorted(legacy_aliases.items())))
         with self._catalog_lock:
             if version == self._catalog_version:
                 return self._catalog
+        with self.unit_of_work_factory() as unit_of_work:
+            version, rows, aliases = unit_of_work.repository.catalog_snapshot()
+        version = (*version, tuple(sorted(legacy_aliases.items())))
+        with self._catalog_lock:
             aliases.update(legacy_aliases)
             self._catalog = ProductCatalog(rows, manual_map=aliases) if rows else None
             self._catalog_version = version

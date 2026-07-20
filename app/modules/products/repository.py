@@ -270,8 +270,7 @@ class SQLiteProductRepository:
         values = product_stats(self.connection)
         return ProductStats(**values)
 
-    def catalog_snapshot(self) -> tuple[tuple[object, ...], list[dict], dict[str, str]]:
-        products, aliases = rows_for_catalog(self.connection)
+    def catalog_version(self) -> tuple[object, ...]:
         product_version = self.connection.execute(
             "SELECT COUNT(*), COALESCE(MAX(updated_at), '') FROM products"
         ).fetchone()
@@ -289,14 +288,17 @@ class SQLiteProductRepository:
                 file_signatures.append((stat.st_mtime_ns, stat.st_size))
             except OSError:
                 file_signatures.append((0, 0))
-        version = (
+        return (
             int(product_version[0] or 0),
             str(product_version[1] or ""),
             int(alias_version[0] or 0),
             str(alias_version[1] or ""),
             *file_signatures,
         )
-        return version, products, aliases
+
+    def catalog_snapshot(self) -> tuple[tuple[object, ...], list[dict], dict[str, str]]:
+        products, aliases = rows_for_catalog(self.connection)
+        return self.catalog_version(), products, aliases
 
     def upsert(self, data: Mapping[str, object], *, actor: str) -> ProductRecord:
         upsert_product(
