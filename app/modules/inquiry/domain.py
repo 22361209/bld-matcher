@@ -8,7 +8,6 @@ from typing import Mapping
 from app.matcher import (
     CatalogMatch,
     ProductCatalog,
-    brand_code_aliases,
     compact_text,
     normalize_code,
     psa_352x_key,
@@ -484,9 +483,7 @@ def quick_candidate_matches(catalog: ProductCatalog, query: str) -> list[QuickCa
         if psa_probe[1]:
             return []
     candidates: dict[str, QuickCandidate] = {}
-    for row in catalog.rows:
-        bld_no = compact_text(row.get("BLD NO."))
-        bld_key = normalize_code(bld_no)
+    for row, bld_no, bld_key, quick_codes in catalog.quick_search_rows:
         if key and bld_key:
             if key == bld_key:
                 _add_quick_candidate(
@@ -510,24 +507,18 @@ def quick_candidate_matches(catalog: ProductCatalog, query: str) -> list[QuickCa
                     hit_code=bld_no,
                     hit_label="BLD号",
                 )
-        for field in ("OE NO.1", "OE NO.2"):
+        for field, code, code_key in quick_codes:
             match_type = "brand" if field == "OE NO.2" else "oe"
             hit_label = "品牌号" if field == "OE NO.2" else "OE号"
             exact_reason = "品牌号码精准命中" if field == "OE NO.2" else "OE 精准命中"
             prefix_reason = "品牌号码前缀命中" if field == "OE NO.2" else "OE 前缀命中"
             partial_reason = "品牌号码片段命中" if field == "OE NO.2" else "OE 片段命中"
-            for code in split_codes(row.get(field)):
-                aliases = brand_code_aliases(code) if field == "OE NO.2" else [code]
-                for alias in aliases:
-                    code_key = normalize_code(alias)
-                    if not code_key:
-                        continue
-                    if key == code_key:
-                        _add_quick_candidate(candidates, query=query, row=row, score=95, reason=exact_reason, match_type=match_type, hit_code=code, hit_label=hit_label)
-                    elif code_key.startswith(key):
-                        _add_quick_candidate(candidates, query=query, row=row, score=90, reason=prefix_reason, match_type=match_type, hit_code=code, hit_label=hit_label)
-                    elif key in code_key:
-                        _add_quick_candidate(candidates, query=query, row=row, score=82, reason=partial_reason, match_type=match_type, hit_code=code, hit_label=hit_label)
+            if key == code_key:
+                _add_quick_candidate(candidates, query=query, row=row, score=95, reason=exact_reason, match_type=match_type, hit_code=code, hit_label=hit_label)
+            elif code_key.startswith(key):
+                _add_quick_candidate(candidates, query=query, row=row, score=90, reason=prefix_reason, match_type=match_type, hit_code=code, hit_label=hit_label)
+            elif key in code_key:
+                _add_quick_candidate(candidates, query=query, row=row, score=82, reason=partial_reason, match_type=match_type, hit_code=code, hit_label=hit_label)
     for source_key, manual_bld in catalog.manual_map.items():
         row = catalog.by_bld.get(normalize_code(manual_bld))
         if not row:

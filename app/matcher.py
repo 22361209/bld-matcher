@@ -185,16 +185,20 @@ class ProductCatalog:
         self.by_oe_fields: dict[str, set[str]] = {}
         self.by_oe_zero_o_fields: dict[str, set[str]] = {}
         self.by_psa_352x: dict[str, list[dict]] = {}
+        self.quick_search_rows: list[tuple[dict, str, str, tuple[tuple[str, str, str], ...]]] = []
 
         for row in rows:
             bld_no = compact_text(row.get("BLD NO."))
+            bld_key = normalize_code(bld_no)
+            quick_codes: list[tuple[str, str, str]] = []
             if bld_no:
-                self.by_bld[normalize_code(bld_no)] = row
+                self.by_bld[bld_key] = row
             for field in ("OE NO.1", "OE NO.2"):
                 for code in split_codes(row.get(field)):
                     aliases = brand_code_aliases(code) if field == "OE NO.2" else [code]
                     for alias in aliases:
                         code_key = normalize_code(alias)
+                        quick_codes.append((field, code, code_key))
                         tolerant_key = zero_o_key(alias)
                         self.by_oe.setdefault(code_key, []).append(row)
                         self.by_oe_zero_o.setdefault(tolerant_key, []).append(row)
@@ -203,6 +207,7 @@ class ProductCatalog:
                         psa_key = psa_352x_key(alias)
                         if psa_key and self._row_is_psa_352x(row):
                             self.by_psa_352x.setdefault(psa_key[0], []).append(row)
+            self.quick_search_rows.append((row, bld_no, bld_key, tuple(quick_codes)))
 
     @classmethod
     def from_excel(cls, path: Path, manual_map: dict[str, str] | None = None) -> "ProductCatalog":
