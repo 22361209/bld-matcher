@@ -91,12 +91,14 @@ class CatalogImportConflict:
     row: CatalogImportRow
     product: ProductRecord
     fields: tuple[dict[str, object], ...]
+    all_fields: tuple[dict[str, object], ...]
 
     def web_payload(self) -> dict[str, object]:
         return {
             "row_number": self.row.row_number,
             "bld_no": self.row.bld_no,
             "fields": list(self.fields),
+            "all_fields": list(self.all_fields),
         }
 
 
@@ -276,16 +278,21 @@ def read_catalog_import(path: Path, *, choices: CatalogImportChoices) -> tuple[C
         workbook.close()
 
 
-def _field_differences(row: CatalogImportRow, product: ProductRecord) -> tuple[dict[str, object], ...]:
+def _field_differences(row: CatalogImportRow, product: ProductRecord) -> tuple[tuple[dict[str, object], ...], tuple[dict[str, object], ...]]:
     fields: list[dict[str, object]] = []
+    all_fields: list[dict[str, object]] = []
     for field, label in FIELD_LABELS.items():
         before = getattr(product, field)
         after = getattr(row, field)
+        all_fields.append({"label": label, "before": before if before is not None else "", "after": after, "changed": before != after})
         if before != after:
             fields.append({"label": label, "before": before if before is not None else "", "after": after})
     if row.image:
-        fields.append({"label": "图片", "before": "已有图片" if product.image_path else "无图片", "after": "替换为 Excel 图片"})
-    return tuple(fields)
+        before_image = "已有图片" if product.image_path else "无图片"
+        after_image = "替换为 Excel 图片"
+        all_fields.append({"label": "图片", "before": before_image, "after": after_image, "changed": True})
+        fields.append({"label": "图片", "before": before_image, "after": after_image})
+    return tuple(fields), tuple(all_fields)
 
 
 def build_catalog_import_preview(rows: Iterable[CatalogImportRow], products: dict[str, ProductRecord]) -> CatalogImportPreview:
@@ -296,11 +303,11 @@ def build_catalog_import_preview(rows: Iterable[CatalogImportRow], products: dic
     digest_payload: list[dict[str, object]] = []
     for row in stable_rows:
         product = products.get(row.bld_no)
-        fields = _field_differences(row, product) if product else ()
+        fields, all_fields = _field_differences(row, product) if product else ((), ())
         if product is None:
             new_rows.append(row)
         elif fields:
-            conflicts.append(CatalogImportConflict(row=row, product=product, fields=fields))
+            conflicts.append(CatalogImportConflict(row=row, product=product, fields=fields, all_fields=all_fields))
         else:
             unchanged.append(row)
         digest_payload.append(

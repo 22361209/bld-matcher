@@ -145,6 +145,19 @@ def _comparison_fields(key: str, local: sqlite3.Row, incoming: dict[str, object]
     ]
 
 
+def _all_comparison_fields(key: str, local: sqlite3.Row, incoming: dict[str, object], columns: list[str]) -> list[dict[str, str | bool]]:
+    return [
+        {
+            "label": FIELD_LABELS.get(column, column),
+            "before": _display_value(local[column]),
+            "after": _display_value(incoming.get(column)),
+            "changed": local[column] != incoming.get(column),
+        }
+        for column in columns
+        if column not in COMPARISON_EXCLUDED_COLUMNS | LOCAL_MEDIA_COLUMNS.get(key, set())
+    ]
+
+
 class BusinessSyncRepository:
     def __init__(self, database_path: Path) -> None:
         self.database_path = database_path
@@ -234,9 +247,16 @@ class BusinessSyncRepository:
                     status, local_row, _adopt_sync_id = _incoming_status(key, local, local_rows, incoming, columns)
                     counts[status] += 1
                     if status == "conflict":
-                        conflicts.append({"key": str(incoming[identity]), "label": _preview_label(key, incoming), "fields": _comparison_fields(key, local_row, incoming, columns) if local_row else [], "local_updated_at": local_row["updated_at"] if local_row else "", "incoming_updated_at": incoming.get("updated_at", "")})
-                    if status != "unchanged" and len(rows) < 30:
-                        rows.append({"status": status, "key": str(incoming[identity]), "local_updated_at": local_row["updated_at"] if local_row else "", "incoming_updated_at": incoming.get("updated_at", "")})
+                        conflicts.append({
+                            "key": str(incoming[identity]),
+                            "label": _preview_label(key, incoming),
+                            "fields": _comparison_fields(key, local_row, incoming, columns) if local_row else [],
+                            "all_fields": _all_comparison_fields(key, local_row, incoming, columns) if local_row else [],
+                            "local_updated_at": local_row["updated_at"] if local_row else "",
+                            "incoming_updated_at": incoming.get("updated_at", ""),
+                        })
+                    if status != "unchanged":
+                        rows.append({"status": status, "key": str(incoming[identity]), "label": _preview_label(key, incoming), "local_updated_at": local_row["updated_at"] if local_row else "", "incoming_updated_at": incoming.get("updated_at", "")})
                 summary[key] = {"label": label, "counts": counts, "rows": rows, "conflicts": conflicts}
             token = _state_token(connection, package_path, tuple(payload))
         return {"manifest": manifest, "summary": summary, "token": token}

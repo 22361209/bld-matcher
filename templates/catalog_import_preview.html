@@ -17,49 +17,112 @@
     <input type="hidden" name="preview_id" value="{{ preview_id }}">
     <input type="hidden" name="snapshot_digest" value="{{ preview.digest }}">
 
-    <section class="workbench-form-section" aria-labelledby="catalog-import-new">
-      <h2 id="catalog-import-new">新增产品</h2>
-      <p class="note">以下产品确认后会直接新增。</p>
-      {% if preview.new_rows %}
-        <p>{% for row in preview.new_rows %}<code>{{ row.bld_no }}</code>{% if not loop.last %}、{% endif %}{% endfor %}</p>
-      {% else %}
-        <p class="note">没有新增产品。</p>
-      {% endif %}
-    </section>
-
-    <section class="workbench-form-section" aria-labelledby="catalog-import-conflicts">
-      <h2 id="catalog-import-conflicts">BLD NO. 冲突处理</h2>
-      <p class="note">逐条选择是否使用 Excel 更新。未勾选的产品会完整保留现有资料，不做部分覆盖。</p>
-      <div class="workspace-table-wrap">
-        <table class="workspace-table">
-          <thead>
-            <tr><th scope="col">处理</th><th scope="col">BLD NO.</th><th scope="col">变化字段</th></tr>
-          </thead>
-          <tbody>
-            {% for conflict in preview.conflicts %}
-              <tr>
-                <td>
-                  <label>
-                    <input type="checkbox" name="update_bld" value="{{ conflict.bld_no }}">
-                    使用 Excel 更新
-                  </label>
-                </td>
-                <td><code>{{ conflict.bld_no }}</code><br><small>Excel 第 {{ conflict.row_number }} 行</small></td>
-                <td>
-                  <ul>
-                    {% for field in conflict.fields %}
-                      <li><strong>{{ field.label }}</strong>：{{ field.before or "（空）" }} → {{ field.after }}</li>
-                    {% endfor %}
-                  </ul>
-                </td>
-              </tr>
-            {% else %}
-              <tr><td colspan="3">没有需要选择的冲突条目。</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
+    <section class="workspace-command">
+      <div>
+        <h2>导入预览</h2>
+        <p>新增产品会直接导入。冲突默认保留现有资料；勾选后才使用 Excel 完整覆盖。</p>
+      </div>
+      <div class="command-actions">
+        <button class="linear-button primary" type="submit">确认按所选规则导入</button>
       </div>
     </section>
+
+    <details class="import-preview-dataset" id="import-preview-products" {% if preview.conflicts or preview.new_rows %}open{% endif %}>
+      <summary>
+        <span class="import-preview-dataset-title">产品目录</span>
+        <span class="import-preview-dataset-counts">
+          <span>新增 {{ preview.new_count }}</span>
+          <span>冲突 {{ preview.conflict_count }}</span>
+          <span>无变化 {{ preview.unchanged_count }}</span>
+        </span>
+      </summary>
+      <div class="import-preview-dataset-tools">
+        <input type="search" class="import-preview-search" data-dataset="products" placeholder="搜索产品目录...">
+        {% if preview.conflicts %}
+          <button type="button" class="linear-button subtle" data-bulk-action="keep-current" data-dataset="products">全部保留当前端</button>
+          <button type="button" class="linear-button subtle" data-bulk-action="use-package" data-dataset="products">全部使用 Excel 更新</button>
+        {% endif %}
+      </div>
+
+      {% if preview.new_rows %}
+        <details class="import-preview-subsection" open>
+          <summary>新增明细（{{ preview.new_count }}）</summary>
+          <div class="workspace-table-wrap">
+            <table class="workspace-table">
+              <thead>
+                <tr><th scope="col">BLD NO.</th><th scope="col">Excel 行号</th></tr>
+              </thead>
+              <tbody>
+                {% for row in preview.new_rows %}
+                  <tr class="import-preview-row" data-search-text="{{ row.bld_no }} {{ row.row_number }}">
+                    <td><code>{{ row.bld_no }}</code></td>
+                    <td>Excel 第 {{ row.row_number }} 行</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      {% endif %}
+
+      {% if preview.conflicts %}
+        <div class="import-preview-conflicts">
+          <h3>冲突处理（{{ preview.conflict_count }}）</h3>
+          <p class="note">逐条选择是否使用 Excel 更新。未勾选的产品会完整保留现有资料，不做部分覆盖。</p>
+          <div class="workspace-table-wrap">
+            <table class="workspace-table">
+              <thead>
+                <tr><th scope="col">处理</th><th scope="col">BLD NO.</th><th scope="col">变化字段</th></tr>
+              </thead>
+              <tbody>
+                {% for conflict in preview.conflicts %}
+                  <tr class="import-preview-row" data-search-text="{{ conflict.bld_no }} {{ conflict.row_number }} {% for field in conflict.all_fields %}{{ field.label }} {{ field.before }} {{ field.after }} {% endfor %}">
+                    <td>
+                      <label>
+                        <input type="checkbox" name="update_bld" value="{{ conflict.bld_no }}" data-dataset="products">
+                        使用 Excel 更新
+                      </label>
+                    </td>
+                    <td>
+                      <code>{{ conflict.bld_no }}</code><br>
+                      <small>Excel 第 {{ conflict.row_number }} 行</small>
+                    </td>
+                    <td>
+                      <ul>
+                        {% for field in conflict.fields %}
+                          <li><strong>{{ field.label }}</strong>：{{ field.before or "（空）" }} → {{ field.after }}</li>
+                        {% endfor %}
+                      </ul>
+                      {% if conflict.all_fields %}
+                        <details class="import-preview-field-details">
+                          <summary>完整字段对比</summary>
+                          <div class="workspace-table-wrap">
+                            <table class="workspace-table">
+                              <thead>
+                                <tr><th scope="col">字段</th><th scope="col">当前端</th><th scope="col">Excel</th></tr>
+                              </thead>
+                              <tbody>
+                                {% for field in conflict.all_fields %}
+                                  <tr {% if field.changed %}class="import-preview-field-changed"{% endif %}>
+                                    <td>{{ field.label }}</td>
+                                    <td>{{ field.before or "（空）" }}</td>
+                                    <td>{{ field.after }}</td>
+                                  </tr>
+                                {% endfor %}
+                              </tbody>
+                            </table>
+                          </div>
+                        </details>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      {% endif %}
+    </details>
 
     <section class="workbench-form-section">
       <h2>无变化</h2>

@@ -252,3 +252,41 @@ class BusinessSyncServiceTest(unittest.TestCase):
             import_materials_from_excel(connection, second, replace=True, actor="test")
             second_id = connection.execute("SELECT sync_id FROM material_items").fetchone()[0]
         self.assertEqual(first_id, second_id)
+
+    def test_conflict_includes_all_fields_with_changed_flags(self) -> None:
+        package = self._package()
+        with connect(self.target) as connection:
+            self._seed(connection)
+            connection.execute("UPDATE material_items SET sync_id = 'target-material-id', pieces = 9")
+            connection.commit()
+
+        preview = BusinessSyncService(BusinessSyncRepository(self.target)).preview(package)
+        summary = cast(dict[str, dict[str, object]], preview["summary"])
+        conflict = cast(list[dict[str, object]], summary["materials"]["conflicts"])[0]
+        all_fields = cast(list[dict[str, object]], conflict["all_fields"])
+        self.assertTrue(all_fields)
+        changed_field_labels = {field.get("label") for field in all_fields if field.get("changed")}
+        self.assertIn("下料只数", changed_field_labels)
+        # updated_at is excluded from comparison fields.
+        self.assertNotIn("updated_at", [field.get("label") for field in all_fields])
+
+    def test_preview_rows_are_not_limited_to_thirty(self) -> None:
+        source = self.root / "bulk-source.sqlite3"
+        with connect(source) as connection:
+            for index in range(35):
+                connection.execute(
+                    "INSERT INTO products (bld_no, created_at, updated_at) VALUES (?, ?, ?)",
+                    (f"BULK-{index:03d}", "2026-07-17 10:00:00", "2026-07-17 10:00:00"),
+                )
+            connection.commit()
+        package = self.root / "bulk-business.tar.gz"
+        BusinessSyncService(BusinessSyncRepository(source)).export(
+            output_path=package,
+            selected=("products",),
+            actor="test",
+        )
+
+        preview = BusinessSyncService(BusinessSyncRepository(self.target)).preview(package)
+        summary = cast(dict[str, dict[str, object]], preview["summary"])
+        rows = cast(list[dict[str, object]], summary["products"]["rows"])
+        self.assertEqual(len(rows), 35)

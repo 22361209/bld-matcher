@@ -10,16 +10,147 @@
 {% if preview %}
 <section class="metric-strip">{% for key, info in preview.summary.items() %}<div><span>{{ info.label }}新增</span><strong>{{ info.counts.new }}</strong></div><div><span>{{ info.label }}更新</span><strong>{{ info.counts.updated }}</strong></div><div><span>{{ info.label }}冲突</span><strong>{{ info.counts.conflict }}</strong></div>{% endfor %}</section>
 <form action="{{ url_for('apply_business_data_sync') }}" method="post" class="workbench-form wide">
-  {{ csrf_field() }}<input type="hidden" name="package_path" value="{{ preview.package_path }}"><input type="hidden" name="preview_token" value="{{ preview.token }}">
-  <section class="workspace-command"><div><h2>导入预览</h2><p>新增和较新的数据会直接导入。冲突默认保留当前端；勾选后才使用数据包完整覆盖当前记录。</p></div><div class="command-actions"><button class="linear-button primary" type="submit">确认按所选规则导入</button></div></section>
-  {% for key, info in preview.summary.items() %}{% if info.conflicts %}
-  <section class="workbench-form-section" aria-labelledby="business-sync-{{ key }}-conflicts">
-    <h2 id="business-sync-{{ key }}-conflicts">{{ info.label }}冲突处理（{{ info.conflicts|length }}）</h2>
-    <p class="note">未勾选时完整保留当前端记录；勾选后以数据包记录完整覆盖。</p>
-    <div class="workspace-table-wrap"><table class="workspace-table"><thead><tr><th scope="col">处理</th><th scope="col">记录</th><th scope="col">新旧实际数据对比</th><th scope="col">更新时间</th></tr></thead><tbody>{% for conflict in info.conflicts %}<tr><td><label><input type="checkbox" name="use_package" value="{{ key }}:{{ conflict.key }}"> 使用数据包</label></td><td>{{ conflict.label }}</td><td><ul>{% for field in conflict.fields %}<li><strong>{{ field.label }}</strong>：当前端 {{ field.before }} → 数据包 {{ field.after }}</li>{% else %}<li>业务字段一致；当前端版本更新时间更晚。</li>{% endfor %}</ul></td><td>数据包：{{ conflict.incoming_updated_at or "—" }}<br>当前端：{{ conflict.local_updated_at or "—" }}</td></tr>{% endfor %}</tbody></table></div>
+  {{ csrf_field() }}
+  <input type="hidden" name="package_path" value="{{ preview.package_path }}">
+  <input type="hidden" name="preview_token" value="{{ preview.token }}">
+  <section class="workspace-command">
+    <div>
+      <h2>导入预览</h2>
+      <p>新增和较新的数据会直接导入。冲突默认保留当前端；勾选后才使用数据包完整覆盖当前记录。</p>
+    </div>
+    <div class="command-actions">
+      <button class="linear-button primary" type="submit">确认按所选规则导入</button>
+    </div>
   </section>
-  {% endif %}{% endfor %}
-  <div class="form-actions"><a class="linear-button subtle" href="{{ url_for('business_data_sync') }}">取消</a><button class="linear-button primary" type="submit">确认按所选规则导入</button></div>
+
+  <nav class="import-preview-summary" aria-label="数据集概览">
+    {% for key, info in preview.summary.items() %}
+      <a class="import-preview-summary-item" href="#import-preview-{{ key }}">
+        <strong>{{ info.label }}</strong>
+        <span>新增 {{ info.counts.new }}</span>
+        <span>更新 {{ info.counts.updated }}</span>
+        <span>冲突 {{ info.counts.conflict }}</span>
+      </a>
+    {% endfor %}
+  </nav>
+
+  {% for key, info in preview.summary.items() %}
+    <details class="import-preview-dataset" id="import-preview-{{ key }}" {% if info.conflicts or info.rows %}open{% endif %}>
+      <summary>
+        <span class="import-preview-dataset-title">{{ info.label }}</span>
+        <span class="import-preview-dataset-counts">
+          <span>新增 {{ info.counts.new }}</span>
+          <span>更新 {{ info.counts.updated }}</span>
+          <span>冲突 {{ info.counts.conflict }}</span>
+          <span>无变化 {{ info.counts.unchanged }}</span>
+        </span>
+      </summary>
+      <div class="import-preview-dataset-tools">
+        <input type="search" class="import-preview-search" data-dataset="{{ key }}" placeholder="搜索 {{ info.label }}...">
+        {% if info.conflicts %}
+          <button type="button" class="linear-button subtle" data-bulk-action="keep-current" data-dataset="{{ key }}">全部保留当前端</button>
+          <button type="button" class="linear-button subtle" data-bulk-action="use-package" data-dataset="{{ key }}">全部使用数据包</button>
+        {% endif %}
+      </div>
+
+      {% if info.rows %}
+        <details class="import-preview-subsection" open>
+          <summary>新增/更新明细（{{ info.rows|length }}）</summary>
+          <div class="workspace-table-wrap">
+            <table class="workspace-table">
+              <thead>
+                <tr>
+                  <th scope="col">状态</th>
+                  <th scope="col">记录</th>
+                  <th scope="col">更新时间</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in info.rows %}
+                  <tr class="import-preview-row" data-search-text="{{ row.key }} {{ row.label }}">
+                    <td>{% if row.status == "new" %}新增{% else %}更新{% endif %}</td>
+                    <td>{{ row.label }}</td>
+                    <td>数据包：{{ row.incoming_updated_at or "—" }}<br>当前端：{{ row.local_updated_at or "—" }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      {% endif %}
+
+      {% if info.conflicts %}
+        <div class="import-preview-conflicts">
+          <h3>冲突处理（{{ info.conflicts|length }}）</h3>
+          <p class="note">未勾选时完整保留当前端记录；勾选后以数据包记录完整覆盖。</p>
+          <div class="workspace-table-wrap">
+            <table class="workspace-table">
+              <thead>
+                <tr>
+                  <th scope="col">处理</th>
+                  <th scope="col">记录</th>
+                  <th scope="col">新旧实际数据对比</th>
+                  <th scope="col">更新时间</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for conflict in info.conflicts %}
+                  <tr class="import-preview-row" data-search-text="{{ conflict.key }} {{ conflict.label }} {% for field in conflict.all_fields %}{{ field.label }} {{ field.before }} {{ field.after }} {% endfor %}">
+                    <td>
+                      <label>
+                        <input type="checkbox" name="use_package" value="{{ key }}:{{ conflict.key }}" data-dataset="{{ key }}">
+                        使用数据包
+                      </label>
+                    </td>
+                    <td>{{ conflict.label }}</td>
+                    <td>
+                      <ul>
+                        {% for field in conflict.fields %}
+                          <li><strong>{{ field.label }}</strong>：当前端 {{ field.before }} → 数据包 {{ field.after }}</li>
+                        {% else %}
+                          <li>业务字段一致；当前端版本更新时间更晚。</li>
+                        {% endfor %}
+                      </ul>
+                      {% if conflict.all_fields %}
+                        <details class="import-preview-field-details">
+                          <summary>完整字段对比</summary>
+                          <div class="workspace-table-wrap">
+                            <table class="workspace-table">
+                              <thead>
+                                <tr><th scope="col">字段</th><th scope="col">当前端</th><th scope="col">数据包</th></tr>
+                              </thead>
+                              <tbody>
+                                {% for field in conflict.all_fields %}
+                                  <tr {% if field.changed %}class="import-preview-field-changed"{% endif %}>
+                                    <td>{{ field.label }}</td>
+                                    <td>{{ field.before }}</td>
+                                    <td>{{ field.after }}</td>
+                                  </tr>
+                                {% endfor %}
+                              </tbody>
+                            </table>
+                          </div>
+                        </details>
+                      {% endif %}
+                    </td>
+                    <td>
+                      数据包：{{ conflict.incoming_updated_at or "—" }}<br>
+                      当前端：{{ conflict.local_updated_at or "—" }}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      {% endif %}
+    </details>
+  {% endfor %}
+
+  <div class="form-actions">
+    <a class="linear-button subtle" href="{{ url_for('business_data_sync') }}">取消</a>
+    <button class="linear-button primary" type="submit">确认按所选规则导入</button>
+  </div>
 </form>
 {% endif %}
 {% endblock %}
