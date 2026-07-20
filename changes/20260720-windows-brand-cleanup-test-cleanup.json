@@ -1,0 +1,10 @@
+{
+  "date": "2026-07-20",
+  "version": "unreleased",
+  "title": "修复 Windows 下品牌清洗测试的临时目录清理失败",
+  "entries": [
+    "在 tests/test_product_brand_cleanup.py 的临时目录清理时忽略 Windows 文件占用错误，使 scripts/verify.py 可在 Windows 完整通过。",
+    "仅影响测试运行环境，不改变产品品牌清洗的业务逻辑或数据行为。"
+  ],
+  "impact": {"data": "none", "api": "compatible", "operations": "none"}
+}

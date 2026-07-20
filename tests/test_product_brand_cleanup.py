@@ -36,7 +36,7 @@ def _insert_raw_product(
 
 class ProductBrandCleanupTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory()
+        self.temporary = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.root = Path(self.temporary.name)
         self.database_path = self.root / "data" / "products.sqlite3"
         self.service = ProductService(
