@@ -96,15 +96,18 @@ const tableColumnLabel = (table, column) => (
 );
 
 export function setupProductTable(table, options = {}) {
-  if (!(table instanceof HTMLTableElement)) return;
+  if (!(table instanceof HTMLTableElement)) return () => {};
 
   const availableColumns = options.columns || DEFAULT_COLUMNS;
   const storagePrefix = options.storagePrefix || "bld.products";
   const resultsHash = options.resultsHash || "products-results";
+  const navigate = typeof options.navigate === "function"
+    ? options.navigate
+    : (url) => window.location.assign(url);
   const storageScope = table.dataset.columnStorageScope || "guest";
   const orderStorageKey = `${storagePrefix}.column-order.v${COLUMN_ORDER_VERSION}.u${storageScope}`;
   const orderStatus = document.querySelector("[data-column-order-status]");
-  const filterPortal = table.closest(".app-surface") || document.body;
+  const filterPortal = table.closest("[data-products-results]") || table.closest(".app-surface") || document.body;
   let currentOrder = [...availableColumns];
   const savedOrder = safeStorageGet(orderStorageKey);
   if (savedOrder) {
@@ -236,7 +239,7 @@ export function setupProductTable(table, options = {}) {
     url.searchParams.delete("page");
     values.forEach((value) => url.searchParams.append(key, value));
     url.hash = resultsHash;
-    window.location.assign(url.toString());
+    navigate(url.toString());
   };
 
   const navigateWithRangeFilter = (panel) => {
@@ -250,7 +253,7 @@ export function setupProductTable(table, options = {}) {
     });
     url.searchParams.delete("page");
     url.hash = resultsHash;
-    window.location.assign(url.toString());
+    navigate(url.toString());
   };
 
   const applyColumnFilter = (panel) => {
@@ -314,6 +317,14 @@ export function setupProductTable(table, options = {}) {
     updatePanelSelection(panel);
   });
 
+  const resetColumnOrder = () => {
+    closeColumnFilter();
+    currentOrder = [...availableColumns];
+    applyColumnOrder(table, currentOrder, availableColumns);
+    safeStorageRemove(orderStorageKey);
+    announceOrder("产品目录列顺序已恢复为默认顺序。");
+  };
+
   filterPortal.addEventListener("click", (event) => {
     if (!(event.target instanceof Element)) return;
     const trigger = event.target.closest("[data-column-filter-trigger]");
@@ -341,13 +352,15 @@ export function setupProductTable(table, options = {}) {
       return;
     }
     if (event.target.closest("[data-reset-product-columns]")) {
-      closeColumnFilter();
-      currentOrder = [...availableColumns];
-      applyColumnOrder(table, currentOrder, availableColumns);
-      safeStorageRemove(orderStorageKey);
-      announceOrder("产品目录列顺序已恢复为默认顺序。");
+      resetColumnOrder();
     }
   });
+
+  const resetColumnButton = document.querySelector("[data-reset-product-columns]");
+  const externalResetColumnButton = resetColumnButton && !filterPortal.contains(resetColumnButton)
+    ? resetColumnButton
+    : null;
+  externalResetColumnButton?.addEventListener("click", resetColumnOrder);
 
   filterPortal.addEventListener("keydown", (event) => {
     if (!(event.target instanceof Element)) return;
@@ -393,11 +406,12 @@ export function setupProductTable(table, options = {}) {
     }
   });
 
-  document.addEventListener("click", (event) => {
+  const handleOutsideClick = (event) => {
     if (!activeFilterPanel || !activeFilterTrigger) return;
     if (activeFilterPanel.contains(event.target) || activeFilterTrigger.contains(event.target)) return;
     closeColumnFilter({ restoreFocus: activeFilterPanel.contains(document.activeElement) });
-  });
+  };
+  document.addEventListener("click", handleOutsideClick);
   window.addEventListener("scroll", positionColumnFilter, { capture: true, passive: true });
   window.addEventListener("resize", positionColumnFilter);
 
@@ -482,4 +496,12 @@ export function setupProductTable(table, options = {}) {
     const handle = event.target.closest("[data-column-drag-handle]");
     if (handle instanceof HTMLElement) startColumnDrag(handle, event);
   });
+
+  return () => {
+    closeColumnFilter();
+    document.removeEventListener("click", handleOutsideClick);
+    window.removeEventListener("scroll", positionColumnFilter, { capture: true });
+    window.removeEventListener("resize", positionColumnFilter);
+    externalResetColumnButton?.removeEventListener("click", resetColumnOrder);
+  };
 }

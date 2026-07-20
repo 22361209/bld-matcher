@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
-from flask import flash, redirect, render_template, request, send_file, url_for
+from flask import flash, make_response, redirect, render_template, request, send_file, url_for
 
 from app.helpers import unique_prefixed_path, user_file_label, user_output_dir, user_upload_dir
 from app.locks import ImportLockError, import_lock
@@ -105,6 +105,51 @@ def _product_pagination(filters: ProductFilters, page: int, total: int) -> dict[
     }
 
 
+def _product_list_context(*, include_admin_preview: bool) -> dict[str, Any]:
+    filters = _product_query_args()
+    service = get_product_service()
+    requested_page = _request_page()
+    page = service.search(
+        filters,
+        limit=PRODUCT_PAGE_SIZE,
+        offset=(requested_page - 1) * PRODUCT_PAGE_SIZE,
+    )
+    pagination = _product_pagination(filters, requested_page, page.total)
+    current_page = int(pagination["page"])
+    if current_page != requested_page:
+        page = service.search(
+            filters,
+            limit=PRODUCT_PAGE_SIZE,
+            offset=(current_page - 1) * PRODUCT_PAGE_SIZE,
+        )
+    context: dict[str, Any] = {
+        "products": [record.web_payload() for record in page.records],
+        "total_products": page.total,
+        "product_page_size": PRODUCT_PAGE_SIZE,
+        "pagination": pagination,
+        "product_canonical_url": _product_page_url(filters, current_page),
+        "query": filters.query,
+        "bld_query": filters.bld_query or filters.query,
+        "oe_query": filters.oe_query,
+        "status": filters.status,
+        "filter_options": service.filter_options(filters).web_payload(),
+        "column_filters": {
+            "brand": [*filters.brands, *(("",) if filters.brand_blank else ())],
+            "item": [*filters.items, *(("",) if filters.item_blank else ())],
+            "product_status": [
+                *filters.product_statuses,
+                *(("",) if filters.product_status_blank else ()),
+            ],
+        },
+        "stats": service.stats().as_dict(),
+    }
+    if include_admin_preview:
+        context["brand_normalization_preview"] = (
+            service.preview_brand_normalization() if can("import_catalog") else None
+        )
+    return context
+
+
 def _catalog_preview_path(preview_id: str) -> Path:
     try:
         normalized = str(UUID(preview_id))
@@ -198,49 +243,21 @@ def register(app) -> None:
     @login_required
     def products():
         try:
-            filters = _product_query_args()
+            context = _product_list_context(include_admin_preview=True)
         except ProductFilterValidationError as exc:
             return f"筛选条件无效：{exc}", 400, {"Content-Type": "text/plain; charset=utf-8"}
-        service = get_product_service()
-        requested_page = _request_page()
-        page = service.search(
-            filters,
-            limit=PRODUCT_PAGE_SIZE,
-            offset=(requested_page - 1) * PRODUCT_PAGE_SIZE,
-        )
-        pagination = _product_pagination(filters, requested_page, page.total)
-        if int(pagination["page"]) != requested_page:
-            page = service.search(
-                filters,
-                limit=PRODUCT_PAGE_SIZE,
-                offset=(int(pagination["page"]) - 1) * PRODUCT_PAGE_SIZE,
-            )
-        rows = [record.web_payload() for record in page.records]
-        stats = service.stats().as_dict()
-        filter_options = service.filter_options(filters).web_payload()
-        brand_normalization_preview = service.preview_brand_normalization() if can("import_catalog") else None
-        return render_template(
-            "products.html",
-            products=rows,
-            total_products=page.total,
-            product_page_size=PRODUCT_PAGE_SIZE,
-            pagination=pagination,
-            query=filters.query,
-            bld_query=filters.bld_query or filters.query,
-            oe_query=filters.oe_query,
-            status=filters.status,
-            filter_options=filter_options,
-            brand_normalization_preview=brand_normalization_preview,
-            column_filters={
-                "brand": [*filters.brands, *(("",) if filters.brand_blank else ())],
-                "item": [*filters.items, *(("",) if filters.item_blank else ())],
-                "product_status": [
-                    *filters.product_statuses,
-                    *(("",) if filters.product_status_blank else ()),
-                ],
-            },
-            stats=stats,
-        )
+        return render_template("products.html", **context)
+
+    @app.get("/products/fragment")
+    @login_required
+    def products_fragment():
+        try:
+            context = _product_list_context(include_admin_preview=False)
+        except ProductFilterValidationError as exc:
+            return f"筛选条件无效：{exc}", 400, {"Content-Type": "text/plain; charset=utf-8"}
+        response = make_response(render_template("_products_results.html", **context))
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     @app.get("/products/export")
     @permission_required("export_catalog")

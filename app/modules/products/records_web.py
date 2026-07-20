@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime
+from html import escape
 
 from flask import Response, flash, jsonify, redirect, render_template, request, url_for
 
@@ -34,22 +36,28 @@ def _pending_product_images() -> list[tuple[int, object]]:
     return files
 
 
-def _embedded_product_done_response() -> Response:
+def _embedded_product_done_response(*, ok: bool, message: str, status: int = 200) -> Response:
     fallback = url_for("products")
+    payload = json.dumps(
+        {"type": "bld:product-mutated", "ok": ok, "message": message},
+        ensure_ascii=False,
+    ).replace("</", "<\\/")
     return Response(
         f"""<!doctype html>
 <html lang="zh-CN">
   <head><meta charset="utf-8"><title>产品已保存</title></head>
   <body>
+    <p>{escape(message)}</p>
     <script>
       if (window.parent && window.parent !== window) {{
-        window.parent.location.reload();
+        window.parent.postMessage({payload}, window.location.origin);
       }} else {{
         window.location.href = {fallback!r};
       }}
     </script>
   </body>
 </html>""",
+        status=status,
         mimetype="text/html",
     )
 
@@ -127,6 +135,7 @@ def register(app) -> None:
     @app.post("/products/save")
     @permission_required("edit_products")
     def save_product():
+        embedded = request.form.get("embedded") == "1"
         try:
             image_files = _pending_product_images()
             drawing_file = request.files.get("drawing")
@@ -151,19 +160,29 @@ def register(app) -> None:
                 drawing_file=drawing_file if drawing_file and drawing_file.filename else None,
             )
         except ValueError as exc:
-            flash(f"保存失败：{exc}", "error")
-            if request.form.get("embedded") == "1":
-                return _embedded_product_done_response()
+            message = f"保存失败：{exc}"
+            if wants_json_response():
+                return jsonify({"ok": False, "error": message}), 400
+            if embedded:
+                return _embedded_product_done_response(ok=False, message=message, status=400)
+            flash(message, "error")
             return redirect(url_for("products"))
         except Exception:
             logger.exception("Product save failed")
-            flash("保存失败，请稍后重试。", "error")
-            if request.form.get("embedded") == "1":
-                return _embedded_product_done_response()
+            message = "保存失败，请稍后重试。"
+            if wants_json_response():
+                return jsonify({"ok": False, "error": message}), 500
+            if embedded:
+                return _embedded_product_done_response(ok=False, message=message, status=500)
+            flash(message, "error")
             return redirect(url_for("products"))
-        flash("产品已保存。", "success")
-        if request.form.get("embedded") == "1":
-            return _embedded_product_done_response()
+        message = "产品已保存。"
+        redirect_url = url_for("products", bld=data["bld_no"]) + "#products-results"
+        if wants_json_response():
+            return jsonify({"ok": True, "message": message, "redirect_url": redirect_url})
+        if embedded:
+            return _embedded_product_done_response(ok=True, message=message)
+        flash(message, "success")
         return redirect(url_for("products", q=data["bld_no"]))
 
     @app.post("/products/<int:product_id>/deactivate")
@@ -180,14 +199,21 @@ def register(app) -> None:
     @app.post("/products/<int:product_id>/delete")
     @permission_required("edit_products")
     def remove_product(product_id: int):
+        embedded = request.form.get("embedded") == "1"
         product_record = get_product_service().delete(product_id, actor=actor_name())
         product = product_record.web_payload() if product_record else None
         if not product:
-            flash("产品不存在或已经删除。", "error")
-            if request.form.get("embedded") == "1":
-                return _embedded_product_done_response()
+            message = "产品不存在或已经删除。"
+            if wants_json_response():
+                return jsonify({"ok": False, "error": message}), 404
+            if embedded:
+                return _embedded_product_done_response(ok=False, message=message, status=404)
+            flash(message, "error")
             return redirect(url_for("products"))
-        flash(f"产品 {product['bld_no']} 已删除。", "success")
-        if request.form.get("embedded") == "1":
-            return _embedded_product_done_response()
+        message = f"产品 {product['bld_no']} 已删除。"
+        if wants_json_response():
+            return jsonify({"ok": True, "message": message})
+        if embedded:
+            return _embedded_product_done_response(ok=True, message=message)
+        flash(message, "success")
         return redirect(url_for("products"))

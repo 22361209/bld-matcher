@@ -322,8 +322,76 @@ class WebAppTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn('class="workspace-command products-command"', html)
+        self.assertIn("data-products-results-host", html)
+        self.assertIn('data-products-fragment-url="/products/fragment"', html)
         self.assertNotIn('<header class="workspace-header">', html)
         self.assertNotIn("目录规模", html)
+
+    def test_product_fragment_is_authenticated_shell_free_and_keeps_filter_state(self):
+        with self.client.session_transaction() as session:
+            session.clear()
+        anonymous = self.client.get(
+            "/products/fragment",
+            headers={"X-Requested-With": "fetch", "Accept": "text/html"},
+        )
+        self.assertEqual(anonymous.status_code, 401)
+
+        self.login()
+        response = self.client.get(
+            "/products/fragment",
+            query_string={"bld": "K8", "status": "all", "brand": "HYUNDAI"},
+            headers={"X-Requested-With": "fetch", "Accept": "text/html"},
+        )
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["Cache-Control"], "no-store")
+        self.assertIn("data-products-results", html)
+        self.assertIn("data-canonical-url=", html)
+        self.assertIn("brand=HYUNDAI", html)
+        self.assertNotIn("<!doctype html>", html.lower())
+        self.assertNotIn("data-products-results-host", html)
+        self.assertNotIn("新增产品", html)
+
+    def test_product_save_fetch_returns_json_for_local_result_refresh(self):
+        self.addCleanup(self.cleanup_products, "K-INLINE-SAVE-%")
+        self.login()
+
+        response = self.client.post(
+            "/products/save",
+            data={
+                "bld_no": "K-INLINE-SAVE-001",
+                "series": "INLINE",
+                "item": "Inline Test Arm",
+                "oe_no_1": "INLINE-OE-001",
+                "oe_no_2": "",
+                "models": "Inline Tester",
+                "price_cny": "12.50",
+                "active": "1",
+            },
+            headers={"X-Requested-With": "fetch", "Accept": "application/json"},
+        )
+        payload = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["message"], "产品已保存。")
+        self.assertIn("bld=K-INLINE-SAVE-001", payload["redirect_url"])
+
+        fragment = self.client.get(
+            "/products/fragment",
+            query_string={"bld": "K-INLINE-SAVE-001"},
+        )
+        self.assertEqual(fragment.status_code, 200)
+        self.assertIn("K-INLINE-SAVE-001", fragment.get_data(as_text=True))
+
+        invalid = self.client.post(
+            "/products/save",
+            data={"bld_no": "", "active": "1"},
+            headers={"X-Requested-With": "fetch", "Accept": "application/json"},
+        )
+        self.assertEqual(invalid.status_code, 400)
+        self.assertFalse(invalid.get_json()["ok"])
 
     def test_primary_data_grid_footers_render_statistics_and_zero_ranges(self):
         self.login()
@@ -3136,7 +3204,10 @@ class WebAppTest(unittest.TestCase):
             follow_redirects=False,
         )
         self.assertEqual(embedded_save.status_code, 200)
-        self.assertIn("window.parent.location.reload()", embedded_save.get_data(as_text=True))
+        embedded_save_html = embedded_save.get_data(as_text=True)
+        self.assertIn("window.parent.postMessage", embedded_save_html)
+        self.assertIn('"type": "bld:product-mutated"', embedded_save_html)
+        self.assertNotIn("window.parent.location.reload()", embedded_save_html)
 
         upload = self.client.post(
             "/products/save",

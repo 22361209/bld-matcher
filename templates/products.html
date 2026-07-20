@@ -1,83 +1,9 @@
 {% extends "base.html" %}
 {% set active_page = "products" %}
-{% set product_filter_options = filter_options if filter_options is defined else {} %}
 {% set product_column_filters = column_filters if column_filters is defined else {} %}
 {% set selected_brand_filters = product_column_filters.get("brand", []) %}
 {% set selected_item_filters = product_column_filters.get("item", []) %}
 {% set selected_product_status_filters = product_column_filters.get("product_status", []) %}
-
-{% macro product_column_heading(column_id, label, filter_key=none, options=none, selected=none) %}
-  {% set filter_options_for_column = options or [] %}
-  {% set selected_values = selected or [] %}
-  {% set selected_values_lower = selected_values | map('lower') | list %}
-  <div class="products-column-heading">
-    <button
-      class="products-column-label"
-      type="button"
-      data-column-drag-handle
-      data-column-label="{{ label }}"
-      aria-label="移动{{ label }}列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整"
-    >{{ label }}</button>
-    {% if filter_key %}
-      <button
-        class="products-column-filter-trigger{% if selected_values %} active{% endif %}"
-        type="button"
-        data-column-filter-trigger
-        data-filter-key="{{ filter_key }}"
-        aria-label="筛选{{ label }}{% if selected_values %}，已选择 {{ selected_values|length }} 项{% endif %}"
-        aria-haspopup="dialog"
-        aria-expanded="false"
-        aria-controls="products-filter-{{ column_id }}"
-      ><span aria-hidden="true"></span></button>
-    {% endif %}
-  </div>
-  {% if filter_key %}
-    <div
-      class="products-column-filter"
-      id="products-filter-{{ column_id }}"
-      role="dialog"
-      aria-label="筛选{{ label }}"
-      data-column-filter-panel
-      data-filter-key="{{ filter_key }}"
-      hidden
-    >
-      <div class="products-column-filter-header">
-        <strong>筛选{{ label }}</strong>
-        <button type="button" data-column-filter-close aria-label="关闭{{ label }}筛选">×</button>
-      </div>
-      <label class="products-column-filter-search">
-        <span>搜索候选项</span>
-        <input type="search" autocomplete="off" placeholder="输入关键词" data-column-filter-search>
-      </label>
-      <div class="products-column-filter-bulk">
-        <button class="linear-button subtle" type="button" data-column-filter-select-all aria-label="全选所有{{ label }}候选项">全选</button>
-        <button class="linear-button subtle" type="button" data-column-filter-select-none aria-label="全不选所有{{ label }}候选项">全不选</button>
-        <span data-column-filter-selection aria-live="polite"></span>
-      </div>
-      <div class="products-column-filter-options" role="group" aria-label="{{ label }}候选项">
-        {% for option in filter_options_for_column %}
-          <label class="products-column-filter-option" data-column-filter-option>
-            <input
-              type="checkbox"
-              value="{{ option.value }}"
-              {% if not selected_values or option.value|lower in selected_values_lower %}checked{% endif %}
-            >
-            <span>{{ option.label }}</span>
-            {% if option.count is defined %}<small>{{ option.count }}</small>{% endif %}
-          </label>
-        {% else %}
-          <p class="products-column-filter-empty">暂无可筛选项。</p>
-        {% endfor %}
-      </div>
-      <p class="products-column-filter-no-match" data-column-filter-no-match hidden>没有匹配项。</p>
-      <p class="products-column-filter-validation" data-column-filter-validation aria-live="polite"></p>
-      <div class="products-column-filter-actions">
-        <button class="linear-button subtle" type="button" data-column-filter-reset>重置筛选</button>
-        <button class="linear-button primary" type="button" data-column-filter-apply>应用</button>
-      </div>
-    </div>
-  {% endif %}
-{% endmacro %}
 
 {% block page_title %}产品目录{% endblock %}
 {% block page_id %}products.list{% endblock %}
@@ -91,7 +17,7 @@
 {% block page_content %}
       {% set status_label = "包含停用" if status == "all" else ("只看停用" if status == "inactive" else "只看启用") %}
       <section class="workspace-command products-command">
-        <form class="search-form" method="get" action="{{ url_for('products') }}#products-results">
+        <form class="search-form" method="get" action="{{ url_for('products') }}#products-results" data-products-search-form>
           <label>
             <span>按 BLD / 品牌 / 车型搜索</span>
             <input id="bld-search" name="bld" value="{{ bld_query }}" placeholder="例如 K6015 / HYUNDAI / Sportage">
@@ -101,12 +27,12 @@
             <input id="oe-search" name="oe" value="{{ oe_query }}" placeholder="例如 55100-2S150">
           </label>
           <input type="hidden" id="status-input" name="status" value="{{ status }}">
-          {% for value in selected_brand_filters %}<input type="hidden" name="brand" value="{{ value }}">{% endfor %}
-          {% for value in selected_item_filters %}<input type="hidden" name="item" value="{{ value }}">{% endfor %}
-          {% for value in selected_product_status_filters %}<input type="hidden" name="product_status" value="{{ value }}">{% endfor %}
+          {% for value in selected_brand_filters %}<input type="hidden" name="brand" value="{{ value }}" data-products-filter-param>{% endfor %}
+          {% for value in selected_item_filters %}<input type="hidden" name="item" value="{{ value }}" data-products-filter-param>{% endfor %}
+          {% for value in selected_product_status_filters %}<input type="hidden" name="product_status" value="{{ value }}" data-products-filter-param>{% endfor %}
           <button class="linear-button primary" type="submit">搜索</button>
           <details class="toolbar-popover linear-popover status-popover">
-            <summary>{{ status_label }}</summary>
+            <summary data-products-status-label>{{ status_label }}</summary>
             <div class="status-menu" role="group" aria-label="启用状态筛选">
               <button class="status-menu-option {% if status == 'active' %}selected{% endif %}" type="submit" data-status="active">只看启用</button>
               <button class="status-menu-option {% if status == 'all' %}selected{% endif %}" type="submit" data-status="all">包含停用</button>
@@ -118,6 +44,7 @@
           <button class="linear-button subtle" type="button" data-reset-product-columns>恢复默认列顺序</button>
           <button class="linear-button subtle" type="button" data-reset-column-widths-for="products">重置列宽</button>
           <span class="products-visually-hidden" aria-live="polite" data-column-order-status></span>
+          <span class="submit-wait-message" aria-live="polite" data-products-inline-status></span>
           {% if can("edit_products") %}
             <button class="linear-button primary" type="button" data-open-product-modal>新增产品</button>
             <a class="linear-button subtle" href="{{ url_for('batch_drawings') }}">批量上传图纸</a>
@@ -157,9 +84,9 @@
                 <input type="hidden" name="bld" value="{{ bld_query }}">
                 <input type="hidden" name="oe" value="{{ oe_query }}">
                 <input type="hidden" name="status" value="{{ status }}">
-                {% for value in selected_brand_filters %}<input type="hidden" name="brand" value="{{ value }}">{% endfor %}
-                {% for value in selected_item_filters %}<input type="hidden" name="item" value="{{ value }}">{% endfor %}
-                {% for value in selected_product_status_filters %}<input type="hidden" name="product_status" value="{{ value }}">{% endfor %}
+                {% for value in selected_brand_filters %}<input type="hidden" name="brand" value="{{ value }}" data-products-export-filter-param>{% endfor %}
+                {% for value in selected_item_filters %}<input type="hidden" name="item" value="{{ value }}" data-products-export-filter-param>{% endfor %}
+                {% for value in selected_product_status_filters %}<input type="hidden" name="product_status" value="{{ value }}" data-products-export-filter-param>{% endfor %}
                 <label>
                   导出格式
                   <select name="export_format">
@@ -175,51 +102,13 @@
         </div>
       </section>
 
-      <section class="data-section" id="products-results">
-        <div class="data-grid" data-resizable-grid data-grid-key="products">
-        <div class="data-table-scroll" data-grid-scroll>
-        <table class="data-table products-table" id="products-table" data-grid-heading-overflow data-column-storage-scope="{{ g.user['id'] if g.user else 'guest' }}">
-          <colgroup>
-            <col data-col="bld" class="col-width-104">
-            <col data-col="series" class="col-width-82">
-            <col data-col="item" class="col-width-92">
-            <col data-col="oe1" class="col-width-128">
-            <col data-col="oe2" class="col-width-136">
-            <col data-col="models" class="col-width-170">
-            <col data-col="image" class="col-width-70">
-            <col data-col="price" class="col-width-72">
-            <col data-col="product-status" class="col-width-104">
-            <col data-col="actions" class="col-width-56">
-          </colgroup>
-          <thead>
-            <tr>
-              <th data-col="bld">{{ product_column_heading("bld", "BLD 号") }}</th>
-              <th data-col="series">{{ product_column_heading("series", "品牌", "brand", product_filter_options.get("brand", []), selected_brand_filters) }}</th>
-              <th data-col="item">{{ product_column_heading("item", "产品名称", "item", product_filter_options.get("item", []), selected_item_filters) }}</th>
-              <th data-col="oe1">{{ product_column_heading("oe1", "OE 号") }}</th>
-              <th data-col="oe2">{{ product_column_heading("oe2", "品牌号码") }}</th>
-              <th data-col="models">{{ product_column_heading("models", "车型") }}</th>
-              <th data-col="image">{{ product_column_heading("image", "产品图片") }}</th>
-              <th data-col="price">{{ product_column_heading("price", "含税单价") }}</th>
-              <th data-col="product-status">{{ product_column_heading("product-status", "产品状态", "product_status", product_filter_options.get("product_status", []), selected_product_status_filters) }}</th>
-              <th class="sticky-actions" data-col="actions"><span class="products-static-column-label">操作</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {% include "_product_rows.html" %}
-          </tbody>
-        </table>
-        {% if total_products == 0 %}
-          <p class="empty-message">没有符合条件的产品。</p>
-        {% endif %}
-        </div>
-        {% set data_grid_label = "产品" %}
-        {% set data_grid_total = total_products %}
-        {% set data_grid_page_size = product_page_size %}
-        {% set data_grid_footer_context = "总产品 " ~ stats.products ~ " · 启用 " ~ stats.active ~ " · 停用 " ~ stats.inactive %}
-        {% include "_data_grid_footer.html" %}
-        </div>
-      </section>
+      <div
+        data-products-results-host
+        data-products-fragment-url="{{ url_for('products_fragment') }}"
+        aria-live="polite"
+      >
+        {% include "_products_results.html" %}
+      </div>
 {% endblock %}
 
 {% block page_modals %}
@@ -232,7 +121,7 @@
             <h2>新增产品</h2>
             <p class="note">一个 BLD NO. 可以维护多个 OE、多个品牌和多个车型；OE 与品牌均建议每行一个。</p>
           </div>
-          <form action="{{ url_for('save_product') }}" method="post" class="record-form modal-form">
+          <form action="{{ url_for('save_product') }}" method="post" class="record-form modal-form" data-product-create-form>
             {{ csrf_field() }}
             <label>
               BLD NO.
@@ -270,6 +159,7 @@
               <button type="submit">保存产品</button>
               <button class="ghost" type="button" data-close-product-modal>取消</button>
             </div>
+            <p class="submit-wait-message" data-product-form-status aria-live="polite"></p>
           </form>
         </div>
       </div>
@@ -279,7 +169,7 @@
           <button class="image-modal-close" type="button" data-close-product-edit-modal aria-label="关闭编辑产品">×</button>
           <div class="modal-heading draggable-modal-heading" data-modal-drag-handle>
             <h2>编辑产品</h2>
-            <p class="note">保存或删除后会刷新当前产品目录列表。</p>
+            <p class="note">保存或删除后会关闭弹窗，并局部更新当前产品目录结果。</p>
           </div>
           <iframe id="product-edit-frame" class="product-edit-frame" title="编辑产品"></iframe>
         </div>

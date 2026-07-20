@@ -575,6 +575,13 @@
       "rule": "/products/export"
     },
     {
+      "endpoint": "products_fragment",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/products/fragment"
+    },
+    {
       "endpoint": "new_product",
       "methods": [
         "GET"

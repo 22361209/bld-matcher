@@ -3,6 +3,7 @@ const MAX_COLUMN_WIDTH = 640;
 const WIDTH_STORAGE_VERSION = 1;
 const GRID_VIEWPORT_GUTTER = 16;
 const MIN_GRID_VIEWPORT_HEIGHT = 120;
+const gridCleanups = new WeakMap();
 
 export const clampColumnWidth = (value) => {
   const width = Number(value);
@@ -41,6 +42,7 @@ export const bindViewportFill = ({ grid, windowTarget }) => {
   grid.classList.add("data-grid-viewport-fill");
   fillViewport();
   windowTarget.addEventListener("resize", fillViewport, { passive: true });
+  return () => windowTarget.removeEventListener("resize", fillViewport);
 };
 
 export const bindResizeSession = ({ handle, windowTarget, onMove, onFinish }) => {
@@ -110,16 +112,19 @@ const readStoredWidths = (storageKey, columnKeys) => {
 };
 
 export function setupDataGrid(grid) {
-  if (!(grid instanceof HTMLElement)) return;
+  if (!(grid instanceof HTMLElement)) return () => {};
+  if (gridCleanups.has(grid)) return gridCleanups.get(grid);
   const scroll = grid.querySelector("[data-grid-scroll]");
   const table = scroll?.querySelector("table");
   const colgroup = table?.querySelector("colgroup");
   const headingRow = table?.tHead?.rows[0];
-  if (!(scroll instanceof HTMLElement) || !(table instanceof HTMLTableElement) || !colgroup || !headingRow) return;
+  if (!(scroll instanceof HTMLElement) || !(table instanceof HTMLTableElement) || !colgroup || !headingRow) {
+    return () => {};
+  }
 
   const columns = Array.from(colgroup.children).filter((column) => column instanceof HTMLTableColElement);
   const headings = Array.from(headingRow.cells);
-  if (!columns.length || columns.length !== headings.length) return;
+  if (!columns.length || columns.length !== headings.length) return () => {};
 
   const columnKeys = columns.map((column, index) => column.dataset.col || `column-${index + 1}`);
   const scope = table.dataset.columnStorageScope || "guest";
@@ -129,7 +134,7 @@ export function setupDataGrid(grid) {
   const initialWidths = {};
   const currentWidths = {};
 
-  bindViewportFill({ grid, windowTarget: window });
+  const cleanupViewportFill = bindViewportFill({ grid, windowTarget: window });
 
   headings.forEach((heading, index) => {
     initialWidths[columnKeys[index]] = clampColumnWidth(heading.getBoundingClientRect().width);
@@ -240,16 +245,38 @@ export function setupDataGrid(grid) {
     });
     announce("所有列宽已恢复为默认值。");
   };
-  grid.querySelectorAll("[data-reset-column-widths]").forEach((button) => {
-    button.addEventListener("click", resetWidths);
-  });
-  document.querySelectorAll(`[data-reset-column-widths-for="${gridKey}"]`).forEach((button) => {
-    button.addEventListener("click", resetWidths);
-  });
+  const resetButtons = [
+    ...grid.querySelectorAll("[data-reset-column-widths]"),
+    ...document.querySelectorAll(`[data-reset-column-widths-for="${gridKey}"]`),
+  ];
+  resetButtons.forEach((button) => button.addEventListener("click", resetWidths));
+
+  const cleanup = () => {
+    cleanupViewportFill();
+    resetButtons.forEach((button) => button.removeEventListener("click", resetWidths));
+    gridCleanups.delete(grid);
+  };
+  gridCleanups.set(grid, cleanup);
+  return cleanup;
 }
 
 export function setupDataGrids(root = document) {
-  root.querySelectorAll("[data-resizable-grid]").forEach(setupDataGrid);
+  const cleanups = Array.from(root.querySelectorAll("[data-resizable-grid]"), setupDataGrid);
+  return () => cleanups.forEach((cleanup) => cleanup());
 }
 
-if (typeof document !== "undefined") setupDataGrids(document);
+export function cleanupDataGrids(root = document) {
+  root.querySelectorAll("[data-resizable-grid]").forEach((grid) => {
+    gridCleanups.get(grid)?.();
+  });
+}
+
+if (typeof document !== "undefined") {
+  setupDataGrids(document);
+  document.addEventListener("bld:data-grids:setup", (event) => {
+    setupDataGrids(event.detail?.root || document);
+  });
+  document.addEventListener("bld:data-grids:cleanup", (event) => {
+    cleanupDataGrids(event.detail?.root || document);
+  });
+}

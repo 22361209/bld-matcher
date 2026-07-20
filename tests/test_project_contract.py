@@ -185,17 +185,23 @@ def dynamic_route():
             self.assertNotIn(marker, global_script)
 
     def test_primary_data_lists_share_resizable_grid_protocol(self):
+        product_shell = (contract.ROOT / "templates" / "products.html").read_text(encoding="utf-8")
+        product_results = (contract.ROOT / "templates" / "_products_results.html").read_text(encoding="utf-8")
         for template_name in ("products.html", "materials.html", "tubes.html", "quotes.html"):
             template = (contract.ROOT / "templates" / template_name).read_text(encoding="utf-8")
+            if template_name == "products.html":
+                template += product_results
             self.assertIn("data-resizable-grid", template, template_name)
             self.assertIn("data-grid-scroll", template, template_name)
             self.assertIn('include "_data_grid_footer.html"', template, template_name)
 
-        products_template = (contract.ROOT / "templates" / "products.html").read_text(encoding="utf-8")
+        products_template = product_shell + product_results
         self.assertNotIn("resizable-table", products_template)
         self.assertIn("data-grid-heading-overflow", products_template)
         for template_name in ("products.html", "materials.html", "tubes.html", "quotes.html"):
             template = (contract.ROOT / "templates" / template_name).read_text(encoding="utf-8")
+            if template_name == "products.html":
+                template += product_results
             self.assertIn("data_grid_footer_context", template, template_name)
 
         self.assertNotIn('~ " · 当前 "', products_template)
