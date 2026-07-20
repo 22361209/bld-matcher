@@ -10,8 +10,8 @@
       <a class="{% if active_page == 'quotes' %}active{% endif %}" href="{{ url_for('quote_web.quotes') }}">报价记录</a>
     {% endif %}
     {% if can("generate_purchase_contract") %}
-      <div class="nav-menu contract-nav-menu">
-        <button class="{% if active_page == 'contracts' %}active{% endif %}" type="button" aria-haspopup="menu" aria-label="选择合同类型">合同管理</button>
+      <div class="nav-menu contract-nav-menu" data-nav-menu>
+        <button class="{% if active_page == 'contracts' %}active{% endif %}" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="选择合同类型" data-nav-menu-trigger>合同管理</button>
         <div class="nav-menu-panel" role="menu" aria-label="合同类型">
           <a class="{% if active_page == 'contracts' and request.path != '/contracts/sales' %}active{% endif %}" href="{{ url_for('contracts') }}" role="menuitem">采购合同</a>
           <a class="{% if request.path == '/contracts/sales' %}active{% endif %}" href="{{ url_for('sales_contracts') }}" role="menuitem">销售合同</a>

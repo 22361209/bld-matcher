@@ -129,8 +129,8 @@ class WebAppTest(unittest.TestCase):
         self.assertNotIn("货物识别", html)
         self.assertIn('class="search-hero"', html)
         self.assertNotIn('class="workspace-header"', html)
-        self.assertIn('class="nav-menu contract-nav-menu"', html)
-        self.assertIn('type="button" aria-haspopup="menu" aria-label="选择合同类型">合同管理</button>', html)
+        self.assertIn('class="nav-menu contract-nav-menu" data-nav-menu', html)
+        self.assertIn('type="button" aria-haspopup="menu" aria-expanded="false" aria-label="选择合同类型" data-nav-menu-trigger>合同管理</button>', html)
         self.assertIn('href="/contracts" role="menuitem">采购合同</a>', html)
         self.assertIn('href="/contracts/sales" role="menuitem">销售合同</a>', html)
 

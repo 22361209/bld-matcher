@@ -13,6 +13,36 @@ if (nav instanceof HTMLElement && nav.dataset.navReady !== "true") {
     });
   }
 
+  const navigationMenus = [...nav.querySelectorAll("[data-nav-menu]")];
+  for (const navigationMenu of navigationMenus) {
+    const trigger = navigationMenu.querySelector("[data-nav-menu-trigger]");
+    if (!(trigger instanceof HTMLButtonElement)) continue;
+
+    const closeMenu = () => {
+      navigationMenu.classList.remove("is-open");
+      trigger.setAttribute("aria-expanded", "false");
+    };
+    const toggleMenu = () => {
+      const willOpen = !navigationMenu.classList.contains("is-open");
+      navigationMenus.forEach((item) => {
+        item.classList.remove("is-open");
+        item.querySelector("[data-nav-menu-trigger]")?.setAttribute("aria-expanded", "false");
+      });
+      if (willOpen) {
+        navigationMenu.classList.add("is-open");
+        trigger.setAttribute("aria-expanded", "true");
+      }
+    };
+
+    trigger.addEventListener("click", toggleMenu);
+    document.addEventListener("click", (event) => {
+      if (!navigationMenu.contains(event.target)) closeMenu();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeMenu();
+    });
+  }
+
   const root = document.documentElement;
   let lastScrollY = window.scrollY;
   let upwardDistance = 0;

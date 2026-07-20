@@ -132,7 +132,7 @@ body {
   min-width: 0;
   flex: 1 1 auto;
   align-items: stretch;
-  overflow-x: auto;
+  overflow: visible;
   scrollbar-width: none;
 }
 
@@ -219,6 +219,11 @@ body {
 .nav-menu-panel a.active {
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
+}
+
+.nav-menu.is-open .nav-menu-panel {
+  display: grid;
+  gap: 2px;
 }
 
 .nav-user {
@@ -688,6 +693,10 @@ label {
     min-height: 58px;
     margin-right: -14px;
     margin-left: -14px;
+  }
+
+  .nav-primary {
+    overflow-x: auto;
   }
 
   .nav-brand {
