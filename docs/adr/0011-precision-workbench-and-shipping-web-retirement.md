@@ -17,6 +17,7 @@
 3. 询价首页采用主操作区加目录状态侧栏；列表、编辑、导入预览和系统管理页复用统一的标题、表单、面板、表格、弹窗与窄屏层级。
 4. 发货通知和货物识别从导航、路由注册、模板和页面静态资源中移除。旧页面及页面动作端点返回 404，不提供隐式重定向。
 5. 页面退役不删除数据库、迁移、历史上传与输出，也不删除发货通知领域服务、识别服务、Worker Handler 或 `tools/shipment_photo_recognition.py`。未来若恢复浏览器能力，必须通过已认证应用 API 或新的 ADR 明确边界。
+6. macOS 与 Linux 保持共享组件的默认显示。仅 Windows 由 `static/platform.js` 在浏览器端为根元素设置 `data-platform="windows"`，`static/components/precision.css` 以 `html[data-platform="windows"]` 前缀局部调整密集工作台的可读性与控件尺寸；不得使用服务端 User-Agent 分支、模板分支或页面级重复 CSS。合同与打印单据维持默认版式。
 
 ## Consequences
 
@@ -24,6 +25,7 @@
 - `/shipping-notices`、`/shipment-recognition` 及其旧页面子路由不再兼容；这替代 ADR 0006 中关于货物识别页面 URL 持续兼容的部分决定。
 - 保留的领域代码和历史数据继续受原有事务、审计、迁移与运行数据保护规则约束，但没有导航或 Web 提交入口。
 - 新视觉需要桌面与窄屏真实浏览器验收，并继续通过静态协议、路由快照和服务端页面回归。
+- 平台差异不改变服务端响应、模板结构或 API；Windows 规则不会命中 macOS/Linux，新增差异必须同时验收 Windows 实机与一个默认平台，确认字号、控件宽高和根级横向溢出。
 
 ## Verification
 

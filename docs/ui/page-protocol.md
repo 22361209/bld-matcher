@@ -80,6 +80,13 @@
 - 模板禁止 `<script>`、`<style>`、`onclick`、`onchange`、`onsubmit`。
 - 页面根节点使用 `data-page="domain.view"`，只初始化当前页面模块。
 
+### 平台显示差异
+
+- macOS 与 Linux 使用共享组件的默认字号、控件尺寸和间距。不得因 Windows 字体栅格化差异修改默认规则。
+- `static/platform.js` 只在浏览器识别为 Windows 时设置根元素 `data-platform="windows"`。所有 Windows 专用 CSS 必须以 `html[data-platform="windows"]` 为前缀，并归入共享 `static/components/precision.css`；禁止使用服务端 User-Agent 分支、模板分支或页面级重复规则。
+- Windows 专用规则仅可调整共享工作台的可读性与控件承载尺寸：数据表、搜索/命令表单、通用操作按钮、分页和统计区。合同与打印单据维持默认版式，除非另有经审查的版式需求。
+- 平台差异验收必须至少覆盖 Windows 实机和 macOS 或 Linux 默认平台，验证字号、控件宽高、窄屏不溢出及现有页面交互；默认平台不得因 Windows 专用规则改变。
+
 当前所有完整页面均已迁入 `base.html`，`policy/legacy_allowlist.json` 中独立页面、内联脚本/事件和内联样式基线均为零。`scripts/check_project_contract.py` 阻止重新出现例外，`tests/test_project_contract.py` 额外验证 page ID 全局唯一。
 
 页面专用脚本放在 `static/pages/`，必须以 `body[data-page]` 作为初始化边界。公共交互放在 `static/app.js`；当前破坏性提交统一使用 `data-confirm`，不在模板写事件代码。

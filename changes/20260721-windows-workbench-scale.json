@@ -1,0 +1,14 @@
+{
+  "date": "2026-07-21",
+  "version": "unreleased",
+  "title": "Windows 工作台控件字号同步",
+  "entries": [
+    "Windows 客户端的搜索说明、搜索输入框、常用操作按钮、分页和列表统计区域按已确认的列表字号尺度同步放大，控件宽度和内边距同步增加；合同和打印单据版式保持原有尺寸。",
+    "项目说明和 UI 页面协议明确：macOS/Linux 保持默认显示，Windows 专用规则只通过根元素 data-platform 标记生效，并须保留默认平台的验收。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "compatible",
+    "operations": "restart-required"
+  }
+}
