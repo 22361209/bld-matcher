@@ -14,6 +14,30 @@ if (nav instanceof HTMLElement && nav.dataset.navReady !== "true") {
   }
 
   const navigationMenus = [...nav.querySelectorAll("[data-nav-menu]")];
+  const navMenus = [...nav.querySelectorAll(".nav-menu")];
+  const narrowViewport = window.matchMedia("(max-width: 760px)");
+
+  const positionMobileMenuPanel = (navigationMenu) => {
+    if (!narrowViewport.matches) return;
+
+    const trigger = navigationMenu.querySelector("[data-nav-menu-trigger], :scope > a");
+    const panel = navigationMenu.querySelector(":scope > .nav-menu-panel");
+    if (!(trigger instanceof HTMLElement) || !(panel instanceof HTMLElement)) return;
+
+    const bounds = trigger.getBoundingClientRect();
+    panel.style.setProperty("--nav-menu-panel-top", `${Math.round(bounds.bottom - 1)}px`);
+    panel.style.setProperty("--nav-menu-panel-left", `${Math.round(bounds.left)}px`);
+    panel.style.setProperty("--nav-menu-panel-width", `${Math.round(bounds.width)}px`);
+  };
+
+  const positionMobileMenuPanels = () => {
+    navMenus.forEach(positionMobileMenuPanel);
+  };
+
+  navMenus.forEach((navigationMenu) => {
+    navigationMenu.addEventListener("pointerenter", () => positionMobileMenuPanel(navigationMenu));
+    navigationMenu.addEventListener("focusin", () => positionMobileMenuPanel(navigationMenu));
+  });
   for (const navigationMenu of navigationMenus) {
     const trigger = navigationMenu.querySelector("[data-nav-menu-trigger]");
     if (!(trigger instanceof HTMLButtonElement)) continue;
@@ -88,7 +112,11 @@ if (nav instanceof HTMLElement && nav.dataset.navReady !== "true") {
   };
 
   window.addEventListener("scroll", updateNavReveal, { passive: true });
-  window.addEventListener("resize", setNavOffset);
+  window.addEventListener("resize", () => {
+    setNavOffset();
+    positionMobileMenuPanels();
+  });
+  nav.querySelector(".nav-primary")?.addEventListener("scroll", positionMobileMenuPanels, { passive: true });
   window.addEventListener("pageshow", setNavOffset);
   setNavOffset();
 }

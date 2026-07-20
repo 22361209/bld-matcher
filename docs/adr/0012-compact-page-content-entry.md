@@ -18,7 +18,7 @@
 ## Consequences
 
 - 所有页面在导航下获得更紧凑的可用高度，列表和表单优先可见。
-- 页面模板不得重新引入 `workspace-header` 或 `search-hero`；回归测试覆盖这一规则。
+- 页面模板不得重新引入 `workspace-header`；`search-hero` 仅保留在询价首页，生产料单首页使用页面级 `material-landing`。回归测试覆盖这一例外边界。
 - 用户仍可从页面内的操作区、数据区标题和浏览器标题识别当前工作内容。
 
 ## Verification

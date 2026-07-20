@@ -714,6 +714,30 @@ label {
     overflow-x: auto;
   }
 
+  /*
+   * Horizontal navigation needs its own scroll area on narrow screens. Keep
+   * submenu panels in the viewport instead of inside that clipping context;
+   * nav.js anchors the fixed panel to its trigger whenever it opens.
+   */
+  .nav-menu-panel {
+    position: fixed;
+    top: var(--nav-menu-panel-top, 0px);
+    left: var(--nav-menu-panel-left, 0px);
+    width: var(--nav-menu-panel-width, auto);
+    min-width: 0;
+  }
+
+  .nav-menu:hover .nav-menu-panel {
+    display: none;
+  }
+
+  @media (hover: hover) {
+    .nav-menu:hover .nav-menu-panel {
+      display: grid;
+      gap: 2px;
+    }
+  }
+
   .nav-brand {
     width: 58px;
     flex-basis: 58px;

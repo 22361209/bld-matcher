@@ -134,7 +134,7 @@ class WebAppTest(unittest.TestCase):
         self.assertIn('href="/contracts" role="menuitem">采购合同</a>', html)
         self.assertIn('href="/contracts/sales" role="menuitem">销售合同</a>', html)
 
-    def test_page_templates_omit_redundant_workspace_headers(self):
+    def test_page_templates_keep_only_approved_spacious_homepage_headers(self):
         template_dir = Path(__file__).resolve().parents[1] / "templates"
         page_templates = sorted(template_dir.glob("*.html"))
 
@@ -143,15 +143,26 @@ class WebAppTest(unittest.TestCase):
             with self.subTest(template=template_path.name):
                 template = template_path.read_text(encoding="utf-8")
                 self.assertNotIn("workspace-header", template)
-                if template_path.name != "index.html":
-                    self.assertNotIn("search-hero", template)
+                self.assertEqual(template.count("search-hero"), 1 if template_path.name == "index.html" else 0)
 
-    def test_navigation_dropdowns_match_their_trigger_width(self):
+        materials_template = (template_dir / "materials.html").read_text(encoding="utf-8")
+        self.assertIn('class="material-landing"', materials_template)
+
+    def test_navigation_dropdowns_stay_anchored_in_narrow_scrollable_navigation(self):
         precision_css = (Path(__file__).resolve().parents[1] / "static" / "components" / "precision.css").read_text(encoding="utf-8")
+        nav_js = (Path(__file__).resolve().parents[1] / "static" / "nav.js").read_text(encoding="utf-8")
 
         self.assertIn(".nav-menu-panel {\n  top: calc(100% - 1px);\n  min-width: 100%;", precision_css)
         self.assertIn("justify-content: center;", precision_css)
         self.assertIn("font-size: 13px;", precision_css)
+        self.assertIn("@media (max-width: 760px)", precision_css)
+        self.assertIn("position: fixed;\n    top: var(--nav-menu-panel-top, 0px);", precision_css)
+        self.assertIn("width: var(--nav-menu-panel-width, auto);", precision_css)
+        self.assertIn('window.matchMedia("(max-width: 760px)")', nav_js)
+        self.assertIn('panel.style.setProperty("--nav-menu-panel-top"', nav_js)
+        self.assertIn('panel.style.setProperty("--nav-menu-panel-left"', nav_js)
+        self.assertIn('panel.style.setProperty("--nav-menu-panel-width"', nav_js)
+        self.assertIn('addEventListener("scroll", positionMobileMenuPanels', nav_js)
 
     def test_quick_inquiry_results_can_filter_by_match_source(self):
         from app.modules.products.persistence import upsert_product
