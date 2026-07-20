@@ -30,6 +30,25 @@ class _UnitOfWork:
 
 
 class ProductCatalogCacheTests(unittest.TestCase):
+    def test_catalog_warmup_is_read_only_and_regular_access_still_bootstraps(self) -> None:
+        repository = _Repository()
+        bootstrap_calls: list[bool] = []
+        service = ProductService(
+            lambda: _UnitOfWork(repository),
+            lambda: bootstrap_calls.append(True),
+            lambda: {},
+        )
+
+        warmed = service.warm_catalog()
+
+        self.assertIsNotNone(warmed)
+        self.assertEqual(bootstrap_calls, [])
+        self.assertEqual(repository.snapshots, 1)
+
+        self.assertIs(service.catalog(), warmed)
+        self.assertEqual(bootstrap_calls, [True])
+        self.assertEqual(repository.snapshots, 1)
+
     def test_catalog_reuses_cached_rows_when_version_is_unchanged(self) -> None:
         repository = _Repository()
         service = ProductService(lambda: _UnitOfWork(repository), lambda: None, lambda: {})

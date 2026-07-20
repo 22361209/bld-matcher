@@ -129,7 +129,7 @@ document.querySelectorAll(".file-picker-input").forEach((input) => {
 
 document.querySelectorAll("form[data-submit-wait]").forEach((form) => {
   form.addEventListener("submit", (event) => {
-    if (form.dataset.submitInProgress === "true") {
+    if (event.defaultPrevented || form.dataset.submitInProgress === "true") {
       event.preventDefault();
       return;
     }

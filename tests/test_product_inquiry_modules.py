@@ -591,6 +591,19 @@ class ProductInquiryModuleTest(unittest.TestCase):
             self.inquiry_service.quick_search("MODULE-API-OE")[0]["product"]["bld_no"],
             "K-MODULE-API",
         )
+        catalog = self.product_service.catalog()
+        with patch.object(
+            self.product_service,
+            "catalog",
+            side_effect=AssertionError("the supplied request catalog must be reused"),
+        ):
+            self.assertEqual(
+                self.inquiry_service.quick_search(
+                    "MODULE-API-OE",
+                    catalog=catalog,
+                )[0]["product"]["bld_no"],
+                "K-MODULE-API",
+            )
 
         exported = self.inquiry_service.run_numbers(
             {"numbers": ["MODULE-API-OE"], "source_name": "module-contract"},

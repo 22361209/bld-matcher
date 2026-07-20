@@ -10,6 +10,7 @@ from app.database import connect
 from app.helpers import download_name, product_image_thumb_url, product_image_url, product_image_urls, product_item_display_lines
 from app.modules.admin.factory import get_admin_service
 from app.modules.admin.persistence import ensure_default_admin
+from app.modules.products.factory import get_product_service
 from app.platform.api_errors import ApiError, error_response
 from app.platform.logging_config import configure_logging
 from app.platform.request_context import is_machine_api_path, register_request_context
@@ -115,4 +116,5 @@ app = create_app()
 
 
 if __name__ == "__main__":
+    get_product_service().warm_catalog()
     app.run(host=APP_HOST, port=APP_PORT, debug=APP_DEBUG)

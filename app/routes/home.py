@@ -94,8 +94,8 @@ def register(app) -> None:
         stats = product_service.stats().as_dict()
         history_files = _load_history_rows(history_query) if history_query else []
         quick_results = (
-            get_inquiry_service().quick_search(quick_oe)
-            if can("generate_match") and quick_oe
+            get_inquiry_service().quick_search(quick_oe, catalog=catalog)
+            if can("generate_match") and quick_oe and catalog is not None
             else []
         )
         return render_template(
