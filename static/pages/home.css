@@ -2,20 +2,27 @@ body[data-page="inquiry.home"] .search-workspace {
   --search-panel-width: 640px;
 }
 
-body[data-page="inquiry.home"] .search-hero {
+body[data-page="inquiry.home"] main.search-workspace .search-hero {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   justify-items: center;
+  align-items: center;
   gap: 8px;
   min-height: 0;
   padding: 46px 0 18px;
   text-align: center;
 }
 
-body[data-page="inquiry.home"] .search-hero::before {
+body[data-page="inquiry.home"] main.search-workspace .search-hero::before {
   content: none;
 }
 
-body[data-page="inquiry.home"] .search-hero h1 {
+body[data-page="inquiry.home"] main.search-workspace .search-hero > * {
+  justify-self: center;
+  text-align: center;
+}
+
+body[data-page="inquiry.home"] main.search-workspace .search-hero h1 {
   color: var(--precision-ink);
   font-size: clamp(40px, 7vw, 72px);
   font-weight: 800;
@@ -23,7 +30,7 @@ body[data-page="inquiry.home"] .search-hero h1 {
   line-height: 1.05;
 }
 
-body[data-page="inquiry.home"] .search-hero p {
+body[data-page="inquiry.home"] main.search-workspace .search-hero p {
   margin: 0;
   font-size: 16px;
   line-height: 1.45;
