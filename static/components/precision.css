@@ -149,7 +149,8 @@ body {
 }
 
 .nav-links > a,
-.nav-menu > a {
+.nav-menu > a,
+.nav-menu > button {
   position: relative;
   display: flex;
   min-height: 63px;
@@ -165,14 +166,17 @@ body {
 
 .nav-links > a:hover,
 .nav-menu > a:hover,
+.nav-menu > button:hover,
 .nav-links > a.active,
-.nav-menu > a.active {
+.nav-menu > a.active,
+.nav-menu > button.active {
   background: rgba(255, 255, 255, 0.055);
   color: #fff;
 }
 
 .nav-links > a.active::after,
-.nav-menu > a.active::after {
+.nav-menu > a.active::after,
+.nav-menu > button.active::after {
   position: absolute;
   right: 12px;
   bottom: 8px;
@@ -186,6 +190,12 @@ body {
   align-items: stretch;
   padding: 0;
   margin: 0;
+}
+
+.nav-menu > button {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
 }
 
 .nav-menu-panel {
@@ -661,7 +671,8 @@ label {
   }
 
   .nav-links > a,
-  .nav-menu > a {
+  .nav-menu > a,
+  .nav-menu > button {
     padding: 0 9px;
     font-size: 12px;
   }
@@ -693,6 +704,7 @@ label {
 
   .nav-links > a,
   .nav-menu > a,
+  .nav-menu > button,
   .user-badge,
   .admin-menu-trigger {
     min-height: 55px;
