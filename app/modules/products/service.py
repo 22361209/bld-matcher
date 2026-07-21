@@ -157,6 +157,42 @@ class ProductService:
         self.invalidate_catalog()
         return product
 
+    def copy_as_new(
+        self,
+        source_product_id: int,
+        data: Mapping[str, object],
+        *,
+        actor: str,
+        image_files: list[tuple[int, object]] | None = None,
+        drawing_file: object | None = None,
+    ) -> ProductRecord:
+        target_bld_no = str(data.get("bld_no") or "").strip()
+        if not target_bld_no:
+            raise ValueError("BLD NO. 不能为空。")
+        with self.unit_of_work_factory() as unit_of_work:
+            source = unit_of_work.repository.get(source_product_id)
+            if source is None:
+                raise ProductNotFoundError(source_product_id)
+            if unit_of_work.repository.get_by_bld(target_bld_no) is not None:
+                raise ValueError("BLD NO. 已存在，请填写新的产品型号。")
+            product = unit_of_work.repository.upsert(data, actor=actor)
+            try:
+                product = unit_of_work.repository.copy_media_from(
+                    source.id,
+                    product.id,
+                    actor=actor,
+                    image_files=image_files,
+                    drawing_file=drawing_file,
+                )
+                unit_of_work.commit()
+            except Exception:
+                unit_of_work.repository.rollback_copy_media()
+                raise
+            else:
+                unit_of_work.repository.finalize_copy_media()
+        self.invalidate_catalog()
+        return product
+
     def save_drawing(self, product_id: int, file: object, *, actor: str) -> ProductRecord:
         with self.unit_of_work_factory() as unit_of_work:
             product = unit_of_work.repository.save_drawing(product_id, file, actor=actor)

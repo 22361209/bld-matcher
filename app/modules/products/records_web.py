@@ -153,12 +153,34 @@ def register(app) -> None:
                 "image_path": request.form.get("image_path", ""),
                 "active": request.form.get("active", "0"),
             }
-            get_product_service().save(
-                data,
-                actor=actor_name(),
-                image_files=image_files,
-                drawing_file=drawing_file if drawing_file and drawing_file.filename else None,
-            )
+            copy_source_product_id = request.form.get("copy_source_product_id", "").strip()
+            if copy_source_product_id:
+                try:
+                    source_product_id = int(copy_source_product_id)
+                except ValueError as exc:
+                    raise ValueError("复制来源无效，请重新选择产品。") from exc
+                get_product_service().copy_as_new(
+                    data=data,
+                    source_product_id=source_product_id,
+                    actor=actor_name(),
+                    image_files=image_files,
+                    drawing_file=drawing_file if drawing_file and drawing_file.filename else None,
+                )
+            else:
+                get_product_service().save(
+                    data,
+                    actor=actor_name(),
+                    image_files=image_files,
+                    drawing_file=drawing_file if drawing_file and drawing_file.filename else None,
+                )
+        except ProductNotFoundError:
+            message = "复制来源已不存在，请刷新目录后重试。"
+            if wants_json_response():
+                return jsonify({"ok": False, "error": message}), 404
+            if embedded:
+                return _embedded_product_done_response(ok=False, message=message, status=404)
+            flash(message, "error")
+            return redirect(url_for("products"))
         except ValueError as exc:
             message = f"保存失败：{exc}"
             if wants_json_response():

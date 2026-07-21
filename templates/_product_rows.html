@@ -1,11 +1,19 @@
 {% for product in products %}
   <tr class="{% if not product.active %}muted-row{% endif %}">
     <td class="bld-cell" data-col="bld">
-      {% if product.drawing_path %}
-        <a class="bld-drawing-link" href="{{ url_for('product_drawing', product_id=product.id) }}" target="_blank" rel="noopener" title="预览 {{ product.bld_no }} PDF 图纸">{{ product.bld_no }}</a>
-      {% else %}
-        <strong>{{ product.bld_no }}</strong>
-      {% endif %}
+      <details class="bld-action-menu" data-bld-action-menu>
+        <summary class="bld-action-trigger" title="查看 {{ product.bld_no }} 操作">{{ product.bld_no }}</summary>
+        <div class="bld-action-popover" role="group" aria-label="{{ product.bld_no }} 操作">
+          {% if product.drawing_path %}
+            <a class="linear-button subtle" href="{{ url_for('product_drawing', product_id=product.id) }}" target="_blank" rel="noopener">查看图纸</a>
+          {% else %}
+            <button class="linear-button subtle" type="button" data-product-drawing-unavailable data-product-bld-no="{{ product.bld_no }}">查看图纸</button>
+          {% endif %}
+          {% if can("edit_products") %}
+            <button class="linear-button primary" type="button" data-copy-product-action data-copy-product='{{ product|tojson }}'>复制信息</button>
+          {% endif %}
+        </div>
+      </details>
     </td>
     <td class="preline" data-col="series">{{ product.series }}</td>
     <td class="product-item-cell" data-col="item">

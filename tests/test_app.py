@@ -3193,9 +3193,21 @@ class WebAppTest(unittest.TestCase):
         html = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
         self.assertIn("data-open-edit-product-modal", html)
+        self.assertIn("data-bld-action-menu", html)
+        self.assertIn("data-product-drawing-unavailable", html)
+        self.assertIn("data-copy-product", html)
+        self.assertIn('name="product_image_1"', html)
+        self.assertIn('name="drawing"', html)
+        self.assertIn('{% include "_product_media_fields.html" %}', (PROJECT_ROOT / "templates" / "products.html").read_text(encoding="utf-8"))
+        self.assertIn('{% include "_product_media_fields.html" %}', (PROJECT_ROOT / "templates" / "product_form.html").read_text(encoding="utf-8"))
+        self.assertIn("data-drawing-unavailable-modal", html)
+        products_js = (PROJECT_ROOT / "static" / "pages" / "products.js").read_text(encoding="utf-8")
+        self.assertIn("openDrawingUnavailableModal(drawingUnavailable.dataset.productBldNo);", products_js)
+        self.assertNotIn("window.alert(", products_js)
+        products_css = (PROJECT_ROOT / "static" / "pages" / "products.css").read_text(encoding="utf-8")
+        self.assertIn(".product-create-modal-panel .product-media-edit,\n.product-create-modal-panel .file-picker-control", products_css)
         self.assertNotIn("PDF图纸", html)
         self.assertIn("批量上传图纸", html)
-        self.assertNotIn('name="drawing"', html)
         self.assertNotIn(f'href="/products/{product["id"]}/drawing"', html)
 
         edit = self.client.get(f"/products/{product['id']}/edit")
@@ -3275,6 +3287,54 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("/product-images/K-DRAW-001.png", html)
         self.assertIn("/product-images/K-DRAW-001-2.png", html)
 
+        copied = self.client.post(
+            "/products/save",
+            data={
+                "copy_source_product_id": str(product["id"]),
+                "bld_no": "K-DRAW-COPY-001",
+                "series": "TEST",
+                "item": "DRAWING PART",
+                "oe_no_1": "DRAW-001",
+                "oe_no_2": "",
+                "models": "Tester",
+                "price_cny": "",
+                "product_status": "",
+                "active": "1",
+                "product_image_1": (io.BytesIO(b"\x89PNG\r\n\x1a\ncopied image"), "K-DRAW-COPY-001.png"),
+                "drawing": (io.BytesIO(b"%PDF-1.4\ncopied drawing\n%%EOF"), "K-DRAW-COPY-001.pdf"),
+            },
+            content_type="multipart/form-data",
+            follow_redirects=False,
+        )
+        self.assertEqual(copied.status_code, 302)
+        with self.web.connect(self.web.DB_PATH) as conn:
+            copied_product = conn.execute("SELECT * FROM products WHERE bld_no = ?", ("K-DRAW-COPY-001",)).fetchone()
+        self.assertIsNotNone(copied_product)
+        self.assertEqual(copied_product["series"], "TEST")
+        self.assertEqual(copied_product["item"], "DRAWING PART")
+        self.assertEqual(copied_product["image_path"], "data_product_images/K-DRAW-COPY-001.png")
+        self.assertEqual(copied_product["image_path_2"], "data_product_images/K-DRAW-COPY-001-2.png")
+        self.assertEqual(copied_product["drawing_path"], "drawings/pdf/K-DRAW-COPY-001.pdf")
+        self.assertTrue((self.root / "data" / "product_images" / "K-DRAW-COPY-001-2.png").exists())
+        self.assertEqual(
+            (self.root / "data" / "product_images" / "K-DRAW-COPY-001.png").read_bytes(),
+            b"\x89PNG\r\n\x1a\ncopied image",
+        )
+        self.assertEqual(
+            (self.root / "data" / "drawings" / "pdf" / "K-DRAW-COPY-001.pdf").read_bytes(),
+            b"%PDF-1.4\ncopied drawing\n%%EOF",
+        )
+
+        duplicate_copy = self.client.post(
+            "/products/save",
+            data={"copy_source_product_id": str(product["id"]), "bld_no": "K-DRAW-COPY-001", "active": "1"},
+            follow_redirects=False,
+        )
+        self.assertEqual(duplicate_copy.status_code, 302)
+        with self.web.connect(self.web.DB_PATH) as conn:
+            unchanged_copy = conn.execute("SELECT * FROM products WHERE bld_no = ?", ("K-DRAW-COPY-001",)).fetchone()
+        self.assertEqual(unchanged_copy["item"], "DRAWING PART")
+
         image = self.client.get("/product-images/K-DRAW-001.png")
         self.assertEqual(image.status_code, 200)
         self.assertTrue(image.get_data().startswith(b"\x89PNG"))
@@ -3308,6 +3368,142 @@ class WebAppTest(unittest.TestCase):
         batch = self.client.get("/products/drawings/batch")
         self.assertEqual(batch.status_code, 200)
         self.assertIn("暂未开放", batch.get_data(as_text=True))
+
+    def test_copy_product_media_restores_files_when_a_later_write_fails(self):
+        self.login()
+        source_upload = self.client.post(
+            "/products/save",
+            data={
+                "bld_no": "K-DRAW-ROLLBACK-SOURCE",
+                "series": "TEST",
+                "item": "ROLLBACK PART",
+                "oe_no_1": "DRAW-ROLLBACK",
+                "models": "Tester",
+                "active": "1",
+                "product_image_1": (io.BytesIO(b"\x89PNG\r\n\x1a\nsource image"), "source.png"),
+            },
+            content_type="multipart/form-data",
+            follow_redirects=False,
+        )
+        self.assertEqual(source_upload.status_code, 302)
+        with self.web.connect(self.web.DB_PATH) as conn:
+            source = conn.execute(
+                "SELECT * FROM products WHERE bld_no = ?", ("K-DRAW-ROLLBACK-SOURCE",)
+            ).fetchone()
+        self.assertIsNotNone(source)
+
+        with patch("app.modules.products.repository.save_product_drawing", side_effect=OSError("disk write failed")):
+            copied = self.client.post(
+                "/products/save",
+                data={
+                    "copy_source_product_id": str(source["id"]),
+                    "bld_no": "K-DRAW-ROLLBACK-COPY",
+                    "series": "TEST",
+                    "item": "ROLLBACK PART",
+                    "oe_no_1": "DRAW-ROLLBACK",
+                    "models": "Tester",
+                    "active": "1",
+                    "product_image_1": (io.BytesIO(b"\x89PNG\r\n\x1a\noverride image"), "override.png"),
+                    "drawing": (io.BytesIO(b"%PDF-1.4\nrollback drawing\n%%EOF"), "rollback.pdf"),
+                },
+                content_type="multipart/form-data",
+                follow_redirects=False,
+            )
+        self.assertEqual(copied.status_code, 302)
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            target = conn.execute(
+                "SELECT * FROM products WHERE bld_no = ?", ("K-DRAW-ROLLBACK-COPY",)
+            ).fetchone()
+        self.assertIsNone(target)
+        self.assertTrue((self.root / "data" / "product_images" / "K-DRAW-ROLLBACK-SOURCE.png").exists())
+        self.assertFalse((self.root / "data" / "product_images" / "K-DRAW-ROLLBACK-COPY.png").exists())
+        self.assertFalse((self.root / "data" / "product_images" / "thumbs" / "K-DRAW-ROLLBACK-COPY.png").exists())
+        self.assertFalse((self.root / "data" / "product_images" / "archive" / "K-DRAW-ROLLBACK-COPY").exists())
+        self.assertFalse((self.root / "data" / "drawings" / "pdf" / "K-DRAW-ROLLBACK-COPY.pdf").exists())
+        self.assertFalse((self.root / "data" / "drawings" / "archive" / "K-DRAW-ROLLBACK-COPY").exists())
+        self.assertFalse(list((self.root / "data" / "local-backups").glob("copy-product-media-*")))
+
+    def test_copy_product_rejects_missing_source_media(self):
+        self.login()
+        headers = {"Accept": "application/json", "X-Requested-With": "fetch"}
+        image_source_upload = self.client.post(
+            "/products/save",
+            data={
+                "bld_no": "K-DRAW-MISSING-IMAGE-SOURCE",
+                "series": "TEST",
+                "item": "MISSING MEDIA PART",
+                "oe_no_1": "DRAW-MISSING-IMAGE",
+                "models": "Tester",
+                "active": "1",
+                "product_image_1": (io.BytesIO(b"\x89PNG\r\n\x1a\nsource image"), "source.png"),
+            },
+            content_type="multipart/form-data",
+            follow_redirects=False,
+        )
+        self.assertEqual(image_source_upload.status_code, 302)
+        with self.web.connect(self.web.DB_PATH) as conn:
+            image_source = conn.execute(
+                "SELECT * FROM products WHERE bld_no = ?", ("K-DRAW-MISSING-IMAGE-SOURCE",)
+            ).fetchone()
+        self.assertIsNotNone(image_source)
+        (self.root / "data" / "product_images" / "K-DRAW-MISSING-IMAGE-SOURCE.png").unlink()
+
+        missing_image_copy = self.client.post(
+            "/products/save",
+            data={
+                "copy_source_product_id": str(image_source["id"]),
+                "bld_no": "K-DRAW-MISSING-IMAGE-COPY",
+                "active": "1",
+            },
+            headers=headers,
+            follow_redirects=False,
+        )
+        self.assertEqual(missing_image_copy.status_code, 400)
+        self.assertIn("来源产品图片 1 文件未找到", missing_image_copy.get_json()["error"])
+
+        drawing_source_upload = self.client.post(
+            "/products/save",
+            data={
+                "bld_no": "K-DRAW-MISSING-PDF-SOURCE",
+                "series": "TEST",
+                "item": "MISSING MEDIA PART",
+                "oe_no_1": "DRAW-MISSING-PDF",
+                "models": "Tester",
+                "active": "1",
+                "drawing": (io.BytesIO(b"%PDF-1.4\nsource drawing\n%%EOF"), "source.pdf"),
+            },
+            content_type="multipart/form-data",
+            follow_redirects=False,
+        )
+        self.assertEqual(drawing_source_upload.status_code, 302)
+        with self.web.connect(self.web.DB_PATH) as conn:
+            drawing_source = conn.execute(
+                "SELECT * FROM products WHERE bld_no = ?", ("K-DRAW-MISSING-PDF-SOURCE",)
+            ).fetchone()
+        self.assertIsNotNone(drawing_source)
+        (self.root / "data" / drawing_source["drawing_path"]).unlink()
+
+        missing_drawing_copy = self.client.post(
+            "/products/save",
+            data={
+                "copy_source_product_id": str(drawing_source["id"]),
+                "bld_no": "K-DRAW-MISSING-PDF-COPY",
+                "active": "1",
+            },
+            headers=headers,
+            follow_redirects=False,
+        )
+        self.assertEqual(missing_drawing_copy.status_code, 400)
+        self.assertIn("来源产品图纸文件未找到", missing_drawing_copy.get_json()["error"])
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            self.assertIsNone(
+                conn.execute("SELECT 1 FROM products WHERE bld_no = ?", ("K-DRAW-MISSING-IMAGE-COPY",)).fetchone()
+            )
+            self.assertIsNone(
+                conn.execute("SELECT 1 FROM products WHERE bld_no = ?", ("K-DRAW-MISSING-PDF-COPY",)).fetchone()
+            )
 
     def test_product_save_can_clear_price_and_reject_invalid_price(self):
         from app.modules.products.persistence import upsert_product

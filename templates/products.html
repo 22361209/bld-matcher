@@ -115,14 +115,15 @@
 {% if can("edit_products") %}
       <div class="editor-modal" id="product-modal" aria-hidden="true">
         <div class="editor-modal-backdrop" data-close-product-modal></div>
-        <div class="editor-modal-panel" role="dialog" aria-modal="true" aria-label="新增产品" data-draggable-modal-panel>
+        <div class="editor-modal-panel product-create-modal-panel" role="dialog" aria-modal="true" aria-label="新增产品" data-draggable-modal-panel>
           <button class="image-modal-close" type="button" data-close-product-modal aria-label="关闭新增产品">×</button>
           <div class="modal-heading draggable-modal-heading" data-modal-drag-handle>
-            <h2>新增产品</h2>
-            <p class="note">一个 BLD NO. 可以维护多个 OE、多个品牌和多个车型；OE 与品牌均建议每行一个。</p>
+            <h2 data-product-modal-title>新增产品</h2>
+            <p class="note" data-product-modal-note>一个 BLD NO. 可以维护多个 OE、多个品牌和多个车型；OE 与品牌均建议每行一个。</p>
           </div>
-          <form action="{{ url_for('save_product') }}" method="post" class="record-form modal-form" data-product-create-form>
+          <form action="{{ url_for('save_product') }}" method="post" enctype="multipart/form-data" class="record-form modal-form" data-product-create-form>
             {{ csrf_field() }}
+            <input type="hidden" name="copy_source_product_id" value="">
             <label>
               BLD NO.
               <input name="bld_no" required>
@@ -151,6 +152,11 @@
               含税单价（人民币）
               <input name="price_cny" type="number" step="0.01" min="0" placeholder="例如 68.50">
             </label>
+            <label>
+              产品状态
+              <input name="product_status" placeholder="例如 1 个球头 2 个衬套">
+            </label>
+            {% include "_product_media_fields.html" %}
             <label class="check">
               <input type="checkbox" name="active" value="1" checked>
               启用
@@ -186,6 +192,21 @@
         </div>
         <div class="image-modal-caption" id="image-modal-caption"></div>
         <div class="image-modal-thumbs" id="image-modal-thumbs"></div>
+      </div>
+    </div>
+    <div class="download-modal" id="drawing-unavailable-modal" aria-hidden="true" data-drawing-unavailable-modal>
+      <div class="download-modal-backdrop" data-close-drawing-unavailable-modal></div>
+      <div class="download-modal-panel" role="dialog" aria-modal="true" aria-labelledby="drawing-unavailable-title">
+        <button class="download-modal-close" type="button" data-close-drawing-unavailable-modal aria-label="关闭图纸未上传提示">×</button>
+        <div class="modal-heading">
+          <h2 id="drawing-unavailable-title">图纸未上传</h2>
+          <p data-drawing-unavailable-message></p>
+        </div>
+        <div class="download-options-form">
+          <div class="form-actions">
+            <button class="linear-button primary" type="button" data-close-drawing-unavailable-modal>知道了</button>
+          </div>
+        </div>
       </div>
     </div>
 {% endblock %}

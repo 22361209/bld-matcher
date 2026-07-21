@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import sqlite3
+import shutil
+import tempfile
 from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
@@ -20,9 +22,16 @@ from app.modules.products.persistence import (
     rows_for_catalog,
     upsert_product,
 )
-from app.drawings import save_product_drawing
+from app.config import DATA_DIR, DRAWING_ARCHIVE_DIR, DRAWING_PDF_DIR, PRODUCT_IMAGE_ARCHIVE_DIR, PRODUCT_IMAGE_DIR
+from app.drawings import drawing_storage_name, product_drawing_path, safe_filename_part, save_product_drawing
 from app.matcher import compact_text
-from app.product_media import save_product_image
+from app.product_media import (
+    image_slot_field,
+    product_image_thumb_path,
+    product_image_storage_name,
+    resolve_product_image_path,
+    save_product_image,
+)
 from app.platform.audit_store import log_event
 from app.platform.clock import now_text
 from app.product_status import canonical_product_status, format_product_status
@@ -40,6 +49,113 @@ from .domain import (
     ProductStats,
     compact,
 )
+
+
+class _NewProductMediaTransaction:
+    """Restore any media side effects when creating a copied product fails."""
+
+    def __init__(
+        self,
+        *,
+        source: sqlite3.Row,
+        target: sqlite3.Row,
+        image_files: list[tuple[int, object]] | None,
+        drawing_file: object | None,
+    ) -> None:
+        self.source = source
+        self.target = target
+        self.image_files = image_files or []
+        self.drawing_file = drawing_file
+        self.backup_dir: Path | None = None
+        self.file_changes: list[tuple[Path, Path | None]] = []
+        self.directory_changes: list[tuple[Path, Path | None]] = []
+
+    @staticmethod
+    def _atomic_copy(source: Path, target: Path) -> None:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_name(f".{target.name}.{uuid4().hex}.rollback")
+        try:
+            shutil.copy2(source, temporary)
+            temporary.replace(target)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def _image_targets(self) -> set[Path]:
+        targets: set[Path] = set()
+        target_bld_no = self.target["bld_no"]
+
+        def add_image_target(slot: int, suffix: str) -> None:
+            path = PRODUCT_IMAGE_DIR / product_image_storage_name(target_bld_no, suffix, slot)
+            targets.add(path)
+            thumbnail = product_image_thumb_path(path.name)
+            if thumbnail is not None:
+                targets.add(thumbnail)
+
+        for slot in range(1, 6):
+            field = image_slot_field(slot)
+            reference = str(self.source[field] or "") if field in self.source.keys() else ""
+            source_path = resolve_product_image_path(reference.rsplit("/", 1)[-1])
+            if source_path is not None:
+                add_image_target(slot, source_path.suffix)
+        for slot, file in self.image_files:
+            suffix = Path(str(getattr(file, "filename", "") or "")).suffix.lower()
+            if suffix:
+                add_image_target(slot, suffix)
+        return targets
+
+    def begin(self) -> None:
+        backup_root = DATA_DIR / "local-backups"
+        backup_root.mkdir(parents=True, exist_ok=True)
+        self.backup_dir = Path(tempfile.mkdtemp(prefix="copy-product-media-", dir=backup_root))
+        try:
+            targets = self._image_targets()
+            if product_drawing_path(self.source) is not None or self.drawing_file is not None:
+                targets.add(DRAWING_PDF_DIR / drawing_storage_name(self.target["bld_no"]))
+            for index, path in enumerate(sorted(targets)):
+                backup = self.backup_dir / "files" / str(index) if path.exists() else None
+                if backup is not None:
+                    self._atomic_copy(path, backup)
+                self.file_changes.append((path, backup))
+
+            safe_bld_no = safe_filename_part(self.target["bld_no"], "product")
+            for name, path in (
+                ("product-images", PRODUCT_IMAGE_ARCHIVE_DIR / safe_bld_no),
+                ("drawings", DRAWING_ARCHIVE_DIR / safe_bld_no),
+            ):
+                backup = self.backup_dir / "archives" / name if path.exists() else None
+                if backup is not None:
+                    shutil.copytree(path, backup)
+                self.directory_changes.append((path, backup))
+        except Exception:
+            self.finalize()
+            raise
+
+    def rollback(self) -> None:
+        errors: list[str] = []
+        for path, backup in reversed(self.file_changes):
+            try:
+                if backup is not None and backup.exists():
+                    self._atomic_copy(backup, path)
+                else:
+                    path.unlink(missing_ok=True)
+            except OSError:
+                errors.append(path.name)
+        for path, backup in reversed(self.directory_changes):
+            try:
+                if path.exists():
+                    shutil.rmtree(path)
+                if backup is not None and backup.exists():
+                    shutil.copytree(backup, path)
+            except OSError:
+                errors.append(path.name)
+        if errors:
+            raise RuntimeError(f"复制产品媒体回滚失败：{', '.join(errors)}")
+        self.finalize()
+
+    def finalize(self) -> None:
+        if self.backup_dir is not None:
+            shutil.rmtree(self.backup_dir, ignore_errors=True)
+            self.backup_dir = None
 
 
 def _record(row: sqlite3.Row | None) -> ProductRecord | None:
@@ -151,6 +267,7 @@ class SQLiteProductRepository:
     def __init__(self, connection: sqlite3.Connection, database_path: Path) -> None:
         self.connection = connection
         self.database_path = database_path
+        self._copy_media_transaction: _NewProductMediaTransaction | None = None
         self.connection.create_function(
             "PRODUCT_STATUS_KEY",
             1,
@@ -313,6 +430,99 @@ class SQLiteProductRepository:
         if product is None:
             raise RuntimeError("Saved product could not be reloaded.")
         return product
+
+    def copy_media_from(
+        self,
+        source_product_id: int,
+        target_product_id: int,
+        *,
+        actor: str,
+        image_files: list[tuple[int, object]] | None = None,
+        drawing_file: object | None = None,
+    ) -> ProductRecord:
+        source = self.connection.execute("SELECT * FROM products WHERE id = ?", (source_product_id,)).fetchone()
+        target = self.connection.execute("SELECT * FROM products WHERE id = ?", (target_product_id,)).fetchone()
+        if source is None or target is None:
+            raise LookupError("复制来源或新建产品不存在。")
+
+        if self._copy_media_transaction is not None:
+            raise RuntimeError("复制产品媒体事务尚未完成。")
+        transaction = _NewProductMediaTransaction(
+            source=source,
+            target=target,
+            image_files=image_files,
+            drawing_file=drawing_file,
+        )
+        transaction.begin()
+        self._copy_media_transaction = transaction
+        try:
+            for slot in range(1, 6):
+                field = image_slot_field(slot)
+                reference = str(source[field] or "") if field in source.keys() else ""
+                source_path = resolve_product_image_path(reference.rsplit("/", 1)[-1])
+                if source_path is None:
+                    if reference:
+                        raise ValueError(f"来源产品图片 {slot} 文件未找到，无法复制。")
+                    continue
+                with source_path.open("rb") as handle:
+                    save_product_image(
+                        self.connection,
+                        target,
+                        FileStorage(stream=handle, filename=source_path.name),
+                        slot=slot,
+                        commit=False,
+                    )
+
+            source_drawing = product_drawing_path(source)
+            drawing_reference = str(source["drawing_path"] or "") if "drawing_path" in source.keys() else ""
+            if drawing_reference and source_drawing is None:
+                raise ValueError("来源产品图纸文件未找到，无法复制。")
+            if source_drawing is not None:
+                original_name = str(source["drawing_original_name"] or "") or source_drawing.name
+                with source_drawing.open("rb") as handle:
+                    save_product_drawing(
+                        self.connection,
+                        target,
+                        FileStorage(stream=handle, filename=original_name),
+                        commit=False,
+                    )
+            for slot, file in image_files or []:
+                self.save_image(target_product_id, file, slot=slot, actor=actor)
+            if drawing_file is not None:
+                self.save_drawing(target_product_id, drawing_file, actor=actor)
+        except Exception:
+            try:
+                transaction.rollback()
+            finally:
+                self._copy_media_transaction = None
+            raise
+
+        log_event(
+            self.connection,
+            "复制产品资料",
+            "product",
+            str(target["bld_no"]),
+            f"从 {source['bld_no']} 复制文字资料、图片和图纸。",
+            actor=actor,
+        )
+        product = self.get(target_product_id)
+        if product is None:
+            raise RuntimeError("Copied product could not be reloaded.")
+        return product
+
+    def finalize_copy_media(self) -> None:
+        if self._copy_media_transaction is None:
+            return
+        self._copy_media_transaction.finalize()
+        self._copy_media_transaction = None
+
+    def rollback_copy_media(self) -> None:
+        if self._copy_media_transaction is None:
+            return
+        try:
+            self._copy_media_transaction.rollback()
+        finally:
+            self._copy_media_transaction = None
 
     def save_image(self, product_id: int, file: object, *, slot: int, actor: str) -> ProductRecord:
         row = self.connection.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone()

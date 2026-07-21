@@ -31,6 +31,20 @@ class ProductRepository(Protocol):
 
     def upsert(self, data: Mapping[str, object], *, actor: str) -> ProductRecord: ...
 
+    def copy_media_from(
+        self,
+        source_product_id: int,
+        target_product_id: int,
+        *,
+        actor: str,
+        image_files: list[tuple[int, object]] | None = None,
+        drawing_file: object | None = None,
+    ) -> ProductRecord: ...
+
+    def finalize_copy_media(self) -> None: ...
+
+    def rollback_copy_media(self) -> None: ...
+
     def save_image(self, product_id: int, file: object, *, slot: int, actor: str) -> ProductRecord: ...
 
     def save_drawing(self, product_id: int, file: object, *, actor: str) -> ProductRecord: ...

@@ -1,0 +1,14 @@
+{
+  "date": "2026-07-21",
+  "version": "unreleased",
+  "title": "产品目录 BLD 号快捷图纸与复制",
+  "entries": [
+    "点击产品目录中的 BLD NO. 可查看图纸；未上传时会在页面中央显示图纸未上传提示。",
+    "有编辑产品权限的用户可复制产品资料，新 BLD NO. 保存后会创建独立的产品图片和 PDF 图纸副本；新增和复制弹窗复用编辑页的上传组件。"
+  ],
+  "impact": {
+    "data": "新增产品副本及其独立媒体文件",
+    "api": "compatible",
+    "operations": "restart-required"
+  }
+}

@@ -208,6 +208,10 @@ if (document.body.dataset.page === "products.list") {
   const productModal = document.querySelector("#product-modal");
   const productForm = productModal?.querySelector("[data-product-create-form]");
   const productFormStatus = productForm?.querySelector("[data-product-form-status]");
+  const productModalTitle = productModal?.querySelector("[data-product-modal-title]");
+  const productModalNote = productModal?.querySelector("[data-product-modal-note]");
+  const drawingUnavailableModal = document.querySelector("[data-drawing-unavailable-modal]");
+  const drawingUnavailableMessage = drawingUnavailableModal?.querySelector("[data-drawing-unavailable-message]");
   const productEditModal = document.querySelector("#product-edit-modal");
   const productEditFrame = document.querySelector("#product-edit-frame");
   const resetModalPosition = (modal) => {
@@ -231,13 +235,66 @@ if (document.body.dataset.page === "products.list") {
     setProductFormStatus();
     productModal?.querySelector("input[name='bld_no']")?.focus();
   };
+  const resetProductModalCopy = () => {
+    const sourceInput = productForm?.querySelector("input[name='copy_source_product_id']");
+    if (sourceInput instanceof HTMLInputElement) sourceInput.value = "";
+    if (productModalTitle instanceof HTMLElement) productModalTitle.textContent = "新增产品";
+    if (productModalNote instanceof HTMLElement) {
+      productModalNote.textContent = "一个 BLD NO. 可以维护多个 OE、多个品牌和多个车型；也可同时上传最多 5 张图片和一份 PDF 图纸。";
+    }
+  };
+  const openCopiedProductModal = (button) => {
+    if (!(productForm instanceof HTMLFormElement)) return;
+    let source;
+    try {
+      source = JSON.parse(button.dataset.copyProduct || "{}");
+    } catch (_error) {
+      setStatus("复制来源无效，请刷新目录后重试。", "error");
+      return;
+    }
+    if (!source?.id) {
+      setStatus("复制来源无效，请刷新目录后重试。", "error");
+      return;
+    }
+    productForm.reset();
+    const fields = ["series", "item", "oe_no_1", "oe_no_2", "models", "price_cny", "product_status"];
+    fields.forEach((name) => {
+      const input = productForm.elements.namedItem(name);
+      if (input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) {
+        input.value = source[name] ?? "";
+      }
+    });
+    const active = productForm.elements.namedItem("active");
+    if (active instanceof HTMLInputElement) active.checked = Boolean(source.active);
+    const sourceInput = productForm.elements.namedItem("copy_source_product_id");
+    if (sourceInput instanceof HTMLInputElement) sourceInput.value = String(source.id);
+    if (productModalTitle instanceof HTMLElement) productModalTitle.textContent = `复制产品资料 · ${source.bld_no}`;
+    if (productModalNote instanceof HTMLElement) {
+      productModalNote.textContent = "请填写新的 BLD NO.；保存后会复制当前产品资料，所选图片或 PDF 图纸会覆盖对应的复制文件。";
+    }
+    openProductModal();
+  };
   const closeProductModal = () => {
     productModal?.classList.remove("open");
     productModal?.setAttribute("aria-hidden", "true");
     document.body.classList.remove("modal-open");
     resetModalPosition(productModal);
     productForm?.reset();
+    resetProductModalCopy();
     setProductFormStatus();
+  };
+  const openDrawingUnavailableModal = (bldNo) => {
+    if (drawingUnavailableMessage instanceof HTMLElement) {
+      drawingUnavailableMessage.textContent = `${bldNo || "该产品"} 暂未上传图纸。`;
+    }
+    drawingUnavailableModal?.classList.add("open");
+    drawingUnavailableModal?.setAttribute("aria-hidden", "false");
+    document.body.classList.add("modal-open");
+  };
+  const closeDrawingUnavailableModal = () => {
+    drawingUnavailableModal?.classList.remove("open");
+    drawingUnavailableModal?.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("modal-open");
   };
   const openProductEditModal = (url) => {
     if (!productEditModal || !productEditFrame) return;
@@ -256,9 +313,16 @@ if (document.body.dataset.page === "products.list") {
     resetModalPosition(productEditModal);
   };
 
-  document.querySelector("[data-open-product-modal]")?.addEventListener("click", openProductModal);
+  document.querySelector("[data-open-product-modal]")?.addEventListener("click", () => {
+    productForm?.reset();
+    resetProductModalCopy();
+    openProductModal();
+  });
   document.querySelectorAll("[data-close-product-modal]").forEach((element) => {
     element.addEventListener("click", closeProductModal);
+  });
+  document.querySelectorAll("[data-close-drawing-unavailable-modal]").forEach((element) => {
+    element.addEventListener("click", closeDrawingUnavailableModal);
   });
   document.querySelectorAll("[data-close-product-edit-modal]").forEach((element) => {
     element.addEventListener("click", closeProductEditModal);
@@ -404,11 +468,45 @@ if (document.body.dataset.page === "products.list") {
       openProductEditModal(editLink.href);
       return;
     }
+    const copyButton = event.target.closest("[data-copy-product-action]");
+    if (copyButton instanceof HTMLButtonElement) {
+      event.preventDefault();
+      copyButton.closest("[data-bld-action-menu]")?.removeAttribute("open");
+      openCopiedProductModal(copyButton);
+      return;
+    }
+    const drawingUnavailable = event.target.closest("[data-product-drawing-unavailable]");
+    if (drawingUnavailable instanceof HTMLButtonElement) {
+      event.preventDefault();
+      drawingUnavailable.closest("[data-bld-action-menu]")?.removeAttribute("open");
+      openDrawingUnavailableModal(drawingUnavailable.dataset.productBldNo);
+      return;
+    }
     const imageLink = event.target.closest(".image-link");
     if (!imageLink) return;
     event.preventDefault();
     openImageModal(imageLink);
   });
+  const positionBldActionMenu = (menu) => {
+    const trigger = menu.querySelector(".bld-action-trigger");
+    const popover = menu.querySelector(".bld-action-popover");
+    if (!(trigger instanceof HTMLElement) || !(popover instanceof HTMLElement)) return;
+    const rect = trigger.getBoundingClientRect();
+    const menuWidth = popover.offsetWidth || 176;
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - menuWidth - 8));
+    const top = Math.min(rect.bottom + 6, window.innerHeight - popover.offsetHeight - 8);
+    popover.style.setProperty("--bld-action-left", `${left}px`);
+    popover.style.setProperty("--bld-action-top", `${Math.max(8, top)}px`);
+  };
+  document.addEventListener("toggle", (event) => {
+    const menu = event.target;
+    if (!(menu instanceof HTMLDetailsElement) || !menu.matches("[data-bld-action-menu]")) return;
+    if (!menu.open) return;
+    resultsHost?.querySelectorAll("[data-bld-action-menu][open]").forEach((other) => {
+      if (other !== menu) other.removeAttribute("open");
+    });
+    requestAnimationFrame(() => positionBldActionMenu(menu));
+  }, true);
   document.querySelectorAll("[data-close-image-modal]").forEach((element) => {
     element.addEventListener("click", closeImageModal);
   });
@@ -431,6 +529,10 @@ if (document.body.dataset.page === "products.list") {
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
     toolbarPopovers.forEach((popover) => { popover.open = false; });
+    if (drawingUnavailableModal?.classList.contains("open")) {
+      closeDrawingUnavailableModal();
+      return;
+    }
     if (productModal?.classList.contains("open")) {
       closeProductModal();
       return;
