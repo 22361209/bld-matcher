@@ -1,0 +1,13 @@
+{
+  "date": "2026-07-22",
+  "version": "unreleased",
+  "title": "忽略本地登录页临时 mockup 目录",
+  "entries": [
+    "将 tmp_login_mockup/ 加入 .gitignore，避免本地临时登录页 mockup 文件影响部署前的契约检查。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "compatible",
+    "operations": "none"
+  }
+}

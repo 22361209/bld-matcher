@@ -44,3 +44,6 @@ static/product_images/
 
 # Generated local launcher build artifacts
 tools/icon_build/
+
+# Temporary UI mockups not part of the application baseline
+tmp_login_mockup/
