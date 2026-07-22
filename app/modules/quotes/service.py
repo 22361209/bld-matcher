@@ -153,6 +153,15 @@ class QuoteService:
             unit_of_work.commit()
         return after
 
+    def delete(self, quote_id: int, *, actor: str) -> QuoteRecord:
+        with self.unit_of_work_factory() as unit_of_work:
+            record = unit_of_work.repository.delete(quote_id)
+            if record is None:
+                raise QuoteNotFoundError(quote_id)
+            unit_of_work.repository.audit("删除报价记录", record, actor=actor)
+            unit_of_work.commit()
+        return record
+
     def preview_import(self, path: Path, *, customer_name: object, currency: object) -> dict:
         customer = clean_multiline(customer_name)
         currency_code = compact_text(currency).upper()

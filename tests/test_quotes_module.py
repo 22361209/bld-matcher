@@ -11,7 +11,7 @@ from pathlib import Path
 from app.database import connect
 from app.modules.quotes.domain import QuoteValidationError, build_quote_draft
 from app.modules.quotes.repository import SQLiteQuoteUnitOfWork
-from app.modules.quotes.service import QuoteService, QuoteVersionConflictError
+from app.modules.quotes.service import QuoteNotFoundError, QuoteService, QuoteVersionConflictError
 from app.migrations import run_migrations
 
 
@@ -158,6 +158,35 @@ class QuoteModuleTest(unittest.TestCase):
         self.assertEqual(unchanged.version, 1)
         self.assertEqual(unchanged.quoted_by, "creator")
         self.assertEqual(unchanged.source_type, "manual")
+
+    def test_delete_removes_record_revisions_and_audits(self):
+        created = self.service.create(self.quote_data(), actor="deleter")
+        self.service.update(
+            created.id,
+            {"remark": "before delete"},
+            actor="deleter",
+            expected_version=created.version,
+        )
+
+        deleted = self.service.delete(created.id, actor="deleter")
+        self.assertEqual(deleted.id, created.id)
+        self.assertEqual(self.service.list_records({"customer_name": "Module"}).total, 0)
+        with self.assertRaises(QuoteNotFoundError):
+            self.service.delete(created.id, actor="deleter")
+
+        with connect(self.db_path) as conn:
+            revisions = conn.execute(
+                "SELECT COUNT(*) FROM quote_record_revisions WHERE quote_id = ?",
+                (created.id,),
+            ).fetchone()[0]
+            actions = conn.execute(
+                "SELECT action, actor FROM audit_logs WHERE target_type = 'quote_record' ORDER BY id"
+            ).fetchall()
+        self.assertEqual(revisions, 0)
+        self.assertEqual(
+            [(row["action"], row["actor"]) for row in actions],
+            [("新增报价记录", "deleter"), ("修正报价记录", "deleter"), ("删除报价记录", "deleter")],
+        )
 
     def test_import_runs_through_same_domain_and_transaction(self):
         rows = [

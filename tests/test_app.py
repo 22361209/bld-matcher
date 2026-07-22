@@ -2066,7 +2066,8 @@ class WebAppTest(unittest.TestCase):
         self.assertIn('name="currency"', html)
         self.assertIn('name="quote_file"', html)
         self.assertNotIn("MOQ", html)
-        self.assertNotIn("删除", html)
+        html_without_edit_dialogs = re.sub(r'<dialog class="quote-edit-dialog".*?</dialog>', "", html, flags=re.S)
+        self.assertNotIn("删除", html_without_edit_dialogs)
 
         response = self.client.post(
             "/quotes/save",
@@ -2190,6 +2191,22 @@ class WebAppTest(unittest.TestCase):
             cleared = conn.execute("SELECT * FROM quote_records WHERE id = ?", (quote_id,)).fetchone()
         self.assertIsNone(cleared["net_price"])
         self.assertEqual(cleared["remark"], "")
+
+        response = self.client.get("/quotes", query_string={"customer_name": "博世", "bld_no": "K48620"})
+        html = response.get_data(as_text=True)
+        edit_dialog = re.search(r'<dialog class="quote-edit-dialog".*?</dialog>', html, re.S).group()
+        self.assertIn(f'formaction="/quotes/{quote_id}/delete"', edit_dialog)
+        self.assertIn('data-confirm="确认删除这条报价记录', edit_dialog)
+
+        response = self.client.post(f"/quotes/{quote_id}/delete", follow_redirects=False)
+        self.assertEqual(response.status_code, 302)
+        with self.web.connect(self.web.DB_PATH) as conn:
+            deleted = conn.execute("SELECT * FROM quote_records WHERE id = ?", (quote_id,)).fetchone()
+            leftover_revisions = conn.execute(
+                "SELECT COUNT(*) FROM quote_record_revisions WHERE quote_id = ?", (quote_id,)
+            ).fetchone()[0]
+        self.assertIsNone(deleted)
+        self.assertEqual(leftover_revisions, 0)
 
         old_path = self.client.get("/customer-prices", follow_redirects=False)
         self.assertEqual(old_path.status_code, 302)

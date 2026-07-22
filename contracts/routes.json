@@ -624,6 +624,13 @@
       "rule": "/quotes"
     },
     {
+      "endpoint": "quote_web.delete_quote",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/quotes/<int:quote_id>/delete"
+    },
+    {
       "endpoint": "quote_web.edit_quote",
       "methods": [
         "POST"

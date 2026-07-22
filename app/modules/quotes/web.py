@@ -219,6 +219,22 @@ def edit_quote(quote_id: int):
     return redirect(safe_referrer(url_for("quote_web.quotes") + "#quote-results"))
 
 
+@quote_web.post("/quotes/<int:quote_id>/delete", endpoint="delete_quote")
+@permission_required("manage_customer_prices")
+def delete_quote(quote_id: int):
+    try:
+        get_quote_service().delete(quote_id, actor=actor_name())
+    except QuoteNotFoundError:
+        flash("报价记录不存在。", "error")
+        return redirect(safe_referrer(url_for("quote_web.quotes") + "#quote-results"))
+    except Exception:
+        logger.exception("Quote delete failed")
+        flash("删除失败，请稍后重试。", "error")
+        return redirect(safe_referrer(url_for("quote_web.quotes") + "#quote-results"))
+    flash("报价记录已删除。", "success")
+    return redirect(safe_referrer(url_for("quote_web.quotes") + "#quote-results"))
+
+
 @quote_web.post("/quotes/import/preview", endpoint="quote_import_preview")
 @permission_required("manage_customer_prices")
 def quote_import_preview():

@@ -140,6 +140,14 @@ class SQLiteQuoteRepository:
         )
         return self.get(quote_id) if cursor.rowcount == 1 else None
 
+    def delete(self, quote_id: int) -> QuoteRecord | None:
+        record = self.get(quote_id)
+        if record is None:
+            return None
+        self.connection.execute("DELETE FROM quote_record_revisions WHERE quote_id = ?", (quote_id,))
+        self.connection.execute("DELETE FROM quote_records WHERE id = ?", (quote_id,))
+        return record
+
     def add_revision(self, before: QuoteRecord, after: QuoteRecord, *, actor: str) -> None:
         self.connection.execute(
             """
