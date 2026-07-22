@@ -18,7 +18,6 @@ class QuoteCreateRequest(StrictApiModel):
     bld_no: str | None = Field(default=None, max_length=100)
     product_model: str | None = Field(default=None, max_length=100)
     customer_product_code: str = Field(default="", max_length=200)
-    price: Decimal | None = None
     tax_price: Decimal | None = None
     net_price: Decimal | None = None
     currency: Currency = "CNY"
@@ -43,7 +42,7 @@ class QuoteCreateRequest(StrictApiModel):
     def validate_identity_and_price(self):
         if not (self.bld_no or self.product_model):
             raise ValueError("bld_no 不能为空。")
-        if self.price is None and self.tax_price is None and self.net_price is None:
+        if self.tax_price is None and self.net_price is None:
             raise ValueError("tax_price 或 net_price 至少填写一个。")
         return self
 
@@ -52,7 +51,6 @@ class QuotePatchRequest(StrictApiModel):
     customer_name: str | None = Field(default=None, min_length=1, max_length=300)
     bld_no: str | None = Field(default=None, min_length=1, max_length=100)
     customer_product_code: str | None = Field(default=None, max_length=200)
-    price: Decimal | None = None
     tax_price: Decimal | None = None
     net_price: Decimal | None = None
     currency: Currency | None = None
@@ -98,7 +96,6 @@ class QuoteResponse(StrictApiModel):
     bld_no: str
     customer_product_code: str
     product_model: str
-    price: float
     tax_price: float | None
     net_price: float | None
     currency: Currency

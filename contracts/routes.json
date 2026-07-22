@@ -29,34 +29,6 @@
       "rule": "/api/internal/inquiry/numbers"
     },
     {
-      "endpoint": "quote_legacy_api.api_list_quotes",
-      "methods": [
-        "GET"
-      ],
-      "rule": "/api/quotes"
-    },
-    {
-      "endpoint": "quote_legacy_api.api_create_quote",
-      "methods": [
-        "POST"
-      ],
-      "rule": "/api/quotes"
-    },
-    {
-      "endpoint": "quote_legacy_api.api_update_quote",
-      "methods": [
-        "PUT"
-      ],
-      "rule": "/api/quotes/<int:quote_id>"
-    },
-    {
-      "endpoint": "quote_legacy_api.api_latest_quote",
-      "methods": [
-        "GET"
-      ],
-      "rule": "/api/quotes/latest"
-    },
-    {
       "endpoint": "api_v1.api_index",
       "methods": [
         "GET"

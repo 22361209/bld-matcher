@@ -109,7 +109,7 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 - `/api/v1/jobs/{id}`、`/result` 与 `/cancel` 提供持久任务状态、结果和幂等取消；任务绑定 API Principal，不返回内部请求路径。
 - v1 导出返回限时 artifact ID；下载绑定创建它的 API Principal，响应不包含服务器绝对路径。OpenAPI 提交快照由统一验收阻断漂移。
 - API Key 可设置 Scopes 和到期日期；历史 Key 保留兼容权限，新 Key 默认只有读取和询价权限，写权限需要管理员明确选择；管理页按默认 90 天周期提示轮换，但不自动删除。
-- `/api/internal/*` 与 `/api/quotes` 是兼容接口，继续可用但不再扩展新能力。
+- `/api/internal/*` 是兼容接口，继续可用但不再扩展新能力；旧 `/api/quotes` 已移除，报价 API 只保留 `/api/v1/quotes`（ADR 0013）。
 
 - 文档在 `OPENCLAW_API.md`，接口前缀为 `/api/internal/`。
 - 管理员菜单里有“内部 API Key”页面，可生成多条 Key 并按条删除；删除会立即使 Key 失效且不可恢复。完整 Key 只在创建响应显示一次，数据库只保留哈希和遮罩后缀，历史明文字段会在迁移时清空并删除。
@@ -187,9 +187,9 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 
 - `/quotes` 提供报价记录页面，可新增报价、按客户/型号/日期/币种/报价人筛选、查看同一客户和型号的历史报价，并显示最近一次报价。
 - 新集成通过 `/api/v1/quotes` 调用报价；读取使用 `quotes:read`，写入使用 `quotes:write`，创建必须带 `Idempotency-Key`，修订还必须带当前 ETag 对应的 `If-Match`。
-- `/api/quotes`、`/api/quotes/latest` 和 `/api/quotes/<id>` 继续作为旧消费者兼容接口，所有入口与网页、Excel 导入共用 `QuoteService`。
+- 旧 `/api/quotes` 系列接口已移除（ADR 0013），报价对外 API 只有 `/api/v1/quotes`；历史 `price` 镜像列同步删除，价格只保留含税单价 `tax_price` 和不含税单价 `net_price`。
 - 新增和修正报价弹窗只录入业务字段，不显示报价人、来源、原文或附件路径；网页、Excel 导入和 API 新增分别由服务端自动记录可信账号及 `manual`、`excel`、`api` 来源，客户端提交的报价人和来源不会覆盖系统识别结果，也不能在修订中修改。
-- 报价数据写入 `quote_records`，整数 `version` 防止并发覆盖；修订 before/after 写入 `quote_record_revisions`，报价不提供删除接口。
+- 报价数据写入 `quote_records`，整数 `version` 防止并发覆盖；修订 before/after 写入 `quote_record_revisions`；删除入口在“修正”弹窗内，删除会清理该条修订日志并写审计事件。
 
 权限：
 

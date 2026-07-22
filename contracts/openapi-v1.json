@@ -1130,22 +1130,6 @@
             "title": "On Behalf Of",
             "type": "string"
           },
-          "price": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Price"
-          },
           "product_model": {
             "anyOf": [
               {
@@ -1481,22 +1465,6 @@
             "title": "On Behalf Of",
             "type": "string"
           },
-          "price": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Price"
-          },
           "quote_date": {
             "anyOf": [
               {
@@ -1610,10 +1578,6 @@
             ],
             "title": "Net Price"
           },
-          "price": {
-            "title": "Price",
-            "type": "number"
-          },
           "product_model": {
             "title": "Product Model",
             "type": "string"
@@ -1674,7 +1638,6 @@
           "bld_no",
           "customer_product_code",
           "product_model",
-          "price",
           "tax_price",
           "net_price",
           "currency",

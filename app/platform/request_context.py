@@ -14,8 +14,6 @@ def is_machine_api_path(path: str | None = None) -> bool:
     return (
         value == "/api/internal"
         or value.startswith("/api/internal/")
-        or value == "/api/quotes"
-        or value.startswith("/api/quotes/")
         or value == "/api/v1"
         or value.startswith("/api/v1/")
     )

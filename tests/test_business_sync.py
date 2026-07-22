@@ -36,7 +36,7 @@ class BusinessSyncServiceTest(unittest.TestCase):
         connection.execute(
             """
             INSERT INTO quote_records
-              (sync_id, customer_name, bld_no, product_model, price, currency, quote_date, remark, created_at, updated_at)
+              (sync_id, customer_name, bld_no, product_model, tax_price, currency, quote_date, remark, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             ("quote-sync-id", "同步客户", "SYNC-PRODUCT", "SYNC-PRODUCT", 10, "USD", "2026-07-17", quote_remark, updated_at, updated_at),

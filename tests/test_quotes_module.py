@@ -274,6 +274,7 @@ class QuoteModuleTest(unittest.TestCase):
         row = connection.execute("SELECT customer_name, version FROM quote_records").fetchone()
         connection.close()
         self.assertIn("version", columns)
+        self.assertNotIn("price", columns)
         self.assertIn("response_headers", idempotency_columns)
         self.assertEqual(dict(row), {"customer_name": "Historical Customer", "version": 1})
 

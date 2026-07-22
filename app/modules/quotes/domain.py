@@ -26,7 +26,6 @@ class QuoteRecord:
     bld_no: str
     customer_product_code: str
     product_model: str
-    price: float
     tax_price: float | None
     net_price: float | None
     currency: str
@@ -41,14 +40,13 @@ class QuoteRecord:
     created_at: str
     updated_at: str
 
-    def legacy_payload(self) -> dict[str, object]:
+    def payload(self) -> dict[str, object]:
         return {
             "id": self.id,
             "customer_name": self.customer_name,
             "bld_no": self.bld_no,
             "customer_product_code": self.customer_product_code,
             "product_model": self.product_model,
-            "price": self.price,
             "tax_price": self.tax_price,
             "net_price": self.net_price,
             "currency": self.currency,
@@ -65,7 +63,7 @@ class QuoteRecord:
         }
 
     def api_payload(self) -> dict[str, object]:
-        payload = self.legacy_payload()
+        payload = self.payload()
         payload.pop("attachment_path")
         return payload
 
@@ -76,7 +74,6 @@ class QuoteDraft:
     bld_no: str
     customer_product_code: str
     product_model: str
-    price: float
     tax_price: float | None
     net_price: float | None
     currency: str
@@ -98,7 +95,6 @@ class QuoteDraft:
                 "bld_no",
                 "customer_product_code",
                 "product_model",
-                "price",
                 "tax_price",
                 "net_price",
                 "currency",
@@ -223,13 +219,8 @@ def build_quote_draft(
     if not bld_no:
         raise QuoteValidationError("quote.bld_required", "bld_no 不能为空。", field="bld_no")
 
-    explicit_price = data.get("price") if "price" in data else None
-    tax_price_source = _value(data, "tax_price", existing, None)
-    net_price_source = _value(data, "net_price", existing, None)
-    if explicit_price not in (None, "") and "tax_price" not in data and "net_price" not in data:
-        tax_price_source = explicit_price
-    tax_price = _optional_price(tax_price_source, "tax_price")
-    net_price = _optional_price(net_price_source, "net_price")
+    tax_price = _optional_price(_value(data, "tax_price", existing, None), "tax_price")
+    net_price = _optional_price(_value(data, "net_price", existing, None), "net_price")
     if tax_price is None and net_price is None:
         raise QuoteValidationError(
             "quote.price_required",
@@ -257,7 +248,6 @@ def build_quote_draft(
         bld_no=bld_no,
         customer_product_code=compact_text(_value(data, "customer_product_code", existing)),
         product_model=bld_no,
-        price=tax_price if tax_price is not None else float(net_price),
         tax_price=tax_price,
         net_price=net_price,
         currency=currency,

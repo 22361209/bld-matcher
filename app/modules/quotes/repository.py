@@ -23,7 +23,6 @@ def _record(row: sqlite3.Row | None) -> QuoteRecord | None:
         bld_no=str(row["bld_no"] or row["product_model"]),
         customer_product_code=str(row["customer_product_code"] or ""),
         product_model=str(row["product_model"]),
-        price=float(row["price"]),
         tax_price=float(row["tax_price"]) if row["tax_price"] is not None else None,
         net_price=float(row["net_price"]) if row["net_price"] is not None else None,
         currency=str(row["currency"]),
@@ -73,11 +72,11 @@ class SQLiteQuoteRepository:
         cursor = self.connection.execute(
             """
             INSERT INTO quote_records
-              (sync_id, customer_name, bld_no, customer_product_code, product_model, price, tax_price, net_price,
+              (sync_id, customer_name, bld_no, customer_product_code, product_model, tax_price, net_price,
                currency, moq, quote_date, quoted_by, source_type, source_text, attachment_path, remark,
                version, created_at, updated_at)
             VALUES
-              (:sync_id, :customer_name, :bld_no, :customer_product_code, :product_model, :price, :tax_price, :net_price,
+              (:sync_id, :customer_name, :bld_no, :customer_product_code, :product_model, :tax_price, :net_price,
                :currency, :moq, :quote_date, :quoted_by, :source_type, :source_text, :attachment_path, :remark,
                1, :created_at, :updated_at)
             """,
@@ -130,7 +129,7 @@ class SQLiteQuoteRepository:
             """
             UPDATE quote_records
             SET customer_name=:customer_name, bld_no=:bld_no, customer_product_code=:customer_product_code,
-                product_model=:product_model, price=:price, tax_price=:tax_price, net_price=:net_price,
+                product_model=:product_model, tax_price=:tax_price, net_price=:net_price,
                 currency=:currency, moq=:moq, quote_date=:quote_date, quoted_by=:quoted_by,
                 source_type=:source_type, source_text=:source_text, attachment_path=:attachment_path,
                 remark=:remark, version=version + 1, updated_at=:updated_at
@@ -157,8 +156,8 @@ class SQLiteQuoteRepository:
             (
                 before.id,
                 actor,
-                json.dumps(before.legacy_payload(), ensure_ascii=False, sort_keys=True),
-                json.dumps(after.legacy_payload(), ensure_ascii=False, sort_keys=True),
+                json.dumps(before.payload(), ensure_ascii=False, sort_keys=True),
+                json.dumps(after.payload(), ensure_ascii=False, sort_keys=True),
                 now_text(),
             ),
         )

@@ -18,3 +18,4 @@ ADR 用于记录难以撤销或会影响多个领域的决定。新增框架、�
 - [ADR 0010: Shared Resizable Data Grid Protocol](0010-shared-resizable-data-grid-protocol.md)
 - [ADR 0011: Precision Workbench UI And Legacy Shipping Web Retirement](0011-precision-workbench-and-shipping-web-retirement.md)
 - [ADR 0012: Compact Page Content Entry](0012-compact-page-content-entry.md)
+- [ADR 0013: Quote Price Field And Legacy Quote API Removal](0013-quote-price-field-and-legacy-api-removal.md)

@@ -40,9 +40,10 @@ class ProjectContractTest(unittest.TestCase):
         from app.platform.request_context import is_machine_api_path
 
         self.assertTrue(is_machine_api_path("/api/v1"))
-        self.assertTrue(is_machine_api_path("/api/quotes/42"))
+        self.assertTrue(is_machine_api_path("/api/internal/inquiry/numbers"))
         self.assertFalse(is_machine_api_path("/api/v10"))
-        self.assertFalse(is_machine_api_path("/api/quotes-preview"))
+        self.assertFalse(is_machine_api_path("/api/quotes"))
+        self.assertFalse(is_machine_api_path("/api/quotes/42"))
 
     def test_route_declaration_reads_route_methods_and_keyword_rule(self):
         tree = ast.parse(

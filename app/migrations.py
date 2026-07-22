@@ -192,7 +192,8 @@ def _add_quote_record_bld_prices(conn: sqlite3.Connection) -> None:
     if "net_price" not in quote_columns:
         conn.execute("ALTER TABLE quote_records ADD COLUMN net_price REAL")
     conn.execute("UPDATE quote_records SET bld_no = product_model WHERE COALESCE(bld_no, '') = ''")
-    conn.execute("UPDATE quote_records SET tax_price = price WHERE tax_price IS NULL")
+    if "price" in quote_columns:
+        conn.execute("UPDATE quote_records SET tax_price = price WHERE tax_price IS NULL")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_quote_records_customer_bld ON quote_records(customer_name, bld_no)")
 
 
@@ -477,6 +478,11 @@ def _rekey_cross_device_sync_keys(conn: sqlite3.Connection) -> None:
     _assign_cross_device_sync_keys(conn, reset=True)
 
 
+def _drop_quote_record_price(conn: sqlite3.Connection) -> None:
+    if "price" in _columns(conn, "quote_records"):
+        conn.execute("ALTER TABLE quote_records DROP COLUMN price")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -501,6 +507,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("021_flatten_tube_borrowing", _flatten_tube_borrowing),
     ("022_cross_device_sync_keys", _add_cross_device_sync_keys),
     ("023_rekey_cross_device_sync_keys", _rekey_cross_device_sync_keys),
+    ("024_drop_quote_record_price", _drop_quote_record_price),
 )
 
 

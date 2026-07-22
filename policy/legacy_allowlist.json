@@ -7,11 +7,7 @@
   "legacy_api_routes": [
     "app/modules/inquiry/api.py:internal_inquiry_analyze /api/internal/inquiry/analyze",
     "app/modules/inquiry/api.py:internal_inquiry_file /api/internal/inquiry/file",
-    "app/modules/inquiry/api.py:internal_inquiry_numbers /api/internal/inquiry/numbers",
-    "app/modules/quotes/api.py:api_create_quote /api/quotes",
-    "app/modules/quotes/api.py:api_latest_quote /api/quotes/latest",
-    "app/modules/quotes/api.py:api_list_quotes /api/quotes",
-    "app/modules/quotes/api.py:api_update_quote /api/quotes/<int:quote_id>"
+    "app/modules/inquiry/api.py:internal_inquiry_numbers /api/internal/inquiry/numbers"
   ],
   "legacy_route_database_import_counts": {},
   "legacy_route_sql_call_counts": {},

@@ -72,4 +72,4 @@ Content-Type: application/json
 
 ## Compatibility
 
-`/api/quotes`、`/api/quotes/latest` 和 `/api/quotes/{id}` 继续保持旧响应格式，供已有消费者迁移。旧接口与网页、Excel 导入仍调用同一 `QuoteService`，但新集成不得继续扩展旧合同。
+旧 `/api/quotes`、`/api/quotes/latest` 和 `/api/quotes/{id}` 已移除（ADR 0013），报价对外 API 只有本文件描述的 v1 合同。历史 `price` 字段也已从请求和响应中删除，价格只使用 `tax_price` 和 `net_price`。

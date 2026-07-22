@@ -153,7 +153,6 @@ CREATE TABLE IF NOT EXISTS quote_records (
   bld_no TEXT DEFAULT '',
   customer_product_code TEXT DEFAULT '',
   product_model TEXT NOT NULL,
-  price REAL NOT NULL,
   tax_price REAL,
   net_price REAL,
   currency TEXT NOT NULL,

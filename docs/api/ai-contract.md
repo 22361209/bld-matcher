@@ -4,7 +4,7 @@
 
 SQLite 是内部实现，不是集成接口。OpenClaw、Hermes、WorkBuddy、MCP、脚本和未来 AI 应用只能通过认证 API 调用 Application Service。
 
-当前 `/api/internal/*` 和 `/api/quotes` 是兼容接口。新增能力进入 `/api/v1`，旧接口在消费者迁移完成前作为适配器保留。
+当前 `/api/internal/*` 是兼容接口。新增能力进入 `/api/v1`，旧接口在消费者迁移完成前作为适配器保留；旧 `/api/quotes` 已由 `/api/v1/quotes` 替代并移除（ADR 0013）。
 
 当前兼容 Key 已执行安全基线：完整 Key 只在创建响应显示一次，响应禁止缓存；数据库只使用哈希校验并保留遮罩后缀，历史明文字段由迁移清空并删除。Key 已包含 Scopes 和可选到期时间，认证后生成不可伪造的 `ApiPrincipal`，审计身份取服务端 Key 名称，不接受客户端自报 actor。
 
@@ -43,7 +43,7 @@ GET  /api/v1/artifacts/{id}
 错误响应包含稳定字段：
 
 ```json
-{"api_version":"1","request_id":"...","error":{"code":"quote.invalid_price","message":"...","details":{},"retryable":false}}
+{"api_version":"1","request_id":"...","error":{"code":"quote.price_required","message":"...","details":{},"retryable":false}}
 ```
 
 `code` 是消费者逻辑依据，`message` 只供人阅读。不得把 Python 异常文本直接作为合同。

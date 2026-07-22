@@ -1,0 +1,15 @@
+{
+  "date": "2026-07-22",
+  "version": "unreleased",
+  "title": "移除报价 price 字段并下线旧 /api/quotes 接口",
+  "entries": [
+    "报价价格只保留含税单价和不含税单价：历史 price 镜像列由迁移 024 从 quote_records 删除，API v1 请求和响应也不再包含 price；只传 price 的调用会收到 422 request.invalid。",
+    "旧 /api/quotes、/api/quotes/latest、/api/quotes/<id> 接口已删除，报价对外 API 只保留 /api/v1/quotes 系列（修订用带 If-Match 的 PATCH）；仍在使用旧接口的集成必须迁移。",
+    "跨设备业务同步需在两侧都升级到本版本后执行；新版本接收旧数据包会自动忽略多出的 price 字段。"
+  ],
+  "impact": {
+    "data": "migration 024 drops quote_records.price after tax_price backfill (migration 010); existing tax/net prices unchanged",
+    "api": "breaking; legacy /api/quotes removed and price field dropped from v1 payloads; see ADR 0013",
+    "operations": "restart-required"
+  }
+}

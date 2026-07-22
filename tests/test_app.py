@@ -2212,92 +2212,19 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(old_path.status_code, 302)
         self.assertTrue(old_path.headers["Location"].endswith("/quotes"))
 
-    def test_quote_api_requires_key_validates_and_keeps_revision_log(self):
-        response = self.client.post("/api/quotes", json={"customer_name": "ACME"})
-        self.assertEqual(response.status_code, 401)
-
+    def test_legacy_quote_api_routes_are_removed(self):
         token = self.create_internal_api_token()
-        headers = {"Authorization": f"Bearer {token}", "X-Quote-Actor": "spoofed-client"}
-        response = self.client.post(
-            "/api/quotes",
-            json={
-                "customer_name": "HermesBosch",
-                "bld_no": "HERMES-48620",
-                "tax_price": "bad",
-                "currency": "USD",
-            },
-            headers=headers,
+        headers = {"Authorization": f"Bearer {token}"}
+        self.assertEqual(self.client.get("/api/quotes", headers=headers).status_code, 404)
+        self.assertEqual(
+            self.client.post("/api/quotes", json={"customer_name": "ACME"}, headers=headers).status_code,
+            404,
         )
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("tax_price", response.get_json()["error"])
-
-        response = self.client.post(
-            "/api/quotes",
-            json={
-                "customer_name": "HermesBosch",
-                "bld_no": "HERMES-48620",
-                "customer_product_code": "CUST-48620",
-                "tax_price": "5.35",
-                "net_price": "4.73",
-                "currency": "USD",
-                "quote_date": "2026-06-10",
-                "quoted_by": "hermes",
-                "source_type": "wechat",
-                "source_text": "HermesBosch HERMES-48620 USD 5.35",
-            },
-            headers=headers,
+        self.assertEqual(self.client.get("/api/quotes/latest", headers=headers).status_code, 404)
+        self.assertEqual(
+            self.client.put("/api/quotes/1", json={"remark": "x"}, headers=headers).status_code,
+            404,
         )
-        self.assertEqual(response.status_code, 201)
-        quote = response.get_json()["quote"]
-        self.assertEqual(quote["customer_name"], "HermesBosch")
-        self.assertEqual(quote["bld_no"], "HERMES-48620")
-        self.assertEqual(quote["customer_product_code"], "CUST-48620")
-        self.assertEqual(quote["tax_price"], 5.35)
-        self.assertEqual(quote["net_price"], 4.73)
-        self.assertEqual(quote["quoted_by"], "OpenClaw Test")
-        self.assertEqual(quote["source_type"], "api")
-
-        immutable = self.client.put(
-            f"/api/quotes/{quote['id']}",
-            json={"quoted_by": "spoofed", "source_type": "manual"},
-            headers=headers,
-        )
-        self.assertEqual(immutable.status_code, 400)
-        self.assertIn("由系统维护", immutable.get_json()["error"])
-
-        response = self.client.get(
-            "/api/quotes/latest",
-            query_string={"customer_name": "HermesBosch", "bld_no": "HERMES-48620"},
-            headers=headers,
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json()["quote"]["id"], quote["id"])
-
-        response = self.client.put(
-            f"/api/quotes/{quote['id']}",
-            json={"tax_price": "5.45", "net_price": "", "currency": "USD", "remark": ""},
-            headers=headers,
-        )
-        self.assertEqual(response.status_code, 200)
-        updated_quote = response.get_json()["quote"]
-        self.assertEqual(updated_quote["tax_price"], 5.45)
-        self.assertIsNone(updated_quote["net_price"])
-        self.assertEqual(updated_quote["remark"], "")
-        with self.web.connect(self.web.DB_PATH) as conn:
-            revisions = conn.execute("SELECT * FROM quote_record_revisions WHERE quote_id = ?", (quote["id"],)).fetchall()
-        self.assertEqual(len(revisions), 1)
-        self.assertEqual(revisions[0]["changed_by"], "OpenClaw Test")
-        self.assertNotEqual(revisions[0]["changed_by"], "spoofed-client")
-        self.assertIn('"tax_price": 5.35', revisions[0]["before_json"])
-        self.assertIn('"tax_price": 5.45', revisions[0]["after_json"])
-
-        response = self.client.get(
-            "/api/quotes",
-            query_string={"customer_name": "Hermes", "currency": "USD"},
-            headers=headers,
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.get_json()["quotes"]), 1)
 
     def test_product_inquiry_v1_and_artifact_consumer_contract(self):
         from app.modules.products.persistence import upsert_product
@@ -2528,6 +2455,27 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(invalid.get_json()["error"]["code"], "request.invalid")
         self.assertNotIn("private-quote.pdf", invalid.get_data(as_text=True))
 
+        legacy_price_only = self.client.post(
+            "/api/v1/quotes",
+            json={
+                "customer_name": "V1 Contract Customer",
+                "bld_no": "V1-BLD-001",
+                "price": "12.34",
+                "currency": "USD",
+            },
+            headers={**authorization, "Idempotency-Key": "quote-create-v1-legacy-price"},
+        )
+        self.assertEqual(legacy_price_only.status_code, 422)
+        self.assertEqual(legacy_price_only.get_json()["error"]["code"], "request.invalid")
+
+        missing_prices = self.client.post(
+            "/api/v1/quotes",
+            json={"customer_name": "V1 Contract Customer", "bld_no": "V1-BLD-001", "currency": "USD"},
+            headers={**authorization, "Idempotency-Key": "quote-create-v1-missing-price"},
+        )
+        self.assertEqual(missing_prices.status_code, 422)
+        self.assertEqual(missing_prices.get_json()["error"]["code"], "request.invalid")
+
         create_payload = {
             "customer_name": "V1 Contract Customer",
             "bld_no": "V1-BLD-001",
@@ -2658,6 +2606,12 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(create_operation["x-required-scopes"], ["quotes:write"])
         self.assertTrue(create_schema["properties"]["quoted_by"]["deprecated"])
         self.assertTrue(create_schema["properties"]["source_type"]["deprecated"])
+        self.assertNotIn("price", create_schema["properties"])
+        self.assertNotIn("price", patch_schema["properties"])
+        self.assertNotIn(
+            "price",
+            document["components"]["schemas"]["QuoteResponse"]["properties"],
+        )
         self.assertNotIn("quoted_by", patch_schema["properties"])
         self.assertNotIn("source_type", patch_schema["properties"])
         self.assertIn("requestBody", create_operation)
@@ -2716,15 +2670,15 @@ class WebAppTest(unittest.TestCase):
 
     def test_quote_api_oversized_request_returns_json(self):
         response = self.client.post(
-            "/api/quotes",
+            "/api/v1/quotes",
             data=b"x" * (21 * 1024 * 1024),
             content_type="application/json",
             follow_redirects=False,
         )
         payload = response.get_json()
         self.assertEqual(response.status_code, 413)
-        self.assertEqual(payload["ok"], False)
-        self.assertIn("上传文件不能超过", payload["error"])
+        self.assertEqual(payload["error"]["code"], "request.too_large")
+        self.assertIn("上传文件不能超过", payload["error"]["message"])
 
     def test_quotes_are_admin_only(self):
         from app.modules.admin.persistence import save_user
@@ -4129,6 +4083,7 @@ class WebAppTest(unittest.TestCase):
                 "021_flatten_tube_borrowing",
                 "022_cross_device_sync_keys",
                 "023_rekey_cross_device_sync_keys",
+                "024_drop_quote_record_price",
             ],
         )
 

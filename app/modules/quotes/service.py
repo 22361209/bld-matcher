@@ -147,7 +147,7 @@ class QuoteService:
                     expected_version=before.version,
                     current_version=current.version if current else before.version + 1,
                 )
-            if before.legacy_payload() != after.legacy_payload():
+            if before.payload() != after.payload():
                 unit_of_work.repository.add_revision(before, after, actor=actor)
                 unit_of_work.repository.audit("修正报价记录", after, actor=actor)
             unit_of_work.commit()
