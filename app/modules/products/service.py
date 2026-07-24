@@ -200,6 +200,20 @@ class ProductService:
         self.invalidate_catalog()
         return product
 
+    def delete_image(self, product_id: int, slot: int, *, actor: str) -> ProductRecord:
+        with self.unit_of_work_factory() as unit_of_work:
+            product = unit_of_work.repository.delete_image(product_id, slot, actor=actor)
+            unit_of_work.commit()
+        self.invalidate_catalog()
+        return product
+
+    def delete_drawing(self, product_id: int, *, actor: str) -> ProductRecord:
+        with self.unit_of_work_factory() as unit_of_work:
+            product = unit_of_work.repository.delete_drawing(product_id, actor=actor)
+            unit_of_work.commit()
+        self.invalidate_catalog()
+        return product
+
     def deactivate(self, product_id: int, *, actor: str) -> ProductRecord:
         with self.unit_of_work_factory() as unit_of_work:
             product = unit_of_work.repository.deactivate(product_id, actor=actor)

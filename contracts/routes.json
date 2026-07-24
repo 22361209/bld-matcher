@@ -512,11 +512,25 @@
       "rule": "/products/<int:product_id>/drawing"
     },
     {
+      "endpoint": "delete_product_drawing",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/products/<int:product_id>/drawing/delete"
+    },
+    {
       "endpoint": "edit_product",
       "methods": [
         "GET"
       ],
       "rule": "/products/<int:product_id>/edit"
+    },
+    {
+      "endpoint": "delete_product_image",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/products/<int:product_id>/images/<int:slot>/delete"
     },
     {
       "endpoint": "normalize_product_brands",
@@ -554,11 +568,25 @@
       "rule": "/products/fragment"
     },
     {
+      "endpoint": "product_lookup",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/products/lookup"
+    },
+    {
       "endpoint": "new_product",
       "methods": [
         "GET"
       ],
       "rule": "/products/new"
+    },
+    {
+      "endpoint": "product_options",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/products/options"
     },
     {
       "endpoint": "save_product",

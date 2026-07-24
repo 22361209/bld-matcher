@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% set active_page = "products" %}
+{% import "_product_option_fields.html" as product_option_fields %}
 {% block page_title %}{{ "编辑产品" if product else "新增产品" }}{% endblock %}
 {% block page_id %}products.edit{% endblock %}
 {% block page_type %}edit{% endblock %}
@@ -20,14 +21,8 @@
             BLD NO.
             <input name="bld_no" value="{{ product.bld_no if product else '' }}" {% if product %}readonly{% endif %} required>
           </label>
-          <label>
-            品牌 / SERIES
-            <textarea name="series" rows="3" placeholder="每行一个品牌，例如 HONDA">{{ product.series if product else '' }}</textarea>
-          </label>
-          <label class="full">
-            产品名称 / ITEM
-            <input name="item" value="{{ product.item if product else '' }}" placeholder="Front Left Lower Control Arm">
-          </label>
+          {{ product_option_fields.brand_picker(product) }}
+          {{ product_option_fields.item_picker(product) }}
           <label>
             OE NO.1
             <textarea name="oe_no_1" rows="9" placeholder="每行一个 OE">{{ product.oe_no_1 if product else '' }}</textarea>
@@ -44,10 +39,7 @@
             含税单价（人民币）
             <input name="price_cny" type="number" step="0.01" min="0" value="{{ '%.2f'|format(product.price_cny) if product and product.price_cny is not none else '' }}" placeholder="例如 68.50">
           </label>
-          <label>
-            产品状态
-            <input name="product_status" value="{{ product.product_status if product and 'product_status' in product.keys() else '' }}" placeholder="例如 1 个球头 2 个衬套">
-          </label>
+          {{ product_option_fields.status_picker(product) }}
           {% if product %}{% include "_product_media_fields.html" %}{% endif %}
           <label class="check">
             <input type="checkbox" name="active" value="1" {% if not product or product.active %}checked{% endif %}>
@@ -68,4 +60,8 @@
           </div>
         </form>
       </section>
+{% endblock %}
+
+{% block page_scripts %}
+  <script type="module" src="{{ url_for('static', filename='pages/product_option_picker.js', v=static_version('pages/product_option_picker.js')) }}"></script>
 {% endblock %}

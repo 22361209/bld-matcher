@@ -1,0 +1,13 @@
+{
+  "date": "2026-07-25",
+  "version": "unreleased",
+  "title": "报价备注文档、匹配明细人工映射入口、产品表单选项选择器与媒体删除",
+  "entries": [
+    "报价 API 文档补充 remark 字段说明：POST /api/v1/quotes 创建报价时本已支持 remark 备注字段，docs/api/quote-v1.md 的 Create 示例现已补上，并提醒严格模式下未知字段名会被 422 拒绝，外部调用方（如 kimiclaw）需使用准确的 remark 字段名。",
+    "匹配明细页新增人工映射入口：未命中行的号码显示为可点击按钮（有 manage_aliases 权限时），弹窗内可编辑号码、搜索并选择目标 BLD 产品，选择加入该产品的 OE 号列表或品牌号列表；保存复用既有 /manual-map 人工映射流程，号码同步写入产品目录并立即生效。多号码未命中行按拆分后的单个号码逐个提供按钮。",
+    "新增/编辑产品表单的品牌、产品名称、产品状态改为选项选择器：品牌支持多选（chips），三者均支持输入关键字筛选和无匹配时新增自定义值；候选由产品目录全库实时去重汇总（新增 GET /products/options），新保存的品牌/名称/状态自动进入候选。保存路径与字段语义不变。",
+    "编辑产品表单中已保存的产品图片（5 个槽位）和 PDF 图纸新增删除按钮，带确认提示；删除后文件移入既有 archive 归档目录保留（不物理删除），数据库字段清空并写审计日志。新增 POST /products/<id>/images/<slot>/delete 与 /products/<id>/drawing/delete 端点（edit_products 权限）。",
+    "新增 GET /products/lookup 会话端点（登录用户），供匹配明细弹窗按关键字搜索目标产品。"
+  ],
+  "impact": {"data": "none", "api": "compatible", "operations": "restart-required"}
+}

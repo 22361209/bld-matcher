@@ -13,6 +13,11 @@
             <a class="image-link product-media-preview" href="{{ slot_image_url }}" target="_blank" rel="noopener" title="打开 {{ product.bld_no }} 图片 {{ slot }}">
               <img class="product-thumb" src="{{ product_image_thumb_url(product, slot) or slot_image_url }}" alt="{{ product.bld_no }} 图片 {{ slot }}" loading="lazy" decoding="async">
             </a>
+            <button class="linear-button danger" type="submit"
+              formaction="{{ url_for('delete_product_image', product_id=product.id, slot=slot) }}"
+              formmethod="post" formnovalidate
+              {% if embedded %}name="embedded" value="1"{% endif %}
+              data-confirm="确认删除图片 {{ slot }}？文件会移入归档目录保留。">删除</button>
           {% elif product %}
             <p class="note product-slot-empty">当前为空</p>
           {% endif %}
@@ -32,7 +37,14 @@
   <div class="product-media-block">
     <h2>PDF 图纸</h2>
     {% if product and product.drawing_path %}
-      <p><a class="linear-button subtle" href="{{ url_for('product_drawing', product_id=product.id) }}" target="_blank" rel="noopener">预览当前图纸</a></p>
+      <p>
+        <a class="linear-button subtle" href="{{ url_for('product_drawing', product_id=product.id) }}" target="_blank" rel="noopener">预览当前图纸</a>
+        <button class="linear-button danger" type="submit"
+          formaction="{{ url_for('delete_product_drawing', product_id=product.id) }}"
+          formmethod="post" formnovalidate
+          {% if embedded %}name="embedded" value="1"{% endif %}
+          data-confirm="确认删除 PDF 图纸？文件会移入归档目录保留。">删除图纸</button>
+      </p>
     {% elif product %}
       <p class="note">当前没有 PDF 图纸。</p>
     {% endif %}

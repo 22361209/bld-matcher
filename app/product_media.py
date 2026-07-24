@@ -232,3 +232,32 @@ def save_product_image(conn: sqlite3.Connection, product: sqlite3.Row, file: Fil
     if commit:
         conn.commit()
     return destination
+
+
+def delete_product_image(conn: sqlite3.Connection, product: sqlite3.Row, slot: int = 1, *, commit: bool = True) -> Path | None:
+    field = image_slot_field(slot)
+    image_path = product[field] if field in product.keys() else ""
+    existing_path = None
+    if str(image_path or "").startswith(PRODUCT_IMAGE_DATA_PREFIX):
+        existing_path = resolve_product_image_path(str(image_path)[len(PRODUCT_IMAGE_DATA_PREFIX) :])
+
+    archived_path = None
+    if existing_path and existing_path.exists():
+        existing_thumb = product_image_thumb_path(existing_path.name)
+        if existing_thumb:
+            existing_thumb.unlink(missing_ok=True)
+        PRODUCT_IMAGE_ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+        archive_dir = PRODUCT_IMAGE_ARCHIVE_DIR / safe_filename_part(product["bld_no"], "product")
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        archived_path = _unique_path(
+            archive_dir / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{existing_path.name}"
+        )
+        existing_path.replace(archived_path)
+
+    conn.execute(
+        f"UPDATE products SET {field} = '', updated_at = ? WHERE id = ?",
+        (now_text(), product["id"]),
+    )
+    if commit:
+        conn.commit()
+    return archived_path

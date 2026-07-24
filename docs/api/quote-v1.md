@@ -46,9 +46,12 @@ Content-Type: application/json
   "net_price": 11.22,
   "currency": "USD",
   "quote_date": "2026-07-11",
+  "remark": "Customer asked for discount",
   "on_behalf_of": "sales note"
 }
 ```
+
+备注使用 `remark` 字段（最长 5000 字符），创建和修订都可以写入。可写字段以运行中的 `GET /api/v1/openapi.json` 里 `QuoteCreateRequest` 的 schema 为准；请求模型是严格模式，携带 schema 未定义的字段名（例如 `note`、`comment`、`memo`）会被拒绝并返回 422，请使用准确的字段名。
 
 相同 Principal、端点、方法和 `Idempotency-Key` 的相同请求会重放原响应，并返回 `Idempotency-Replayed: true`。同一个 Key 携带不同请求会返回 `409 idempotency.conflict`。
 

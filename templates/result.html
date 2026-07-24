@@ -88,7 +88,19 @@
             {% for row in summary.rows %}
               <tr>
                 <td>{{ row.row }}</td>
-                <td>{{ row.oe }}</td>
+                <td>
+                  {% if not row.bld_no and can("manage_aliases") %}
+                    {% if row.unmatched_oe_codes %}
+                      {% for code in row.unmatched_oe_codes %}
+                        <button type="button" class="map-oe-code" data-map-oe-code="{{ code }}">{{ code }}</button>
+                      {% endfor %}
+                    {% else %}
+                      <button type="button" class="map-oe-code" data-map-oe-code="{{ row.oe }}">{{ row.oe }}</button>
+                    {% endif %}
+                  {% else %}
+                    {{ row.oe }}
+                  {% endif %}
+                </td>
                 <td>{{ row.name }}</td>
                 <td><strong>{{ row.bld_no }}</strong></td>
                 <td class="money-cell">{% if row.price_cny is not none %}¥{{ "%.2f"|format(row.price_cny) }}{% endif %}</td>
@@ -147,6 +159,48 @@
             <div class="download-modal-actions">
               <button class="download-cancel-button" type="button" data-close-download-modal>取消</button>
               <button class="download-confirm-button" type="submit">确认</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    {% endif %}
+    {% if can("manage_aliases") %}
+      <div class="map-oe-modal" id="map-oe-modal" aria-hidden="true">
+        <div class="map-oe-modal-backdrop" data-close-map-oe-modal></div>
+        <div class="map-oe-modal-panel" role="dialog" aria-modal="true" aria-labelledby="map-oe-modal-title">
+          <button class="map-oe-modal-close" type="button" data-close-map-oe-modal aria-label="关闭加入号码列表">×</button>
+          <div class="modal-heading">
+            <h2 id="map-oe-modal-title">加入产品号码列表</h2>
+            <p>把未命中的客户号码加入某个 BLD 产品的 OE 号或品牌号列表，并保存人工映射。</p>
+          </div>
+          <form class="map-oe-form" data-map-oe-form data-map-oe-lookup-url="{{ url_for('product_lookup') }}" data-map-oe-submit-url="{{ url_for('add_manual_map') }}">
+            {{ csrf_field() }}
+            <label>
+              <span>客户号码</span>
+              <input name="source_code" type="text" required data-map-oe-source>
+            </label>
+            <div class="map-oe-search-field">
+              <label>
+                <span>目标 BLD 产品</span>
+                <input type="search" placeholder="输入 BLD NO. 或品名搜索" autocomplete="off" data-map-oe-search>
+              </label>
+              <div class="map-oe-results" data-map-oe-results hidden></div>
+            </div>
+            <input type="hidden" name="bld_no" data-map-oe-bld>
+            <p class="map-oe-selected" data-map-oe-selected hidden></p>
+            <fieldset class="map-oe-targets">
+              <legend>加入列表</legend>
+              <label><input type="radio" name="sync_target" value="oe" checked> 加入 OE 号列表</label>
+              <label><input type="radio" name="sync_target" value="brand_code"> 加入品牌号列表</label>
+            </fieldset>
+            <label>
+              <span>备注（可选）</span>
+              <input name="note" type="text">
+            </label>
+            <p class="map-oe-error" data-map-oe-error aria-live="polite" hidden></p>
+            <div class="map-oe-modal-actions">
+              <button class="map-oe-cancel-button" type="button" data-close-map-oe-modal>取消</button>
+              <button class="map-oe-confirm-button" type="submit" data-map-oe-submit>确认加入</button>
             </div>
           </form>
         </div>

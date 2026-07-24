@@ -23,9 +23,10 @@ from app.modules.products.persistence import (
     upsert_product,
 )
 from app.config import DATA_DIR, DRAWING_ARCHIVE_DIR, DRAWING_PDF_DIR, PRODUCT_IMAGE_ARCHIVE_DIR, PRODUCT_IMAGE_DIR
-from app.drawings import drawing_storage_name, product_drawing_path, safe_filename_part, save_product_drawing
+from app.drawings import delete_product_drawing, drawing_storage_name, product_drawing_path, safe_filename_part, save_product_drawing
 from app.matcher import compact_text
 from app.product_media import (
+    delete_product_image,
     image_slot_field,
     product_image_thumb_path,
     product_image_storage_name,
@@ -560,6 +561,42 @@ class SQLiteProductRepository:
         product = self.get(product_id)
         if product is None:
             raise RuntimeError("Product drawing update could not be reloaded.")
+        return product
+
+    def delete_image(self, product_id: int, slot: int, *, actor: str) -> ProductRecord:
+        row = self.connection.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone()
+        if row is None:
+            raise LookupError("产品不存在。")
+        archived_path = delete_product_image(self.connection, row, slot, commit=False)
+        log_event(
+            self.connection,
+            "删除产品图片",
+            "product",
+            str(row["bld_no"]),
+            f"图片 {slot}" + (f": {archived_path.name}" if archived_path else ""),
+            actor=actor,
+        )
+        product = self.get(product_id)
+        if product is None:
+            raise RuntimeError("Product image delete could not be reloaded.")
+        return product
+
+    def delete_drawing(self, product_id: int, *, actor: str) -> ProductRecord:
+        row = self.connection.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone()
+        if row is None:
+            raise LookupError("产品不存在。")
+        archived_path = delete_product_drawing(self.connection, row, commit=False)
+        log_event(
+            self.connection,
+            "删除图纸",
+            "product",
+            str(row["bld_no"]),
+            archived_path.name if archived_path else "",
+            actor=actor,
+        )
+        product = self.get(product_id)
+        if product is None:
+            raise RuntimeError("Product drawing delete could not be reloaded.")
         return product
 
     def deactivate(self, product_id: int, *, actor: str) -> ProductRecord | None:

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% set active_page = "products" %}
+{% import "_product_option_fields.html" as product_option_fields %}
 {% set product_column_filters = column_filters if column_filters is defined else {} %}
 {% set selected_brand_filters = product_column_filters.get("brand", []) %}
 {% set selected_item_filters = product_column_filters.get("item", []) %}
@@ -128,14 +129,8 @@
               BLD NO.
               <input name="bld_no" required>
             </label>
-            <label>
-              品牌 / SERIES
-              <textarea name="series" rows="2" placeholder="每行一个品牌，例如 HONDA"></textarea>
-            </label>
-            <label class="full">
-              产品名称 / ITEM
-              <input name="item" placeholder="Front Left Lower Control Arm">
-            </label>
+            {{ product_option_fields.brand_picker(none) }}
+            {{ product_option_fields.item_picker(none) }}
             <label>
               OE NO.1
               <textarea name="oe_no_1" rows="5" placeholder="每行一个 OE"></textarea>
@@ -152,10 +147,7 @@
               含税单价（人民币）
               <input name="price_cny" type="number" step="0.01" min="0" placeholder="例如 68.50">
             </label>
-            <label>
-              产品状态
-              <input name="product_status" placeholder="例如 1 个球头 2 个衬套">
-            </label>
+            {{ product_option_fields.status_picker(none) }}
             {% include "_product_media_fields.html" %}
             <label class="check">
               <input type="checkbox" name="active" value="1" checked>
@@ -212,5 +204,6 @@
 {% endblock %}
 
 {% block page_scripts %}
+  <script type="module" src="{{ url_for('static', filename='pages/product_option_picker.js', v=static_version('pages/product_option_picker.js')) }}"></script>
   <script type="module" src="{{ url_for('static', filename='pages/products.js', v=static_version('pages/products.js')) }}"></script>
 {% endblock %}

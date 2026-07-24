@@ -1,0 +1,31 @@
+{% macro brand_picker(product) %}
+            <label>
+              品牌 / SERIES
+              <div class="product-option-picker" data-option-picker data-picker-mode="multi" data-picker-field="brand">
+                <div class="product-option-picker-chips" data-picker-chips hidden></div>
+                <input type="text" data-picker-input autocomplete="off" placeholder="输入筛选品牌；无匹配可直接新增">
+                <div class="product-option-picker-dropdown" data-picker-dropdown hidden></div>
+                <textarea name="series" rows="3" data-picker-value placeholder="每行一个品牌，例如 HONDA">{{ product.series if product else "" }}</textarea>
+              </div>
+            </label>
+{% endmacro %}
+
+{% macro item_picker(product) %}
+            <label class="full">
+              产品名称 / ITEM
+              <div class="product-option-picker" data-option-picker data-picker-mode="single" data-picker-field="item">
+                <input name="item" data-picker-input autocomplete="off" value="{{ product.item if product else "" }}" placeholder="Front Left Lower Control Arm">
+                <div class="product-option-picker-dropdown" data-picker-dropdown hidden></div>
+              </div>
+            </label>
+{% endmacro %}
+
+{% macro status_picker(product) %}
+            <label>
+              产品状态
+              <div class="product-option-picker" data-option-picker data-picker-mode="single" data-picker-field="product_status">
+                <input name="product_status" data-picker-input autocomplete="off" value="{{ product.product_status if product and 'product_status' in product.keys() else '' }}" placeholder="例如 1 个球头 2 个衬套">
+                <div class="product-option-picker-dropdown" data-picker-dropdown hidden></div>
+              </div>
+            </label>
+{% endmacro %}

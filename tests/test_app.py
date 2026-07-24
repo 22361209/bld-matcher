@@ -353,6 +353,292 @@ class WebAppTest(unittest.TestCase):
         self.assertNotIn("data-products-results-host", html)
         self.assertNotIn("新增产品", html)
 
+    def test_product_options_endpoint_returns_deduped_picker_candidates(self):
+        with self.client.session_transaction() as session:
+            session.clear()
+        anonymous = self.client.get(
+            "/products/options",
+            headers={"X-Requested-With": "fetch", "Accept": "application/json"},
+        )
+        self.assertEqual(anonymous.status_code, 401)
+
+        self.addCleanup(self.cleanup_products, "K-OPTIONS-%")
+        self.login()
+        for bld_no, series, item, status, active in (
+            ("K-OPTIONS-001", "OPTIONBRAND\nOPTIONSECOND", "Option Arm", "1 个球头 2 个衬套", "1"),
+            ("K-OPTIONS-002", "OPTIONBRAND", "Option Arm", "1个球头2个衬套", "0"),
+            ("K-OPTIONS-003", "", "", "", "1"),
+        ):
+            saved = self.client.post(
+                "/products/save",
+                data={
+                    "bld_no": bld_no,
+                    "series": series,
+                    "item": item,
+                    "product_status": status,
+                    "active": active,
+                },
+                headers={"X-Requested-With": "fetch", "Accept": "application/json"},
+            )
+            self.assertEqual(saved.status_code, 200, saved.get_data(as_text=True))
+
+        response = self.client.get("/products/options")
+        payload = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["Cache-Control"], "no-store")
+        self.assertEqual(sorted(payload.keys()), ["brands", "items", "statuses"])
+        self.assertEqual(payload["brands"].count("OPTIONBRAND"), 1)
+        self.assertIn("OPTIONSECOND", payload["brands"])
+        self.assertEqual(payload["items"].count("Option Arm"), 1)
+        self.assertEqual(payload["statuses"].count("1球头 2衬套"), 1)
+        for candidates in payload.values():
+            self.assertTrue(all(isinstance(value, str) and value for value in candidates))
+            lowered = [value.lower() for value in candidates]
+            self.assertEqual(len(lowered), len(set(lowered)))
+
+    def test_manual_map_json_appends_code_to_product_oe_list(self):
+        from app.modules.products.persistence import upsert_product
+
+        self.addCleanup(self.cleanup_products, "K-MAP-OE-%")
+        self.login()
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {"bld_no": "K-MAP-OE-001", "series": "TEST", "item": "Map OE Arm", "active": "1"},
+                actor="tester",
+            )
+            conn.commit()
+
+        response = self.client.post(
+            "/manual-map",
+            data={"source_code": "MAP-OE-CODE-1", "bld_no": "K-MAP-OE-001", "sync_target": "oe", "note": ""},
+            headers={"X-Requested-With": "fetch", "Accept": "application/json"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload["ok"])
+        self.assertTrue(payload["appended"])
+        self.assertIn("人工映射已保存", payload["message"])
+        self.assertIn("已同步加入产品目录OE 号", payload["message"])
+        with self.web.connect(self.web.DB_PATH) as conn:
+            product = conn.execute(
+                "SELECT oe_no_1, oe_no_2 FROM products WHERE bld_no = ?",
+                ("K-MAP-OE-001",),
+            ).fetchone()
+        self.assertIn("MAP-OE-CODE-1", product["oe_no_1"])
+        self.assertNotIn("MAP-OE-CODE-1", product["oe_no_2"] or "")
+
+    def test_manual_map_json_appends_code_to_product_brand_list(self):
+        from app.modules.products.persistence import upsert_product
+
+        self.addCleanup(self.cleanup_products, "K-MAP-BRAND-%")
+        self.login()
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {"bld_no": "K-MAP-BRAND-001", "series": "TEST", "item": "Map Brand Arm", "active": "1"},
+                actor="tester",
+            )
+            conn.commit()
+
+        response = self.client.post(
+            "/manual-map",
+            data={
+                "source_code": "MAP-BRAND-CODE-1",
+                "bld_no": "K-MAP-BRAND-001",
+                "sync_target": "brand_code",
+                "note": "",
+            },
+            headers={"X-Requested-With": "fetch", "Accept": "application/json"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload["ok"])
+        self.assertTrue(payload["appended"])
+        self.assertIn("已同步加入产品目录品牌号码", payload["message"])
+        with self.web.connect(self.web.DB_PATH) as conn:
+            product = conn.execute(
+                "SELECT oe_no_1, oe_no_2 FROM products WHERE bld_no = ?",
+                ("K-MAP-BRAND-001",),
+            ).fetchone()
+        self.assertIn("MAP-BRAND-CODE-1", product["oe_no_2"])
+        self.assertNotIn("MAP-BRAND-CODE-1", product["oe_no_1"] or "")
+
+    def test_manual_map_json_rejects_empty_codes(self):
+        self.login()
+        for data in (
+            {"source_code": "", "bld_no": "K-MAP-OE-001"},
+            {"source_code": "MAP-OE-CODE-2", "bld_no": ""},
+        ):
+            response = self.client.post(
+                "/manual-map",
+                data=data,
+                headers={"X-Requested-With": "fetch", "Accept": "application/json"},
+            )
+            self.assertEqual(response.status_code, 400)
+            payload = response.get_json()
+            self.assertFalse(payload["ok"])
+            self.assertIn("请输入客户号码和 BLD NO.", payload["error"])
+
+    def test_manual_map_json_requires_manage_aliases_permission(self):
+        from app.modules.admin.persistence import save_user
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            save_user(
+                conn,
+                {
+                    "username": "map-plain-user",
+                    "display_name": "Map Plain User",
+                    "password": "plain-pw",
+                    "role": "user",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        self.client.post("/login", data={"username": "map-plain-user", "password": "plain-pw", "next": "/"})
+        response = self.client.post(
+            "/manual-map",
+            data={"source_code": "MAP-DENIED-1", "bld_no": "K-MAP-OE-001"},
+            headers={"X-Requested-With": "fetch", "Accept": "application/json"},
+        )
+        self.assertEqual(response.status_code, 403)
+        payload = response.get_json()
+        self.assertFalse(payload["ok"])
+        with self.web.connect(self.web.DB_PATH) as conn:
+            alias = conn.execute(
+                "SELECT id FROM aliases WHERE source_code = ?",
+                ("MAPDENIED1",),
+            ).fetchone()
+        self.assertIsNone(alias)
+        self.client.post("/logout")
+
+    def test_manual_map_form_submit_still_redirects(self):
+        self.login()
+        response = self.client.post(
+            "/manual-map",
+            data={"source_code": "MAP-FORM-1", "bld_no": "K-MAP-OE-001"},
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith("/"))
+
+    def test_result_page_renders_map_oe_buttons_and_modal_for_unmatched_rows(self):
+        from app.modules.products.persistence import upsert_product
+
+        self.addCleanup(self.cleanup_products, "K-MAP-RENDER-%")
+        self.login()
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-MAP-RENDER-001",
+                    "series": "TEST",
+                    "item": "Map Render Arm",
+                    "oe_no_1": "MAP-RENDER-OE",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            conn.commit()
+
+        response = self.client.post("/match", data={"quick_oe": "MAP-RENDER-OE\nMAP-RENDER-UNMATCHED"})
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('data-map-oe-code="MAP-RENDER-UNMATCHED"', html)
+        self.assertNotIn('data-map-oe-code="MAP-RENDER-OE"', html)
+        self.assertIn('id="map-oe-modal"', html)
+        self.assertIn('name="sync_target" value="oe" checked', html)
+        self.assertIn('name="sync_target" value="brand_code"', html)
+        self.assertIn("/products/lookup", html)
+        self.assertIn("/manual-map", html)
+
+    def test_summary_row_lists_each_split_code_for_multi_code_unmatched_row(self):
+        from app.modules.inquiry.excel.analysis import summary_row
+
+        row = summary_row(1, "MAP-MULTI-AAA / MAP-MULTI-BBB", "Arm", None)
+        self.assertEqual(row["unmatched_oe_codes"], ["MAP-MULTI-AAA", "MAP-MULTI-BBB"])
+        single = summary_row(2, "MAP-MULTI-CCC", "Arm", None)
+        self.assertEqual(single["unmatched_oe_codes"], [])
+
+    def test_result_page_hides_map_oe_controls_without_manage_aliases(self):
+        from app.modules.products.persistence import upsert_product
+
+        self.addCleanup(self.cleanup_products, "K-MAP-PLAIN-%")
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {"bld_no": "K-MAP-PLAIN-001", "series": "TEST", "item": "Map Plain Arm", "active": "1"},
+                actor="tester",
+            )
+            conn.commit()
+
+        self.client.post("/login", data={"username": "map-plain-user", "password": "plain-pw", "next": "/"})
+        response = self.client.post("/match", data={"quick_oe": "K-MAP-PLAIN-001\nMAP-RENDER-UNMATCHED"})
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("MAP-RENDER-UNMATCHED", html)
+        self.assertNotIn("data-map-oe-code", html)
+        self.assertNotIn('id="map-oe-modal"', html)
+        self.client.post("/logout")
+
+    def test_product_lookup_returns_matching_products(self):
+        from app.modules.products.persistence import upsert_product
+
+        with self.client.session_transaction() as session:
+            session.clear()
+        anonymous = self.client.get(
+            "/products/lookup?q=K-LOOKUP",
+            headers={"X-Requested-With": "fetch", "Accept": "application/json"},
+        )
+        self.assertEqual(anonymous.status_code, 401)
+
+        self.addCleanup(self.cleanup_products, "K-LOOKUP-%")
+        self.login()
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-LOOKUP-001",
+                    "series": "LOOKUPSERIES",
+                    "item": "Lookup Control Arm",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-LOOKUP-002",
+                    "series": "JOINTSERIES",
+                    "item": "Lookup Ball Joint",
+                    "active": "0",
+                },
+                actor="tester",
+            )
+            conn.commit()
+
+        response = self.client.get("/products/lookup?q=K-LOOKUP-001")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["Cache-Control"], "no-store")
+        payload = response.get_json()
+        self.assertIsInstance(payload, list)
+        self.assertEqual(len(payload), 1)
+        entry = payload[0]
+        self.assertEqual(sorted(entry.keys()), ["bld_no", "id", "item", "series"])
+        self.assertEqual(entry["bld_no"], "K-LOOKUP-001")
+        self.assertEqual(entry["item"], "Lookup Control Arm")
+        self.assertEqual(entry["series"], "LOOKUPSERIES")
+
+        filtered = self.client.get("/products/lookup?q=JOINTSERIES").get_json()
+        self.assertEqual([entry["bld_no"] for entry in filtered], ["K-LOOKUP-002"])
+
+        empty = self.client.get("/products/lookup?q=NO-SUCH-PRODUCT-XYZ").get_json()
+        self.assertEqual(empty, [])
+
     def test_product_save_fetch_returns_json_for_local_result_refresh(self):
         self.addCleanup(self.cleanup_products, "K-INLINE-SAVE-%")
         self.login()
@@ -3339,6 +3625,154 @@ class WebAppTest(unittest.TestCase):
         batch = self.client.get("/products/drawings/batch")
         self.assertEqual(batch.status_code, 200)
         self.assertIn("暂未开放", batch.get_data(as_text=True))
+
+    def test_product_image_and_drawing_delete_endpoints(self):
+        from app.modules.admin.persistence import save_user
+        from app.modules.products.persistence import upsert_product
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-DELMEDIA-001",
+                    "series": "TEST",
+                    "item": "DELETE MEDIA PART",
+                    "oe_no_1": "DELMEDIA-001",
+                    "models": "Tester",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            save_user(
+                conn,
+                {
+                    "username": "viewer-delmedia",
+                    "display_name": "Viewer Delete Media",
+                    "password": "viewer-pw",
+                    "role": "viewer",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            conn.commit()
+            product = conn.execute("SELECT * FROM products WHERE bld_no = ?", ("K-DELMEDIA-001",)).fetchone()
+        product_id = product["id"]
+
+        self.client.post("/logout")
+        anonymous = self.client.post(f"/products/{product_id}/images/1/delete", data={})
+        self.assertEqual(anonymous.status_code, 302)
+        self.assertIn("/login", anonymous.headers["Location"])
+
+        self.login()
+        upload = self.client.post(
+            "/products/save",
+            data={
+                "bld_no": "K-DELMEDIA-001",
+                "series": "TEST",
+                "item": "DELETE MEDIA PART",
+                "oe_no_1": "DELMEDIA-001",
+                "oe_no_2": "",
+                "models": "Tester",
+                "price_cny": "",
+                "active": "1",
+                "product_image_1": (io.BytesIO(b"\x89PNG\r\n\x1a\ndelete image 1"), "K-DELMEDIA-001.png"),
+                "product_image_2": (io.BytesIO(b"\x89PNG\r\n\x1a\ndelete image 2"), "K-DELMEDIA-001-2.png"),
+                "drawing": (io.BytesIO(b"%PDF-1.4\ndelete drawing\n%%EOF"), "K-DELMEDIA-001.pdf"),
+            },
+            content_type="multipart/form-data",
+            follow_redirects=False,
+        )
+        self.assertEqual(upload.status_code, 302)
+        image_2_path = self.root / "data" / "product_images" / "K-DELMEDIA-001-2.png"
+        drawing_path = self.root / "data" / "drawings" / "pdf" / "K-DELMEDIA-001.pdf"
+        self.assertTrue(image_2_path.exists())
+        self.assertTrue(drawing_path.exists())
+        thumb_2_path = self.root / "data" / "product_images" / "thumbs" / "K-DELMEDIA-001-2.png"
+        thumb_2_path.parent.mkdir(parents=True, exist_ok=True)
+        thumb_2_path.write_bytes(b"fake thumb")
+
+        edit_html = self.client.get(f"/products/{product_id}/edit").get_data(as_text=True)
+        self.assertIn(f'formaction="/products/{product_id}/images/1/delete"', edit_html)
+        self.assertIn(f'formaction="/products/{product_id}/images/2/delete"', edit_html)
+        self.assertIn(f'formaction="/products/{product_id}/drawing/delete"', edit_html)
+        self.assertIn('data-confirm="确认删除图片 1？', edit_html)
+        self.assertIn('data-confirm="确认删除 PDF 图纸？', edit_html)
+
+        self.assertEqual(self.client.post(f"/products/{product_id}/images/0/delete").status_code, 400)
+        self.assertEqual(self.client.post(f"/products/{product_id}/images/6/delete").status_code, 400)
+
+        embedded_delete = self.client.post(
+            f"/products/{product_id}/images/2/delete",
+            data={"embedded": "1"},
+            follow_redirects=False,
+        )
+        self.assertEqual(embedded_delete.status_code, 302)
+        self.assertEqual(embedded_delete.headers["Location"], f"/products/{product_id}/edit?embedded=1")
+        with self.web.connect(self.web.DB_PATH) as conn:
+            updated = conn.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone()
+        self.assertEqual(updated["image_path_2"], "")
+        self.assertEqual(updated["image_path"], "data_product_images/K-DELMEDIA-001.png")
+        self.assertFalse(image_2_path.exists())
+        self.assertFalse(thumb_2_path.exists())
+        image_archive = self.root / "data" / "product_images" / "archive" / "K-DELMEDIA-001"
+        archived_images = list(image_archive.glob("*K-DELMEDIA-001-2.png"))
+        self.assertEqual(len(archived_images), 1)
+        self.assertEqual(archived_images[0].read_bytes(), b"\x89PNG\r\n\x1a\ndelete image 2")
+        self.assertTrue((self.root / "data" / "product_images" / "K-DELMEDIA-001.png").exists())
+        with self.web.connect(self.web.DB_PATH) as conn:
+            image_audit = conn.execute(
+                "SELECT * FROM audit_logs WHERE action = ? AND target_key = ? ORDER BY id DESC LIMIT 1",
+                ("删除产品图片", "K-DELMEDIA-001"),
+            ).fetchone()
+        self.assertIsNotNone(image_audit)
+        self.assertIn("图片 2", image_audit["detail"])
+
+        drawing_delete = self.client.post(f"/products/{product_id}/drawing/delete", follow_redirects=False)
+        self.assertEqual(drawing_delete.status_code, 302)
+        self.assertEqual(drawing_delete.headers["Location"], f"/products/{product_id}/edit")
+        with self.web.connect(self.web.DB_PATH) as conn:
+            updated = conn.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone()
+        self.assertEqual(updated["drawing_path"], "")
+        self.assertEqual(updated["drawing_original_name"], "")
+        self.assertEqual(updated["drawing_updated_at"], "")
+        self.assertFalse(drawing_path.exists())
+        drawing_archive = self.root / "data" / "drawings" / "archive" / "K-DELMEDIA-001"
+        archived_drawings = list(drawing_archive.glob("*.pdf"))
+        self.assertEqual(len(archived_drawings), 1)
+        self.assertEqual(archived_drawings[0].read_bytes(), b"%PDF-1.4\ndelete drawing\n%%EOF")
+        with self.web.connect(self.web.DB_PATH) as conn:
+            drawing_audit = conn.execute(
+                "SELECT * FROM audit_logs WHERE action = ? AND target_key = ? ORDER BY id DESC LIMIT 1",
+                ("删除图纸", "K-DELMEDIA-001"),
+            ).fetchone()
+        self.assertIsNotNone(drawing_audit)
+
+        edit_html = self.client.get(f"/products/{product_id}/edit").get_data(as_text=True)
+        self.assertNotIn(f'formaction="/products/{product_id}/images/2/delete"', edit_html)
+        self.assertNotIn(f'formaction="/products/{product_id}/drawing/delete"', edit_html)
+
+        missing_image = self.client.post("/products/99999999/images/1/delete", follow_redirects=False)
+        self.assertEqual(missing_image.status_code, 302)
+        missing_drawing = self.client.post("/products/99999999/drawing/delete", follow_redirects=False)
+        self.assertEqual(missing_drawing.status_code, 302)
+
+        self.client.post("/logout")
+        login = self.client.post(
+            "/login",
+            data={"username": "viewer-delmedia", "password": "viewer-pw", "next": "/"},
+            follow_redirects=False,
+        )
+        self.assertEqual(login.status_code, 302)
+        forbidden = self.client.post(
+            f"/products/{product_id}/images/1/delete",
+            headers={"Accept": "text/html", "X-Requested-With": "fetch"},
+        )
+        self.assertEqual(forbidden.status_code, 403)
+        with self.web.connect(self.web.DB_PATH) as conn:
+            unchanged = conn.execute("SELECT image_path FROM products WHERE id = ?", (product_id,)).fetchone()
+        self.assertEqual(unchanged["image_path"], "data_product_images/K-DELMEDIA-001.png")
+        self.client.post("/logout")
+        self.login()
 
     def test_copy_product_media_restores_files_when_a_later_write_fails(self):
         self.login()

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from flask import flash, redirect, request, url_for
+from flask import flash, jsonify, redirect, request, url_for
 
 from app.matcher import normalize_code
 from app.modules.inquiry.factory import get_inquiry_service
-from app.security import actor_name, permission_required
+from app.security import actor_name, permission_required, wants_json_response
 
 
 def register(app) -> None:
@@ -14,6 +14,8 @@ def register(app) -> None:
         source_code = request.form.get("source_code", "")
         bld_no = request.form.get("bld_no", "")
         if not normalize_code(source_code) or not normalize_code(bld_no):
+            if wants_json_response():
+                return jsonify({"ok": False, "error": "请输入客户号码和 BLD NO.。"}), 400
             flash("请输入客户号码和 BLD NO.。", "error")
             return redirect(url_for("index"))
 
@@ -25,8 +27,11 @@ def register(app) -> None:
             sync_target,
             actor=actor_name(),
         )
-        target_label = "OE 号" if request.form.get("sync_target", "oe") == "oe" else "品牌号码"
-        flash("人工映射已保存。" + (f" 已同步加入产品目录{target_label}。" if appended else ""), "success")
+        target_label = "OE 号" if sync_target == "oe" else "品牌号码"
+        message = "人工映射已保存。" + (f" 已同步加入产品目录{target_label}。" if appended else "")
+        if wants_json_response():
+            return jsonify({"ok": True, "appended": appended, "message": message})
+        flash(message, "success")
         return redirect(url_for("index"))
 
     @app.post("/manual-map/delete")

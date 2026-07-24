@@ -136,6 +136,32 @@ def save_product_drawing(conn: sqlite3.Connection, product: sqlite3.Row, file: F
     return destination
 
 
+def delete_product_drawing(conn: sqlite3.Connection, product: sqlite3.Row, *, commit: bool = True) -> Path | None:
+    existing_path = product_drawing_path(product)
+
+    archived_path = None
+    if existing_path and existing_path.exists():
+        DRAWING_ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+        archive_dir = DRAWING_ARCHIVE_DIR / safe_filename_part(product["bld_no"], "drawing")
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        previous_name = product["drawing_original_name"] if "drawing_original_name" in product.keys() else existing_path.name
+        archive_name = safe_filename_part(Path(previous_name or existing_path.name).stem, existing_path.stem)
+        archived_path = _unique_path(archive_dir / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{archive_name}.pdf")
+        existing_path.replace(archived_path)
+
+    conn.execute(
+        """
+        UPDATE products
+        SET drawing_path = '', drawing_original_name = '', drawing_updated_at = '', updated_at = ?
+        WHERE id = ?
+        """,
+        (now_text(), product["id"]),
+    )
+    if commit:
+        conn.commit()
+    return archived_path
+
+
 def split_bld_numbers(value: object) -> list[str]:
     text = str(value or "").strip()
     if not text:

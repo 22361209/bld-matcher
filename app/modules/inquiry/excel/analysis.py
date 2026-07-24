@@ -85,6 +85,8 @@ def summary_row(
     if match and len(parts) > 1 and match.matched_codes:
         row["matched_oe_codes"] = list(match.matched_codes)
         row["unmatched_oe_codes"] = list(match.unmatched_codes)
+    elif not match and len(parts) > 1:
+        row["unmatched_oe_codes"] = list(parts)
     return row
 
 

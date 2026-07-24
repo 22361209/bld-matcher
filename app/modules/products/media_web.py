@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import cast
 
-from flask import flash, redirect, render_template, request, send_file, url_for
+from flask import abort, flash, redirect, render_template, request, send_file, url_for
 
 from app.drawings import product_drawing_path
 from app.modules.products.factory import get_product_service
@@ -85,3 +85,44 @@ def register(app) -> None:
             as_attachment=download,
             download_name=cast(str | None, product["drawing_original_name"]) or path.name,
         )
+
+    def _media_delete_target(product_id: int, *, embedded: bool) -> str:
+        if embedded:
+            return url_for("edit_product", product_id=product_id, embedded="1")
+        return url_for("edit_product", product_id=product_id)
+
+    @app.post("/products/<int:product_id>/images/<int:slot>/delete")
+    @permission_required("edit_products")
+    def delete_product_image(product_id: int, slot: int):
+        if not 1 <= slot <= 5:
+            abort(400)
+        embedded = request.form.get("embedded") == "1"
+        target = _media_delete_target(product_id, embedded=embedded)
+        try:
+            get_product_service().delete_image(product_id, slot, actor=actor_name())
+        except LookupError:
+            flash("产品不存在。", "error")
+            return redirect(target)
+        except Exception:
+            logger.exception("Product image delete failed")
+            flash("图片删除失败，请稍后重试。", "error")
+            return redirect(target)
+        flash(f"图片 {slot} 已删除，文件已移入归档目录保留。", "success")
+        return redirect(target)
+
+    @app.post("/products/<int:product_id>/drawing/delete")
+    @permission_required("edit_products")
+    def delete_product_drawing(product_id: int):
+        embedded = request.form.get("embedded") == "1"
+        target = _media_delete_target(product_id, embedded=embedded)
+        try:
+            get_product_service().delete_drawing(product_id, actor=actor_name())
+        except LookupError:
+            flash("产品不存在。", "error")
+            return redirect(target)
+        except Exception:
+            logger.exception("Product drawing delete failed")
+            flash("图纸删除失败，请稍后重试。", "error")
+            return redirect(target)
+        flash("图纸已删除，文件已移入归档目录保留。", "success")
+        return redirect(target)

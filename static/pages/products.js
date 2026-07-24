@@ -4,6 +4,10 @@ import {
   productCatalogHistoryUrl,
   productCatalogState,
 } from "./product_catalog_navigation.js?v=20260720-1";
+import {
+  invalidateProductOptionCache,
+  setProductOptionPickerValue,
+} from "./product_option_picker.js?v=20260724-1";
 import { setupProductTable } from "./product_table.js?v=20260720-1";
 
 if (document.body.dataset.page === "products.list") {
@@ -257,13 +261,16 @@ if (document.body.dataset.page === "products.list") {
       return;
     }
     productForm.reset();
-    const fields = ["series", "item", "oe_no_1", "oe_no_2", "models", "price_cny", "product_status"];
+    const fields = ["oe_no_1", "oe_no_2", "models", "price_cny"];
     fields.forEach((name) => {
       const input = productForm.elements.namedItem(name);
       if (input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) {
         input.value = source[name] ?? "";
       }
     });
+    setProductOptionPickerValue(productForm, "brand", source.series ?? "");
+    setProductOptionPickerValue(productForm, "item", source.item ?? "");
+    setProductOptionPickerValue(productForm, "product_status", source.product_status ?? "");
     const active = productForm.elements.namedItem("active");
     if (active instanceof HTMLInputElement) active.checked = Boolean(source.active);
     const sourceInput = productForm.elements.namedItem("copy_source_product_id");
@@ -343,6 +350,7 @@ if (document.body.dataset.page === "products.list") {
       });
       const payload = await response.json();
       if (!response.ok || !payload.ok) throw new Error(payload.error || "保存失败，请稍后重试。");
+      invalidateProductOptionCache();
       closeProductModal();
       await loadProducts(payload.redirect_url || window.location.href, {
         history: "push",
@@ -518,6 +526,7 @@ if (document.body.dataset.page === "products.list") {
       setStatus(event.data.message || "产品保存失败。", "error");
       return;
     }
+    invalidateProductOptionCache();
     closeProductEditModal();
     await loadProducts(window.location.href, {
       history: "replace",
