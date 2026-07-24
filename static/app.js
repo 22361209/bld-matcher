@@ -1,10 +1,7 @@
+import { confirmDestructive } from "./components/confirm-dialog.js?v=20260725-1";
+
 document.addEventListener("submit", (event) => {
-  const submitter = event.submitter;
-  if (!(submitter instanceof HTMLElement)) return;
-  const message = submitter.dataset.confirm;
-  if (message && !window.confirm(message)) {
-    event.preventDefault();
-  }
+  confirmDestructive(event);
 });
 const hasFileDrag = (event) => {
   const types = event.dataTransfer ? Array.from(event.dataTransfer.types || []) : [];

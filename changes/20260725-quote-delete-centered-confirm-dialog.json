@@ -1,0 +1,14 @@
+{
+  "date": "2026-07-25",
+  "version": "unreleased",
+  "title": "全局破坏性确认改为居中对话框",
+  "entries": [
+    "将 base.html 中的全局确认对话框与 app.js 的 data-confirm 整合，所有带 data-confirm 的破坏性提交统一使用居中 <dialog> 对话框，不再调用浏览器原生的 window.confirm。",
+    "对话框显示在浏览器视口中央，包含确认消息、‘确认’和‘取消’按钮，支持点击遮罩、Esc 和关闭按钮取消。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "compatible",
+    "operations": "restart-required"
+  }
+}

@@ -36,6 +36,17 @@
       {% block page_filters %}{% endblock %}
       {% block page_content %}{% endblock %}
     </main>
+    <dialog class="confirm-dialog" id="global-confirm-dialog" aria-labelledby="global-confirm-title">
+      <div class="confirm-dialog-header">
+        <h2 id="global-confirm-title">确认操作</h2>
+        <button class="confirm-dialog-close" type="button" data-close-global-confirm aria-label="关闭确认窗口">×</button>
+      </div>
+      <p class="confirm-dialog-message" data-global-confirm-message></p>
+      <div class="confirm-dialog-actions">
+        <button class="linear-button primary" type="button" data-global-confirm-ok>确认</button>
+        <button class="linear-button subtle" type="button" data-close-global-confirm>取消</button>
+      </div>
+    </dialog>
     {% block page_modals %}{% endblock %}
     <script type="module" src="{{ url_for('static', filename='components/data_grid.js', v=static_version('components/data_grid.js')) }}"></script>
     <script type="module" src="{{ url_for('static', filename='components/import-preview.js', v=static_version('components/import-preview.js')) }}"></script>
