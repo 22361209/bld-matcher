@@ -1,6 +1,8 @@
 /* Product image batch upload and media attachment panel. */
 
 .product-media-edit {
+  --product-media-card-width: 280px;
+  --product-media-card-height: 178px;
   display: grid;
   grid-template-columns: minmax(360px, 1.5fr) minmax(240px, 0.75fr);
   gap: 20px;
@@ -42,14 +44,16 @@
 
 .product-media-tile-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(126px, 1fr));
+  grid-template-columns: repeat(2, var(--product-media-card-width));
   gap: 10px;
-  align-items: stretch;
 }
 
 .product-media-tile {
   position: relative;
   display: grid;
+  box-sizing: border-box;
+  inline-size: var(--product-media-card-width);
+  block-size: var(--product-media-card-height);
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--precision-line-strong);
@@ -73,6 +77,7 @@
 
 .product-media-tile-preview {
   display: grid;
+  grid-template-rows: 37px minmax(0, 1fr);
   background: #f2f6f9;
 }
 
@@ -81,7 +86,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  min-height: 36px;
+  min-height: 0;
   padding: 5px 7px 5px 9px;
   border-bottom: 1px solid var(--linear-line);
   background: #f8fbfd;
@@ -90,7 +95,7 @@
 .product-media-tile-visual {
   position: relative;
   display: grid;
-  min-height: 108px;
+  min-height: 0;
   background: #ffffff;
 }
 
@@ -99,7 +104,7 @@
 
 .product-media-tile-visual img {
   display: block;
-  min-height: 108px;
+  min-height: 0;
   object-fit: contain;
   background: #ffffff;
 }
@@ -157,14 +162,15 @@
 
 .product-media-intake {
   display: grid;
-  min-height: 178px;
+  box-sizing: border-box;
+  inline-size: var(--product-media-card-width);
+  block-size: var(--product-media-card-height);
+  min-height: 0;
   border: 1px dashed #9eafbd;
   border-radius: 7px;
   background: #ffffff;
   transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
 }
-
-.product-media-intake.has-media { min-height: 0; }
 
 .product-media-intake.drag-over,
 .product-media-intake:focus-within {
@@ -225,8 +231,6 @@
 .product-media-upload-status.error { color: #9a3412; }
 
 .product-media-drawing {
-  display: flex;
-  flex-direction: column;
   padding-left: 20px;
   border-left: 1px solid var(--linear-line);
 }
@@ -238,24 +242,26 @@
   margin: 0 0 12px;
 }
 
-/* On desktop the drawing card fills the same media row as the image tile. */
 .product-media-drawing-intake,
 .product-media-drawing-intake.has-media {
-  flex: 1 1 auto;
+  max-inline-size: 100%;
   min-height: 0;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 930px) {
   .product-media-edit { grid-template-columns: minmax(0, 1fr); }
 
   .product-media-drawing {
-    display: block;
     padding-top: 14px;
     padding-left: 0;
     border-top: 1px solid var(--linear-line);
     border-left: 0;
   }
 
-  .product-media-drawing-intake,
-  .product-media-drawing-intake.has-media { min-height: 178px; }
+}
+
+@media (max-width: 620px) {
+  .product-media-edit { --product-media-card-width: 100%; }
+
+  .product-media-tile-grid { grid-template-columns: minmax(0, 1fr); }
 }
