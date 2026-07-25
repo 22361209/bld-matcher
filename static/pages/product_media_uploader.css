@@ -225,6 +225,8 @@
 .product-media-upload-status.error { color: #9a3412; }
 
 .product-media-drawing {
+  display: flex;
+  flex-direction: column;
   padding-left: 20px;
   border-left: 1px solid var(--linear-line);
 }
@@ -236,18 +238,24 @@
   margin: 0 0 12px;
 }
 
-/* Match the single-image tile: 36px header + 108px image area, plus borders. */
-.product-media-drawing-intake { min-height: 146px; }
-
-.product-media-drawing-intake .product-media-intake-button { min-height: 110px; }
+/* On desktop the drawing card fills the same media row as the image tile. */
+.product-media-drawing-intake,
+.product-media-drawing-intake.has-media {
+  flex: 1 1 auto;
+  min-height: 0;
+}
 
 @media (max-width: 760px) {
   .product-media-edit { grid-template-columns: minmax(0, 1fr); }
 
   .product-media-drawing {
+    display: block;
     padding-top: 14px;
     padding-left: 0;
     border-top: 1px solid var(--linear-line);
     border-left: 0;
   }
+
+  .product-media-drawing-intake,
+  .product-media-drawing-intake.has-media { min-height: 178px; }
 }

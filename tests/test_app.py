@@ -3714,6 +3714,9 @@ class WebAppTest(unittest.TestCase):
         self.assertNotIn("file-picker-clear", edit_html)
         self.assertIn("/static/app.js", edit_html)
         self.assertIn('name="drawing"', edit_html)
+        media_css = (PROJECT_ROOT / "static" / "pages" / "product_media_uploader.css").read_text(encoding="utf-8")
+        self.assertIn(".product-media-drawing-intake.has-media", media_css)
+        self.assertIn("flex: 1 1 auto", media_css)
 
         embedded = self.client.get(f"/products/{product['id']}/edit", query_string={"embedded": "1"})
         embedded_html = embedded.get_data(as_text=True)

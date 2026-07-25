@@ -1,0 +1,13 @@
+{
+  "date": "2026-07-26",
+  "version": "unreleased",
+  "title": "修正产品媒体卡片高度对齐",
+  "entries": [
+    "产品编辑弹窗的 PDF 图纸上传框会随左侧图片卡片高度自动拉齐，不再因图片实际比例产生高度差。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "compatible",
+    "operations": "none"
+  }
+}
