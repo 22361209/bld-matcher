@@ -179,12 +179,12 @@ export function setupProductOptionPicker(container) {
     if (keepOpen) renderDropdown();
     else closeDropdown();
   };
-  const renderDropdown = () => {
+  const renderDropdown = (filterText = input.value) => {
     const source = (cachedOptions && cachedOptions[FIELD_SOURCE_KEYS[field]]) || [];
     const selectedKeys = new Set(state.values.map((value) => value.toLowerCase()));
     const available = mode === "multi" ? source.filter((option) => !selectedKeys.has(option.toLowerCase())) : source;
-    const matches = filterPickerOptions(available, input.value);
-    const newValue = pickerNewValue(input.value, source);
+    const matches = filterPickerOptions(available, filterText);
+    const newValue = pickerNewValue(filterText, source);
     dropdown.replaceChildren();
     matches.forEach((option) => {
       const button = document.createElement("button");
@@ -210,9 +210,9 @@ export function setupProductOptionPicker(container) {
     }
     dropdown.hidden = false;
   };
-  const openDropdown = () => {
+  const openDropdown = (filterText) => {
     if (cachedOptions) {
-      renderDropdown();
+      renderDropdown(filterText);
       return;
     }
     dropdown.replaceChildren();
@@ -222,7 +222,7 @@ export function setupProductOptionPicker(container) {
     dropdown.appendChild(loading);
     dropdown.hidden = false;
     fetchPickerOptions()
-      .then(() => renderDropdown())
+      .then(() => renderDropdown(filterText))
       .catch(() => {
         dropdown.replaceChildren();
         const failure = document.createElement("p");
@@ -232,10 +232,10 @@ export function setupProductOptionPicker(container) {
       });
   };
 
-  input.addEventListener("focus", openDropdown);
+  input.addEventListener("focus", () => openDropdown(""));
   input.addEventListener("input", () => {
     if (mode === "single") state.set(input.value);
-    openDropdown();
+    openDropdown(input.value);
   });
   input.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {

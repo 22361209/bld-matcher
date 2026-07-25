@@ -10,14 +10,17 @@
             {% if slot == 1 %}<span>主图</span>{% endif %}
           </div>
           {% if slot_image_url %}
-            <a class="image-link product-media-preview" href="{{ slot_image_url }}" target="_blank" rel="noopener" title="打开 {{ product.bld_no }} 图片 {{ slot }}">
-              <img class="product-thumb" src="{{ product_image_thumb_url(product, slot) or slot_image_url }}" alt="{{ product.bld_no }} 图片 {{ slot }}" loading="lazy" decoding="async">
-            </a>
-            <button class="linear-button danger" type="submit"
-              formaction="{{ url_for('delete_product_image', product_id=product.id, slot=slot) }}"
-              formmethod="post" formnovalidate
-              {% if embedded %}name="embedded" value="1"{% endif %}
-              data-confirm="确认删除图片 {{ slot }}？文件会移入归档目录保留。">删除</button>
+            <div class="product-media-preview-wrap">
+              <a class="image-link product-media-preview" href="{{ slot_image_url }}" target="_blank" rel="noopener" title="打开 {{ product.bld_no }} 图片 {{ slot }}">
+                <img class="product-thumb" src="{{ product_image_thumb_url(product, slot) or slot_image_url }}" alt="{{ product.bld_no }} 图片 {{ slot }}" loading="lazy" decoding="async">
+              </a>
+              <button class="product-media-delete" type="submit"
+                formaction="{{ url_for('delete_product_image', product_id=product.id, slot=slot) }}"
+                formmethod="post" formnovalidate
+                {% if embedded %}name="embedded" value="1"{% endif %}
+                data-confirm="确认删除图片 {{ slot }}？文件会移入归档目录保留。"
+                aria-label="删除图片 {{ slot }}" title="删除图片 {{ slot }}">×</button>
+            </div>
           {% elif product %}
             <p class="note product-slot-empty">当前为空</p>
           {% endif %}
