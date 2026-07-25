@@ -236,6 +236,15 @@ CREATE TABLE IF NOT EXISTS api_artifacts (
 
 CREATE INDEX IF NOT EXISTS idx_api_artifacts_owner ON api_artifacts(owner_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_api_artifacts_expires ON api_artifacts(expires_at);
+
+CREATE TABLE IF NOT EXISTS product_option_values (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL,
+  value TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+  UNIQUE(kind, value)
+);
 """
 
 

@@ -7,7 +7,7 @@ import {
 import {
   invalidateProductOptionCache,
   setProductOptionPickerValue,
-} from "./product_option_picker.js?v=20260724-1";
+} from "./product_option_picker.js?v=20260725-1";
 import { setupProductTable } from "./product_table.js?v=20260720-1";
 
 if (document.body.dataset.page === "products.list") {

@@ -1,0 +1,23 @@
+/* 产品候选值管理页（admin.product_options） */
+
+.product-option-add-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0;
+}
+
+.product-option-add-form input[name="value"] {
+  flex: 1;
+  max-width: 360px;
+}
+
+.product-option-edit-form {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.product-option-edit-form input[name="value"] {
+  width: 220px;
+}

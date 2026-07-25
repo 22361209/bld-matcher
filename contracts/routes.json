@@ -477,6 +477,27 @@
       "rule": "/product-images/<path:name>"
     },
     {
+      "endpoint": "product_option_values",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/product-options"
+    },
+    {
+      "endpoint": "delete_product_option_value_route",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/product-options/delete"
+    },
+    {
+      "endpoint": "save_product_option_value_route",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/product-options/save"
+    },
+    {
       "endpoint": "products",
       "methods": [
         "GET"

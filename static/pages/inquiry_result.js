@@ -1,3 +1,10 @@
+import { setupProductTable } from "./product_table.js?v=20260721-1";
+
+setupProductTable(document.querySelector(".data-grid[data-grid-key='inquiry-result'] table.data-table"), {
+  columns: ["row", "oe", "name", "bld", "price", "status", "score", "reason"],
+  storagePrefix: "bld.inquiry-result",
+});
+
 document.querySelectorAll("[data-price-mode]").forEach((select) => {
   const form = select.closest("form");
   const rateField = form ? form.querySelector("[data-exchange-rate-field]") : null;

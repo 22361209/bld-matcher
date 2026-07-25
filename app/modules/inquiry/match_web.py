@@ -22,6 +22,20 @@ PASTED_INQUIRY_MAX_CHARS = 5000
 logger = logging.getLogger(__name__)
 
 
+def _single_page_pagination(total: int) -> dict:
+    return {
+        "page": 1,
+        "total_pages": 1,
+        "start": 1 if total else 0,
+        "end": total,
+        "links": [],
+        "has_prev": False,
+        "has_next": False,
+        "prev_url": "",
+        "next_url": "",
+    }
+
+
 def _clean_inquiry_workbook_for_matching(upload_path: Path, original_filename: str) -> tuple[Path, str]:
     cleanup = sanitize_inquiry_workbook_if_needed(
         upload_path,
@@ -65,6 +79,7 @@ def _render_pasted_inquiry_result(query: str):
         original_filename=PASTED_INQUIRY_FILENAME,
         output_name=output_path.name,
         match_column="",
+        pagination=_single_page_pagination(summary["total"]),
     )
 
 
@@ -158,6 +173,7 @@ def register(app) -> None:
             output_name=output_path.name,
             match_columns=match_columns,
             cleanup_message=request.form.get("cleanup_message", ""),
+            pagination=_single_page_pagination(summary["total"]),
         )
 
     @app.post("/match/column/back")

@@ -307,10 +307,46 @@
   font-weight: 400;
 }
 
-.product-option-picker-chips {
+.product-option-picker-combobox {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--precision-line-strong);
+  border-radius: 4px;
+  background: #ffffff;
+  color: var(--linear-text);
+  cursor: text;
+}
+
+.product-option-picker-combobox:focus-within {
+  border-color: #83a8bd;
+  box-shadow: 0 0 0 3px rgba(32, 93, 132, 0.14);
+}
+
+.product-option-picker-combobox input {
+  flex: 1 1 10ch;
+  min-width: 10ch;
+  width: auto;
+  padding: 4px 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.product-option-picker-combobox input:focus {
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+}
+
+.product-option-picker-chips {
+  display: contents;
+}
+
+.product-option-picker-chips[hidden] {
+  display: none;
 }
 
 .product-option-picker-chip {

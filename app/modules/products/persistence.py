@@ -12,6 +12,7 @@ from app.platform.audit_store import log_event
 from app.platform.clock import now_text
 
 from .brand_normalization import canonicalize_brands
+from .option_values import register_product_option_values
 
 _BOOTSTRAP_LOCK = threading.Lock()
 _BOOTSTRAPPED_SOURCES: set[tuple[Path, Path, int | None]] = set()
@@ -123,6 +124,12 @@ def upsert_product(
         values,
     )
     after = connection.execute("SELECT * FROM products WHERE bld_no = ?", (bld_no,)).fetchone()
+    register_product_option_values(
+        connection,
+        series=values["series"],
+        item=values["item"],
+        product_status=values["product_status"],
+    )
     if audit and after:
         changes = _field_changes(before, dict(after))
         if changes:

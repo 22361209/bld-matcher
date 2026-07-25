@@ -309,6 +309,91 @@ class ProductInquiryModuleTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "SERIES 只能选择模板下拉选项"):
             self.product_service.preview_catalog_import(catalog_path)
 
+    def test_catalog_import_accepts_values_added_to_controlled_vocabulary(self) -> None:
+        self.add_catalog_import_choices()
+        self.product_service.save_option_value("brand", "vocab brand", actor="module-test")
+        self.product_service.save_option_value("item", "Vocab Item", actor="module-test")
+        catalog_path = self.root / "catalog-vocabulary-choice.xlsx"
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["BLD NO.", "SERIES", "ITEM", "OE NO.1", "Models", "产品状态", "导入单价"])
+        sheet.append(["K-IMPORT-VOCAB", "VOCAB BRAND", "Vocab Item", "43330", "CAMRY", "1 个球头", 68.5])
+        workbook.save(catalog_path)
+        workbook.close()
+
+        preview = self.product_service.preview_catalog_import(catalog_path)
+
+        self.assertEqual(len(preview.new_rows), 1)
+
+    def test_product_save_registers_option_values_used_by_import_choices(self) -> None:
+        self.add_product(
+            "K-VOCAB-AUTO-001",
+            "AUTO-OE-1",
+            item="Auto Arm",
+            series="auto brand",
+            product_status="1 个球头 2 个衬套",
+        )
+
+        choices = self.product_service.catalog_import_choices()
+
+        self.assertIn("AUTO BRAND", choices.series)
+        self.assertIn("Auto Arm", choices.items)
+        with connect(self.database_path) as connection:
+            status_row = connection.execute(
+                "SELECT value FROM product_option_values WHERE kind = 'product_status' AND value = '1球头2衬套'"
+            ).fetchone()
+        self.assertIsNotNone(status_row)
+
+    def test_migration_025_seeds_option_values_idempotently(self) -> None:
+        from app.migrations import _add_product_option_values
+
+        connection = sqlite3.connect(":memory:")
+        connection.row_factory = sqlite3.Row
+        try:
+            connection.execute(
+                "CREATE TABLE products (id INTEGER PRIMARY KEY, series TEXT DEFAULT '', item TEXT DEFAULT '')"
+            )
+            connection.execute("INSERT INTO products (series, item) VALUES ('dodge chrysler', ' Ball Joint ')")
+            connection.execute("INSERT INTO products (series, item) VALUES ('TOYOTA\nTOYOTA', '')")
+
+            _add_product_option_values(connection)
+            rows = connection.execute("SELECT kind, value FROM product_option_values").fetchall()
+            seeded = {(row["kind"], row["value"]) for row in rows}
+            self.assertIn(("brand", "DODGE"), seeded)
+            self.assertIn(("brand", "CHRYSLER"), seeded)
+            self.assertIn(("brand", "TOYOTA"), seeded)
+            self.assertIn(("item", "Ball Joint"), seeded)
+            first_count = len(rows)
+
+            _add_product_option_values(connection)
+            second_count = int(
+                connection.execute("SELECT COUNT(*) FROM product_option_values").fetchone()[0]
+            )
+            self.assertEqual(second_count, first_count)
+        finally:
+            connection.close()
+
+    def test_migration_025_seeds_product_status_canonically(self) -> None:
+        from app.migrations import _add_product_option_values
+
+        connection = sqlite3.connect(":memory:")
+        connection.row_factory = sqlite3.Row
+        try:
+            connection.execute(
+                "CREATE TABLE products (id INTEGER PRIMARY KEY, series TEXT DEFAULT '', item TEXT DEFAULT '', product_status TEXT DEFAULT '')"
+            )
+            connection.execute(
+                "INSERT INTO products (series, item, product_status) VALUES ('', '', '1 个球头 2 个衬套')"
+            )
+
+            _add_product_option_values(connection)
+            rows = connection.execute(
+                "SELECT value FROM product_option_values WHERE kind = 'product_status'"
+            ).fetchall()
+            self.assertEqual([row["value"] for row in rows], ["1球头2衬套"])
+        finally:
+            connection.close()
+
     def test_catalog_column_filters_are_exact_multiselect_facets(self) -> None:
         self.add_product(
             "K-FACET-001",

@@ -7,7 +7,7 @@ from typing import Mapping, Protocol, Self
 from app.matcher import ProductCatalog
 
 from .brand_normalization import BrandNormalizationChange
-from .domain import ProductFilterOptions, ProductFilters, ProductRecord, ProductStats
+from .domain import ProductFilterOptions, ProductFilters, ProductOptionValue, ProductRecord, ProductStats
 
 
 class ProductRepository(Protocol):
@@ -89,6 +89,18 @@ class ProductRepository(Protocol):
     def backup_database(self, target_path: Path) -> None: ...
 
     def lock_brand_normalization(self) -> None: ...
+
+    def option_values(self) -> list[ProductOptionValue]: ...
+
+    def get_option_value(self, option_id: int) -> ProductOptionValue | None: ...
+
+    def option_value_exists(self, kind: str, value: str) -> bool: ...
+
+    def add_option_value(self, kind: str, value: str, *, actor: str) -> bool: ...
+
+    def rename_option_value(self, option_id: int, value: str, *, actor: str) -> ProductOptionValue | None: ...
+
+    def delete_option_value(self, option_id: int, *, actor: str) -> ProductOptionValue | None: ...
 
 
 class ProductUnitOfWork(Protocol):

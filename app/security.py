@@ -36,6 +36,7 @@ ROLE_PERMISSIONS = {
         "recognize_shipments",
         "generate_shipping_notice",
         "sync_product_data",
+        "manage_product_options",
     },
     "editor": {"edit_products", "manage_aliases", "generate_match", "view_logs", "generate_material_sheet", "recognize_shipments", "generate_shipping_notice"},
     "user": {"generate_match", "generate_material_sheet", "recognize_shipments", "generate_shipping_notice"},

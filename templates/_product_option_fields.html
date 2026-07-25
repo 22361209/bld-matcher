@@ -2,8 +2,10 @@
             <label>
               品牌 / SERIES
               <div class="product-option-picker" data-option-picker data-picker-mode="multi" data-picker-field="brand">
-                <div class="product-option-picker-chips" data-picker-chips hidden></div>
-                <input type="text" data-picker-input autocomplete="off" placeholder="输入筛选品牌；无匹配可直接新增">
+                <div class="product-option-picker-combobox" data-picker-combobox>
+                  <div class="product-option-picker-chips" data-picker-chips hidden></div>
+                  <input type="text" data-picker-input autocomplete="off" placeholder="输入筛选品牌；无匹配可直接新增">
+                </div>
                 <div class="product-option-picker-dropdown" data-picker-dropdown hidden></div>
                 <textarea name="series" rows="3" data-picker-value placeholder="每行一个品牌，例如 HONDA">{{ product.series if product else "" }}</textarea>
               </div>

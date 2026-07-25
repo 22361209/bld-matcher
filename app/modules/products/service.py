@@ -25,14 +25,24 @@ from .brand_normalization import (
     build_brand_normalization_preview,
 )
 from .domain import (
+    PRODUCT_OPTION_KINDS,
     ProductFilterOptions,
     ProductFilters,
+    ProductOptionValue,
     ProductPage,
     ProductRecord,
     ProductStats,
     build_product_filters,
 )
+from .option_values import normalized_option_values
 from .ports import CatalogBootstrapPort, LegacyAliasPort, ProductUnitOfWorkFactory
+
+
+PRODUCT_OPTION_KIND_LABELS = {
+    "brand": "品牌",
+    "item": "产品名称",
+    "product_status": "产品状态",
+}
 
 
 class ProductNotFoundError(LookupError):
@@ -238,11 +248,52 @@ class ProductService:
         return imported
 
     def catalog_import_choices(self) -> CatalogImportChoices:
-        options = self.filter_options(ProductFilters(status="all"))
+        self.bootstrap_port()
+        with self.unit_of_work_factory() as unit_of_work:
+            values = unit_of_work.repository.option_values()
         return CatalogImportChoices(
-            series=tuple(option.value for option in options.brand if option.value),
-            items=tuple(option.value for option in options.item if option.value),
+            series=tuple(option.value for option in values if option.kind == "brand"),
+            items=tuple(option.value for option in values if option.kind == "item"),
         )
+
+    def option_values(self) -> list[ProductOptionValue]:
+        self.bootstrap_port()
+        with self.unit_of_work_factory() as unit_of_work:
+            return unit_of_work.repository.option_values()
+
+    def save_option_value(self, kind: str, value: object, *, option_id: int | None = None, actor: str) -> None:
+        label = PRODUCT_OPTION_KIND_LABELS.get(kind)
+        if kind not in PRODUCT_OPTION_KINDS or label is None:
+            raise ValueError("未知的候选值类型。")
+        normalized = normalized_option_values(kind, value)
+        if not normalized:
+            raise ValueError(f"{label}候选值不能为空。")
+        with self.unit_of_work_factory() as unit_of_work:
+            if option_id is None:
+                created = False
+                for candidate in normalized:
+                    created = unit_of_work.repository.add_option_value(kind, candidate, actor=actor) or created
+                if not created:
+                    raise ValueError(f"{label}“{normalized[0]}”已存在。")
+            else:
+                if len(normalized) != 1:
+                    raise ValueError(f"{label}改名后必须恰好是一个值，请拆分为多条新增。")
+                current = unit_of_work.repository.get_option_value(option_id)
+                if current is None or current.kind != kind:
+                    raise ValueError("候选值不存在，请刷新后重试。")
+                new_value = normalized[0]
+                if new_value != current.value:
+                    if unit_of_work.repository.option_value_exists(kind, new_value):
+                        raise ValueError(f"{label}“{new_value}”已存在。")
+                    unit_of_work.repository.rename_option_value(option_id, new_value, actor=actor)
+            unit_of_work.commit()
+
+    def delete_option_value(self, option_id: int, *, actor: str) -> None:
+        with self.unit_of_work_factory() as unit_of_work:
+            removed = unit_of_work.repository.delete_option_value(option_id, actor=actor)
+            if removed is None:
+                raise ValueError("候选值不存在，请刷新后重试。")
+            unit_of_work.commit()
 
     def preview_catalog_import(self, path: Path) -> CatalogImportPreview:
         rows = read_catalog_import(path, choices=self.catalog_import_choices())

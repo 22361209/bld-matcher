@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -64,4 +65,27 @@ test("option filtering matches substrings case-insensitively and keeps all on bl
   assert.deepEqual(filterPickerOptions(options, "kia"), ["KIA", "Kia Motors"]);
   assert.deepEqual(filterPickerOptions(options, "  "), options);
   assert.deepEqual(filterPickerOptions(options, "vw"), []);
+});
+
+test("multi picker macro renders chips inside the combobox before the bare input", () => {
+  const macroSource = readFileSync(
+    new URL("../../templates/_product_option_fields.html", import.meta.url),
+    "utf8",
+  );
+  const brandMacro = macroSource.slice(
+    macroSource.indexOf("{% macro brand_picker"),
+    macroSource.indexOf("{% endmacro %}"),
+  );
+  const comboboxIndex = brandMacro.indexOf("data-picker-combobox");
+  const chipsIndex = brandMacro.indexOf("data-picker-chips");
+  const inputIndex = brandMacro.indexOf("data-picker-input");
+  const dropdownIndex = brandMacro.indexOf("data-picker-dropdown");
+  const valueIndex = brandMacro.indexOf("data-picker-value");
+  for (const index of [comboboxIndex, chipsIndex, inputIndex, dropdownIndex, valueIndex]) {
+    assert.notEqual(index, -1, "brand_picker macro is missing a picker hook");
+  }
+  assert.ok(comboboxIndex < chipsIndex, "chips host must live inside the combobox container");
+  assert.ok(chipsIndex < inputIndex, "chips must render before the inline text input");
+  assert.ok(inputIndex < dropdownIndex, "dropdown must stay outside the combobox");
+  assert.ok(dropdownIndex < valueIndex, "hidden textarea remains the submitted field");
 });

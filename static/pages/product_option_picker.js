@@ -133,6 +133,7 @@ export function setupProductOptionPicker(container) {
   const input = container.querySelector("[data-picker-input]");
   const dropdown = container.querySelector("[data-picker-dropdown]");
   const chipsHost = container.querySelector("[data-picker-chips]");
+  const combobox = container.querySelector("[data-picker-combobox]");
   const valueField = container.querySelector("[data-picker-value]") || input;
   if (!(input instanceof HTMLInputElement) || !(dropdown instanceof HTMLElement) || !valueField) return null;
 
@@ -263,6 +264,10 @@ export function setupProductOptionPicker(container) {
     if (!state.remove(remove.dataset.pickerChipRemove)) return;
     syncValueField();
     renderChips();
+  });
+  combobox?.addEventListener("click", (event) => {
+    if (event.target === input) return;
+    input.focus();
   });
   document.addEventListener("click", (event) => {
     if (!container.contains(event.target)) closeDropdown();

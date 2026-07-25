@@ -248,6 +248,31 @@ class ProductBrandCleanupTest(unittest.TestCase):
             ).fetchone()
         self.assertEqual(row["series"], "DODGE\nVOLVO")
 
+    def test_product_data_sync_registers_option_values(self) -> None:
+        package_database = self.root / "incoming.sqlite3"
+        _insert_raw_product(
+            package_database,
+            bld_no="BRAND-SYNC-OPT",
+            series="syncbrand",
+            source="remote",
+            updated_at="2099-07-14 10:00:00",
+        )
+        repository = SQLiteProductSyncRepository(self.database_path)
+        result = repository.apply(
+            package_database,
+            deactivate_local_only=False,
+            actor="sync-admin",
+        )
+        self.assertEqual(result.new_count, 1)
+
+        with connect(self.database_path) as connection:
+            rows = connection.execute(
+                "SELECT kind, value FROM product_option_values WHERE kind IN ('brand', 'item')"
+            ).fetchall()
+        values = {(row["kind"], row["value"]) for row in rows}
+        self.assertIn(("brand", "SYNCBRAND"), values)
+        self.assertIn(("item", "Test Product"), values)
+
 
 if __name__ == "__main__":
     unittest.main()

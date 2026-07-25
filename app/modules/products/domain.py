@@ -153,6 +153,17 @@ class ProductFilterOptions:
         }
 
 
+PRODUCT_OPTION_KINDS = ("brand", "item", "product_status")
+
+
+@dataclass(frozen=True, slots=True)
+class ProductOptionValue:
+    id: int
+    kind: str
+    value: str
+    updated_at: str
+
+
 def compact(value: object) -> str:
     return " ".join(str(value or "").split()).strip()
 

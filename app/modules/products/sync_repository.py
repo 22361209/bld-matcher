@@ -9,6 +9,7 @@ from app.database import connect
 from app.platform.audit_store import log_event
 
 from .brand_normalization import canonicalize_brands
+from .option_values import register_product_option_values
 from .sync_domain import ProductDiff, ProductSyncResult
 
 
@@ -230,6 +231,12 @@ class SQLiteProductSyncRepository:
                         ON CONFLICT(bld_no) DO UPDATE SET {assignments}
                         """,
                         [row[column] for column in insert_columns],
+                    )
+                    register_product_option_values(
+                        connection,
+                        series=row["series"],
+                        item=row["item"],
+                        product_status=row["product_status"],
                     )
                 if deactivate_local_only:
                     cursor = connection.execute(

@@ -483,6 +483,36 @@ def _drop_quote_record_price(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE quote_records DROP COLUMN price")
 
 
+def _add_product_option_values(conn: sqlite3.Connection) -> None:
+    # 延迟导入：app.database -> app.migrations 在模块加载期不能反向依赖业务模块。
+    from .modules.products.option_values import register_product_option_values
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS product_option_values (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          kind TEXT NOT NULL,
+          value TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+          UNIQUE(kind, value)
+        )
+        """
+    )
+    if not _columns(conn, "products"):
+        return
+    product_columns = _columns(conn, "products")
+    status_column = "product_status" if "product_status" in product_columns else "'' AS product_status"
+    rows = conn.execute(f"SELECT series, item, {status_column} FROM products").fetchall()
+    for row in rows:
+        register_product_option_values(
+            conn,
+            series=row["series"],
+            item=row["item"],
+            product_status=row["product_status"],
+        )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -508,6 +538,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("022_cross_device_sync_keys", _add_cross_device_sync_keys),
     ("023_rekey_cross_device_sync_keys", _rekey_cross_device_sync_keys),
     ("024_drop_quote_record_price", _drop_quote_record_price),
+    ("025_create_product_option_values", _add_product_option_values),
 )
 
 

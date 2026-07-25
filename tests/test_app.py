@@ -100,6 +100,11 @@ class WebAppTest(unittest.TestCase):
             conn.execute("DELETE FROM products WHERE bld_no LIKE ?", (bld_pattern,))
             conn.commit()
 
+    def cleanup_option_values(self, value_pattern):
+        with self.web.connect(self.web.DB_PATH) as conn:
+            conn.execute("DELETE FROM product_option_values WHERE value LIKE ?", (value_pattern,))
+            conn.commit()
+
     def create_internal_api_token(self, *, scopes=None, name="OpenClaw Test"):
         from app.platform.api_keys import create_internal_api_key
 
@@ -397,6 +402,148 @@ class WebAppTest(unittest.TestCase):
             lowered = [value.lower() for value in candidates]
             self.assertEqual(len(lowered), len(set(lowered)))
 
+    def test_product_save_registers_managed_option_values(self):
+        self.addCleanup(self.cleanup_products, "K-OPTREG-%")
+        self.addCleanup(self.cleanup_option_values, "OPTREG%")
+        self.login()
+        for _ in range(2):
+            saved = self.client.post(
+                "/products/save",
+                data={
+                    "bld_no": "K-OPTREG-001",
+                    "series": "optreg brand\noptreg second",
+                    "item": "Optreg Arm",
+                    "product_status": "1 个球头",
+                    "active": "1",
+                },
+                headers={"X-Requested-With": "fetch", "Accept": "application/json"},
+            )
+            self.assertEqual(saved.status_code, 200, saved.get_data(as_text=True))
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            rows = conn.execute(
+                "SELECT kind, value FROM product_option_values WHERE value LIKE 'OPTREG%' OR value = '1球头'"
+            ).fetchall()
+        registered = {(row["kind"], row["value"]) for row in rows}
+        self.assertIn(("brand", "OPTREG BRAND"), registered)
+        self.assertIn(("brand", "OPTREG SECOND"), registered)
+        self.assertIn(("item", "Optreg Arm"), registered)
+        self.assertIn(("product_status", "1球头"), registered)
+        brand_count = sum(1 for row in rows if row["kind"] == "brand" and row["value"] == "OPTREG BRAND")
+        self.assertEqual(brand_count, 1)
+
+    def test_product_options_admin_page_crud_and_audit(self):
+        self.addCleanup(self.cleanup_option_values, "ADMINOPT%")
+        self.login()
+
+        page = self.client.get("/product-options")
+        html = page.get_data(as_text=True)
+        self.assertEqual(page.status_code, 200)
+        self.assertIn('data-page="admin.product_options"', html)
+        self.assertIn("产品候选值", html)
+
+        saved = self.client.post(
+            "/product-options/save",
+            data={"kind": "brand", "value": "adminopt brand"},
+            follow_redirects=False,
+        )
+        self.assertEqual(saved.status_code, 302)
+        self.client.post("/product-options/save", data={"kind": "item", "value": "Adminopt Item"})
+        self.client.post("/product-options/save", data={"kind": "product_status", "value": "1 个球头 2 个衬套"})
+        # 重复新增被拒绝：值保持唯一
+        self.client.post("/product-options/save", data={"kind": "brand", "value": "ADMINOPT BRAND"})
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            brand_row = conn.execute(
+                "SELECT * FROM product_option_values WHERE kind = 'brand' AND value = 'ADMINOPT BRAND'"
+            ).fetchone()
+            self.assertIsNotNone(brand_row)
+            duplicates = conn.execute(
+                "SELECT COUNT(*) FROM product_option_values WHERE kind = 'brand' AND value LIKE 'ADMINOPT BRAND'"
+            ).fetchone()[0]
+            self.assertEqual(duplicates, 1)
+            status_row = conn.execute(
+                "SELECT * FROM product_option_values WHERE kind = 'product_status' AND value = '1球头2衬套'"
+            ).fetchone()
+            self.assertIsNotNone(status_row)
+
+        option_id = brand_row["id"]
+        renamed = self.client.post(
+            "/product-options/save",
+            data={"kind": "brand", "id": str(option_id), "value": "ADMINOPT RENAMED"},
+        )
+        self.assertEqual(renamed.status_code, 302)
+        # 改名规范化出多个值（复合输入）被拒绝
+        self.client.post(
+            "/product-options/save",
+            data={"kind": "brand", "id": str(option_id), "value": "AAA/BBB"},
+        )
+        with self.web.connect(self.web.DB_PATH) as conn:
+            current = conn.execute(
+                "SELECT value FROM product_option_values WHERE id = ?", (option_id,)
+            ).fetchone()
+            self.assertEqual(current["value"], "ADMINOPT RENAMED")
+
+        payload = self.client.get("/products/options").get_json()
+        self.assertIn("ADMINOPT RENAMED", payload["brands"])
+        self.assertIn("Adminopt Item", payload["items"])
+        self.assertIn("1球头 2衬套", payload["statuses"])
+
+        deleted = self.client.post("/product-options/delete", data={"id": str(option_id)})
+        self.assertEqual(deleted.status_code, 302)
+        with self.web.connect(self.web.DB_PATH) as conn:
+            gone = conn.execute(
+                "SELECT 1 FROM product_option_values WHERE id = ?", (option_id,)
+            ).fetchone()
+            self.assertIsNone(gone)
+            audit_actions = {
+                row["action"]
+                for row in conn.execute(
+                    "SELECT action FROM audit_logs WHERE target_type = 'product_option_value' AND target_key LIKE '%ADMINOPT%'"
+                ).fetchall()
+            }
+        self.assertIn("新增产品候选值", audit_actions)
+        self.assertIn("改名产品候选值", audit_actions)
+        self.assertIn("删除产品候选值", audit_actions)
+
+    def test_product_options_admin_page_requires_permission(self):
+        from app.modules.admin.persistence import save_user
+
+        self.login()
+        with self.web.connect(self.web.DB_PATH) as conn:
+            save_user(
+                conn,
+                {
+                    "username": "viewer-options",
+                    "display_name": "Viewer Options",
+                    "password": "viewer-pw",
+                    "role": "viewer",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            conn.commit()
+
+        self.client.post("/logout")
+        anonymous = self.client.get("/product-options", follow_redirects=False)
+        self.assertEqual(anonymous.status_code, 302)
+        self.assertIn("/login", anonymous.headers["Location"])
+
+        self.client.post(
+            "/login",
+            data={"username": "viewer-options", "password": "viewer-pw", "next": "/"},
+        )
+        denied = self.client.get("/product-options", follow_redirects=False)
+        self.assertEqual(denied.status_code, 302)
+        self.assertNotIn("/product-options", denied.headers["Location"])
+        denied_post = self.client.post(
+            "/product-options/save",
+            data={"kind": "brand", "value": "DENIED"},
+            follow_redirects=False,
+        )
+        self.assertEqual(denied_post.status_code, 302)
+        self.client.post("/logout")
+
     def test_manual_map_json_appends_code_to_product_oe_list(self):
         from app.modules.products.persistence import upsert_product
 
@@ -565,10 +712,22 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(single["unmatched_oe_codes"], [])
 
     def test_result_page_hides_map_oe_controls_without_manage_aliases(self):
+        from app.modules.admin.persistence import save_user
         from app.modules.products.persistence import upsert_product
 
         self.addCleanup(self.cleanup_products, "K-MAP-PLAIN-%")
         with self.web.connect(self.web.DB_PATH) as conn:
+            save_user(
+                conn,
+                {
+                    "username": "map-hide-user",
+                    "display_name": "Map Hide User",
+                    "password": "plain-pw",
+                    "role": "user",
+                    "active": "1",
+                },
+                actor="tester",
+            )
             upsert_product(
                 conn,
                 {"bld_no": "K-MAP-PLAIN-001", "series": "TEST", "item": "Map Plain Arm", "active": "1"},
@@ -576,7 +735,7 @@ class WebAppTest(unittest.TestCase):
             )
             conn.commit()
 
-        self.client.post("/login", data={"username": "map-plain-user", "password": "plain-pw", "next": "/"})
+        self.client.post("/login", data={"username": "map-hide-user", "password": "plain-pw", "next": "/"})
         response = self.client.post("/match", data={"quick_oe": "K-MAP-PLAIN-001\nMAP-RENDER-UNMATCHED"})
         html = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
@@ -584,6 +743,42 @@ class WebAppTest(unittest.TestCase):
         self.assertNotIn("data-map-oe-code", html)
         self.assertNotIn('id="map-oe-modal"', html)
         self.client.post("/logout")
+
+    def test_result_page_uses_shared_data_grid_protocol(self):
+        from app.modules.products.persistence import upsert_product
+
+        self.addCleanup(self.cleanup_products, "K-GRID-CHECK-%")
+        self.login()
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-GRID-CHECK-001",
+                    "series": "TEST",
+                    "item": "Grid Check Arm",
+                    "oe_no_1": "GRID-CHECK-001",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            conn.commit()
+
+        response = self.client.post("/match", data={"quick_oe": "GRID-CHECK-001\nGRID-CHECK-002"})
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("data-resizable-grid", html)
+        self.assertIn('data-grid-key="inquiry-result"', html)
+        self.assertIn("data-grid-scroll", html)
+        self.assertIn("data-column-storage-scope", html)
+        self.assertEqual(html.count("<col data-col="), 8)
+        for column in ("row", "oe", "name", "bld", "price", "status", "score", "reason"):
+            self.assertIn(f'<col data-col="{column}">', html)
+            self.assertIn(f'<th data-col="{column}">', html)
+            self.assertIn(f'<td data-col="{column}"', html)
+        self.assertEqual(html.count("data-column-drag-handle"), 8)
+        self.assertIn("data-grid-footer", html)
+        self.assertIn("data-grid-summary", html)
+        self.assertIn("<strong>1–2</strong><span> / 2</span>", html)
 
     def test_product_lookup_returns_matching_products(self):
         from app.modules.products.persistence import upsert_product
@@ -4518,6 +4713,7 @@ class WebAppTest(unittest.TestCase):
                 "022_cross_device_sync_keys",
                 "023_rekey_cross_device_sync_keys",
                 "024_drop_quote_record_price",
+                "025_create_product_option_values",
             ],
         )
 
@@ -5185,10 +5381,10 @@ with connect(database_path) as conn:
         self.assertIn("粘贴号码询价.xlsx", html)
         self.assertIn("含税单价", html)
         self.assertIn("¥79.20", html)
-        self.assertIn("<td>1</td>", html)
-        self.assertIn("<td>2</td>", html)
-        self.assertIn("<td>3</td>", html)
-        self.assertNotIn("<td>4</td>", html)
+        self.assertIn("<td data-col=\"row\">1</td>", html)
+        self.assertIn("<td data-col=\"row\">2</td>", html)
+        self.assertIn("<td data-col=\"row\">3</td>", html)
+        self.assertNotIn("<td data-col=\"row\">4</td>", html)
         self.assertIn('id="download-excel-modal"', html)
         self.assertIn('action="/match/download"', html)
         self.assertNotIn("返回上一步", html)
@@ -5268,8 +5464,8 @@ with connect(database_path) as conn:
         self.assertIn("K8282RA", html)
         self.assertIn("OE 组合前缀命中", html)
         self.assertNotIn("K8235RA", html)
-        self.assertIn("<td>1</td>", html)
-        self.assertNotIn("<td>2</td>", html)
+        self.assertIn("<td data-col=\"row\">1</td>", html)
+        self.assertNotIn("<td data-col=\"row\">2</td>", html)
 
     def test_uploaded_inquiry_combined_oe_prefix_matches_before_fragments(self):
         from app.modules.products.persistence import upsert_product
@@ -5771,7 +5967,7 @@ with connect(database_path) as conn:
         self.assertIn("共 2 行，命中 2 行，未找到 0 行", result_html)
         self.assertIn("KCLEAN01", result_html)
         self.assertIn("KCLEAN02", result_html)
-        self.assertIn("<td>250</td>", result_html)
+        self.assertIn("<td data-col=\"row\">250</td>", result_html)
 
     def test_uploaded_inquiry_can_match_multiple_selected_columns(self):
         from app.modules.products.persistence import upsert_product
@@ -5915,8 +6111,8 @@ with connect(database_path) as conn:
         self.assertIn("共 1 行，命中 1 行，未找到 0 行", result_html)
         self.assertIn("KPIKA01", result_html)
         self.assertIn("¥66.00", result_html)
-        self.assertIn("<td>4</td>", result_html)
-        self.assertNotIn("<td>3</td>", result_html)
+        self.assertIn("<td data-col=\"row\">4</td>", result_html)
+        self.assertNotIn("<td data-col=\"row\">3</td>", result_html)
 
     def test_xlsx_without_dimension_can_preview_match_columns(self):
         from openpyxl import Workbook
@@ -6013,8 +6209,8 @@ with connect(database_path) as conn:
 
         self.assertEqual(result.status_code, 200)
         self.assertIn("共 4 行，命中 4 行，未找到 0 行", result_html)
-        self.assertNotIn("<td>2</td>", result_html)
-        self.assertNotIn("<td>6</td>", result_html)
+        self.assertNotIn("<td data-col=\"row\">2</td>", result_html)
+        self.assertNotIn("<td data-col=\"row\">6</td>", result_html)
         for index in range(1, 5):
             self.assertIn(f"KSEG{index:02d}", result_html)
 

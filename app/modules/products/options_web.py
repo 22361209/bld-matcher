@@ -1,30 +1,34 @@
 from __future__ import annotations
 
-from flask import jsonify, request
+import logging
+
+from flask import flash, jsonify, redirect, render_template, request, url_for
 
 from app.modules.products.domain import (
-    ProductFilters,
     ProductFilterValidationError,
     build_product_filters,
 )
 from app.modules.products.factory import get_product_service
 from app.product_status import format_product_status
-from app.security import login_required
+from app.security import actor_name, login_required, permission_required
+
+
+logger = logging.getLogger(__name__)
 
 
 def register(app) -> None:
     @app.get("/products/options")
     @login_required
     def product_options():
-        options = get_product_service().filter_options(ProductFilters(status="all")).web_payload()
+        values = get_product_service().option_values()
         response = jsonify(
             {
-                "brands": [option["label"] for option in options["brand"] if option["value"]],
-                "items": [option["label"] for option in options["item"] if option["value"]],
+                "brands": [option.value for option in values if option.kind == "brand"],
+                "items": [option.value for option in values if option.kind == "item"],
                 "statuses": [
-                    format_product_status(option["value"], "zh", multiline=False)
-                    for option in options["product_status"]
-                    if option["value"]
+                    format_product_status(option.value, "zh", multiline=False)
+                    for option in values
+                    if option.kind == "product_status"
                 ],
             }
         )
@@ -52,3 +56,52 @@ def register(app) -> None:
         )
         response.headers["Cache-Control"] = "no-store"
         return response
+
+    @app.get("/product-options")
+    @permission_required("manage_product_options")
+    def product_option_values():
+        values = get_product_service().option_values()
+        return render_template(
+            "product_options.html",
+            brands=[option for option in values if option.kind == "brand"],
+            items=[option for option in values if option.kind == "item"],
+            statuses=[option for option in values if option.kind == "product_status"],
+        )
+
+    @app.post("/product-options/save")
+    @permission_required("manage_product_options")
+    def save_product_option_value_route():
+        kind = request.form.get("kind", "").strip()
+        value = request.form.get("value", "")
+        option_id_text = request.form.get("id", "").strip()
+        option_id = int(option_id_text) if option_id_text.isdigit() else None
+        try:
+            get_product_service().save_option_value(kind, value, option_id=option_id, actor=actor_name())
+        except ValueError as exc:
+            flash(f"候选值保存失败：{exc}", "error")
+            return redirect(url_for("product_option_values"))
+        except Exception:
+            logger.exception("Product option value save failed")
+            flash("候选值保存失败，请稍后重试。", "error")
+            return redirect(url_for("product_option_values"))
+        flash("候选值已保存。", "success")
+        return redirect(url_for("product_option_values"))
+
+    @app.post("/product-options/delete")
+    @permission_required("manage_product_options")
+    def delete_product_option_value_route():
+        option_id_text = request.form.get("id", "").strip()
+        option_id = int(option_id_text) if option_id_text.isdigit() else None
+        try:
+            if option_id is None:
+                raise ValueError("缺少候选值编号。")
+            get_product_service().delete_option_value(option_id, actor=actor_name())
+        except ValueError as exc:
+            flash(f"候选值删除失败：{exc}", "error")
+            return redirect(url_for("product_option_values"))
+        except Exception:
+            logger.exception("Product option value delete failed")
+            flash("候选值删除失败，请稍后重试。", "error")
+            return redirect(url_for("product_option_values"))
+        flash("候选值已删除，仅影响未来可选；已有产品数据保持不变。", "success")
+        return redirect(url_for("product_option_values"))

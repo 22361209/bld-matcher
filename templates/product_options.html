@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% set active_page = "product_option_values" %}
+{% block page_title %}产品候选值{% endblock %}
+{% block page_id %}admin.product_options{% endblock %}
+{% block page_type %}system-admin{% endblock %}
+{% block page_class %}shell wide app-surface{% endblock %}
+
+{% block page_head %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='pages/product_options.css', v=static_version('pages/product_options.css')) }}">
+{% endblock %}
+
+{% block page_content %}
+      {% for kind, label, rows, hint in (
+        ("brand", "品牌", brands, "保存产品时自动登记；多个品牌可用“/”分隔一次新增。"),
+        ("item", "产品名称", items, "保存产品时自动登记。"),
+        ("product_status", "产品状态", statuses, "保存产品时自动登记，按规范形式存储。"),
+      ) %}
+      <section class="data-section">
+        <div class="data-section-header">
+          <div>
+            <h2>{{ label }}</h2>
+            <p>{{ hint }}删除或改名只影响未来可选，已有产品数据保持不变。</p>
+          </div>
+          <span>{{ rows|length }} 个</span>
+        </div>
+        <form action="{{ url_for('save_product_option_value_route') }}" method="post" class="product-option-add-form">
+          {{ csrf_field() }}
+          <input type="hidden" name="kind" value="{{ kind }}">
+          <input name="value" placeholder="新增{{ label }}" required>
+          <button class="linear-button primary" type="submit">新增</button>
+        </form>
+        <div class="data-table-scroll">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>值</th>
+              <th>更新时间</th>
+              <th>改名</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for option in rows %}
+              <tr>
+                <td><strong>{% if kind == "product_status" %}{{ format_product_status(option.value, "zh", multiline=False) }}{% else %}{{ option.value }}{% endif %}</strong></td>
+                <td>{{ option.updated_at }}</td>
+                <td>
+                  <form action="{{ url_for('save_product_option_value_route') }}" method="post" class="product-option-edit-form">
+                    {{ csrf_field() }}
+                    <input type="hidden" name="kind" value="{{ kind }}">
+                    <input type="hidden" name="id" value="{{ option.id }}">
+                    <input name="value" value="{{ option.value }}" required>
+                    <button class="linear-button subtle compact" type="submit">保存</button>
+                  </form>
+                </td>
+                <td>
+                  <form action="{{ url_for('delete_product_option_value_route') }}" method="post">
+                    {{ csrf_field() }}
+                    <input type="hidden" name="id" value="{{ option.id }}">
+                    <button class="linear-button danger compact" type="submit" data-confirm="确认删除{{ label }}“{{ option.value }}”？删除后只影响未来可选，已有产品数据保持不变。">删除</button>
+                  </form>
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="4">暂无{{ label }}候选值。</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        </div>
+      </section>
+      {% endfor %}
+{% endblock %}
