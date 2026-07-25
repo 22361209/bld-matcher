@@ -16,6 +16,7 @@ from app.modules.products.brand_normalization import (
 )
 from app.modules.products.domain import validated_price_value
 from app.modules.products.factory import get_product_service
+from app.modules.products.presentation import product_web_payload
 from app.modules.products.service import ProductNotFoundError
 from app.product_media import validate_product_image_file
 from app.security import actor_name, permission_required, wants_json_response
@@ -126,7 +127,7 @@ def register(app) -> None:
     @permission_required("edit_products")
     def edit_product(product_id: int):
         try:
-            product = get_product_service().get(product_id).web_payload()
+            product = product_web_payload(get_product_service().get(product_id))
         except ProductNotFoundError:
             flash("产品不存在。", "error")
             return redirect(url_for("products"))

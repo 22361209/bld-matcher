@@ -19,6 +19,7 @@ from app.modules.products.domain import (
     build_product_filters,
 )
 from app.modules.products.factory import get_product_service
+from app.modules.products.presentation import product_web_payload
 from app.security import actor_name, can, login_required, permission_required
 
 
@@ -123,7 +124,7 @@ def _product_list_context(*, include_admin_preview: bool) -> dict[str, Any]:
             offset=(current_page - 1) * PRODUCT_PAGE_SIZE,
         )
     context: dict[str, Any] = {
-        "products": [record.web_payload() for record in page.records],
+        "products": [product_web_payload(record) for record in page.records],
         "total_products": page.total,
         "product_page_size": PRODUCT_PAGE_SIZE,
         "pagination": pagination,

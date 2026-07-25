@@ -1,0 +1,14 @@
+{
+  "date": "2026-07-26",
+  "version": "unreleased",
+  "title": "按实际 PDF 文件显示产品图纸",
+  "entries": [
+    "产品目录和编辑窗口现在只在 PDF 实体文件存在时显示图纸预览；失效的历史路径会显示上传入口，不再提供无效预览或删除操作。",
+    "已有图纸使用统一固定卡片：点击卡片预览，右上角圆形 X 删除；如需替换，请先删除旧图纸后再上传。"
+  ],
+  "impact": {
+    "data": "existing stale drawing reference K6004LB cleared through the authenticated product drawing deletion action",
+    "api": "compatible",
+    "operations": "restart-required"
+  }
+}
