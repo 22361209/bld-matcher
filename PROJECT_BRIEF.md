@@ -53,7 +53,7 @@ NAS 信息：
 ```bash
 cd "/Users/linzhenyue/Projects/bld-matcher"
 uv run python -m scripts.init_database
-APP_DEBUG=0 SECRET_KEY=local-dev-bld-matcher uv run python app.py
+bash tools/restart_local_5055.sh
 ```
 
 另开一个终端运行持久任务 Worker：
@@ -62,7 +62,7 @@ APP_DEBUG=0 SECRET_KEY=local-dev-bld-matcher uv run python app.py
 uv run python -m scripts.run_worker
 ```
 
-本机也有 `/Applications/BLD.app` 启动器；它只用于通过 Terminal 启动本机 5055 并打开浏览器，不用于 NAS。启动日志在 `logs/bld-local-5055.log`。
+本机 5055 只通过 `bash tools/restart_local_5055.sh` 或 `/Applications/BLD.app` 启动；两者复用同一个启动器，会仅停止本工作区的旧服务并精确关闭它创建的旧 Terminal 窗口。首次安装或拉取启动器更新后，运行 `bash tools/install_bld_launcher.sh` 重建 BLD.app；它不用于 NAS。启动日志在 `logs/bld-local-5055.log`。
 
 常用检查：
 

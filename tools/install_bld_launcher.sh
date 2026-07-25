@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TEMPLATE="$PROJECT_DIR/tools/start_local_5055.applescript"
+TEMPLATE="$PROJECT_DIR/tools/bld_launcher.applescript"
 ICON="$PROJECT_DIR/tools/BLD.icns"
 APP_PATH="/Applications/BLD.app"
 
@@ -16,16 +16,16 @@ if [[ ! -f "$ICON" ]]; then
   exit 1
 fi
 
-TMP_SCRIPT="$(mktemp "${TMPDIR:-/tmp}/bld-launcher.XXXXXX.applescript")"
+TMP_SCRIPT="$(mktemp "${TMPDIR:-/tmp}/bld-launcher.XXXXXX")"
 trap 'rm -f "$TMP_SCRIPT"' EXIT
 
-python3 - "$TEMPLATE" "$TMP_SCRIPT" "$PROJECT_DIR" <<'PY'
+python3 - "$TEMPLATE" "$TMP_SCRIPT" "$PROJECT_DIR/tools/restart_local_5055.sh" <<'PY'
 from pathlib import Path
 import sys
 
-template, output, project_dir = map(Path, sys.argv[1:4])
+template, output, restart_script_path = map(Path, sys.argv[1:4])
 text = template.read_text(encoding="utf-8")
-text = text.replace("__PROJECT_PATH__", str(project_dir))
+text = text.replace("__RESTART_SCRIPT_PATH__", str(restart_script_path))
 output.write_text(text, encoding="utf-8")
 PY
 

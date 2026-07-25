@@ -1,0 +1,14 @@
+{
+  "date": "2026-07-26",
+  "version": "unreleased",
+  "title": "统一本机 BLD 服务启动入口",
+  "entries": [
+    "本机 5055 可通过命令行重启入口或 BLD.app 启动，两种方式复用同一套重启逻辑。",
+    "启动器会在下一次重启时精确关闭自己创建且已停止的旧 Terminal 窗口，避免 Terminal 保留已退出会话时窗口持续累积。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "compatible",
+    "operations": "local-launcher-reinstall-required; NAS-unaffected"
+  }
+}
