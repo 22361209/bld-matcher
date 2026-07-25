@@ -105,6 +105,7 @@ function mountProductMediaUploader(root) {
       const name = tile.querySelector("[data-product-media-tile-name]");
       const replaceButton = tile.querySelector("[data-product-media-replace]");
       const clearButton = tile.querySelector("[data-product-media-clear-pending]");
+      const deleteButton = tile.querySelector(".product-media-delete");
       return {
         slot,
         tile,
@@ -114,6 +115,7 @@ function mountProductMediaUploader(root) {
         name,
         replaceButton,
         clearButton,
+        deleteButton,
         hasExisting: tile.dataset.productMediaHasExisting === "true",
       };
     })
@@ -167,6 +169,7 @@ function mountProductMediaUploader(root) {
       if (entry.existingPreview instanceof HTMLElement) entry.existingPreview.hidden = Boolean(file);
       if (entry.name instanceof HTMLElement) entry.name.textContent = file ? file.name : (entry.hasExisting ? "已保存" : "");
       if (entry.clearButton instanceof HTMLButtonElement) entry.clearButton.hidden = !file;
+      if (entry.deleteButton instanceof HTMLButtonElement) entry.deleteButton.hidden = Boolean(file);
       if (entry.replaceButton instanceof HTMLButtonElement) entry.replaceButton.textContent = file || entry.hasExisting ? "替换" : "选择图片";
     });
   };

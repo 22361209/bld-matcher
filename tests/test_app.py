@@ -3684,6 +3684,8 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("data-product-media-batch-input", html)
         self.assertIn("multiple", html)
         self.assertIn("拖入图片或选择文件", html)
+        self.assertIn("product-media-tile-overlay", html)
+        self.assertIn("product-media-tile-label", html)
         self.assertIn('name="drawing"', html)
         self.assertIn('{% include "_product_media_fields.html" %}', (PROJECT_ROOT / "templates" / "products.html").read_text(encoding="utf-8"))
         self.assertIn('{% include "_product_media_fields.html" %}', (PROJECT_ROOT / "templates" / "product_form.html").read_text(encoding="utf-8"))

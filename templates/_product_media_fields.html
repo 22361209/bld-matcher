@@ -42,22 +42,24 @@
               </a>
             {% endif %}
             <img class="product-media-pending-preview" data-product-media-pending-preview alt="" hidden>
+            <div class="product-media-tile-overlay">
+              <span class="product-media-tile-label"><strong>图片 {{ slot }}</strong>{% if slot == 1 %}<em>主图</em>{% endif %}</span>
+              <div class="product-media-tile-actions">
+                <button class="linear-button subtle" type="button" data-product-media-replace>替换</button>
+                <button class="product-media-dismiss" type="button" data-product-media-clear-pending hidden aria-label="取消选择图片 {{ slot }}" title="取消选择图片 {{ slot }}">×</button>
+                {% if slot_image_url %}
+                  <button class="product-media-delete" type="submit"
+                    formaction="{{ url_for('delete_product_image', product_id=product.id, slot=slot) }}"
+                    formmethod="post" formnovalidate
+                    {% if embedded %}name="embedded" value="1"{% endif %}
+                    data-confirm="确认删除图片 {{ slot }}？文件会移入归档目录保留。"
+                    aria-label="删除图片 {{ slot }}" title="删除图片 {{ slot }}">×</button>
+                {% endif %}
+              </div>
+            </div>
           </div>
           <div class="product-media-tile-foot">
-            <span><strong>图片 {{ slot }}</strong>{% if slot == 1 %}<em>主图</em>{% endif %}</span>
             <span class="product-media-tile-name" data-product-media-tile-name>{% if slot_image_url %}已保存{% endif %}</span>
-          </div>
-          <div class="product-media-tile-actions">
-            <button class="linear-button subtle" type="button" data-product-media-replace>替换</button>
-            <button class="linear-button subtle" type="button" data-product-media-clear-pending hidden>取消选择</button>
-            {% if slot_image_url %}
-              <button class="product-media-delete" type="submit"
-                formaction="{{ url_for('delete_product_image', product_id=product.id, slot=slot) }}"
-                formmethod="post" formnovalidate
-                {% if embedded %}name="embedded" value="1"{% endif %}
-                data-confirm="确认删除图片 {{ slot }}？文件会移入归档目录保留。"
-                aria-label="删除图片 {{ slot }}" title="删除图片 {{ slot }}">×</button>
-            {% endif %}
           </div>
         </article>
       {% endfor %}
