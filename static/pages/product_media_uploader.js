@@ -21,7 +21,7 @@ export function productImageIntakeCopy(imageCount) {
   if (count === PRODUCT_IMAGE_LIMIT) {
     return {
       title: "已达到 5 张上限",
-      note: "如需更换某张图片，请使用图片卡片中的“替换”。",
+      note: "如需添加新图片，请先删除不需要的图片。",
     };
   }
   return {
@@ -35,6 +35,17 @@ const extensionFor = (file) => {
   const match = name.match(/\.[^.]+$/);
   return match ? match[0] : "";
 };
+
+export function isProductDrawingFile(file) {
+  const extension = extensionFor(file);
+  return extension === ".pdf" && (!file?.type || file.type === "application/pdf");
+}
+
+export function productDrawingIntakeCopy(fileName = "") {
+  return fileName
+    ? { title: "已选择 PDF 图纸", note: fileName }
+    : { title: "上传 PDF 图纸", note: "可选择、拖入或粘贴一个 PDF 文件。" };
+}
 
 const basicImageValidationError = (file) => {
   if (!(file instanceof File)) return "未读取到图片文件。";
@@ -76,16 +87,18 @@ const assignInputFile = (input, file) => {
   return true;
 };
 
-const clipboardImageFiles = (event) => {
+const clipboardFiles = (event) => {
   const clipboard = event.clipboardData;
   if (!clipboard) return [];
-  const directFiles = Array.from(clipboard.files || []).filter((file) => file.type.startsWith("image/"));
+  const directFiles = Array.from(clipboard.files || []).filter((file) => file instanceof File);
   if (directFiles.length) return directFiles;
   return Array.from(clipboard.items || [])
-    .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+    .filter((item) => item.kind === "file")
     .map((item) => item.getAsFile())
     .filter((file) => file instanceof File);
 };
+
+const clipboardImageFiles = (event) => clipboardFiles(event).filter((file) => file.type.startsWith("image/"));
 
 function mountProductMediaUploader(root) {
   const form = root.closest("form");
@@ -102,8 +115,6 @@ function mountProductMediaUploader(root) {
       const input = tile.querySelector("[data-product-media-slot-input]");
       const pendingPreview = tile.querySelector("[data-product-media-pending-preview]");
       const existingPreview = tile.querySelector(".product-media-existing-preview");
-      const name = tile.querySelector("[data-product-media-tile-name]");
-      const replaceButton = tile.querySelector("[data-product-media-replace]");
       const clearButton = tile.querySelector("[data-product-media-clear-pending]");
       const deleteButton = tile.querySelector(".product-media-delete");
       return {
@@ -112,8 +123,6 @@ function mountProductMediaUploader(root) {
         input,
         pendingPreview,
         existingPreview,
-        name,
-        replaceButton,
         clearButton,
         deleteButton,
         hasExisting: tile.dataset.productMediaHasExisting === "true",
@@ -167,10 +176,8 @@ function mountProductMediaUploader(root) {
         }
       }
       if (entry.existingPreview instanceof HTMLElement) entry.existingPreview.hidden = Boolean(file);
-      if (entry.name instanceof HTMLElement) entry.name.textContent = file ? file.name : (entry.hasExisting ? "已保存" : "");
       if (entry.clearButton instanceof HTMLButtonElement) entry.clearButton.hidden = !file;
       if (entry.deleteButton instanceof HTMLButtonElement) entry.deleteButton.hidden = Boolean(file);
-      if (entry.replaceButton instanceof HTMLButtonElement) entry.replaceButton.textContent = file || entry.hasExisting ? "替换" : "选择图片";
     });
   };
 
@@ -184,24 +191,6 @@ function mountProductMediaUploader(root) {
     batchInput.value = "";
     setStatus();
     render();
-  };
-
-  const setSlotFile = async (slot, file) => {
-    const entry = bySlot.get(slot);
-    if (!entry || !(entry.input instanceof HTMLInputElement)) return false;
-    const error = await imageValidationError(file);
-    if (error) {
-      setStatus(`${file.name || "该文件"}：${error}`, true);
-      return false;
-    }
-    if (!assignInputFile(entry.input, file)) {
-      setStatus("当前浏览器不支持此上传方式，请点击选择文件。", true);
-      return false;
-    }
-    pendingFiles.set(slot, file);
-    setStatus();
-    render();
-    return true;
   };
 
   const appendFiles = async (files) => {
@@ -243,11 +232,6 @@ function mountProductMediaUploader(root) {
   batchInput.addEventListener("change", () => appendFiles(batchInput.files));
 
   tiles.forEach((entry) => {
-    entry.replaceButton?.addEventListener("click", () => entry.input.click());
-    entry.input.addEventListener("change", () => {
-      const file = entry.input.files?.[0];
-      if (file) setSlotFile(entry.slot, file);
-    });
     entry.clearButton?.addEventListener("click", () => {
       entry.input.value = "";
       pendingFiles.delete(entry.slot);
@@ -292,6 +276,92 @@ function mountProductMediaUploader(root) {
   render();
 }
 
+function mountProductDrawingUploader(intake) {
+  const root = intake.closest(".product-media-edit");
+  const form = intake.closest("form");
+  const input = root?.querySelector("[data-product-media-drawing-input]");
+  const browseButton = intake.querySelector("[data-product-media-drawing-browse]");
+  const title = intake.querySelector("[data-product-media-drawing-title]");
+  const note = intake.querySelector("[data-product-media-drawing-note]");
+  const status = intake.querySelector("[data-product-media-drawing-status]");
+  if (!(input instanceof HTMLInputElement)) return;
+
+  let selectedFile = input.files?.[0] || null;
+  let dragDepth = 0;
+
+  const render = () => {
+    const copy = productDrawingIntakeCopy(selectedFile?.name || "");
+    if (title instanceof HTMLElement) title.textContent = copy.title;
+    if (note instanceof HTMLElement) note.textContent = copy.note;
+    intake.classList.toggle("has-media", Boolean(selectedFile));
+  };
+
+  const setStatus = (message = "", isError = false) => {
+    if (!(status instanceof HTMLElement)) return;
+    status.textContent = message;
+    status.classList.toggle("error", isError);
+  };
+
+  const setDrawingFile = (file) => {
+    if (!(file instanceof File) || !isProductDrawingFile(file)) {
+      setStatus("仅支持 PDF 图纸文件。", true);
+      return;
+    }
+    if (input.files?.[0] !== file && !assignInputFile(input, file)) {
+      setStatus("当前浏览器不支持此上传方式，请点击选择文件。", true);
+      return;
+    }
+    selectedFile = file;
+    setStatus(`已选择 ${file.name}；保存后生效。`);
+    render();
+  };
+
+  browseButton?.addEventListener("click", () => input.click());
+  input.addEventListener("change", () => {
+    const file = input.files?.[0];
+    if (file) setDrawingFile(file);
+  });
+
+  intake.addEventListener("dragenter", (event) => {
+    if (!event.dataTransfer?.types.includes("Files")) return;
+    event.preventDefault();
+    dragDepth += 1;
+    intake.classList.add("drag-over");
+  });
+  intake.addEventListener("dragover", (event) => {
+    if (!event.dataTransfer?.types.includes("Files")) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  });
+  intake.addEventListener("dragleave", (event) => {
+    if (!event.dataTransfer?.types.includes("Files")) return;
+    dragDepth -= 1;
+    if (dragDepth > 0) return;
+    intake.classList.remove("drag-over");
+  });
+  intake.addEventListener("drop", (event) => {
+    if (!event.dataTransfer?.types.includes("Files")) return;
+    event.preventDefault();
+    dragDepth = 0;
+    intake.classList.remove("drag-over");
+    setDrawingFile(Array.from(event.dataTransfer.files).find(isProductDrawingFile));
+  });
+  intake.addEventListener("paste", (event) => {
+    const file = clipboardFiles(event).find(isProductDrawingFile);
+    if (!file) return;
+    event.preventDefault();
+    setDrawingFile(file);
+  });
+  form?.addEventListener("reset", () => window.setTimeout(() => {
+    selectedFile = null;
+    setStatus();
+    render();
+  }, 0));
+
+  render();
+}
+
 if (typeof document !== "undefined") {
   document.querySelectorAll("[data-product-media-upload]").forEach(mountProductMediaUploader);
+  document.querySelectorAll("[data-product-media-drawing-intake]").forEach(mountProductDrawingUploader);
 }

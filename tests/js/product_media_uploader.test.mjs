@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   availableProductImageSlots,
+  isProductDrawingFile,
+  productDrawingIntakeCopy,
   productImageIntakeCopy,
 } from "../../static/pages/product_media_uploader.js";
 
@@ -21,4 +23,13 @@ test("intake copy makes the single-image path primary and exposes remaining capa
   assert.match(productImageIntakeCopy(1).title, /添加更多图片/);
   assert.match(productImageIntakeCopy(1).note, /还可添加 4 张/);
   assert.match(productImageIntakeCopy(5).title, /5 张上限/);
+});
+
+test("PDF intake accepts only PDF files and reports the selected file", () => {
+  assert.equal(isProductDrawingFile({ name: "drawing.pdf", type: "application/pdf" }), true);
+  assert.equal(isProductDrawingFile({ name: "drawing.png", type: "image/png" }), false);
+  assert.deepEqual(productDrawingIntakeCopy("K8116LA.pdf"), {
+    title: "已选择 PDF 图纸",
+    note: "K8116LA.pdf",
+  });
 });
