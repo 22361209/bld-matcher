@@ -3681,6 +3681,9 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("data-product-drawing-unavailable", html)
         self.assertIn("data-copy-product", html)
         self.assertIn('name="product_image_1"', html)
+        self.assertIn("data-product-media-batch-input", html)
+        self.assertIn("multiple", html)
+        self.assertIn("拖入图片或选择文件", html)
         self.assertIn('name="drawing"', html)
         self.assertIn('{% include "_product_media_fields.html" %}', (PROJECT_ROOT / "templates" / "products.html").read_text(encoding="utf-8"))
         self.assertIn('{% include "_product_media_fields.html" %}', (PROJECT_ROOT / "templates" / "product_form.html").read_text(encoding="utf-8"))
@@ -3699,6 +3702,8 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(edit.status_code, 200)
         for slot in range(1, 6):
             self.assertIn(f'name="product_image_{slot}"', edit_html)
+        self.assertIn("data-product-media-upload", edit_html)
+        self.assertIn("data-product-media-browse", edit_html)
         self.assertIn("file-picker-clear", edit_html)
         self.assertIn("/static/app.js", edit_html)
         self.assertIn('name="drawing"', edit_html)

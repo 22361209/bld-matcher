@@ -1,46 +1,85 @@
 <section class="product-media-edit full" aria-label="产品图片和图纸上传">
-  <div class="product-media-block product-media-images">
-    <h2>产品图片</h2>
-    <div class="product-image-slot-grid">
+  <div class="product-media-block product-media-images" data-product-media-upload>
+    <div class="product-media-section-heading">
+      <div>
+        <h2>产品图片</h2>
+        <p>第一张为主图；可一次选择、拖入或粘贴最多 5 张图片。</p>
+      </div>
+      <span class="product-media-count" data-product-media-count>0 / 5</span>
+    </div>
+    <input
+      class="product-media-batch-input"
+      type="file"
+      accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+      multiple
+      data-product-media-batch-input
+      tabindex="-1"
+      aria-hidden="true"
+    >
+    <div class="product-media-tile-grid" data-product-media-tile-grid>
       {% for slot in range(1, 6) %}
         {% set slot_image_url = product_image_url(product, slot) if product else none %}
-        <div class="product-image-slot">
-          <div class="product-image-slot-head">
-            <strong>图片 {{ slot }}</strong>
-            {% if slot == 1 %}<span>主图</span>{% endif %}
-          </div>
-          {% if slot_image_url %}
-            <div class="product-media-preview-wrap">
-              <a class="image-link product-media-preview" href="{{ slot_image_url }}" target="_blank" rel="noopener" title="打开 {{ product.bld_no }} 图片 {{ slot }}">
-                <img class="product-thumb" src="{{ product_image_thumb_url(product, slot) or slot_image_url }}" alt="{{ product.bld_no }} 图片 {{ slot }}" loading="lazy" decoding="async">
+        {% set slot_thumb_url = product_image_thumb_url(product, slot) if product else none %}
+        <article
+          class="product-media-tile{% if slot_image_url %} has-existing-image{% endif %}"
+          data-product-media-slot="{{ slot }}"
+          data-product-media-has-existing="{{ 'true' if slot_image_url else 'false' }}"
+          {% if not slot_image_url %}hidden{% endif %}
+        >
+          <input
+            class="product-media-slot-input"
+            type="file"
+            name="product_image_{{ slot }}"
+            accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+            data-product-media-slot-input="{{ slot }}"
+            tabindex="-1"
+            aria-hidden="true"
+          >
+          <div class="product-media-tile-preview">
+            {% if slot_image_url %}
+              <a class="image-link product-media-existing-preview" href="{{ slot_image_url }}" target="_blank" rel="noopener" title="打开 {{ product.bld_no }} 图片 {{ slot }}">
+                <img src="{{ slot_thumb_url or slot_image_url }}" alt="{{ product.bld_no }} 图片 {{ slot }}" loading="lazy" decoding="async">
               </a>
+            {% endif %}
+            <img class="product-media-pending-preview" data-product-media-pending-preview alt="" hidden>
+          </div>
+          <div class="product-media-tile-foot">
+            <span><strong>图片 {{ slot }}</strong>{% if slot == 1 %}<em>主图</em>{% endif %}</span>
+            <span class="product-media-tile-name" data-product-media-tile-name>{% if slot_image_url %}已保存{% endif %}</span>
+          </div>
+          <div class="product-media-tile-actions">
+            <button class="linear-button subtle" type="button" data-product-media-replace>替换</button>
+            <button class="linear-button subtle" type="button" data-product-media-clear-pending hidden>取消选择</button>
+            {% if slot_image_url %}
               <button class="product-media-delete" type="submit"
                 formaction="{{ url_for('delete_product_image', product_id=product.id, slot=slot) }}"
                 formmethod="post" formnovalidate
                 {% if embedded %}name="embedded" value="1"{% endif %}
                 data-confirm="确认删除图片 {{ slot }}？文件会移入归档目录保留。"
                 aria-label="删除图片 {{ slot }}" title="删除图片 {{ slot }}">×</button>
-            </div>
-          {% elif product %}
-            <p class="note product-slot-empty">当前为空</p>
-          {% endif %}
-          <label class="file-picker media-upload-field">
-            <span>{{ "上传 / 替换" if product else "上传图片" }}</span>
-            <input class="file-picker-input" type="file" name="product_image_{{ slot }}" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp">
-            <span class="file-picker-control">
-              <span class="file-picker-button">选择文件</span>
-              <span class="file-picker-name">未选择任何文件</span>
-              <button class="file-picker-clear" type="button" disabled>清除</button>
-            </span>
-          </label>
-        </div>
+            {% endif %}
+          </div>
+        </article>
       {% endfor %}
+      <div class="product-media-intake" data-product-media-intake tabindex="0">
+        <button class="product-media-intake-button" type="button" data-product-media-browse>
+          <span aria-hidden="true">＋</span>
+          <strong data-product-media-intake-title>拖入图片或选择文件</strong>
+          <small data-product-media-intake-note>可一次选择多张；JPG / PNG / WEBP，单张不超过 5 MB</small>
+        </button>
+        <p class="product-media-upload-status" data-product-media-upload-status aria-live="polite"></p>
+      </div>
     </div>
   </div>
-  <div class="product-media-block">
-    <h2>PDF 图纸</h2>
+  <aside class="product-media-block product-media-drawing">
+    <div class="product-media-section-heading">
+      <div>
+        <h2>PDF 图纸</h2>
+        <p>可选附件，不影响产品图片上传。</p>
+      </div>
+    </div>
     {% if product and product.drawing_path %}
-      <p>
+      <p class="product-media-drawing-current">
         <a class="linear-button subtle" href="{{ url_for('product_drawing', product_id=product.id) }}" target="_blank" rel="noopener">预览当前图纸</a>
         <button class="linear-button danger" type="submit"
           formaction="{{ url_for('delete_product_drawing', product_id=product.id) }}"
@@ -49,9 +88,9 @@
           data-confirm="确认删除 PDF 图纸？文件会移入归档目录保留。">删除图纸</button>
       </p>
     {% elif product %}
-      <p class="note">当前没有 PDF 图纸。</p>
+      <p class="note product-media-drawing-current">当前没有 PDF 图纸。</p>
     {% endif %}
-    <label class="file-picker media-upload-field">
+    <label class="file-picker media-upload-field" data-file-drop-zone data-file-drop-accept=".pdf">
       <span>{{ "上传 / 替换 PDF 图纸" if product else "上传 PDF 图纸" }}</span>
       <input class="file-picker-input" type="file" name="drawing" accept="application/pdf,.pdf">
       <span class="file-picker-control">
@@ -60,5 +99,5 @@
         <button class="file-picker-clear" type="button" disabled>清除</button>
       </span>
     </label>
-  </div>
+  </aside>
 </section>
