@@ -1,0 +1,16 @@
+{
+  "date": "2026-07-25",
+  "version": "unreleased",
+  "title": "搜索框统一清除按钮、询价客户产品编码列、匹配结果写入报价记录",
+  "entries": [
+    "材料明细、管件资料、产品目录、报价记录、日志、图纸资料、采购/销售合同及首页/材料明细历史抽屉的搜索输入框右侧统一加入 × 清除按钮，点击后清空并重新查询；报价记录页搜索栏原来的「重置」文字按钮同步移除。",
+    "询价文件预览页新增「客户产品编码列」单选（默认不选择）；选择后匹配明细页用「客户产品编码」列取代原「物料名称」列（该列在手动选列流程中一直为空）。",
+    "匹配结果下载弹窗新增「写入报价」按钮（需 manage_customer_prices 权限）：按弹窗中选择的单价方式（含税/不含税/美金价），把命中且带单价的行写入报价记录，写入前需填写客户名称（带历史客户自动补全），可填备注；同一 BLD 号按客户产品编码去重，编码为空或相同只写一条。",
+    "「不带单价」时不能写入报价；写入完成后跳转到报价记录页并按该客户过滤。"
+  ],
+  "impact": {
+    "data": "quote_records gains rows written from inquiry match results (source_type=excel); no schema change",
+    "api": "compatible; new web route POST /match/write-quotes (manage_customer_prices)",
+    "operations": "restart-required"
+  }
+}

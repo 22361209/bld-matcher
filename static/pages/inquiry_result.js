@@ -1,7 +1,7 @@
 import { setupProductTable } from "./product_table.js?v=20260721-1";
 
 setupProductTable(document.querySelector(".data-grid[data-grid-key='inquiry-result'] table.data-table"), {
-  columns: ["row", "oe", "name", "bld", "price", "status", "score", "reason"],
+  columns: ["row", "oe", "customer-code", "bld", "price", "status", "score", "reason"],
   storagePrefix: "bld.inquiry-result",
 });
 
@@ -49,6 +49,20 @@ document.querySelectorAll("[data-open-download-modal]").forEach((button) => {
 
 document.querySelectorAll("[data-close-download-modal]").forEach((element) => {
   element.addEventListener("click", closeDownloadModal);
+});
+
+document.querySelectorAll("[data-write-quotes-submit]").forEach((button) => {
+  button.addEventListener("click", (event) => {
+    const form = button.closest("form");
+    const customerInput = form ? form.querySelector("input[name='customer_name']") : null;
+    if (!(customerInput instanceof HTMLInputElement)) return;
+    if (customerInput.value.trim()) return;
+    event.preventDefault();
+    customerInput.setCustomValidity("写入报价前请填写客户名称。");
+    customerInput.reportValidity();
+    customerInput.focus();
+    customerInput.addEventListener("input", () => customerInput.setCustomValidity(""), { once: true });
+  });
 });
 
 

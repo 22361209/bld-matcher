@@ -50,6 +50,9 @@
                   {% for column in selected_match_columns %}
                     <input type="hidden" name="match_columns" value="{{ column }}">
                   {% endfor %}
+                  {% if customer_code_column is defined and customer_code_column is not none %}
+                    <input type="hidden" name="customer_code_column" value="{{ customer_code_column }}">
+                  {% endif %}
                   <input type="hidden" name="cleanup_message" value="{{ cleanup_message|default('') }}">
                   <button class="linear-button subtle" type="submit">返回上一步</button>
                 </form>
@@ -80,7 +83,7 @@
           <colgroup>
             <col data-col="row">
             <col data-col="oe">
-            <col data-col="name">
+            <col data-col="customer-code">
             <col data-col="bld">
             <col data-col="price">
             <col data-col="status">
@@ -91,7 +94,7 @@
             <tr>
               <th data-col="row"><button class="products-column-label" type="button" data-column-drag-handle data-column-label="行号" aria-label="移动行号列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">行号</button></th>
               <th data-col="oe"><button class="products-column-label" type="button" data-column-drag-handle data-column-label="OE号" aria-label="移动OE号列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">OE号</button></th>
-              <th data-col="name"><button class="products-column-label" type="button" data-column-drag-handle data-column-label="物料名称" aria-label="移动物料名称列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">物料名称</button></th>
+              <th data-col="customer-code"><button class="products-column-label" type="button" data-column-drag-handle data-column-label="客户产品编码" aria-label="移动客户产品编码列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">客户产品编码</button></th>
               <th data-col="bld"><button class="products-column-label" type="button" data-column-drag-handle data-column-label="BLD NO." aria-label="移动BLD NO.列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">BLD NO.</button></th>
               <th data-col="price"><button class="products-column-label" type="button" data-column-drag-handle data-column-label="含税单价" aria-label="移动含税单价列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">含税单价</button></th>
               <th data-col="status"><button class="products-column-label" type="button" data-column-drag-handle data-column-label="产品状态" aria-label="移动产品状态列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">产品状态</button></th>
@@ -116,7 +119,7 @@
                     {{ row.oe }}
                   {% endif %}
                 </td>
-                <td data-col="name">{{ row.name }}</td>
+                <td data-col="customer-code">{{ row.customer_product_code }}</td>
                 <td data-col="bld"><strong>{{ row.bld_no }}</strong></td>
                 <td data-col="price" class="money-cell">{% if row.price_cny is not none %}¥{{ "%.2f"|format(row.price_cny) }}{% endif %}</td>
                 <td data-col="status" class="product-status-cell">{{ format_product_status(row.product_status, "zh") }}</td>
@@ -161,6 +164,9 @@
             {% for column in selected_match_columns %}
               <input type="hidden" name="match_columns" value="{{ column }}">
             {% endfor %}
+            {% if customer_code_column is defined and customer_code_column is not none %}
+              <input type="hidden" name="customer_code_column" value="{{ customer_code_column }}">
+            {% endif %}
             <label>
               <span>单价</span>
               <select name="price_mode" data-price-mode>
@@ -174,10 +180,29 @@
               <span>汇率</span>
               <input name="exchange_rate" type="number" step="0.0001" min="0.0001" placeholder="例如 7.20" data-exchange-rate>
             </label>
+            {% if can("manage_customer_prices") %}
+              <label>
+                <span>客户名称（写入报价时必填）</span>
+                <input name="customer_name" list="write-quotes-customer-names" placeholder="例如 博世" autocomplete="off">
+                <datalist id="write-quotes-customer-names">
+                  {% for name in customer_names|default([]) %}
+                    <option value="{{ name }}"></option>
+                  {% endfor %}
+                </datalist>
+              </label>
+              <label>
+                <span>备注（写入报价时可选）</span>
+                <input name="remark" placeholder="写入本次所有报价记录">
+              </label>
+              <p class="note">点「写入报价」会按上方选择的单价方式，把命中的 BLD 号和单价写入报价记录；重复提交会重复写入。</p>
+            {% endif %}
             <p class="submit-wait-message" data-submit-wait-message aria-live="polite"></p>
             <div class="download-modal-actions">
               <button class="download-cancel-button" type="button" data-close-download-modal>取消</button>
               <button class="download-confirm-button" type="submit">确认</button>
+              {% if can("manage_customer_prices") %}
+                <button class="download-confirm-button" type="submit" formaction="{{ url_for('write_match_quotes') }}" data-write-quotes-submit>写入报价</button>
+              {% endif %}
             </div>
           </form>
         </div>

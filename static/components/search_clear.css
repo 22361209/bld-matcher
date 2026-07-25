@@ -1,0 +1,49 @@
+.search-input-wrap {
+  position: relative;
+  display: inline-block;
+  min-width: 0;
+}
+
+.search-input-wrap input {
+  padding-right: 30px;
+}
+
+.search-clear {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  min-width: 0;
+  height: 22px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--linear-muted);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.search-clear:hover,
+.search-clear:focus-visible {
+  background: #eef2f7;
+  color: var(--linear-text);
+}
+
+.search-clear[hidden] {
+  display: none;
+}
+
+.embedded-input-control > .search-clear {
+  position: static;
+  transform: none;
+  flex: 0 0 auto;
+  margin-right: 6px;
+}

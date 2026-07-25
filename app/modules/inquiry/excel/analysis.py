@@ -10,6 +10,7 @@ from .pricing import numeric_price
 from .reader import (
     _cell_from_values,
     _combined_match_text,
+    _customer_code_text,
     _find_xlsx_inquiry_columns_from_rows,
     _find_xlsx_selected_header_row_from_rows,
     _manual_match_columns,
@@ -49,6 +50,7 @@ def summary_row(
     inquiry_oe: object,
     inquiry_name: object,
     match,
+    customer_product_code: str = "",
 ) -> dict:
     parts = split_codes(inquiry_oe)
     match_note = ""
@@ -73,6 +75,7 @@ def summary_row(
         "row": row_number,
         "oe": inquiry_oe,
         "name": inquiry_name,
+        "customer_product_code": customer_product_code,
         "bld_no": match.bld_no if match else "",
         "price_cny": price_cny,
         "product_status": product_status,
@@ -96,6 +99,7 @@ def analyze_xlsx_with_bld(
     match_column: object = None,
     price_mode: str = "none",
     exchange_rate: float | None = None,
+    customer_code_column: int | None = None,
 ) -> dict:
     workbook = load_workbook(inquiry_path, read_only=True, data_only=True)
     try:
@@ -121,6 +125,11 @@ def analyze_xlsx_with_bld(
             rows = sheet.iter_rows(min_row=header_row + 1, values_only=True)
             for row_index, values in enumerate(rows, start=header_row + 1):
                 inquiry_name = _cell_from_values(values, columns["name"]) if "name" in columns else ""
+                customer_product_code = (
+                    _customer_code_text(_cell_from_values(values, customer_code_column + 1))
+                    if customer_code_column is not None
+                    else ""
+                )
                 match_values = _row_match_values(values, selected_match_columns)
                 if _selected_match_row_is_header(match_values):
                     continue
@@ -135,14 +144,16 @@ def analyze_xlsx_with_bld(
                     summary["matched"] += 1
                     summary["rows"].append(
                         annotate_row_summary_with_match_columns(
-                            summary_row(row_index, inquiry_oe, inquiry_name, match),
+                            summary_row(row_index, inquiry_oe, inquiry_name, match, customer_product_code),
                             match_values,
                             match,
                         )
                     )
                 else:
                     summary["unmatched"] += 1
-                    summary["rows"].append(summary_row(row_index, inquiry_oe, inquiry_name, None))
+                    summary["rows"].append(
+                        summary_row(row_index, inquiry_oe, inquiry_name, None, customer_product_code)
+                    )
 
         return summary
     finally:

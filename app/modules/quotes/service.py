@@ -101,6 +101,10 @@ class QuoteService:
         with self.unit_of_work_factory() as unit_of_work:
             return unit_of_work.repository.stats()
 
+    def customer_names(self) -> list[str]:
+        with self.unit_of_work_factory() as unit_of_work:
+            return unit_of_work.repository.customer_names()
+
     def create(self, data: Mapping[str, object], *, actor: str) -> QuoteRecord:
         draft = build_quote_draft(data, actor=actor)
         with self.unit_of_work_factory() as unit_of_work:

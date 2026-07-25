@@ -176,6 +176,7 @@ class WorkbookInquiryEngine:
         match_column: object = None,
         write_output: bool,
         options: PriceOptions,
+        customer_code_column: int | None = None,
     ) -> dict:
         return generate_excel_with_bld(
             source_path,
@@ -183,6 +184,7 @@ class WorkbookInquiryEngine:
             catalog,
             match_column=match_column,
             write_output=write_output,
+            customer_code_column=customer_code_column,
             **options.as_kwargs(),
         )
 

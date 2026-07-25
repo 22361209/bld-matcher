@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='components/workspace.css', v=static_version('components/workspace.css')) }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='components/data_grid.css', v=static_version('components/data_grid.css')) }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='components/import-preview.css', v=static_version('components/import-preview.css')) }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='components/search_clear.css', v=static_version('components/search_clear.css')) }}">
     {% block page_head %}{% endblock %}
     <link rel="stylesheet" href="{{ url_for('static', filename='components/precision.css', v=static_version('components/precision.css')) }}">
   </head>
@@ -50,6 +51,7 @@
     {% block page_modals %}{% endblock %}
     <script type="module" src="{{ url_for('static', filename='components/data_grid.js', v=static_version('components/data_grid.js')) }}"></script>
     <script type="module" src="{{ url_for('static', filename='components/import-preview.js', v=static_version('components/import-preview.js')) }}"></script>
+    <script type="module" src="{{ url_for('static', filename='components/search_clear.js', v=static_version('components/search_clear.js')) }}"></script>
     <script type="module" src="{{ url_for('static', filename='app.js', v=static_version('app.js')) }}"></script>
     {% if g.user %}<script type="module" src="{{ url_for('static', filename='nav.js', v=static_version('nav.js')) }}"></script>{% endif %}
     {% block page_scripts %}{% endblock %}

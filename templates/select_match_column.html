@@ -38,6 +38,23 @@
               </div>
               <p>可同时选择 OE 号、参考号等多个号码列。</p>
             </fieldset>
+            <fieldset class="match-column-picker">
+              <legend>客户产品编码列（可选）</legend>
+              {% set selected_customer_code_column = selected_customer_code_column|default(none) %}
+              <div class="match-column-options">
+                <label class="choice-card">
+                  <input type="radio" name="customer_code_column" value="" {% if selected_customer_code_column is none %}checked{% endif %}>
+                  <span>不选择</span>
+                </label>
+                {% for column in preview.columns %}
+                  <label class="choice-card">
+                    <input type="radio" name="customer_code_column" value="{{ column.index }}" {% if selected_customer_code_column is not none and column.index == selected_customer_code_column %}checked{% endif %}>
+                    <span>{{ column.label }} 列</span>
+                  </label>
+                {% endfor %}
+              </div>
+              <p>选择后，匹配明细会显示该列内容，写入报价时作为客户产品编码。</p>
+            </fieldset>
             <p class="submit-wait-message" data-submit-wait-message aria-live="polite"></p>
             <div class="match-column-actions">
               <button class="linear-button primary" type="submit">确认并查看结果</button>

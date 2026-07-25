@@ -344,6 +344,13 @@
       "rule": "/match/drawings/download"
     },
     {
+      "endpoint": "write_match_quotes",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/match/write-quotes"
+    },
+    {
       "endpoint": "material_drawings",
       "methods": [
         "GET"

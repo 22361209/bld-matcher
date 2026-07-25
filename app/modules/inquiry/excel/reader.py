@@ -222,6 +222,14 @@ def _cell_from_values(row: tuple, column_index: int) -> object:
     return row[column_index - 1] if 0 < column_index <= len(row) else ""
 
 
+def _customer_code_text(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value).strip()
+
+
 def _row_match_values(
     values: tuple,
     match_columns: list[int],

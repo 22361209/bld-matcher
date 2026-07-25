@@ -178,6 +178,17 @@ class SQLiteQuoteRepository:
             models=int(row["models"] or 0),
         )
 
+    def customer_names(self) -> list[str]:
+        rows = self.connection.execute(
+            """
+            SELECT DISTINCT customer_name
+            FROM quote_records
+            WHERE customer_name != ''
+            ORDER BY customer_name
+            """
+        ).fetchall()
+        return [str(row["customer_name"]) for row in rows]
+
     def audit(self, action: str, quote: QuoteRecord, *, actor: str) -> None:
         log_event(
             self.connection,

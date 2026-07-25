@@ -49,6 +49,17 @@ def optional_match_columns() -> list[int]:
     return match_columns_from_request(required=False) or []
 
 
+def customer_code_column_from_request() -> int | None:
+    raw = request.form.get("customer_code_column", "").strip()
+    if not raw:
+        return None
+    try:
+        column = int(raw)
+    except ValueError:
+        return None
+    return column if column >= 0 else None
+
+
 def match_column_payload(match_columns: list[int]) -> int | list[int] | None:
     if not match_columns:
         return None

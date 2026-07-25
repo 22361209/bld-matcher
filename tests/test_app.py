@@ -771,7 +771,7 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("data-grid-scroll", html)
         self.assertIn("data-column-storage-scope", html)
         self.assertEqual(html.count("<col data-col="), 8)
-        for column in ("row", "oe", "name", "bld", "price", "status", "score", "reason"):
+        for column in ("row", "oe", "customer-code", "bld", "price", "status", "score", "reason"):
             self.assertIn(f'<col data-col="{column}">', html)
             self.assertIn(f'<th data-col="{column}">', html)
             self.assertIn(f'<td data-col="{column}"', html)
@@ -6046,6 +6046,177 @@ with connect(database_path) as conn:
         self.assertEqual(generated_sheet.cell(2, 3).value, "KMULTI02")
         self.assertIn("命中列：B列：REF-MULTI-002", generated_sheet.cell(2, 6).value)
         generated.close()
+
+    def test_match_result_can_write_quotes_with_customer_code_column(self):
+        from app.modules.products.persistence import upsert_product
+        from openpyxl import Workbook
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            for bld_no, oe_code, price in (
+                ("KWQ01", "WQ-OE-001", "100"),
+                ("KWQ02", "WQ-OE-002", "55"),
+                ("KWQ03", "WQ-OE-003", ""),
+            ):
+                upsert_product(
+                    conn,
+                    {
+                        "bld_no": bld_no,
+                        "series": "TEST",
+                        "item": "WRITE QUOTE ARM",
+                        "oe_no_1": oe_code,
+                        "price_cny": price,
+                        "active": "1",
+                    },
+                    actor="tester",
+                )
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["客户编码", "参考号"])
+        sheet.append(["CUST-A1", "WQ-OE-001"])
+        sheet.append(["CUST-A1", "WQ-OE-001"])
+        sheet.append(["CUST-B2", "WQ-OE-001"])
+        sheet.append(["CUST-C3", "WQ-OE-002"])
+        sheet.append(["CUST-D4", "WQ-OE-003"])
+        buffer = io.BytesIO()
+        workbook.save(buffer)
+        buffer.seek(0)
+
+        self.login()
+        response = self.client.post(
+            "/match",
+            data={"inquiry": (buffer, "write-quotes.xlsx")},
+            content_type="multipart/form-data",
+        )
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('name="customer_code_column"', html)
+        upload_match = re.search(r'name="upload_path" value="([^"]+)"', html)
+        output_match = re.search(r'name="output_name" value="([^"]+)"', html)
+        self.assertIsNotNone(upload_match)
+        self.assertIsNotNone(output_match)
+
+        result = self.client.post(
+            "/match/column",
+            data={
+                "upload_path": upload_match.group(1),
+                "original_filename": "write-quotes.xlsx",
+                "output_name": output_match.group(1),
+                "match_columns": ["1"],
+                "customer_code_column": "0",
+            },
+        )
+        result_html = result.get_data(as_text=True)
+        self.assertEqual(result.status_code, 200)
+        self.assertIn('data-col="customer-code"', result_html)
+        self.assertNotIn('data-col="name"', result_html)
+        self.assertIn("CUST-A1", result_html)
+        self.assertIn("写入报价", result_html)
+
+        write = self.client.post(
+            "/match/write-quotes",
+            data={
+                "upload_path": upload_match.group(1),
+                "original_filename": "write-quotes.xlsx",
+                "match_columns": ["1"],
+                "customer_code_column": "0",
+                "price_mode": "tax",
+                "customer_name": "测试客户WQ",
+                "remark": "询价写入",
+            },
+        )
+        self.assertEqual(write.status_code, 302)
+        self.assertIn("/quotes", write.headers["Location"])
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            rows = conn.execute(
+                """
+                SELECT bld_no, customer_product_code, tax_price, net_price, currency, remark, source_type
+                FROM quote_records
+                WHERE customer_name = '测试客户WQ'
+                ORDER BY bld_no, customer_product_code
+                """
+            ).fetchall()
+
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(rows[0]["bld_no"], "KWQ01")
+        self.assertEqual(rows[0]["customer_product_code"], "CUST-A1")
+        self.assertEqual(rows[0]["tax_price"], 100)
+        self.assertIsNone(rows[0]["net_price"])
+        self.assertEqual(rows[0]["currency"], "CNY")
+        self.assertEqual(rows[0]["remark"], "询价写入")
+        self.assertEqual(rows[0]["source_type"], "excel")
+        self.assertEqual(rows[1]["customer_product_code"], "CUST-B2")
+        self.assertEqual(rows[2]["bld_no"], "KWQ02")
+        self.assertEqual(rows[2]["tax_price"], 55)
+        self.assertFalse(any(row["bld_no"] == "KWQ03" for row in rows))
+
+    def test_match_write_quotes_requires_price_mode_and_customer_name(self):
+        from app.modules.products.persistence import upsert_product
+        from openpyxl import Workbook
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "KWQ09",
+                    "series": "TEST",
+                    "item": "WRITE QUOTE GUARD",
+                    "oe_no_1": "WQ-OE-009",
+                    "price_cny": "88",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["参考号"])
+        sheet.append(["WQ-OE-009"])
+        buffer = io.BytesIO()
+        workbook.save(buffer)
+        buffer.seek(0)
+
+        self.login()
+        response = self.client.post(
+            "/match",
+            data={"inquiry": (buffer, "write-quotes-guard.xlsx")},
+            content_type="multipart/form-data",
+        )
+        html = response.get_data(as_text=True)
+        upload_match = re.search(r'name="upload_path" value="([^"]+)"', html)
+        self.assertIsNotNone(upload_match)
+
+        missing_customer = self.client.post(
+            "/match/write-quotes",
+            data={
+                "upload_path": upload_match.group(1),
+                "original_filename": "write-quotes-guard.xlsx",
+                "match_columns": ["0"],
+                "price_mode": "tax",
+            },
+            follow_redirects=True,
+        )
+        self.assertIn("写入报价前请填写客户名称", missing_customer.get_data(as_text=True))
+
+        missing_price_mode = self.client.post(
+            "/match/write-quotes",
+            data={
+                "upload_path": upload_match.group(1),
+                "original_filename": "write-quotes-guard.xlsx",
+                "match_columns": ["0"],
+                "price_mode": "none",
+                "customer_name": "测试客户WQ2",
+            },
+            follow_redirects=True,
+        )
+        self.assertIn("未选择单价方式", missing_price_mode.get_data(as_text=True))
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            count = conn.execute(
+                "SELECT COUNT(*) AS total FROM quote_records WHERE bld_no = 'KWQ09'"
+            ).fetchone()
+        self.assertEqual(count["total"], 0)
 
     def test_item_header_with_code_values_prompts_for_match_column(self):
         from app.modules.products.persistence import upsert_product

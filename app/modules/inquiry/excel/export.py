@@ -19,6 +19,7 @@ from .cleanup import trim_unused_row_dimensions
 from .pricing import match_export_price, match_export_status, price_export_header
 from .reader import (
     _combined_match_text,
+    _customer_code_text,
     _find_inquiry_columns,
     _find_xls_selected_header_row,
     _find_xlsx_inquiry_columns,
@@ -52,6 +53,7 @@ def generate_xls_with_bld(
     write_output: bool = True,
     price_mode: str = "none",
     exchange_rate: float | None = None,
+    customer_code_column: int | None = None,
 ) -> dict:
     book = xlrd.open_workbook(
         str(inquiry_path),
@@ -90,6 +92,11 @@ def generate_xls_with_bld(
 
         for row_index in range(header_row + 1, source_sheet.nrows):
             inquiry_name = source_sheet.cell_value(row_index, columns["name"]) if "name" in columns else ""
+            customer_product_code = (
+                _customer_code_text(source_sheet.cell_value(row_index, customer_code_column))
+                if customer_code_column is not None and customer_code_column < source_sheet.ncols
+                else ""
+            )
             match_values = _xls_match_values(
                 source_sheet,
                 row_index,
@@ -124,7 +131,7 @@ def generate_xls_with_bld(
                         )
                 summary["matched"] += 1
                 row_summary = annotate_row_summary_with_match_columns(
-                    summary_row(row_index + 1, inquiry_oe, inquiry_name, match),
+                    summary_row(row_index + 1, inquiry_oe, inquiry_name, match, customer_product_code),
                     match_values,
                     match,
                 )
@@ -139,7 +146,7 @@ def generate_xls_with_bld(
                     if status_header and status_col is not None:
                         target_sheet.write(row_index, status_col, "")
                 summary["unmatched"] += 1
-                row_summary = summary_row(row_index + 1, inquiry_oe, inquiry_name, None)
+                row_summary = summary_row(row_index + 1, inquiry_oe, inquiry_name, None, customer_product_code)
                 if target_sheet:
                     target_sheet.write(row_index, note_col, row_summary["match_note"])
                 summary["rows"].append(row_summary)
@@ -158,6 +165,7 @@ def generate_xlsx_with_bld(
     write_output: bool = True,
     price_mode: str = "none",
     exchange_rate: float | None = None,
+    customer_code_column: int | None = None,
 ) -> dict:
     if not write_output:
         return analyze_xlsx_with_bld(
@@ -166,6 +174,7 @@ def generate_xlsx_with_bld(
             match_column=match_column,
             price_mode=price_mode,
             exchange_rate=exchange_rate,
+            customer_code_column=customer_code_column,
         )
 
     workbook = load_workbook(inquiry_path)
@@ -202,6 +211,11 @@ def generate_xlsx_with_bld(
 
             for row_index in range(header_row + 1, sheet.max_row + 1):
                 inquiry_name = sheet.cell(row_index, columns["name"]).value if "name" in columns else ""
+                customer_product_code = (
+                    _customer_code_text(sheet.cell(row_index, customer_code_column + 1).value)
+                    if customer_code_column is not None
+                    else ""
+                )
                 match_values = _xlsx_match_values(
                     sheet,
                     row_index,
@@ -236,7 +250,7 @@ def generate_xlsx_with_bld(
                         )
                     summary["matched"] += 1
                     row_summary = annotate_row_summary_with_match_columns(
-                        summary_row(row_index, inquiry_oe, inquiry_name, match),
+                        summary_row(row_index, inquiry_oe, inquiry_name, match, customer_product_code),
                         match_values,
                         match,
                     )
@@ -249,7 +263,7 @@ def generate_xlsx_with_bld(
                     if status_header and status_col is not None:
                         _write_cell(sheet, row_index, status_col, "")
                     summary["unmatched"] += 1
-                    row_summary = summary_row(row_index, inquiry_oe, inquiry_name, None)
+                    row_summary = summary_row(row_index, inquiry_oe, inquiry_name, None, customer_product_code)
                     _write_cell(sheet, row_index, note_col, row_summary["match_note"])
                     summary["rows"].append(row_summary)
             trim_unused_row_dimensions(sheet, data_end_row)
@@ -269,6 +283,7 @@ def generate_excel_with_bld(
     write_output: bool = True,
     price_mode: str = "none",
     exchange_rate: float | None = None,
+    customer_code_column: int | None = None,
 ) -> dict:
     suffix = inquiry_path.suffix.lower()
     if suffix == ".xls":
@@ -280,6 +295,7 @@ def generate_excel_with_bld(
             write_output=write_output,
             price_mode=price_mode,
             exchange_rate=exchange_rate,
+            customer_code_column=customer_code_column,
         )
     if suffix == ".xlsx":
         return generate_xlsx_with_bld(
@@ -290,5 +306,6 @@ def generate_excel_with_bld(
             write_output=write_output,
             price_mode=price_mode,
             exchange_rate=exchange_rate,
+            customer_code_column=customer_code_column,
         )
     raise ValueError("客户询价文件仅支持 .xls 或 .xlsx。")

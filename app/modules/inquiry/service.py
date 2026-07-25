@@ -321,6 +321,7 @@ class InquiryService:
         match_column: object = None,
         write_output: bool = False,
         options: PriceOptions | None = None,
+        customer_code_column: int | None = None,
     ) -> dict:
         return self.engine.analyze_workbook(
             source_path,
@@ -329,6 +330,7 @@ class InquiryService:
             match_column=match_column,
             write_output=write_output,
             options=options or PriceOptions("none"),
+            customer_code_column=customer_code_column,
         )
 
     def preview_columns(self, source_path: Path) -> dict:
