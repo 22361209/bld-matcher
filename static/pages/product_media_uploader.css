@@ -236,6 +236,11 @@
   margin: 0 0 12px;
 }
 
+/* Match the single-image tile: 36px header + 108px image area, plus borders. */
+.product-media-drawing-intake { min-height: 146px; }
+
+.product-media-drawing-intake .product-media-intake-button { min-height: 110px; }
+
 @media (max-width: 760px) {
   .product-media-edit { grid-template-columns: minmax(0, 1fr); }
 

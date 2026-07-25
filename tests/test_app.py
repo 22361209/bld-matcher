@@ -3710,6 +3710,7 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("data-product-media-upload", edit_html)
         self.assertIn("data-product-media-browse", edit_html)
         self.assertIn("data-product-media-drawing-intake", edit_html)
+        self.assertNotIn("当前没有 PDF 图纸", edit_html)
         self.assertNotIn("file-picker-clear", edit_html)
         self.assertIn("/static/app.js", edit_html)
         self.assertIn('name="drawing"', edit_html)

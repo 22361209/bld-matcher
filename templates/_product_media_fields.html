@@ -87,8 +87,6 @@
           {% if embedded %}name="embedded" value="1"{% endif %}
           data-confirm="确认删除 PDF 图纸？文件会移入归档目录保留。">删除图纸</button>
       </p>
-    {% elif product %}
-      <p class="note product-media-drawing-current">当前没有 PDF 图纸。</p>
     {% endif %}
     <input class="product-media-drawing-input" type="file" name="drawing" accept="application/pdf,.pdf" data-product-media-drawing-input tabindex="-1" aria-hidden="true">
     <div class="product-media-intake product-media-drawing-intake" data-product-media-drawing-intake tabindex="0">

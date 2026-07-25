@@ -1,0 +1,13 @@
+{
+  "date": "2026-07-26",
+  "version": "unreleased",
+  "title": "对齐产品图片与 PDF 图纸上传卡片",
+  "entries": [
+    "未上传图纸时不再显示“当前没有 PDF 图纸”，PDF 上传卡与产品图片卡保持统一高度。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "compatible",
+    "operations": "none"
+  }
+}
