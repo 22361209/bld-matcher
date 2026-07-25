@@ -779,6 +779,7 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("data-grid-footer", html)
         self.assertIn("data-grid-summary", html)
         self.assertIn("<strong>1–2</strong><span> / 2</span>", html)
+        self.assertNotIn("重新查询", html)
 
     def test_product_lookup_returns_matching_products(self):
         from app.modules.products.persistence import upsert_product
@@ -6112,6 +6113,7 @@ with connect(database_path) as conn:
         self.assertNotIn('data-col="name"', result_html)
         self.assertIn("CUST-A1", result_html)
         self.assertIn("写入报价", result_html)
+        self.assertIn("重新查询", result_html)
 
         write = self.client.post(
             "/match/write-quotes",

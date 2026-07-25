@@ -16,7 +16,7 @@
       <section class="data-section">
         <div class="data-section-header">
           <div>
-            <h2>匹配明细</h2>
+            <h2>查询明细</h2>
             <p>共 {{ summary.total }} 行，命中 {{ summary.matched }} 行，未找到 {{ summary.unmatched }} 行。</p>
             <p>按源表行号显示匹配结果和说明。</p>
             {% if output_pending %}
@@ -27,9 +27,23 @@
           </div>
           <div class="data-section-actions">
             <span>{{ summary.rows|length }} 条</span>
-            <button class="linear-button subtle" type="button" data-reset-product-columns>恢复默认列顺序</button>
-            <button class="linear-button subtle" type="button" data-reset-column-widths-for="inquiry-result">重置列宽</button>
             <span class="products-visually-hidden" aria-live="polite" data-column-order-status></span>
+            {% if upload_path and selected_match_columns %}
+              <form action="{{ url_for('match_inquiry_with_column') }}" method="post" class="inline-form" data-submit-wait data-submit-wait-text="正在重新查询...">
+                {{ csrf_field() }}
+                <input type="hidden" name="upload_path" value="{{ upload_path }}">
+                <input type="hidden" name="original_filename" value="{{ original_filename }}">
+                <input type="hidden" name="output_name" value="{{ output_name }}">
+                {% for column in selected_match_columns %}
+                  <input type="hidden" name="match_columns" value="{{ column }}">
+                {% endfor %}
+                {% if customer_code_column is defined and customer_code_column is not none %}
+                  <input type="hidden" name="customer_code_column" value="{{ customer_code_column }}">
+                {% endif %}
+                <input type="hidden" name="cleanup_message" value="{{ cleanup_message|default('') }}">
+                <button class="linear-button subtle" type="submit">重新查询</button>
+              </form>
+            {% endif %}
             {% if output_pending %}
               <button class="linear-button primary" type="button" data-open-download-modal>下载 Excel</button>
               <form action="{{ url_for('download_match_drawings') }}" method="post" class="inline-form" data-submit-wait data-submit-wait-text="正在打包图纸..." data-submit-wait-button-text="打包中..." data-submit-wait-reset="6000">
@@ -135,7 +149,7 @@
           </tbody>
         </table>
         </div>
-        {% set data_grid_label = "匹配明细" %}
+        {% set data_grid_label = "查询明细" %}
         {% set data_grid_total = summary.total %}
         {% include "_data_grid_footer.html" %}
         </div>
