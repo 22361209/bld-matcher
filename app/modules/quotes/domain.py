@@ -36,6 +36,7 @@ class QuoteRecord:
     source_text: str
     attachment_path: str
     remark: str
+    quote_no: str
     version: int
     created_at: str
     updated_at: str
@@ -57,6 +58,7 @@ class QuoteRecord:
             "source_text": self.source_text,
             "attachment_path": self.attachment_path,
             "remark": self.remark,
+            "quote_no": self.quote_no,
             "version": self.version,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
@@ -84,6 +86,7 @@ class QuoteDraft:
     source_text: str
     attachment_path: str
     remark: str
+    quote_no: str
     created_at: str
     updated_at: str
 
@@ -105,6 +108,7 @@ class QuoteDraft:
                 "source_text",
                 "attachment_path",
                 "remark",
+                "quote_no",
                 "created_at",
                 "updated_at",
             )
@@ -119,6 +123,7 @@ class QuoteFilters:
     date_to: str = ""
     currency: str = ""
     quoted_by: str = ""
+    quote_no: str = ""
 
     def as_dict(self) -> dict[str, str]:
         return {
@@ -128,6 +133,7 @@ class QuoteFilters:
             "date_to": self.date_to,
             "currency": self.currency,
             "quoted_by": self.quoted_by,
+            "quote_no": self.quote_no,
         }
 
 
@@ -258,6 +264,7 @@ def build_quote_draft(
         source_text=clean_multiline(_value(data, "source_text", existing)),
         attachment_path=compact_text(_value(data, "attachment_path", existing)),
         remark=clean_multiline(_value(data, "remark", existing)),
+        quote_no=compact_text(_value(data, "quote_no", existing)),
         created_at=existing.created_at if existing else timestamp_text,
         updated_at=timestamp_text,
     )
@@ -287,4 +294,5 @@ def build_quote_filters(data: Mapping[str, object]) -> QuoteFilters:
         date_to=date_to,
         currency=currency,
         quoted_by=compact_text(data.get("quoted_by")),
+        quote_no=compact_text(data.get("quote_no")),
     )

@@ -75,6 +75,7 @@ class QuoteListQuery(StrictApiModel):
     date_to: date | None = None
     currency: Currency | None = None
     quoted_by: str = Field(default="", max_length=200)
+    quote_no: str = Field(default="", max_length=20)
     limit: int = Field(default=100, ge=1, le=500)
     offset: int = Field(default=0, ge=0)
 
@@ -105,6 +106,7 @@ class QuoteResponse(StrictApiModel):
     source_type: SourceType
     source_text: str
     remark: str
+    quote_no: str
     version: int = Field(ge=1)
     created_at: str
     updated_at: str

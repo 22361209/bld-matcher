@@ -2981,6 +2981,7 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(quote["version"], 1)
         self.assertEqual(quote["quoted_by"], "WorkBuddy Quote V1")
         self.assertEqual(quote["source_type"], "api")
+        self.assertRegex(quote["quote_no"], r"^Q\d{9}$")
         self.assertEqual(created.headers["ETag"], '"1"')
         self.assertNotIn("attachment_path", quote)
         quote_id = quote["id"]
@@ -3020,6 +3021,15 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(listed.status_code, 200)
         self.assertEqual(listed_data["total"], 1)
         self.assertEqual([item["id"] for item in listed_data["quotes"]], [quote_id])
+
+        listed_by_no = self.client.get(
+            f"/api/v1/quotes?quote_no={quote['quote_no']}",
+            headers=authorization,
+        )
+        listed_by_no_data = listed_by_no.get_json()["data"]
+        self.assertEqual(listed_by_no.status_code, 200)
+        self.assertEqual(listed_by_no_data["total"], 1)
+        self.assertEqual(listed_by_no_data["quotes"][0]["id"], quote_id)
 
         missing_precondition = self.client.patch(
             f"/api/v1/quotes/{quote_id}",
@@ -3104,6 +3114,27 @@ class WebAppTest(unittest.TestCase):
             any(parameter["name"] == "If-Match" for parameter in patch_operation["parameters"])
         )
         self.assertIn("ETag", patch_operation["responses"]["200"]["headers"])
+        self.assertIn("/api/v1/docs/{doc_name}", document["paths"])
+
+    def test_api_docs_markdown_endpoint(self):
+        token = self.create_internal_api_token(scopes=["api:read"], name="Docs Reader")
+        authorization = {"Authorization": f"Bearer {token}"}
+
+        anonymous = self.client.get("/api/v1/docs/quote-v1.md")
+        self.assertEqual(anonymous.status_code, 401)
+
+        document = self.client.get("/api/v1/docs/quote-v1.md", headers=authorization)
+        self.assertEqual(document.status_code, 200)
+        self.assertIn("text/markdown", document.headers["Content-Type"])
+        self.assertIn("Quote API v1", document.get_data(as_text=True))
+
+        missing = self.client.get("/api/v1/docs/no-such-doc.md", headers=authorization)
+        self.assertEqual(missing.status_code, 404)
+        details = missing.get_json()["error"].get("details", {})
+        self.assertIn("quote-v1.md", details.get("available_docs", []))
+
+        traversal = self.client.get("/api/v1/docs/..", headers=authorization)
+        self.assertEqual(traversal.status_code, 404)
 
     def test_quote_records_can_import_excel_into_quote_table(self):
         from openpyxl import Workbook
@@ -4715,6 +4746,7 @@ class WebAppTest(unittest.TestCase):
                 "023_rekey_cross_device_sync_keys",
                 "024_drop_quote_record_price",
                 "025_create_product_option_values",
+                "026_quote_record_quote_no",
             ],
         )
 
@@ -6152,6 +6184,48 @@ with connect(database_path) as conn:
         self.assertEqual(rows[2]["bld_no"], "KWQ02")
         self.assertEqual(rows[2]["tax_price"], 55)
         self.assertFalse(any(row["bld_no"] == "KWQ03" for row in rows))
+
+        write_json = self.client.post(
+            "/match/write-quotes",
+            data={
+                "upload_path": upload_match.group(1),
+                "original_filename": "write-quotes.xlsx",
+                "match_columns": ["1"],
+                "customer_code_column": "0",
+                "price_mode": "tax",
+                "customer_name": "测试客户WQ",
+                "remark": "询价写入",
+            },
+            headers={"X-Requested-With": "fetch", "Accept": "application/json"},
+        )
+        self.assertEqual(write_json.status_code, 200)
+        payload = write_json.get_json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["written"], 3)
+        quote_no = payload["quote_no"]
+        self.assertRegex(quote_no, r"^Q\d{9}$")
+        self.assertIn(quote_no, payload["quotes_url"])
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            batch = conn.execute(
+                "SELECT bld_no, customer_product_code, quote_no FROM quote_records WHERE quote_no = ? ORDER BY id",
+                (quote_no,),
+            ).fetchall()
+        self.assertEqual(len(batch), 3)
+        self.assertTrue(all(row["quote_no"] == quote_no for row in batch))
+
+        detail = self.client.get(f"/quotes/number/{quote_no}")
+        detail_html = detail.get_data(as_text=True)
+        self.assertEqual(detail.status_code, 200)
+        self.assertIn("CUST-A1", detail_html)
+        self.assertIn("CUST-B2", detail_html)
+        self.assertIn("CUST-C3", detail_html)
+
+        list_page = self.client.get(f"/quotes?quote_no={quote_no}")
+        list_html = list_page.get_data(as_text=True)
+        self.assertEqual(list_page.status_code, 200)
+        self.assertLess(list_html.index("CUST-A1"), list_html.index("CUST-B2"))
+        self.assertLess(list_html.index("CUST-B2"), list_html.index("CUST-C3"))
 
     def test_match_write_quotes_requires_price_mode_and_customer_name(self):
         from app.modules.products.persistence import upsert_product

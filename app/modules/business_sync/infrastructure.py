@@ -30,7 +30,7 @@ FIELD_LABELS = {
     "length": "长度", "model": "母件编码", "models": "适用车型", "moq": "起订量", "note": "备注",
     "oe_no_1": "OE 号 1", "oe_no_2": "OE 号 2", "outer_diameter_mm": "外径", "part": "零件",
     "pieces": "下料只数", "price": "报价", "price_cny": "价格", "product_model": "产品型号", "product_status": "产品状态",
-    "purchase_base": "采购基数", "quote_date": "报价日期", "quoted_by": "报价人", "remark": "备注", "series": "系列",
+    "purchase_base": "采购基数", "quote_date": "报价日期", "quote_no": "报价单号", "quoted_by": "报价人", "remark": "备注", "series": "系列",
     "source": "来源", "source_row": "来源行", "source_sheet": "来源工作表", "source_text": "来源内容", "source_type": "来源类型",
     "spec_text": "规格", "tax_price": "含税价", "net_price": "未税价", "thickness": "厚度", "tolerance_mm": "公差",
     "tube_type": "产品名称", "weight_kg": "重量", "width": "宽度",

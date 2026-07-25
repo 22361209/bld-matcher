@@ -53,15 +53,59 @@ document.querySelectorAll("[data-close-download-modal]").forEach((element) => {
 
 document.querySelectorAll("[data-write-quotes-submit]").forEach((button) => {
   button.addEventListener("click", (event) => {
-    const form = button.closest("form");
-    const customerInput = form ? form.querySelector("input[name='customer_name']") : null;
-    if (!(customerInput instanceof HTMLInputElement)) return;
-    if (customerInput.value.trim()) return;
     event.preventDefault();
-    customerInput.setCustomValidity("写入报价前请填写客户名称。");
-    customerInput.reportValidity();
-    customerInput.focus();
-    customerInput.addEventListener("input", () => customerInput.setCustomValidity(""), { once: true });
+    const form = button.closest("form");
+    if (!(form instanceof HTMLFormElement) || !(button instanceof HTMLButtonElement)) return;
+    const customerInput = form.querySelector("input[name='customer_name']");
+    if (!(customerInput instanceof HTMLInputElement)) return;
+    if (!customerInput.value.trim()) {
+      customerInput.setCustomValidity("写入报价前请填写客户名称。");
+      customerInput.reportValidity();
+      customerInput.focus();
+      customerInput.addEventListener("input", () => customerInput.setCustomValidity(""), { once: true });
+      return;
+    }
+
+    const message = form.querySelector("[data-submit-wait-message]");
+    const showError = (text) => {
+      if (message instanceof HTMLElement) {
+        message.textContent = text;
+        message.classList.add("active", "error");
+        message.classList.remove("done");
+      }
+      button.disabled = false;
+    };
+
+    button.disabled = true;
+    const writeUrl = button.formAction;
+    const body = new FormData(form);
+    // 原生提交触发生成并下载 Excel（响应为附件，页面不跳转）
+    HTMLFormElement.prototype.submit.call(form);
+    if (message instanceof HTMLElement) {
+      message.textContent = "Excel 已开始下载，正在写入报价记录...";
+      message.classList.add("active");
+      message.classList.remove("done", "error");
+    }
+
+    fetch(writeUrl, {
+      method: "POST",
+      body,
+      headers: { Accept: "application/json", "X-Requested-With": "fetch" },
+    })
+      .then((response) =>
+        response
+          .json()
+          .catch(() => null)
+          .then((payload) => ({ status: response.status, payload })),
+      )
+      .then(({ payload }) => {
+        if (payload && payload.ok) {
+          window.location.assign(payload.quotes_url);
+          return;
+        }
+        showError((payload && payload.error) || "写入报价失败，请稍后重试。");
+      })
+      .catch(() => showError("网络错误，报价写入失败；Excel 已开始下载。"));
   });
 });
 

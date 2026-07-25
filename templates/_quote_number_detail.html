@@ -1,0 +1,25 @@
+<table class="data-table quote-table quote-number-table">
+  <thead>
+    <tr>
+      <th>日期</th><th>客户</th><th>BLD号</th><th>客户产品编码</th><th>含税单价</th><th>不含税单价</th><th>币种</th><th>报价人</th><th>备注</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for record in records %}
+      <tr>
+        <td>{{ record.quote_date }}</td>
+        <td>{{ record.customer_name }}</td>
+        <td>{{ record.bld_no or record.product_model }}</td>
+        <td>{{ record.customer_product_code }}</td>
+        <td>{% if record.tax_price is not none %}{{ "%.4f"|format(record.tax_price) }}{% endif %}</td>
+        <td>{% if record.net_price is not none %}{{ "%.4f"|format(record.net_price) }}{% endif %}</td>
+        <td>{{ record.currency }}</td>
+        <td>{{ record.quoted_by }}</td>
+        <td>{{ record.remark }}</td>
+      </tr>
+    {% endfor %}
+    {% if not records %}
+      <tr><td colspan="9">没有找到报价单号 {{ quote_no }} 的记录。</td></tr>
+    {% endif %}
+  </tbody>
+</table>

@@ -5,7 +5,7 @@ from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
-from flask import flash, redirect, request, send_file, url_for
+from flask import flash, jsonify, redirect, request, send_file, url_for
 
 from app.helpers import (
     clean_original_filename,
@@ -26,7 +26,6 @@ from app.modules.inquiry.web_helpers import (
     selected_match_columns,
     validated_user_upload_path,
 )
-from app.modules.quotes.domain import QuoteValidationError
 from app.modules.quotes.factory import get_quote_service
 from app.security import actor_name, permission_required
 
@@ -48,6 +47,12 @@ def _write_quote_price_fields(price_cny: float, price_options: dict) -> dict:
         exchange_rate = float(price_options.get("exchange_rate") or 0)
         return {"tax_price": round(price_cny / 1.1 / exchange_rate, 2), "currency": "USD"}
     return {}
+
+
+def _wants_json() -> bool:
+    if request.headers.get("X-Requested-With") == "fetch":
+        return True
+    return "application/json" in request.headers.get("Accept", "")
 
 
 def register(app) -> None:
@@ -120,27 +125,29 @@ def register(app) -> None:
     @permission_required("manage_customer_prices")
     def write_match_quotes():
         service = get_inquiry_service()
-        if not service.catalog_available():
-            flash("请先上传产品目录。", "error")
+
+        def fail(message: str, status: int = 400):
+            if _wants_json():
+                return jsonify({"ok": False, "error": message}), status
+            flash(message, "error")
             return redirect(url_for("index"))
+
+        if not service.catalog_available():
+            return fail("请先上传产品目录。")
 
         upload_path = validated_user_upload_path()
         if not upload_path:
-            flash("询价源文件不存在，请重新上传。", "error")
-            return redirect(url_for("index"))
+            return fail("询价源文件不存在，请重新上传。")
 
         customer_name = request.form.get("customer_name", "").strip()
         if not customer_name:
-            flash("写入报价前请填写客户名称。", "error")
-            return redirect(url_for("index"))
+            return fail("写入报价前请填写客户名称。")
 
         price_options, price_error = price_options_from_request()
         if price_error:
-            flash(price_error, "error")
-            return redirect(url_for("index"))
+            return fail(price_error)
         if price_options.get("price_mode") == "none":
-            flash("未选择单价方式，无法写入报价；请先在下载弹窗中选择含税或不含税单价。", "error")
-            return redirect(url_for("index"))
+            return fail("未选择单价方式，无法写入报价；请先在下载弹窗中选择含税或不含税单价。")
 
         match_columns = optional_match_columns() or []
         customer_code_column = customer_code_column_from_request()
@@ -155,18 +162,15 @@ def register(app) -> None:
                 customer_code_column=customer_code_column,
             )
         except ValueError as exc:
-            flash(f"生成失败：{exc}", "error")
-            return redirect(url_for("index"))
+            return fail(f"生成失败：{exc}")
         except Exception:
             logger.exception("Quote write-back analysis failed")
-            flash("生成失败，请稍后重试。", "error")
-            return redirect(url_for("index"))
+            return fail("生成失败，请稍后重试。", 500)
 
-        quote_service = get_quote_service()
-        actor = actor_name()
+        rows_data: list[dict] = []
         seen_keys: set[tuple[str, str]] = set()
-        written = 0
         skipped = 0
+        actor = actor_name()
         for row in summary["rows"]:
             bld_no = str(row.get("bld_no") or "").strip()
             price_cny = row.get("price_cny")
@@ -188,18 +192,31 @@ def register(app) -> None:
                 "remark": remark,
             }
             data.update(_write_quote_price_fields(float(price_cny), price_options))
-            try:
-                quote_service.create(data, actor=actor)
-            except QuoteValidationError:
-                skipped += 1
-                continue
-            written += 1
+            rows_data.append(data)
 
-        if written:
-            flash(f"已写入 {written} 条报价记录（跳过 {skipped} 条未命中或无单价行）。", "success")
-        else:
-            flash("没有可写入的报价行：需要命中有 BLD 号且带单价的条目。", "error")
-        return redirect(url_for("quote_web.quotes", customer_name=customer_name) + "#quote-results")
+        try:
+            written_records, service_skipped, quote_no = get_quote_service().create_many(rows_data, actor=actor)
+        except Exception:
+            logger.exception("Quote write-back failed")
+            return fail("写入报价失败，请稍后重试。", 500)
+        skipped += service_skipped
+        written = len(written_records)
+        if not written:
+            return fail("没有可写入的报价行：需要命中有 BLD 号且带单价的条目。")
+
+        quotes_url = url_for("quote_web.quotes", customer_name=customer_name, quote_no=quote_no) + "#quote-results"
+        if _wants_json():
+            return jsonify(
+                {
+                    "ok": True,
+                    "written": written,
+                    "skipped": skipped,
+                    "quote_no": quote_no,
+                    "quotes_url": quotes_url,
+                }
+            )
+        flash(f"已写入 {written} 条报价记录（跳过 {skipped} 条未命中或无单价行）。", "success")
+        return redirect(quotes_url)
 
     @app.post("/match/drawings/download")
     @permission_required("generate_match")

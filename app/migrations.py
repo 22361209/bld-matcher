@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from collections.abc import Callable
 from datetime import datetime, timedelta
@@ -483,6 +484,46 @@ def _drop_quote_record_price(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE quote_records DROP COLUMN price")
 
 
+def _quote_no_day(value: object) -> str:
+    digits = re.sub(r"\D", "", str(value or ""))
+    return digits[2:8] if len(digits) >= 8 else "000000"
+
+
+def _add_quote_record_quote_no(conn: sqlite3.Connection) -> None:
+    if "quote_no" not in _columns(conn, "quote_records"):
+        conn.execute("ALTER TABLE quote_records ADD COLUMN quote_no TEXT NOT NULL DEFAULT ''")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS quote_no_counters (
+          day TEXT PRIMARY KEY,
+          last_seq INTEGER NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_quote_records_quote_no ON quote_records(quote_no)"
+    )
+    rows = conn.execute(
+        "SELECT id, quote_date, created_at FROM quote_records WHERE quote_no = '' ORDER BY quote_date, id"
+    ).fetchall()
+    sequences: dict[str, int] = {}
+    for row in rows:
+        day = _quote_no_day(row["quote_date"] or row["created_at"])
+        sequences[day] = sequences.get(day, 0) + 1
+        conn.execute(
+            "UPDATE quote_records SET quote_no = ? WHERE id = ?",
+            (f"Q{day}{sequences[day]:03d}", row["id"]),
+        )
+    for day, last_seq in sequences.items():
+        conn.execute(
+            """
+            INSERT INTO quote_no_counters (day, last_seq) VALUES (?, ?)
+            ON CONFLICT(day) DO UPDATE SET last_seq = MAX(last_seq, excluded.last_seq)
+            """,
+            (day, last_seq),
+        )
+
+
 def _add_product_option_values(conn: sqlite3.Connection) -> None:
     # 延迟导入：app.database -> app.migrations 在模块加载期不能反向依赖业务模块。
     from .modules.products.option_values import register_product_option_values
@@ -539,6 +580,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("023_rekey_cross_device_sync_keys", _rekey_cross_device_sync_keys),
     ("024_drop_quote_record_price", _drop_quote_record_price),
     ("025_create_product_option_values", _add_product_option_values),
+    ("026_quote_record_quote_no", _add_quote_record_quote_no),
 )
 
 

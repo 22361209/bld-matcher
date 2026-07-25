@@ -107,6 +107,7 @@
   <div class="data-table-scroll" data-grid-scroll>
     <table class="data-table quote-table" id="quotes-table" data-column-storage-scope="{{ g.user['id'] if g.user else 'guest' }}">
       <colgroup>
+        <col class="col-width-128" data-col="quote-no">
         <col class="col-width-92" data-col="date">
         <col class="col-width-128" data-col="customer">
         <col class="col-width-142" data-col="bld">
@@ -121,13 +122,13 @@
       </colgroup>
       <thead>
         <tr>
-          <th>日期</th><th>客户</th><th>BLD号</th><th>客户产品编码</th><th>含税单价</th><th>不含税单价</th><th>币种</th><th>报价人</th><th>来源</th><th>备注</th><th>操作</th>
+          <th>报价单号</th><th>日期</th><th>客户</th><th>BLD号</th><th>客户产品编码</th><th>含税单价</th><th>不含税单价</th><th>币种</th><th>报价人</th><th>来源</th><th>备注</th><th>操作</th>
         </tr>
       </thead>
       <tbody>
         {% for record in records %}
           <tr>
-            <td>{{ record.quote_date }}</td><td><strong>{{ record.customer_name }}</strong></td><td>{{ record.bld_no or record.product_model }}</td><td>{{ record.customer_product_code }}</td><td>{% if record.tax_price is not none %}{{ "%.4f"|format(record.tax_price) }}{% endif %}</td><td>{% if record.net_price is not none %}{{ "%.4f"|format(record.net_price) }}{% endif %}</td><td>{{ record.currency }}</td><td>{{ record.quoted_by }}</td><td>{{ record.source_type }}</td><td>{{ record.remark }}</td>
+            <td>{% if record.quote_no %}<button class="quote-edit-trigger" type="button" data-quote-number="{{ record.quote_no }}" data-quote-number-url="{{ url_for('quote_web.quote_number_detail', quote_no=record.quote_no) }}">{{ record.quote_no }}</button>{% endif %}</td><td>{{ record.quote_date }}</td><td><strong>{{ record.customer_name }}</strong></td><td>{{ record.bld_no or record.product_model }}</td><td>{{ record.customer_product_code }}</td><td>{% if record.tax_price is not none %}{{ "%.4f"|format(record.tax_price) }}{% endif %}</td><td>{% if record.net_price is not none %}{{ "%.4f"|format(record.net_price) }}{% endif %}</td><td>{{ record.currency }}</td><td>{{ record.quoted_by }}</td><td>{{ record.source_type }}</td><td>{{ record.remark }}</td>
             <td>
               <a href="{{ url_for('quote_web.quotes', customer_name=record.customer_name, bld_no=record.bld_no or record.product_model) }}" data-quote-results-link>历史</a>
               {% if can("manage_customer_prices") %}
@@ -146,7 +147,7 @@
             </td>
           </tr>
         {% endfor %}
-        {% if not records %}<tr><td colspan="11">没有找到报价记录。</td></tr>{% endif %}
+        {% if not records %}<tr><td colspan="12">没有找到报价记录。</td></tr>{% endif %}
       </tbody>
     </table>
   </div>

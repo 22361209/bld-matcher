@@ -29,6 +29,47 @@ if (document.body.dataset.page === "quotes.list") {
     }
   };
 
+  const numberDialog = document.querySelector("#quote-number-dialog");
+
+  const openQuoteNumber = (button) => {
+    if (!(numberDialog instanceof HTMLDialogElement)) return;
+    const label = numberDialog.querySelector("[data-quote-number-label]");
+    const detail = numberDialog.querySelector("[data-quote-number-detail]");
+    if (label instanceof HTMLElement) {
+      label.textContent = button.dataset.quoteNumber || "";
+    }
+    if (detail instanceof HTMLElement) {
+      detail.textContent = "正在加载...";
+    }
+    numberDialog.showModal();
+    fetch(button.dataset.quoteNumberUrl, {
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: { Accept: "text/html", "X-Requested-With": "fetch" },
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error("load failed");
+        return response.text();
+      })
+      .then((html) => {
+        if (detail instanceof HTMLElement) {
+          detail.innerHTML = html;
+        }
+      })
+      .catch(() => {
+        if (detail instanceof HTMLElement) {
+          detail.textContent = "加载失败，请稍后重试。";
+        }
+      });
+  };
+
+  if (numberDialog instanceof HTMLDialogElement) {
+    numberDialog.querySelector("[data-close-quote-number]")?.addEventListener("click", () => numberDialog.close());
+    numberDialog.addEventListener("click", (event) => {
+      if (event.target === numberDialog) numberDialog.close();
+    });
+  }
+
   const initializeResults = () => {
     resultsHost?.querySelector("[data-quote-search-form]")?.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -36,6 +77,9 @@ if (document.body.dataset.page === "quotes.list") {
     });
     resultsHost?.querySelectorAll("[data-open-quote-edit]").forEach((button) => {
       button.addEventListener("click", () => openQuoteEdit(document.getElementById(button.dataset.openQuoteEdit)));
+    });
+    resultsHost?.querySelectorAll("[data-quote-number-url]").forEach((button) => {
+      button.addEventListener("click", () => openQuoteNumber(button));
     });
     resultsHost?.querySelectorAll("[data-close-quote-edit]").forEach((button) => {
       button.addEventListener("click", () => button.closest("dialog")?.close());

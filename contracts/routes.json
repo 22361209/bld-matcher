@@ -43,6 +43,13 @@
       "rule": "/api/v1/artifacts/<string:artifact_id>"
     },
     {
+      "endpoint": "docs_v1_api.read_api_doc",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/api/v1/docs/<doc_name>"
+    },
+    {
       "endpoint": "inquiry_v1_api.analyze_inquiry_v1",
       "methods": [
         "POST"
@@ -685,6 +692,13 @@
         "POST"
       ],
       "rule": "/quotes/import/preview"
+    },
+    {
+      "endpoint": "quote_web.quote_number_detail",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/quotes/number/<quote_no>"
     },
     {
       "endpoint": "quote_web.save_quote",

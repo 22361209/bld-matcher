@@ -22,7 +22,9 @@ POST  /api/v1/quotes
 PATCH /api/v1/quotes/{quote_id}
 ```
 
-列表支持 `customer_name`、`bld_no`、`date_from`、`date_to`、`currency`、`quoted_by`、`limit` 和 `offset`。API v1 不接受或返回本机 `attachment_path`。
+列表支持 `customer_name`、`bld_no`、`date_from`、`date_to`、`currency`、`quoted_by`、`quote_no`、`limit` 和 `offset`。API v1 不接受或返回本机 `attachment_path`。
+
+每条报价记录都有服务端生成的 `quote_no`（报价单号，格式 `Q` + 6 位日期 + 3 位当日序号，如 `Q260725001`）。网页手工新增和 API 新增每条各生成一个单号；网页询价写入和 Excel 导入的整批记录共用一个单号。`quote_no` 由系统维护，创建和修订请求都不能指定或修改；历史记录在迁移 026 中按报价日期逐行补编号。列表按报价日期新→旧、报价单号新→旧、同一单号内按写入顺序返回。
 
 报价人和来源由服务端按可信入口确定：网页手工新增记录为当前登录账号和 `manual`，Excel 导入为当前登录账号和 `excel`，API 新增为 API Key 对应的 Principal 和 `api`。为兼容旧调用方，创建请求仍可携带已废弃的 `quoted_by` 和 `source_type`，但服务端不会采用调用方提供的值；修订请求不再接受这两个系统字段。兼容性决定见 [ADR 0009](../adr/0009-server-owned-quote-attribution.md)。
 

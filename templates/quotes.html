@@ -17,3 +17,13 @@
     {% include "_quote_results.html" %}
   </div>
 {% endblock %}
+
+{% block page_modals %}
+  <dialog class="quote-edit-dialog quote-number-dialog" id="quote-number-dialog" aria-labelledby="quote-number-dialog-title">
+    <div class="quote-edit-dialog-header">
+      <h2 id="quote-number-dialog-title">报价单 <span data-quote-number-label></span></h2>
+      <button class="quote-edit-close" type="button" data-close-quote-number aria-label="关闭报价明细窗口">关闭</button>
+    </div>
+    <div class="quote-number-detail" data-quote-number-detail></div>
+  </dialog>
+{% endblock %}

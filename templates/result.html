@@ -208,14 +208,14 @@
                 <span>备注（写入报价时可选）</span>
                 <input name="remark" placeholder="写入本次所有报价记录">
               </label>
-              <p class="note">点「写入报价」会按上方选择的单价方式，把命中的 BLD 号和单价写入报价记录；重复提交会重复写入。</p>
+              <p class="note">点「下载并写入报价」会先下载 Excel，再按上方选择的单价方式把命中的 BLD 号和单价写入报价记录，完成后跳转到报价记录页；重复提交会重复写入。</p>
             {% endif %}
             <p class="submit-wait-message" data-submit-wait-message aria-live="polite"></p>
             <div class="download-modal-actions">
               <button class="download-cancel-button" type="button" data-close-download-modal>取消</button>
               <button class="download-confirm-button" type="submit">确认</button>
               {% if can("manage_customer_prices") %}
-                <button class="download-confirm-button" type="submit" formaction="{{ url_for('write_match_quotes') }}" data-write-quotes-submit>写入报价</button>
+                <button class="download-confirm-button" type="submit" formaction="{{ url_for('write_match_quotes') }}" data-write-quotes-submit>下载并写入报价</button>
               {% endif %}
             </div>
           </form>

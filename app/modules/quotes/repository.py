@@ -33,6 +33,7 @@ def _record(row: sqlite3.Row | None) -> QuoteRecord | None:
         source_text=str(row["source_text"] or ""),
         attachment_path=str(row["attachment_path"] or ""),
         remark=str(row["remark"] or ""),
+        quote_no=str(row["quote_no"] or "") if "quote_no" in row.keys() else "",
         version=int(row["version"]),
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
@@ -60,6 +61,9 @@ def _filter_clauses(filters: QuoteFilters) -> tuple[list[str], list[object]]:
     if filters.quoted_by:
         clauses.append("UPPER(quoted_by) LIKE ?")
         params.append(f"%{filters.quoted_by.upper()}%")
+    if filters.quote_no:
+        clauses.append("quote_no = ?")
+        params.append(filters.quote_no)
     return clauses, params
 
 
@@ -74,11 +78,11 @@ class SQLiteQuoteRepository:
             INSERT INTO quote_records
               (sync_id, customer_name, bld_no, customer_product_code, product_model, tax_price, net_price,
                currency, moq, quote_date, quoted_by, source_type, source_text, attachment_path, remark,
-               version, created_at, updated_at)
+               quote_no, version, created_at, updated_at)
             VALUES
               (:sync_id, :customer_name, :bld_no, :customer_product_code, :product_model, :tax_price, :net_price,
                :currency, :moq, :quote_date, :quoted_by, :source_type, :source_text, :attachment_path, :remark,
-               1, :created_at, :updated_at)
+               :quote_no, 1, :created_at, :updated_at)
             """,
             {**values, "sync_id": uuid.uuid4().hex},
         )
@@ -97,7 +101,7 @@ class SQLiteQuoteRepository:
         clauses, params = _filter_clauses(filters)
         if clauses:
             sql += " WHERE " + " AND ".join(clauses)
-        sql += " ORDER BY quote_date DESC, id DESC LIMIT ? OFFSET ?"
+        sql += " ORDER BY quote_date DESC, quote_no DESC, id ASC LIMIT ? OFFSET ?"
         params.extend([max(1, min(500, limit)), max(0, offset)])
         records = [_record(row) for row in self.connection.execute(sql, params).fetchall()]
         return [record for record in records if record is not None]
@@ -188,6 +192,27 @@ class SQLiteQuoteRepository:
             """
         ).fetchall()
         return [str(row["customer_name"]) for row in rows]
+
+    def next_quote_no(self, day: str) -> str:
+        self.connection.execute(
+            """
+            INSERT INTO quote_no_counters (day, last_seq) VALUES (?, 1)
+            ON CONFLICT(day) DO UPDATE SET last_seq = last_seq + 1
+            """,
+            (day,),
+        )
+        row = self.connection.execute(
+            "SELECT last_seq FROM quote_no_counters WHERE day = ?",
+            (day,),
+        ).fetchone()
+        return f"Q{day}{int(row['last_seq']):03d}"
+
+    def list_by_quote_no(self, quote_no: str) -> list[QuoteRecord]:
+        rows = self.connection.execute(
+            "SELECT * FROM quote_records WHERE quote_no = ? ORDER BY id ASC",
+            (quote_no,),
+        ).fetchall()
+        return [record for record in (_record(row) for row in rows) if record is not None]
 
     def audit(self, action: str, quote: QuoteRecord, *, actor: str) -> None:
         log_event(

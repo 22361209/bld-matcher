@@ -1587,6 +1587,10 @@
             "title": "Quote Date",
             "type": "string"
           },
+          "quote_no": {
+            "title": "Quote No",
+            "type": "string"
+          },
           "quoted_by": {
             "title": "Quoted By",
             "type": "string"
@@ -1647,6 +1651,7 @@
           "source_type",
           "source_text",
           "remark",
+          "quote_no",
           "version",
           "created_at",
           "updated_at"
@@ -1767,6 +1772,52 @@
         "summary": "Download an artifact owned by the API principal",
         "x-required-scopes": [
           "artifacts:read"
+        ]
+      }
+    },
+    "/api/v1/docs/{doc_name}": {
+      "get": {
+        "operationId": "readApiDoc",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "doc_name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/markdown": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Read an API guide markdown document",
+        "x-required-scopes": [
+          "api:read"
         ]
       }
     },
@@ -2364,6 +2415,17 @@
               "default": "",
               "maxLength": 200,
               "title": "Quoted By",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "quote_no",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 20,
+              "title": "Quote No",
               "type": "string"
             }
           },

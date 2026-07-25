@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from .domain import (
@@ -20,7 +21,7 @@ from .ports import ImportLockBusyError, ImportLockPort, QuoteImportPort, QuoteUn
 
 
 logger = logging.getLogger(__name__)
-SYSTEM_MANAGED_QUOTE_FIELDS = frozenset({"quoted_by", "source_type"})
+SYSTEM_MANAGED_QUOTE_FIELDS = frozenset({"quoted_by", "source_type", "quote_no"})
 
 
 class QuoteNotFoundError(LookupError):
@@ -106,12 +107,46 @@ class QuoteService:
             return unit_of_work.repository.customer_names()
 
     def create(self, data: Mapping[str, object], *, actor: str) -> QuoteRecord:
-        draft = build_quote_draft(data, actor=actor)
         with self.unit_of_work_factory() as unit_of_work:
+            quote_no = compact_text(data.get("quote_no")) or unit_of_work.repository.next_quote_no(
+                datetime.now().strftime("%y%m%d")
+            )
+            draft = build_quote_draft({**data, "quote_no": quote_no}, actor=actor)
             record = unit_of_work.repository.add(draft)
             unit_of_work.repository.audit("新增报价记录", record, actor=actor)
             unit_of_work.commit()
         return record
+
+    def create_many(
+        self,
+        rows: Sequence[Mapping[str, object]],
+        *,
+        actor: str,
+    ) -> tuple[list[QuoteRecord], int, str]:
+        written: list[QuoteRecord] = []
+        skipped = 0
+        quote_no = ""
+        with self.unit_of_work_factory() as unit_of_work:
+            quote_no = unit_of_work.repository.next_quote_no(datetime.now().strftime("%y%m%d"))
+            for data in rows:
+                try:
+                    draft = build_quote_draft({**data, "quote_no": quote_no}, actor=actor)
+                except QuoteValidationError:
+                    skipped += 1
+                    continue
+                record = unit_of_work.repository.add(draft)
+                unit_of_work.repository.audit("新增报价记录", record, actor=actor)
+                written.append(record)
+            if written:
+                unit_of_work.commit()
+        return written, skipped, quote_no
+
+    def records_by_quote_no(self, quote_no: object) -> list[QuoteRecord]:
+        number = compact_text(quote_no)
+        if not number:
+            return []
+        with self.unit_of_work_factory() as unit_of_work:
+            return unit_of_work.repository.list_by_quote_no(number)
 
     def update(
         self,
@@ -135,7 +170,7 @@ class QuoteService:
             if immutable_fields:
                 raise QuoteValidationError(
                     "quote.system_fields_immutable",
-                    "quoted_by 和 source_type 由系统维护，不能修改。",
+                    "quoted_by、source_type 和 quote_no 由系统维护，不能修改。",
                     field=sorted(immutable_fields)[0],
                 )
             draft = build_quote_draft(data, actor=actor, existing=before)
@@ -200,10 +235,13 @@ class QuoteService:
         imported = 0
         skipped = 0
         with self.unit_of_work_factory() as unit_of_work:
+            quote_no = ""
             for row in rows:
                 if row.get("status") != "valid":
                     skipped += 1
                     continue
+                if not quote_no:
+                    quote_no = unit_of_work.repository.next_quote_no(datetime.now().strftime("%y%m%d"))
                 values = dict(row)
                 values.update(
                     {
@@ -211,6 +249,7 @@ class QuoteService:
                         "source_type": "excel",
                         "source_text": "",
                         "attachment_path": "",
+                        "quote_no": quote_no,
                     }
                 )
                 draft = build_quote_draft(values, actor=actor)

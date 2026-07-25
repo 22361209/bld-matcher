@@ -1,0 +1,17 @@
+{
+  "date": "2026-07-25",
+  "version": "unreleased",
+  "title": "报价单号、下载并写入报价、报价记录按写入顺序展示",
+  "entries": [
+    "报价记录新增「报价单号」列（第一列）：每次写入生成一个单号，格式 Q+6位日期+3位当日序号（如 Q260725001）；同一次询价写入或 Excel 导入的整批记录共用一个单号。点击单号弹窗查看该批报价明细。历史记录由迁移 026 按报价日期逐行补编号。",
+    "询价下载弹窗的「写入报价」改为「下载并写入报价」：校验客户名称后先下载 Excel，再写入报价记录，完成后自动跳转到报价记录页并按本次单号过滤；写入失败时弹窗内提示且不影响已开始的下载。",
+    "报价记录列表排序调整为：报价日期新→旧、报价单号新→旧、同一单号内按写入顺序——与查询结果页行序一致，不再出现先写的条目排在最后。",
+    "API v1 报价响应新增 quote_no 字段，列表查询支持 quote_no 过滤（均为 additive 兼容变更）；跨设备业务同步会自动携带 quote_no 列。",
+    "API v1 新增 GET /api/v1/docs/<文档名>（api:read scope）：以 text/markdown 返回 docs/api/ 下的 API 调用说明（如 quote-v1.md、product-inquiry-v1.md、ai-contract.md），不存在的文档返回 404 并附带可用文档清单；agent 可直接在线读取 API 说明。"
+  ],
+  "impact": {
+    "data": "migration 026 adds quote_records.quote_no + quote_no_counters and backfills per-row numbers by quote_date",
+    "api": "compatible; additive quote_no in v1 quote payloads and list query filter",
+    "operations": "restart-required"
+  }
+}

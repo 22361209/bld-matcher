@@ -48,6 +48,7 @@ def _filters() -> dict[str, str]:
         "date_to": request.args.get("date_to", "").strip(),
         "currency": request.args.get("currency", "").strip().upper(),
         "quoted_by": request.args.get("quoted_by", "").strip(),
+        "quote_no": request.args.get("quote_no", "").strip(),
     }
 
 
@@ -160,6 +161,15 @@ def _quote_list_context() -> dict[str, object]:
 @permission_required("view_customer_prices")
 def quotes_fragment():
     response = make_response(render_template("_quote_results.html", **_quote_list_context()))
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@quote_web.get("/quotes/number/<quote_no>", endpoint="quote_number_detail")
+@permission_required("view_customer_prices")
+def quote_number_detail(quote_no: str):
+    records = get_quote_service().records_by_quote_no(quote_no)
+    response = make_response(render_template("_quote_number_detail.html", quote_no=quote_no, records=records))
     response.headers["Cache-Control"] = "no-store"
     return response
 
