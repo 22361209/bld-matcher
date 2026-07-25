@@ -8,8 +8,15 @@ on closeManagedTerminalWindow(windowId)
 	try
 		tell application "Terminal"
 			set targetWindow to first window whose id is (windowId as integer)
-			close targetWindow
 		end tell
+		repeat 20 times
+			tell application "Terminal" to set targetBusy to busy of selected tab of targetWindow
+			if not targetBusy then
+				tell application "Terminal" to close targetWindow
+				return
+			end if
+			delay 0.25
+		end repeat
 	end try
 end closeManagedTerminalWindow
 
