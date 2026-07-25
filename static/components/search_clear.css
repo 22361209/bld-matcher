@@ -1,6 +1,7 @@
 .search-input-wrap {
   position: relative;
-  display: inline-block;
+  display: block;
+  width: 100%;
   min-width: 0;
 }
 

@@ -1,0 +1,13 @@
+{
+  "date": "2026-07-25",
+  "version": "unreleased",
+  "title": "修复加入产品号码列表弹窗候选不可见",
+  "entries": [
+    "修复「加入产品号码列表」弹窗中目标 BLD 产品候选文字为白色、与白底相同导致看不见的问题，候选项现在显示为深色文字。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "none",
+    "operations": "restart-required"
+  }
+}
