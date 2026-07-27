@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from datetime import datetime
 from functools import wraps
 
 from flask import Blueprint, request
 from pydantic import ValidationError
 
+from app.config import DATA_DIR
 from app.platform.api_auth import api_actor_name, api_scope_required
 from app.platform.api_errors import ApiError, register_api_error_handlers, success_response, validation_error
 from app.platform.api_schemas import api_schema
@@ -16,6 +18,9 @@ from .schemas import (
     ProductPriceUpdateData,
     ProductPriceUpdateEnvelope,
     ProductPriceUpdateRequest,
+    ProductRenameData,
+    ProductRenameEnvelope,
+    ProductRenameRequest,
     ProductResponse,
     ProductSearchData,
     ProductSearchEnvelope,
@@ -87,6 +92,34 @@ def update_product_price_v1(product_id: int, *, payload: ProductPriceUpdateReque
     return success_response(data.model_dump(mode="json"))
 
 
+@product_v1_api.post("/api/v1/products/<bld_no>/rename")
+@api_scope_required("products:admin")
+@idempotency_required
+@api_schema(ProductRenameRequest)
+@_product_api_errors
+def rename_product_bld_no_v1(bld_no: str, *, payload: ProductRenameRequest):
+    backup_path = (
+        DATA_DIR
+        / "local-backups"
+        / f"before-bld-rename-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.sqlite3"
+    )
+    try:
+        counts = get_product_service().rename_bld_no(
+            bld_no,
+            payload.new_bld_no,
+            actor=api_actor_name(),
+            backup_path=backup_path,
+        )
+    except ValueError as exc:
+        raise ApiError("product.rename.invalid", str(exc), 400) from exc
+    data = ProductRenameData(
+        old_bld_no=bld_no,
+        new_bld_no=payload.new_bld_no,
+        counts=counts,
+    )
+    return success_response(data.model_dump(mode="json"))
+
+
 register_openapi_operation(
     OpenApiOperation(
         path="/api/v1/products/search",
@@ -109,6 +142,19 @@ register_openapi_operation(
         request_model=ProductPriceUpdateRequest,
         response_model=ProductPriceUpdateEnvelope,
         path_parameters=(("product_id", "integer"),),
+    )
+)
+
+register_openapi_operation(
+    OpenApiOperation(
+        path="/api/v1/products/{bld_no}/rename",
+        method="POST",
+        operation_id="renameProductBldNo",
+        summary="Rename a product BLD NO. and cascade the change",
+        scopes=("products:admin",),
+        request_model=ProductRenameRequest,
+        response_model=ProductRenameEnvelope,
+        path_parameters=(("bld_no", "string"),),
     )
 )
 

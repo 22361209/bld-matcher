@@ -7,9 +7,11 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from app.database import connect
+from app.drawings import DRAWING_PDF_DIR, _relative_to_data, drawing_storage_name
 from app.matcher import PSA_352X_BRANDS, ProductCatalog, compact_text, normalize_code, psa_352x_key, split_codes
 from app.platform.audit_store import log_event
 from app.platform.clock import now_text
+from app.product_media import PRODUCT_IMAGE_DATA_PREFIX, image_slot_field, product_image_storage_name
 
 from .brand_normalization import canonicalize_brands
 from .option_values import register_product_option_values
@@ -143,6 +145,92 @@ def upsert_product(
             )
     if commit:
         connection.commit()
+
+
+def rename_bld_no(
+    connection: sqlite3.Connection,
+    old_bld_no: str,
+    new_bld_no: str,
+    actor: str,
+    *,
+    commit: bool = True,
+) -> dict[str, int]:
+    """Rename a product's BLD NO. and cascade the change to related tables.
+
+    The caller is responsible for renaming any associated media files and for
+    creating a database backup before invoking this function.
+    """
+    timestamp = now_text()
+    old = compact_text(old_bld_no)
+    new = compact_text(new_bld_no)
+    if not old or not new:
+        raise ValueError("BLD NO. 不能为空。")
+    if old == new:
+        raise ValueError("新旧 BLD NO. 相同，无需迁移。")
+
+    old_row = connection.execute(
+        "SELECT * FROM products WHERE UPPER(bld_no) = UPPER(?)", (old,)
+    ).fetchone()
+    if old_row is None:
+        raise ValueError(f"产品 {old} 不存在。")
+    if connection.execute(
+        "SELECT 1 FROM products WHERE UPPER(bld_no) = UPPER(?)", (new,)
+    ).fetchone():
+        raise ValueError(f"BLD NO. {new} 已存在。")
+
+    counts: dict[str, int] = {}
+
+    # Cascade rename bld_no in related tables.
+    for table in ("aliases", "customer_price_records", "quote_records"):
+        cursor = connection.execute(
+            f"UPDATE {table} SET bld_no = ?, updated_at = ? WHERE bld_no = ?",
+            (new, timestamp, old),
+        )
+        counts[table] = cursor.rowcount
+
+    # Rename the product itself. SQLite does not allow updating the UNIQUE
+    # column in a single statement that conflicts with itself, so we do it
+    # after verifying the target does not exist.
+    cursor = connection.execute(
+        "UPDATE products SET bld_no = ?, updated_at = ? WHERE id = ?",
+        (new, timestamp, old_row["id"]),
+    )
+    counts["products"] = cursor.rowcount
+
+    # Update image path references to match the new filenames.
+    for slot in range(1, 6):
+        field = image_slot_field(slot)
+        reference = str(old_row[field] or "") if field in old_row.keys() else ""
+        if reference.startswith(PRODUCT_IMAGE_DATA_PREFIX):
+            old_filename = reference[len(PRODUCT_IMAGE_DATA_PREFIX) :]
+            new_filename = product_image_storage_name(new, Path(old_filename).suffix, slot)
+            new_reference = f"{PRODUCT_IMAGE_DATA_PREFIX}{new_filename}"
+            connection.execute(
+                f"UPDATE products SET {field} = ?, updated_at = ? WHERE id = ?",
+                (new_reference, timestamp, old_row["id"]),
+            )
+
+    # Update drawing path reference to match the new filename.
+    drawing_path = str(old_row["drawing_path"] or "") if "drawing_path" in old_row.keys() else ""
+    if drawing_path:
+        new_drawing_path = _relative_to_data(DRAWING_PDF_DIR / drawing_storage_name(new))
+        connection.execute(
+            "UPDATE products SET drawing_path = ?, updated_at = ? WHERE id = ?",
+            (new_drawing_path, timestamp, old_row["id"]),
+        )
+
+    detail = (
+        f"{old} -> {new}"
+        + f"；产品 {counts.get('products', 0)} 条"
+        + f"，人工映射 {counts.get('aliases', 0)} 条"
+        + f"，客户价格 {counts.get('customer_price_records', 0)} 条"
+        + f"，报价 {counts.get('quote_records', 0)} 条"
+    )
+    log_event(connection, "产品型号迁移", "product", new, detail, actor=actor)
+
+    if commit:
+        connection.commit()
+    return counts
 
 
 def import_catalog(

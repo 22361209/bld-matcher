@@ -918,6 +918,79 @@
         "title": "ProductPriceUpdateRequest",
         "type": "object"
       },
+      "ProductRenameData": {
+        "additionalProperties": false,
+        "properties": {
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "new_bld_no": {
+            "title": "New Bld No",
+            "type": "string"
+          },
+          "old_bld_no": {
+            "title": "Old Bld No",
+            "type": "string"
+          }
+        },
+        "required": [
+          "old_bld_no",
+          "new_bld_no",
+          "counts"
+        ],
+        "title": "ProductRenameData",
+        "type": "object"
+      },
+      "ProductRenameEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "api_version": {
+            "default": "1",
+            "title": "Api Version",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ProductRenameData"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "request_id",
+          "data"
+        ],
+        "title": "ProductRenameEnvelope",
+        "type": "object"
+      },
+      "ProductRenameRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "new_bld_no": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "New Bld No",
+            "type": "string"
+          }
+        },
+        "required": [
+          "new_bld_no"
+        ],
+        "title": "ProductRenameRequest",
+        "type": "object"
+      },
       "ProductResponse": {
         "additionalProperties": false,
         "properties": {
@@ -2254,6 +2327,72 @@
         "summary": "Search the product catalog",
         "x-required-scopes": [
           "products:read"
+        ]
+      }
+    },
+    "/api/v1/products/{bld_no}/rename": {
+      "post": {
+        "operationId": "renameProductBldNo",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "bld_no",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 8,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductRenameRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductRenameEnvelope"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Rename a product BLD NO. and cascade the change",
+        "x-required-scopes": [
+          "products:admin"
         ]
       }
     },

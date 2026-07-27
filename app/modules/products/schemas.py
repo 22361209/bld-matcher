@@ -60,3 +60,20 @@ class ProductPriceUpdateEnvelope(StrictApiModel):
     request_id: str
     data: ProductPriceUpdateData
     warnings: list[str] = Field(default_factory=list)
+
+
+class ProductRenameRequest(StrictApiModel):
+    new_bld_no: str = Field(min_length=1, max_length=128)
+
+
+class ProductRenameData(StrictApiModel):
+    old_bld_no: str
+    new_bld_no: str
+    counts: dict[str, int]
+
+
+class ProductRenameEnvelope(StrictApiModel):
+    api_version: str = "1"
+    request_id: str
+    data: ProductRenameData
+    warnings: list[str] = Field(default_factory=list)

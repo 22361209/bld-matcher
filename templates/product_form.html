@@ -48,6 +48,9 @@
           <div class="form-actions">
             <button class="linear-button primary" type="submit">保存产品</button>
             {% if product %}
+              {% if can("rename_products") %}
+                <a class="linear-button" href="{{ url_for('rename_product_form', bld_no=product.bld_no) }}">迁移型号</a>
+              {% endif %}
               <button
                 class="linear-button danger"
                 type="submit"

@@ -1,0 +1,16 @@
+{
+  "date": "2026-07-27",
+  "title": "管理员产品型号迁移",
+  "entries": [
+    "新增管理员专属功能：可将产品 BLD NO.（如 K6009A）迁移为新的 BLD NO.（如 K6009C）。",
+    "迁移会级联更新 products、aliases、customer_price_records、quote_records 中的 BLD NO.，保持历史数据一致性。",
+    "迁移时自动重命名产品图片、图纸及归档目录，并在操作前生成数据库备份。",
+    "新增 API v1 接口 POST /api/v1/products/{bld_no}/rename，需 products:admin 权限。"
+  ],
+  "impact": {
+    "users": "仅 admin 角色可见「迁移型号」按钮；editor/user/viewer 无法访问该功能。",
+    "api": "新增 POST /api/v1/products/{bld_no}/rename，scope 为 products:admin。",
+    "data": "不修改现有 BLD NO.；仅在管理员执行迁移时按规则级联改写相关表。",
+    "operations": "无需重启；新增 rename_products 权限已默认加入 admin 角色。"
+  }
+}

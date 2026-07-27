@@ -92,6 +92,13 @@
       "rule": "/api/v1/openapi.json"
     },
     {
+      "endpoint": "product_v1_api.rename_product_bld_no_v1",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/v1/products/<bld_no>/rename"
+    },
+    {
       "endpoint": "product_v1_api.update_product_price_v1",
       "methods": [
         "POST"
@@ -517,6 +524,20 @@
         "GET"
       ],
       "rule": "/products"
+    },
+    {
+      "endpoint": "rename_product_form",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/products/<bld_no>/rename"
+    },
+    {
+      "endpoint": "rename_product",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/products/<bld_no>/rename"
     },
     {
       "endpoint": "stop_product",

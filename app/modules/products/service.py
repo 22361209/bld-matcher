@@ -203,6 +203,35 @@ class ProductService:
         self.invalidate_catalog()
         return product
 
+    def rename_bld_no(
+        self,
+        old_bld_no: str,
+        new_bld_no: str,
+        *,
+        actor: str,
+        backup_path: Path,
+    ) -> dict[str, int]:
+        old = str(old_bld_no or "").strip()
+        new = str(new_bld_no or "").strip()
+        if not old or not new:
+            raise ValueError("BLD NO. 不能为空。")
+        with self.unit_of_work_factory() as unit_of_work:
+            try:
+                counts = unit_of_work.repository.rename_bld_no(
+                    old,
+                    new,
+                    actor=actor,
+                    backup_path=backup_path,
+                )
+                unit_of_work.commit()
+            except Exception:
+                unit_of_work.repository.rollback_rename_media()
+                raise
+            else:
+                unit_of_work.repository.finalize_rename_media()
+        self.invalidate_catalog()
+        return counts
+
     def save_drawing(self, product_id: int, file: object, *, actor: str) -> ProductRecord:
         with self.unit_of_work_factory() as unit_of_work:
             product = unit_of_work.repository.save_drawing(product_id, file, actor=actor)

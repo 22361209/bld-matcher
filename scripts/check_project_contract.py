@@ -24,6 +24,7 @@ APPROVED_API_SCOPES = {
     "api:read",
     "products:read",
     "products:write",
+    "products:admin",
     "inquiries:run",
     "artifacts:read",
     "quotes:read",

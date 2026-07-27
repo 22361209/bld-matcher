@@ -90,6 +90,19 @@ class ProductRepository(Protocol):
 
     def lock_brand_normalization(self) -> None: ...
 
+    def rename_bld_no(
+        self,
+        old_bld_no: str,
+        new_bld_no: str,
+        *,
+        actor: str,
+        backup_path: Path,
+    ) -> dict[str, int]: ...
+
+    def finalize_rename_media(self) -> None: ...
+
+    def rollback_rename_media(self) -> None: ...
+
     def option_values(self) -> list[ProductOptionValue]: ...
 
     def get_option_value(self, option_id: int) -> ProductOptionValue | None: ...

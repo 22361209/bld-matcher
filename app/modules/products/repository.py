@@ -19,13 +19,15 @@ from app.modules.products.persistence import (
     import_catalog,
     list_products,
     product_stats,
+    rename_bld_no,
     rows_for_catalog,
     upsert_product,
 )
-from app.config import DATA_DIR, DRAWING_ARCHIVE_DIR, DRAWING_PDF_DIR, PRODUCT_IMAGE_ARCHIVE_DIR, PRODUCT_IMAGE_DIR
+from app.config import DATA_DIR, DRAWING_ARCHIVE_DIR, DRAWING_PDF_DIR, PRODUCT_IMAGE_ARCHIVE_DIR, PRODUCT_IMAGE_DIR, PRODUCT_IMAGE_THUMB_DIR
 from app.drawings import delete_product_drawing, drawing_storage_name, product_drawing_path, safe_filename_part, save_product_drawing
 from app.matcher import compact_text
 from app.product_media import (
+    PRODUCT_IMAGE_DATA_PREFIX,
     delete_product_image,
     image_slot_field,
     product_image_thumb_path,
@@ -168,6 +170,80 @@ class _NewProductMediaTransaction:
             self.backup_dir = None
 
 
+class _ProductRenameMediaTransaction:
+    """Rename media files and archive directories when a product BLD NO. changes.
+
+    Moves are executed immediately. ``rollback`` reverses completed moves so the
+    operation can be undone if the database transaction fails to commit.
+    """
+
+    def __init__(self, old_bld_no: str, new_bld_no: str, product_row: sqlite3.Row) -> None:
+        self.old_bld_no = old_bld_no
+        self.new_bld_no = new_bld_no
+        self.product_row = product_row
+        self.moves: list[tuple[Path, Path]] = []
+        self.completed: list[tuple[Path, Path]] = []
+        self.rolled_back = False
+
+    def _plan(self) -> list[tuple[Path, Path]]:
+        moves: list[tuple[Path, Path]] = []
+        old_safe = safe_filename_part(self.old_bld_no, "product")
+        new_safe = safe_filename_part(self.new_bld_no, "product")
+
+        for slot in range(1, 6):
+            field = image_slot_field(slot)
+            reference = str(self.product_row[field] or "") if field in self.product_row.keys() else ""
+            if not reference.startswith(PRODUCT_IMAGE_DATA_PREFIX):
+                continue
+            source = resolve_product_image_path(reference[len(PRODUCT_IMAGE_DATA_PREFIX) :])
+            if source is None:
+                continue
+            target_name = product_image_storage_name(self.new_bld_no, source.suffix, slot)
+            target = PRODUCT_IMAGE_DIR / target_name
+            moves.append((source, target))
+            thumb_source = product_image_thumb_path(source.name)
+            if thumb_source is not None and thumb_source.exists():
+                thumb_target = PRODUCT_IMAGE_THUMB_DIR / target_name
+                moves.append((thumb_source, thumb_target))
+
+        source_drawing = product_drawing_path(self.product_row)
+        if source_drawing is not None:
+            target_drawing = DRAWING_PDF_DIR / drawing_storage_name(self.new_bld_no)
+            moves.append((source_drawing, target_drawing))
+
+        old_image_archive = PRODUCT_IMAGE_ARCHIVE_DIR / old_safe
+        new_image_archive = PRODUCT_IMAGE_ARCHIVE_DIR / new_safe
+        if old_image_archive.exists():
+            moves.append((old_image_archive, new_image_archive))
+
+        old_drawing_archive = DRAWING_ARCHIVE_DIR / old_safe
+        new_drawing_archive = DRAWING_ARCHIVE_DIR / new_safe
+        if old_drawing_archive.exists():
+            moves.append((old_drawing_archive, new_drawing_archive))
+
+        return moves
+
+    def begin(self) -> None:
+        self.moves = self._plan()
+        for source, target in self.moves:
+            if target.exists():
+                raise FileExistsError(f"目标文件已存在，无法重命名：{target}")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            source.replace(target)
+            self.completed.append((source, target))
+
+    def rollback(self) -> None:
+        if self.rolled_back:
+            return
+        for source, target in reversed(self.completed):
+            if target.exists():
+                target.replace(source)
+        self.rolled_back = True
+
+    def finalize(self) -> None:
+        pass
+
+
 def _record(row: sqlite3.Row | None) -> ProductRecord | None:
     if row is None:
         return None
@@ -278,6 +354,7 @@ class SQLiteProductRepository:
         self.connection = connection
         self.database_path = database_path
         self._copy_media_transaction: _NewProductMediaTransaction | None = None
+        self._rename_media_transaction: _ProductRenameMediaTransaction | None = None
         self.connection.create_function(
             "PRODUCT_STATUS_KEY",
             1,
@@ -389,6 +466,64 @@ class SQLiteProductRepository:
                 (compact_text(bld_no),),
             ).fetchone()
         )
+
+    def rename_bld_no(
+        self,
+        old_bld_no: str,
+        new_bld_no: str,
+        *,
+        actor: str,
+        backup_path: Path,
+    ) -> dict[str, int]:
+        old = compact_text(old_bld_no)
+        new = compact_text(new_bld_no)
+        if not old or not new:
+            raise ValueError("BLD NO. 不能为空。")
+        if old == new:
+            raise ValueError("新旧 BLD NO. 相同，无需迁移。")
+
+        old_row = self.connection.execute(
+            "SELECT * FROM products WHERE UPPER(bld_no) = UPPER(?)", (old,)
+        ).fetchone()
+        if old_row is None:
+            raise ValueError(f"产品 {old} 不存在。")
+        if self.connection.execute(
+            "SELECT 1 FROM products WHERE UPPER(bld_no) = UPPER(?)", (new,)
+        ).fetchone():
+            raise ValueError(f"BLD NO. {new} 已存在。")
+
+        self.backup_database(backup_path)
+
+        transaction = _ProductRenameMediaTransaction(old, new, old_row)
+        self._rename_media_transaction = transaction
+        try:
+            transaction.begin()
+            counts = rename_bld_no(
+                self.connection,
+                old,
+                new,
+                actor,
+                commit=False,
+            )
+        except Exception:
+            transaction.rollback()
+            self._rename_media_transaction = None
+            raise
+        return counts
+
+    def finalize_rename_media(self) -> None:
+        if self._rename_media_transaction is None:
+            return
+        self._rename_media_transaction.finalize()
+        self._rename_media_transaction = None
+
+    def rollback_rename_media(self) -> None:
+        if self._rename_media_transaction is None:
+            return
+        try:
+            self._rename_media_transaction.rollback()
+        finally:
+            self._rename_media_transaction = None
 
     def export_catalog_source(self, path: Path) -> None:
         export_products_xlsx(self.connection, path, export_format="bld")

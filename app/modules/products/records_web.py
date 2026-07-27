@@ -218,6 +218,50 @@ def register(app) -> None:
         flash("产品已停用，历史资料仍保留。", "success")
         return redirect(url_for("products"))
 
+    @app.get("/products/<bld_no>/rename")
+    @permission_required("rename_products")
+    def rename_product_form(bld_no: str):
+        product = get_product_service().find_by_bld(bld_no, active_only=False)
+        if product is None:
+            flash("产品不存在。", "error")
+            return redirect(url_for("products"))
+        return render_template("product_rename.html", product=product)
+
+    @app.post("/products/<bld_no>/rename")
+    @permission_required("rename_products")
+    def rename_product(bld_no: str):
+        new_bld_no = request.form.get("new_bld_no", "").strip()
+        backup_path = (
+            DATA_DIR
+            / "local-backups"
+            / f"before-bld-rename-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.sqlite3"
+        )
+        try:
+            get_product_service().rename_bld_no(
+                bld_no,
+                new_bld_no,
+                actor=actor_name(),
+                backup_path=backup_path,
+            )
+        except ValueError as exc:
+            message = f"型号迁移失败：{exc}"
+            if wants_json_response():
+                return jsonify({"ok": False, "error": message}), 400
+            flash(message, "error")
+            return redirect(url_for("rename_product_form", bld_no=bld_no))
+        except Exception:
+            logger.exception("Product BLD NO. rename failed")
+            message = "型号迁移失败，请稍后重试。"
+            if wants_json_response():
+                return jsonify({"ok": False, "error": message}), 500
+            flash(message, "error")
+            return redirect(url_for("rename_product_form", bld_no=bld_no))
+        message = f"产品 {bld_no} 已成功迁移为 {new_bld_no}。"
+        if wants_json_response():
+            return jsonify({"ok": True, "message": message, "redirect_url": url_for("products", bld=new_bld_no)})
+        flash(message, "success")
+        return redirect(url_for("products", bld=new_bld_no))
+
     @app.post("/products/<int:product_id>/delete")
     @permission_required("edit_products")
     def remove_product(product_id: int):

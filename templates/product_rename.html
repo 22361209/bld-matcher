@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% set active_page = "products" %}
+{% block page_title %}迁移产品型号{% endblock %}
+{% block page_id %}products.rename{% endblock %}
+{% block page_type %}edit{% endblock %}
+{% block page_class %}shell wide app-surface{% endblock %}
+
+{% block page_content %}
+      <section class="workbench-form-section">
+        <form action="{{ url_for('rename_product', bld_no=product.bld_no) }}" method="post" class="record-form">
+          {{ csrf_field() }}
+          <p class="form-warning">
+            此操作仅限管理员。迁移会把产品库、人工映射、客户价格记录、报价记录中的
+            <strong>{{ product.bld_no }}</strong> 全部改为新 BLD NO.，并重命名关联的图片和图纸文件。
+          </p>
+          <label>
+            当前 BLD NO.
+            <input value="{{ product.bld_no }}" readonly>
+          </label>
+          <label>
+            新 BLD NO.
+            <input name="new_bld_no" value="" required placeholder="例如 K6009C">
+          </label>
+          <div class="form-actions">
+            <button class="linear-button primary" type="submit" data-confirm="确认将 {{ product.bld_no }} 迁移为新 BLD NO.？此操作不可撤销，系统会自动备份数据库。">确认迁移</button>
+            <a class="linear-button" href="{{ url_for('edit_product', product_id=product.id) }}">取消</a>
+          </div>
+        </form>
+      </section>
+{% endblock %}
