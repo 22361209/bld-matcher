@@ -46,6 +46,13 @@ Before starting any operation expected to take more than 5 minutes, ask the user
 - why it may take more than 5 minutes
 - whether the project remains usable during the operation
 
+## Local 5055 Restart
+
+For the local 5055 service, use `bash tools/restart_local_5055.sh` or
+`/Applications/BLD.app`. Do not use an ad-hoc `Terminal do script` command to
+launch `app.py`: it bypasses the managed-window cleanup and accumulates
+Terminal windows.
+
 ## Data Safety
 
 Never overwrite NAS runtime data with local data unless the user explicitly asks for that exact operation.

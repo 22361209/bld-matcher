@@ -3681,6 +3681,14 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("data-product-drawing-unavailable", html)
         self.assertIn("data-copy-product", html)
         self.assertIn('name="product_image_1"', html)
+        self.assertIn("data-product-media-batch-input", html)
+        self.assertIn("multiple", html)
+        self.assertIn("拖入图片或选择文件", html)
+        self.assertIn("product-media-tile-header", html)
+        self.assertIn("product-media-tile-label", html)
+        self.assertIn("data-product-media-drawing-intake", html)
+        self.assertNotIn("data-product-media-replace", html)
+        self.assertNotIn("file-picker-clear", html)
         self.assertIn('name="drawing"', html)
         self.assertIn('{% include "_product_media_fields.html" %}', (PROJECT_ROOT / "templates" / "products.html").read_text(encoding="utf-8"))
         self.assertIn('{% include "_product_media_fields.html" %}', (PROJECT_ROOT / "templates" / "product_form.html").read_text(encoding="utf-8"))
@@ -3699,9 +3707,20 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(edit.status_code, 200)
         for slot in range(1, 6):
             self.assertIn(f'name="product_image_{slot}"', edit_html)
-        self.assertIn("file-picker-clear", edit_html)
+        self.assertIn("data-product-media-upload", edit_html)
+        self.assertIn("data-product-media-browse", edit_html)
+        self.assertIn("data-product-media-drawing-intake", edit_html)
+        self.assertNotIn("当前没有 PDF 图纸", edit_html)
+        self.assertNotIn("file-picker-clear", edit_html)
         self.assertIn("/static/app.js", edit_html)
         self.assertIn('name="drawing"', edit_html)
+        media_css = (PROJECT_ROOT / "static" / "pages" / "product_media_uploader.css").read_text(encoding="utf-8")
+        self.assertIn("--product-media-card-width: 280px", media_css)
+        self.assertIn("--product-media-card-height: 178px", media_css)
+        self.assertIn("grid-template-columns: repeat(2, var(--product-media-card-width))", media_css)
+        self.assertIn("block-size: var(--product-media-card-height)", media_css)
+        self.assertIn(".product-media-drawing-intake.has-media", media_css)
+        self.assertIn("max-inline-size: 100%", media_css)
 
         embedded = self.client.get(f"/products/{product['id']}/edit", query_string={"embedded": "1"})
         embedded_html = embedded.get_data(as_text=True)
@@ -3829,6 +3848,14 @@ class WebAppTest(unittest.TestCase):
         self.assertTrue(preview.get_data().startswith(b"%PDF-1.4"))
         preview.close()
 
+        drawing_edit = self.client.get(f"/products/{product['id']}/edit")
+        drawing_edit_html = drawing_edit.get_data(as_text=True)
+        self.assertIn("data-product-media-drawing-preview", drawing_edit_html)
+        self.assertIn(f'formaction="/products/{product["id"]}/drawing/delete"', drawing_edit_html)
+        self.assertIn(f'aria-label="删除 {product["bld_no"]} 的 PDF 图纸"', drawing_edit_html)
+        self.assertNotIn("data-product-media-drawing-intake", drawing_edit_html)
+        self.assertNotIn("预览当前图纸", drawing_edit_html)
+
         replace = self.client.post(
             "/products/save",
             data={
@@ -3852,6 +3879,52 @@ class WebAppTest(unittest.TestCase):
         batch = self.client.get("/products/drawings/batch")
         self.assertEqual(batch.status_code, 200)
         self.assertIn("暂未开放", batch.get_data(as_text=True))
+
+    def test_stale_product_drawing_reference_uses_upload_state(self):
+        from app.modules.products.persistence import upsert_product
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-DRAW-STALE-001",
+                    "series": "TEST",
+                    "item": "STALE DRAWING PART",
+                    "oe_no_1": "DRAW-STALE-001",
+                    "models": "Tester",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            product = conn.execute("SELECT * FROM products WHERE bld_no = ?", ("K-DRAW-STALE-001",)).fetchone()
+            self.assertIsNotNone(product)
+            conn.execute(
+                """
+                UPDATE products
+                SET drawing_path = ?, drawing_original_name = ?, drawing_updated_at = ?
+                WHERE id = ?
+                """,
+                ("drawings/pdf/K-DRAW-STALE-001.pdf", "K-DRAW-STALE-001.pdf", "2026-07-26 10:00:00", product["id"]),
+            )
+            conn.commit()
+
+        self.login()
+        listing = self.client.get("/products", query_string={"bld": "K-DRAW-STALE-001"})
+        listing_html = listing.get_data(as_text=True)
+        self.assertEqual(listing.status_code, 200)
+        self.assertIn("data-product-drawing-unavailable", listing_html)
+        self.assertNotIn(f'href="/products/{product["id"]}/drawing"', listing_html)
+
+        edit = self.client.get(f"/products/{product['id']}/edit")
+        edit_html = edit.get_data(as_text=True)
+        self.assertEqual(edit.status_code, 200)
+        self.assertIn("data-product-media-drawing-intake", edit_html)
+        self.assertNotIn("data-product-media-drawing-preview", edit_html)
+        self.assertNotIn(f'formaction="/products/{product["id"]}/drawing/delete"', edit_html)
+
+        preview = self.client.get(f"/products/{product['id']}/drawing", follow_redirects=False)
+        self.assertEqual(preview.status_code, 302)
+        self.assertIn("/products?bld=K-DRAW-STALE-001", preview.headers["Location"])
 
     def test_product_image_and_drawing_delete_endpoints(self):
         from app.modules.admin.persistence import save_user
@@ -3923,7 +3996,7 @@ class WebAppTest(unittest.TestCase):
         self.assertIn(f'formaction="/products/{product_id}/images/2/delete"', edit_html)
         self.assertIn(f'formaction="/products/{product_id}/drawing/delete"', edit_html)
         self.assertIn('data-confirm="确认删除图片 1？', edit_html)
-        self.assertIn('data-confirm="确认删除 PDF 图纸？', edit_html)
+        self.assertIn('data-confirm="确认删除 K-DELMEDIA-001 的 PDF 图纸？', edit_html)
 
         self.assertEqual(self.client.post(f"/products/{product_id}/images/0/delete").status_code, 400)
         self.assertEqual(self.client.post(f"/products/{product_id}/images/6/delete").status_code, 400)

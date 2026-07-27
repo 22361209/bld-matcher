@@ -1,0 +1,13 @@
+{
+  "date": "2026-07-26",
+  "version": "unreleased",
+  "title": "固定产品媒体上传卡片尺寸",
+  "entries": [
+    "产品图片、添加图片和 PDF 图纸上传框在桌面端统一为 280 × 178 像素；产品图片会在固定框内完整等比例展示，不再随原图比例改变布局。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "compatible",
+    "operations": "none"
+  }
+}

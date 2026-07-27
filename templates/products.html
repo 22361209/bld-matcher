@@ -13,6 +13,7 @@
 {% block page_head %}
   <link rel="stylesheet" href="{{ url_for('static', filename='pages/product_table.css', v=static_version('pages/product_table.css')) }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='pages/products.css', v=static_version('pages/products.css')) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='pages/product_media_uploader.css', v=static_version('pages/product_media_uploader.css')) }}">
 {% endblock %}
 
 {% block page_content %}
@@ -205,5 +206,6 @@
 
 {% block page_scripts %}
   <script type="module" src="{{ url_for('static', filename='pages/product_option_picker.js', v=static_version('pages/product_option_picker.js')) }}"></script>
+  <script type="module" src="{{ url_for('static', filename='pages/product_media_uploader.js', v=static_version('pages/product_media_uploader.js')) }}"></script>
   <script type="module" src="{{ url_for('static', filename='pages/products.js', v=static_version('pages/products.js')) }}"></script>
 {% endblock %}

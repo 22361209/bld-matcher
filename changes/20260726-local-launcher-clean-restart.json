@@ -1,0 +1,14 @@
+{
+  "date": "2026-07-26",
+  "version": "unreleased",
+  "title": "本机 BLD 启动器自动清理旧终端",
+  "entries": [
+    "再次打开本机 BLD 启动器时，会仅停止同一工作区的旧 5055 服务并结束对应 Terminal 会话，然后启动新服务。",
+    "BLD 服务退出后，启动它的 Terminal 会自动退出；其他目录占用 5055 时启动器会提示并保留该服务。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "compatible",
+    "operations": "local-launcher-reinstall-required; NAS-unaffected"
+  }
+}
