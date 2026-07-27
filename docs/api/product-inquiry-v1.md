@@ -22,6 +22,43 @@ Scope：`products:read`。
 
 响应只包含稳定产品字段，不包含服务器图片路径或数据库实现字段。
 
+## Product BLD NO. Rename
+
+```http
+POST /api/v1/products/K6009A/rename
+Authorization: Bearer <key>
+Idempotency-Key: product-rename-20260727-001
+Content-Type: application/json
+
+{
+  "new_bld_no": "K6009C"
+}
+```
+
+Scope：`products:admin`。默认生成的 API Key 不包含此 Scope，需在管理后台显式勾选。
+
+将产品的 BLD NO. 迁移为新值，并在同一事务内级联更新人工映射、客户价格记录和报价记录中的 BLD NO.，同步重命名产品图片与图纸文件；操作前服务器自动备份数据库。该操作仅限管理员级别的调用方使用。
+
+成功响应 `data` 示例：
+
+```json
+{
+  "old_bld_no": "K6009A",
+  "new_bld_no": "K6009C",
+  "counts": {
+    "products": 1,
+    "aliases": 0,
+    "customer_price_records": 2,
+    "quote_records": 5
+  }
+}
+```
+
+错误：
+
+- `product.rename.invalid`（400）：旧 BLD NO. 不存在、目标 BLD NO. 已存在或新旧相同。
+- `auth.insufficient_scope`（403）：Key 没有 `products:admin`。
+
 ## Inquiry Analysis
 
 ```http
