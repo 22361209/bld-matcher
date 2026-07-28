@@ -51,6 +51,31 @@ document.querySelectorAll("[data-close-download-modal]").forEach((element) => {
   element.addEventListener("click", closeDownloadModal);
 });
 
+const attachmentFilename = (response) => {
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const encoded = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(disposition);
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded[1].trim().replace(/^"|"$/g, ""));
+    } catch {
+      return null;
+    }
+  }
+  const plain = /filename="?([^";]+)"?/i.exec(disposition);
+  return plain ? plain[1] : null;
+};
+
+const triggerBlobDownload = (blob, filename) => {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 10000);
+};
+
 document.querySelectorAll("[data-write-quotes-submit]").forEach((button) => {
   button.addEventListener("click", (event) => {
     event.preventDefault();
@@ -77,35 +102,63 @@ document.querySelectorAll("[data-write-quotes-submit]").forEach((button) => {
     };
 
     button.disabled = true;
+    const downloadUrl = form.action;
     const writeUrl = button.formAction;
     const body = new FormData(form);
-    // 原生提交触发生成并下载 Excel（响应为附件，页面不跳转）
-    HTMLFormElement.prototype.submit.call(form);
-    if (message instanceof HTMLElement) {
-      message.textContent = "Excel 已开始下载，正在写入报价记录...";
-      message.classList.add("active");
-      message.classList.remove("done", "error");
-    }
+    const showWait = (text) => {
+      if (message instanceof HTMLElement) {
+        message.textContent = text;
+        message.classList.add("active");
+        message.classList.remove("done", "error");
+      }
+    };
 
-    fetch(writeUrl, {
+    const startWriteQuotes = () => {
+      showWait("Excel 已开始下载，正在写入报价记录...");
+      return fetch(writeUrl, {
+        method: "POST",
+        body,
+        headers: { Accept: "application/json", "X-Requested-With": "fetch" },
+      })
+        .then((response) =>
+          response
+            .json()
+            .catch(() => null)
+            .then((payload) => ({ status: response.status, payload })),
+        )
+        .then(({ payload }) => {
+          if (payload && payload.ok) {
+            window.location.assign(payload.quotes_url);
+            return;
+          }
+          showError((payload && payload.error) || "写入报价失败，请稍后重试。");
+        })
+        .catch(() => showError("网络错误，报价写入失败；Excel 已开始下载。"));
+    };
+
+    // 先用 fetch 取回 Excel 并触发浏览器保存，再写入报价：
+    // 原生表单提交下载与写入后的页面跳转会互相竞争，跳转可能取消尚未响应的下载。
+    showWait("正在生成 Excel...");
+    fetch(downloadUrl, {
       method: "POST",
       body,
-      headers: { Accept: "application/json", "X-Requested-With": "fetch" },
+      headers: { "X-Requested-With": "fetch" },
     })
-      .then((response) =>
-        response
-          .json()
-          .catch(() => null)
-          .then((payload) => ({ status: response.status, payload })),
-      )
-      .then(({ payload }) => {
-        if (payload && payload.ok) {
-          window.location.assign(payload.quotes_url);
-          return;
+      .then((response) => {
+        const filename = attachmentFilename(response);
+        if (!response.ok || !filename) {
+          throw new Error("excel-download-failed");
         }
-        showError((payload && payload.error) || "写入报价失败，请稍后重试。");
+        return response.blob().then((blob) => triggerBlobDownload(blob, filename));
       })
-      .catch(() => showError("网络错误，报价写入失败；Excel 已开始下载。"));
+      .then(startWriteQuotes)
+      .catch((error) => {
+        if (error && error.message === "excel-download-failed") {
+          showError("Excel 生成失败，报价未写入；请稍后重试。");
+        } else {
+          showError("网络错误，Excel 下载失败，报价未写入；请稍后重试。");
+        }
+      });
   });
 });
 

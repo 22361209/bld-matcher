@@ -184,7 +184,9 @@
             <label>
               <span>单价</span>
               <select name="price_mode" data-price-mode>
-                <option value="none" selected>不带单价</option>
+                {% if not can("manage_customer_prices") %}
+                  <option value="none" selected>不带单价</option>
+                {% endif %}
                 <option value="tax">带含税单价</option>
                 <option value="net">带不含税单价</option>
                 <option value="usd">美金价</option>
@@ -196,7 +198,7 @@
             </label>
             {% if can("manage_customer_prices") %}
               <label>
-                <span>客户名称（写入报价时必填）</span>
+                <span>客户名称（必填）</span>
                 <input name="customer_name" list="write-quotes-customer-names" placeholder="例如 博世" autocomplete="off">
                 <datalist id="write-quotes-customer-names">
                   {% for name in customer_names|default([]) %}
@@ -205,7 +207,7 @@
                 </datalist>
               </label>
               <label>
-                <span>备注（写入报价时可选）</span>
+                <span>备注（可选）</span>
                 <input name="remark" placeholder="写入本次所有报价记录">
               </label>
               <p class="note">点「下载并写入报价」会先下载 Excel，再按上方选择的单价方式把命中的 BLD 号和单价写入报价记录，完成后跳转到报价记录页；重复提交会重复写入。</p>
@@ -213,9 +215,10 @@
             <p class="submit-wait-message" data-submit-wait-message aria-live="polite"></p>
             <div class="download-modal-actions">
               <button class="download-cancel-button" type="button" data-close-download-modal>取消</button>
-              <button class="download-confirm-button" type="submit">确认</button>
               {% if can("manage_customer_prices") %}
                 <button class="download-confirm-button" type="submit" formaction="{{ url_for('write_match_quotes') }}" data-write-quotes-submit>下载并写入报价</button>
+              {% else %}
+                <button class="download-confirm-button" type="submit">确认</button>
               {% endif %}
             </div>
           </form>
