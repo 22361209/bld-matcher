@@ -1,0 +1,14 @@
+{
+  "date": "2026-07-29",
+  "version": "unreleased",
+  "title": "后台新增输入框与产品目录对齐",
+  "entries": [
+    "客户列表和产品候选值页面的新增输入框现复用产品目录搜索框的 320px 尺寸、32px 高度和控件样式，并补齐标准内容缩进；新增按钮保持在输入框右侧。",
+    "窄屏下两处输入框会随产品目录的搜索框规则铺满可用宽度，同时保持 12px 内容缩进。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "compatible",
+    "operations": "restart-required"
+  }
+}

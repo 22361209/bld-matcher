@@ -23,7 +23,7 @@
           </div>
           <span>{{ rows|length }} 个</span>
         </div>
-        <form action="{{ url_for('save_product_option_value_route') }}" method="post" class="product-option-add-form">
+        <form action="{{ url_for('save_product_option_value_route') }}" method="post" class="search-form product-option-add-form">
           {{ csrf_field() }}
           <input type="hidden" name="kind" value="{{ kind }}">
           <input name="value" placeholder="新增{{ label }}" required>
