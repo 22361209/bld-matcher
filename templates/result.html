@@ -199,12 +199,9 @@
             {% if can("manage_customer_prices") %}
               <label>
                 <span>客户名称（必填）</span>
-                <input name="customer_name" list="write-quotes-customer-names" placeholder="例如 博世" autocomplete="off">
-                <datalist id="write-quotes-customer-names">
-                  {% for name in customer_names|default([]) %}
-                    <option value="{{ name }}"></option>
-                  {% endfor %}
-                </datalist>
+                <span class="combobox" data-combobox="customer" data-lookup-url="{{ url_for('customer_lookup') }}" {% if can("manage_customers") %}data-can-create="1" data-create-url="{{ url_for('save_customer') }}"{% endif %}>
+                  <input name="customer_name" placeholder="例如 宁波多迦" autocomplete="off">
+                </span>
               </label>
               <label>
                 <span>备注（可选）</span>

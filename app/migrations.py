@@ -554,6 +554,33 @@ def _add_product_option_values(conn: sqlite3.Connection) -> None:
         )
 
 
+def _add_customers(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS customers (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          sync_id TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+        )
+        """
+    )
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_name ON customers(name COLLATE NOCASE)")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_sync_id ON customers(sync_id)")
+    if not _columns(conn, "quote_records"):
+        return
+    rows = conn.execute(
+        "SELECT DISTINCT customer_name FROM quote_records WHERE COALESCE(customer_name, '') <> '' ORDER BY customer_name COLLATE NOCASE"
+    ).fetchall()
+    for row in rows:
+        name = " ".join(str(row["customer_name"]).split())
+        if not name:
+            continue
+        sync_id = stable_sync_id("customer", name.upper(), 1)
+        conn.execute("INSERT OR IGNORE INTO customers (name, sync_id) VALUES (?, ?)", (name, sync_id))
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -581,6 +608,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("024_drop_quote_record_price", _drop_quote_record_price),
     ("025_create_product_option_values", _add_product_option_values),
     ("026_quote_record_quote_no", _add_quote_record_quote_no),
+    ("027_customers", _add_customers),
 )
 
 

@@ -43,6 +43,13 @@
       "rule": "/api/v1/artifacts/<string:artifact_id>"
     },
     {
+      "endpoint": "customer_v1_api.list_customers_v1",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/api/v1/customers"
+    },
+    {
       "endpoint": "docs_v1_api.read_api_doc",
       "methods": [
         "GET"
@@ -216,6 +223,34 @@
         "GET"
       ],
       "rule": "/customer-prices"
+    },
+    {
+      "endpoint": "customers",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/customers"
+    },
+    {
+      "endpoint": "delete_customer",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/customers/delete"
+    },
+    {
+      "endpoint": "customer_lookup",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/customers/lookup"
+    },
+    {
+      "endpoint": "save_customer",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/customers/save"
     },
     {
       "endpoint": "download",

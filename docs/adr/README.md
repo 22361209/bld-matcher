@@ -19,3 +19,6 @@ ADR 用于记录难以撤销或会影响多个领域的决定。新增框架、�
 - [ADR 0011: Precision Workbench UI And Legacy Shipping Web Retirement](0011-precision-workbench-and-shipping-web-retirement.md)
 - [ADR 0012: Compact Page Content Entry](0012-compact-page-content-entry.md)
 - [ADR 0013: Quote Price Field And Legacy Quote API Removal](0013-quote-price-field-and-legacy-api-removal.md)
+- [ADR 0014: Product Option Values](0014-product-option-values.md)
+- [ADR 0015: Product BLD NO. Rename](0015-product-bld-no-rename.md)
+- [ADR 0016: Customer Master Data And Quote Target Validation](0016-customer-master-and-quote-target-validation.md)

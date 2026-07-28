@@ -45,6 +45,17 @@ def _selected_conflicts() -> dict[str, set[str]]:
     return selected
 
 
+def _customer_mappings() -> dict[str, str | None]:
+    mappings: dict[str, str | None] = {}
+    names = request.form.getlist("customer_mapping_name")
+    targets = request.form.getlist("customer_mapping_target")
+    for name, target in zip(names, targets):
+        cleaned = name.strip()
+        if cleaned:
+            mappings[cleaned] = target.strip() or None
+    return mappings
+
+
 def register(app) -> None:
     @app.get("/business-data-sync")
     @permission_required("sync_product_data")
@@ -102,6 +113,7 @@ def register(app) -> None:
                     actor=actor,
                     expected_token=request.form.get("preview_token", ""),
                     selected_conflicts=_selected_conflicts(),
+                    customer_mappings=_customer_mappings(),
                 )
         except ImportLockError as exc:
             flash(str(exc), "error")

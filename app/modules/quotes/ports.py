@@ -58,4 +58,12 @@ class ImportLockPort(Protocol):
     def __call__(self, owner: str, purpose: str) -> ContextManager[None]: ...
 
 
+class ProductCatalogPort(Protocol):
+    def exists(self, bld_no: str) -> bool: ...
+
+
+class CustomerDirectoryPort(Protocol):
+    def exists(self, customer_name: str) -> bool: ...
+
+
 QuoteRows = Iterable[dict[str, object]]

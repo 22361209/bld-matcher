@@ -1,0 +1,17 @@
+{
+  "date": "2026-07-28",
+  "version": "unreleased",
+  "title": "客户主数据、报价 BLD/客户硬校验、键盘下拉选择",
+  "entries": [
+    "新增「客户列表」维护页（管理菜单，新权限 manage_customers，初始仅管理员）：客户新增/改名/删除；改名会同步更新该客户全部历史报价记录，被报价记录引用的客户不能删除。初始名单由迁移 027 从现有报价记录去重回填，如本身带错别字可在维护页改名修正。",
+    "报价硬校验：手动新增、修正、Excel 导入、询价「下载并写入报价」、API v1 创建/修订的 BLD 号必须存在于产品目录（含已停用产品），客户必须已登记；不满足时拒绝并提示。Excel 导入在上传预览阶段即标出未知 BLD 行；「先报价、后补录目录」的做法不再可行。",
+    "录入交互：报价页新增/修正/导入表单和询价下载弹窗的 BLD 号、客户名称改为字符匹配下拉——输入即过滤，方向键↓进入候选、↑↓移动、回车填入、Esc 关闭；有客户维护权限时下拉尾部提供「新增 \"X\"」快捷登记。产品目录新增/编辑页的品牌、产品名称、产品状态候选下拉补齐同样的方向键+回车交互。",
+    "业务数据同步：customers 表纳入同步数据集（名称规范化后生成确定性 sync_id，各端一致）；导入报价包时预览会列出本机未登记的客户，逐个选择「新建客户」或「映射到已有客户」后方可导入，解决其他设备客户名与 NAS 不一致的问题。",
+    "API v1 新增 GET /api/v1/customers?q=（quotes:read scope，additive 兼容变更）：按名称片段模糊匹配已登记客户，供 agent 用客户简称匹配；docs/api/quote-v1.md 与 ai-contract.md 已补充匹配流程（多候选向用户确认、无候选请先登记、不要自行拼写全称）。"
+  ],
+  "impact": {
+    "data": "migration 027 creates customers table (name + deterministic sync_id) and backfills from distinct quote_records.customer_name",
+    "api": "compatible; additive GET /api/v1/customers; quote create/update now reject unknown customer/BLD with 422 quote.customer_unknown / quote.bld_unknown",
+    "operations": "restart-required"
+  }
+}

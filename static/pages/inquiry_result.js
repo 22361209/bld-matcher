@@ -1,4 +1,7 @@
 import { setupProductTable } from "./product_table.js?v=20260721-1";
+import { setupQuoteFieldComboboxes } from "../components/quote_comboboxes.js?v=20260728-1";
+
+setupQuoteFieldComboboxes(document);
 
 setupProductTable(document.querySelector(".data-grid[data-grid-key='inquiry-result'] table.data-table"), {
   columns: ["row", "oe", "customer-code", "bld", "price", "status", "score", "reason"],

@@ -20,7 +20,10 @@ class FakeQuoteImportPort:
         self.rows = rows or []
 
     def parse(self, path: Path, *, customer_name: str, currency: str) -> dict:
-        return {"rows": self.rows, "customer_name": customer_name, "currency": currency, "path": path.name}
+        counts = {"total": len(self.rows), "valid": 0, "invalid": 0}
+        for row in self.rows:
+            counts["valid" if row.get("status") == "valid" else "invalid"] += 1
+        return {"rows": [dict(row) for row in self.rows], "counts": counts, "customer_name": customer_name, "currency": currency, "path": path.name}
 
     def encode(self, rows: list[dict]) -> str:
         return json.dumps(rows)
@@ -35,6 +38,11 @@ class NoopImportLock:
         yield
 
 
+class PermissiveCatalog:
+    def exists(self, _value: str) -> bool:
+        return True
+
+
 class QuoteModuleTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -45,6 +53,8 @@ class QuoteModuleTest(unittest.TestCase):
             lambda: SQLiteQuoteUnitOfWork(self.db_path),
             FakeQuoteImportPort(),
             NoopImportLock(),
+            PermissiveCatalog(),
+            PermissiveCatalog(),
         )
 
     def tearDown(self):
@@ -200,6 +210,90 @@ class QuoteModuleTest(unittest.TestCase):
         self.assertEqual([record.bld_no for record in page.records], ["IMPORT-001"])
         self.assertEqual(page.records[0].quoted_by, "importer")
         self.assertEqual(page.records[0].source_type, "excel")
+
+    def test_create_and_update_reject_unknown_bld_or_customer(self):
+        class NothingExists:
+            def exists(self, _value: str) -> bool:
+                return False
+
+        service = QuoteService(
+            lambda: SQLiteQuoteUnitOfWork(self.db_path),
+            FakeQuoteImportPort(),
+            NoopImportLock(),
+            NothingExists(),
+            NothingExists(),
+        )
+        with self.assertRaisesRegex(QuoteValidationError, "产品目录中不存在 BLD 号"):
+            service.create(self.quote_data(), actor="tester")
+        with self.assertRaisesRegex(QuoteValidationError, "未登记"):
+            QuoteService(
+                lambda: SQLiteQuoteUnitOfWork(self.db_path),
+                FakeQuoteImportPort(),
+                NoopImportLock(),
+                PermissiveCatalog(),
+                NothingExists(),
+            ).create(self.quote_data(), actor="tester")
+        self.assertEqual(self.service.stats().total, 0)
+
+        created = self.service.create(self.quote_data(), actor="tester")
+        with self.assertRaisesRegex(QuoteValidationError, "产品目录中不存在 BLD 号"):
+            service.update(created.id, {"bld_no": "UNKNOWN-BLD"}, actor="tester", expected_version=1)
+
+    def test_create_many_and_import_skip_rows_with_unknown_targets(self):
+        class NothingExists:
+            def exists(self, _value: str) -> bool:
+                return False
+
+        service = QuoteService(
+            lambda: SQLiteQuoteUnitOfWork(self.db_path),
+            FakeQuoteImportPort(),
+            NoopImportLock(),
+            NothingExists(),
+            NothingExists(),
+        )
+        written, skipped, _quote_no = service.create_many([self.quote_data()], actor="tester")
+        self.assertEqual((len(written), skipped), (0, 1))
+
+        payload = json.dumps([{**self.quote_data(), "status": "valid"}])
+        imported, skipped = service.apply_import_payload(payload, actor="importer")
+        self.assertEqual((imported, skipped), (0, 1))
+        self.assertEqual(self.service.stats().total, 0)
+
+    def test_preview_import_marks_unknown_bld_rows_invalid(self):
+        class OnlyCustomerExists:
+            def exists(self, _value: str) -> bool:
+                return True
+
+        class NoBldExists:
+            def exists(self, _value: str) -> bool:
+                return False
+
+        import_port = FakeQuoteImportPort(
+            rows=[
+                {"bld_no": "MISSING-BLD", "status": "valid", "error": ""},
+            ]
+        )
+        service = QuoteService(
+            lambda: SQLiteQuoteUnitOfWork(self.db_path),
+            import_port,
+            NoopImportLock(),
+            NoBldExists(),
+            OnlyCustomerExists(),
+        )
+        preview = service.preview_import(Path("quotes.xlsx"), customer_name="Module Customer", currency="USD")
+        self.assertEqual(preview["rows"][0]["status"], "invalid")
+        self.assertIn("MISSING-BLD", preview["rows"][0]["error"])
+        self.assertEqual(preview["counts"]["valid"], 0)
+        self.assertEqual(preview["counts"]["invalid"], 1)
+
+        with self.assertRaisesRegex(QuoteValidationError, "未登记"):
+            QuoteService(
+                lambda: SQLiteQuoteUnitOfWork(self.db_path),
+                import_port,
+                NoopImportLock(),
+                PermissiveCatalog(),
+                NoBldExists(),
+            ).preview_import(Path("quotes.xlsx"), customer_name="陌生人", currency="USD")
 
     def test_historical_quote_table_gains_version_without_losing_rows(self):
         historical_path = Path(self.tmp.name) / "historical-quotes.sqlite3"

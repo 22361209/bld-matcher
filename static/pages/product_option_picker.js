@@ -1,3 +1,5 @@
+import { moveActiveIndex } from "../components/combobox.js?v=20260728-1";
+
 const PICKER_PAGE_IDS = new Set(["products.list", "products.edit"]);
 const OPTIONS_ENDPOINT = "/products/options";
 const FIELD_SOURCE_KEYS = {
@@ -164,6 +166,22 @@ export function setupProductOptionPicker(container) {
   const closeDropdown = () => {
     dropdown.hidden = true;
     dropdown.replaceChildren();
+    activeIndex = -1;
+  };
+  let activeIndex = -1;
+  const pickerOptions = () => Array.from(dropdown.querySelectorAll("[data-picker-option], [data-picker-add]"));
+  const highlightOption = () => {
+    pickerOptions().forEach((element, index) => {
+      element.classList.toggle("active", index === activeIndex);
+      if (index === activeIndex) element.scrollIntoView({ block: "nearest" });
+    });
+  };
+  const commitOptionElement = (element) => {
+    if (element.dataset.pickerOption !== undefined) {
+      commitValue(element.dataset.pickerOption, { keepOpen: mode === "multi" });
+      return;
+    }
+    if (element.dataset.pickerAdd !== undefined) commitValue(element.dataset.pickerAdd, { keepOpen: mode === "multi" });
   };
   const commitValue = (value, { keepOpen = false } = {}) => {
     if (mode === "single") {
@@ -208,6 +226,7 @@ export function setupProductOptionPicker(container) {
       empty.textContent = "没有匹配项。";
       dropdown.appendChild(empty);
     }
+    activeIndex = -1;
     dropdown.hidden = false;
   };
   const openDropdown = (filterText) => {
@@ -244,9 +263,26 @@ export function setupProductOptionPicker(container) {
       closeDropdown();
       return;
     }
-    if (event.key === "Enter" && mode === "multi") {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
-      commitValue(input.value, { keepOpen: true });
+      if (dropdown.hidden) {
+        openDropdown(input.value);
+        return;
+      }
+      activeIndex = moveActiveIndex(activeIndex, event.key === "ArrowDown" ? 1 : -1, pickerOptions().length);
+      highlightOption();
+      return;
+    }
+    if (event.key === "Enter") {
+      if (!dropdown.hidden && activeIndex >= 0 && pickerOptions()[activeIndex]) {
+        event.preventDefault();
+        commitOptionElement(pickerOptions()[activeIndex]);
+        return;
+      }
+      if (mode === "multi") {
+        event.preventDefault();
+        commitValue(input.value, { keepOpen: true });
+      }
     }
   });
   dropdown.addEventListener("click", (event) => {

@@ -1,0 +1,65 @@
+/* 通用 combobox：输入过滤 + 方向键选择（quotes / inquiry / customers 录入共用） */
+
+.combobox {
+  position: relative;
+  display: block;
+}
+
+.combobox input {
+  width: 100%;
+}
+
+.combobox-dropdown {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #d8dce3);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(15 23 42 / 0.12);
+}
+
+.combobox-option {
+  display: flex;
+  width: 100%;
+  gap: 8px;
+  align-items: baseline;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.combobox-option.active,
+.combobox-option:hover {
+  background: var(--wash, #eef2f7);
+}
+
+.combobox-option-label {
+  font-weight: 600;
+}
+
+.combobox-option-detail {
+  color: var(--ink-3, #667085);
+  font-size: 12px;
+}
+
+.combobox-option-create {
+  color: var(--brand, #175cd3);
+}
+
+.combobox-empty {
+  margin: 0;
+  padding: 6px 8px;
+  color: var(--ink-3, #667085);
+  font-size: 13px;
+}

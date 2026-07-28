@@ -4,6 +4,7 @@ import {
   inlineResultsFragmentUrl,
   inlineResultsHistoryUrl,
 } from "./inline_results_navigation.js?v=20260721-2";
+import { setupQuoteFieldComboboxes } from "../components/quote_comboboxes.js?v=20260728-1";
 
 if (document.body.dataset.page === "quotes.list") {
   const resultsHost = document.querySelector("[data-quote-results-host]");
@@ -71,6 +72,7 @@ if (document.body.dataset.page === "quotes.list") {
   }
 
   const initializeResults = () => {
+    setupQuoteFieldComboboxes(resultsHost || document);
     resultsHost?.querySelector("[data-quote-search-form]")?.addEventListener("submit", (event) => {
       event.preventDefault();
       loadResults(formGetUrl(event.currentTarget, window.location.href));

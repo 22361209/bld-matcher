@@ -30,6 +30,10 @@ class BusinessSyncServiceTest(unittest.TestCase):
     @staticmethod
     def _seed(connection, *, updated_at: str = "2026-07-17 10:00:00", quote_remark: str = "source") -> None:
         connection.execute(
+            "INSERT OR IGNORE INTO customers (name, sync_id) VALUES (?, ?)",
+            ("同步客户", "customer-sync-id"),
+        )
+        connection.execute(
             "INSERT INTO products (bld_no, created_at, updated_at) VALUES (?, ?, ?)",
             ("SYNC-PRODUCT", updated_at, updated_at),
         )
@@ -96,10 +100,12 @@ class BusinessSyncServiceTest(unittest.TestCase):
             backup_path=self.root / "backup.sqlite3",
             actor="test",
             expected_token=cast(str, preview["token"]),
+            customer_mappings={"同步客户": None},
         )
         self.assertEqual({key: counts["new"] for key, counts in result.items()}, {"products": 1, "quotes": 1, "tubes": 1, "materials": 1})
         self.assertTrue((self.root / "backup.sqlite3").is_file())
         with connect(self.target) as connection:
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM customers WHERE name = '同步客户'").fetchone()[0], 1)
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM products WHERE bld_no = 'SYNC-PRODUCT'").fetchone()[0], 1)
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM quote_records WHERE sync_id = 'quote-sync-id'").fetchone()[0], 1)
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM tube_items WHERE code = 'SYNC-TUBE'").fetchone()[0], 1)
@@ -197,6 +203,60 @@ class BusinessSyncServiceTest(unittest.TestCase):
         with connect(self.target) as connection:
             self.assertEqual(connection.execute("SELECT sync_id FROM quote_records").fetchone()[0], "quote-sync-id")
             self.assertEqual(connection.execute("SELECT sync_id FROM material_items").fetchone()[0], "material-sync-id")
+
+    def test_quote_package_with_unknown_customer_requires_mapping(self) -> None:
+        package = self._package()
+        service = BusinessSyncService(BusinessSyncRepository(self.target))
+
+        preview = service.preview(package)
+        self.assertEqual(preview["unresolved_customers"], ["同步客户"])
+        self.assertEqual(preview["customer_options"], [])
+
+        with self.assertRaisesRegex(ValueError, "新建或映射"):
+            service.apply(
+                package,
+                backup_path=self.root / "backup.sqlite3",
+                actor="test",
+                expected_token=cast(str, preview["token"]),
+            )
+
+        result = service.apply(
+            package,
+            backup_path=self.root / "backup.sqlite3",
+            actor="test",
+            expected_token=cast(str, preview["token"]),
+            customer_mappings={"同步客户": None},
+        )
+        self.assertEqual(result["quotes"]["new"], 1)
+        with connect(self.target) as connection:
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM customers WHERE name = '同步客户'").fetchone()[0], 1)
+
+    def test_quote_package_unknown_customer_can_map_to_existing(self) -> None:
+        package = self._package()
+        with connect(self.target) as connection:
+            connection.execute(
+                "INSERT INTO customers (name, sync_id) VALUES (?, ?)",
+                ("既有客户", "existing-customer-id"),
+            )
+            connection.commit()
+
+        service = BusinessSyncService(BusinessSyncRepository(self.target))
+        preview = service.preview(package)
+        self.assertEqual(preview["unresolved_customers"], ["同步客户"])
+        self.assertEqual(preview["customer_options"], ["既有客户"])
+
+        result = service.apply(
+            package,
+            backup_path=self.root / "backup.sqlite3",
+            actor="test",
+            expected_token=cast(str, preview["token"]),
+            customer_mappings={"同步客户": "既有客户"},
+        )
+        self.assertEqual(result["quotes"]["new"], 1)
+        with connect(self.target) as connection:
+            row = connection.execute("SELECT customer_name FROM quote_records WHERE sync_id = 'quote-sync-id'").fetchone()
+            self.assertEqual(row[0], "既有客户")
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM customers").fetchone()[0], 1)
 
     def test_duplicate_identity_and_stale_preview_are_rejected_without_writes(self) -> None:
         package = self._write_package(

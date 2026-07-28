@@ -12,12 +12,13 @@ from pathlib import Path
 
 from app.database import connect
 from app.platform.audit_store import log_event
-from app.platform.sync_identity import material_match_key, quote_match_key
+from app.platform.sync_identity import material_match_key, quote_match_key, stable_sync_id
 
 
 PACKAGE_SUFFIX = ".tar.gz"
 PACKAGE_TYPE = "bld_business_data"
 DATASETS = {
+    "customers": ("customers", "sync_id", "客户"),
     "products": ("products", "bld_no", "产品目录"),
     "quotes": ("quote_records", "sync_id", "报价记录"),
     "tubes": ("tube_items", "code", "管件资料"),
@@ -27,7 +28,7 @@ FIELD_LABELS = {
     "active": "状态", "bld_no": "BLD NO.", "blank_length_text": "毛坯管长度", "borrowed_from": "借用编号",
     "car": "车型", "category": "类别", "code": "编号", "consumption_mm": "消耗长度", "currency": "币种",
     "customer_name": "客户", "customer_product_code": "客户产品编号", "inner_diameter_mm": "内径", "item": "产品名称",
-    "length": "长度", "model": "母件编码", "models": "适用车型", "moq": "起订量", "note": "备注",
+    "length": "长度", "model": "母件编码", "models": "适用车型", "moq": "起订量", "name": "客户名称", "note": "备注",
     "oe_no_1": "OE 号 1", "oe_no_2": "OE 号 2", "outer_diameter_mm": "外径", "part": "零件",
     "pieces": "下料只数", "price": "报价", "price_cny": "价格", "product_model": "产品型号", "product_status": "产品状态",
     "purchase_base": "采购基数", "quote_date": "报价日期", "quote_no": "报价单号", "quoted_by": "报价人", "remark": "备注", "series": "系列",
@@ -62,6 +63,18 @@ def _status(key: str, local: sqlite3.Row | None, incoming: dict[str, object], co
     if key == "quotes" or _older(local, incoming):
         return "conflict"
     return "updated"
+
+
+def _unresolved_customers(connection: sqlite3.Connection, payload: dict[str, list[dict[str, object]]]) -> list[str]:
+    """报价行里本机 customers 表和数据包 customers 数据集都不存在的客户名。"""
+
+    names = {str(row.get("customer_name") or "").strip() for row in payload.get("quotes", [])}
+    names.discard("")
+    if not names:
+        return []
+    local = {str(row["name"]).upper() for row in connection.execute("SELECT name FROM customers").fetchall()}
+    incoming = {str(row.get("name") or "").strip().upper() for row in payload.get("customers", [])}
+    return sorted(name for name in names if name.upper() not in local and name.upper() not in incoming)
 
 
 def _package_digest(package_path: Path) -> str:
@@ -124,6 +137,8 @@ def _incoming_status(
 
 
 def _preview_label(key: str, incoming: dict[str, object]) -> str:
+    if key == "customers":
+        return str(incoming.get("name") or "—")
     if key == "materials":
         fields = ("model", "code", "category", "car", "part", "spec_text")
         return " · ".join(str(incoming.get(field) or "—") for field in fields)
@@ -259,9 +274,48 @@ class BusinessSyncRepository:
                         rows.append({"status": status, "key": str(incoming[identity]), "label": _preview_label(key, incoming), "local_updated_at": local_row["updated_at"] if local_row else "", "incoming_updated_at": incoming.get("updated_at", "")})
                 summary[key] = {"label": label, "counts": counts, "rows": rows, "conflicts": conflicts}
             token = _state_token(connection, package_path, tuple(payload))
-        return {"manifest": manifest, "summary": summary, "token": token}
+            unresolved_customers = _unresolved_customers(connection, payload)
+            customer_options = (
+                [str(row["name"]) for row in connection.execute("SELECT name FROM customers ORDER BY name COLLATE NOCASE").fetchall()]
+                if unresolved_customers
+                else []
+            )
+        return {
+            "manifest": manifest,
+            "summary": summary,
+            "token": token,
+            "unresolved_customers": unresolved_customers,
+            "customer_options": customer_options,
+        }
 
-    def apply(self, package_path: Path, *, backup_path: Path, actor: str, expected_token: str, selected_conflicts: dict[str, set[str]]) -> dict[str, dict[str, int]]:
+    @staticmethod
+    def _resolve_quote_customers(connection: sqlite3.Connection, payload: dict[str, list[dict[str, object]]], mappings: dict[str, str | None]) -> None:
+        unresolved = _unresolved_customers(connection, payload)
+        if not unresolved:
+            return
+        missing = [name for name in unresolved if name not in mappings]
+        if missing:
+            raise ValueError("报价包含本机未登记的客户，请为每个客户选择新建或映射：" + "、".join(missing[:10]))
+        for name in unresolved:
+            target = mappings.get(name)
+            if target is None:
+                connection.execute(
+                    "INSERT OR IGNORE INTO customers (name, sync_id) VALUES (?, ?)",
+                    (name, stable_sync_id("customer", name.upper(), 1)),
+                )
+                continue
+            local = connection.execute(
+                "SELECT name FROM customers WHERE name = ? COLLATE NOCASE",
+                (target,),
+            ).fetchone()
+            if local is None:
+                raise ValueError(f"映射目标客户 {target} 不存在，请重新上传预览。")
+            canonical = str(local["name"])
+            for row in payload["quotes"]:
+                if str(row.get("customer_name") or "").strip() == name:
+                    row["customer_name"] = canonical
+
+    def apply(self, package_path: Path, *, backup_path: Path, actor: str, expected_token: str, selected_conflicts: dict[str, set[str]], customer_mappings: dict[str, str | None] | None = None) -> dict[str, dict[str, int]]:
         _manifest, payload = self.read(package_path)
         backup_path.parent.mkdir(parents=True, exist_ok=True)
         backup = sqlite3.connect(backup_path)
@@ -277,6 +331,7 @@ class BusinessSyncRepository:
             connection.execute("BEGIN IMMEDIATE")
             if _state_token(connection, package_path, tuple(payload)) != expected_token:
                 raise ValueError("预览后数据包或本机数据已变化，请重新上传预览。")
+            self._resolve_quote_customers(connection, payload, customer_mappings or {})
             for key, incoming_rows in payload.items():
                 table, identity, _label = DATASETS[key]
                 columns = _columns(connection, table)

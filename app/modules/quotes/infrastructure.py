@@ -28,3 +28,17 @@ class FileImportLockAdapter:
                 yield
         except ImportLockError as exc:
             raise ImportLockBusyError(str(exc)) from exc
+
+
+class ProductCatalogAdapter:
+    def exists(self, bld_no: str) -> bool:
+        from app.modules.products.factory import get_product_service
+
+        return get_product_service().find_by_bld(bld_no, active_only=False) is not None
+
+
+class CustomerDirectoryAdapter:
+    def exists(self, customer_name: str) -> bool:
+        from app.modules.customers.factory import get_customer_service
+
+        return get_customer_service().find_by_name(customer_name) is not None

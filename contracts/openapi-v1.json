@@ -97,6 +97,72 @@
         "title": "ArtifactResponse",
         "type": "object"
       },
+      "CustomerListData": {
+        "additionalProperties": false,
+        "properties": {
+          "customers": {
+            "items": {
+              "$ref": "#/components/schemas/CustomerResponse"
+            },
+            "title": "Customers",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "customers",
+          "total"
+        ],
+        "title": "CustomerListData",
+        "type": "object"
+      },
+      "CustomerListEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "api_version": {
+            "default": "1",
+            "title": "Api Version",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/CustomerListData"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "request_id",
+          "data"
+        ],
+        "title": "CustomerListEnvelope",
+        "type": "object"
+      },
+      "CustomerResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CustomerResponse",
+        "type": "object"
+      },
       "InquiryAnalyzeRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1845,6 +1911,68 @@
         "summary": "Download an artifact owned by the API principal",
         "x-required-scopes": [
           "artifacts:read"
+        ]
+      }
+    },
+    "/api/v1/customers": {
+      "get": {
+        "operationId": "listCustomers",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "客户名称的模糊匹配片段（如客户简称）。",
+              "maxLength": 300,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerListEnvelope"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Match registered customers by name fragment",
+        "x-required-scopes": [
+          "quotes:read"
         ]
       }
     },

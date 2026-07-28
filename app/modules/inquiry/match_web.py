@@ -15,7 +15,6 @@ from app.modules.inquiry.web_helpers import (
     selected_match_columns,
     validated_user_upload_path,
 )
-from app.modules.quotes.factory import get_quote_service
 from app.security import actor_name, permission_required
 
 
@@ -36,14 +35,6 @@ def _single_page_pagination(total: int) -> dict:
         "prev_url": "",
         "next_url": "",
     }
-
-
-def _quote_customer_names() -> list[str]:
-    try:
-        return get_quote_service().customer_names()
-    except Exception:
-        logger.exception("Quote customer names query failed")
-        return []
 
 
 def _clean_inquiry_workbook_for_matching(upload_path: Path, original_filename: str) -> tuple[Path, str]:
@@ -89,7 +80,6 @@ def _render_pasted_inquiry_result(query: str):
         original_filename=PASTED_INQUIRY_FILENAME,
         output_name=output_path.name,
         match_column="",
-        customer_names=_quote_customer_names(),
         pagination=_single_page_pagination(summary["total"]),
     )
 
@@ -186,7 +176,6 @@ def register(app) -> None:
             output_name=output_path.name,
             match_columns=match_columns,
             customer_code_column=customer_code_column,
-            customer_names=_quote_customer_names(),
             cleanup_message=request.form.get("cleanup_message", ""),
             pagination=_single_page_pagination(summary["total"]),
         )

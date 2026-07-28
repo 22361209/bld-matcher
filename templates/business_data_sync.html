@@ -34,6 +34,39 @@
     {% endfor %}
   </nav>
 
+  {% if preview.unresolved_customers %}
+    <section class="import-preview-dataset" id="import-preview-customers">
+      <h3 class="import-preview-dataset-title">报价中的未知客户（{{ preview.unresolved_customers|length }}）</h3>
+      <p class="note">这些客户在本机客户列表中不存在。请为每个客户选择「新建客户」或映射到已有客户，否则无法导入。</p>
+      <div class="workspace-table-wrap">
+        <table class="workspace-table">
+          <thead>
+            <tr>
+              <th scope="col">数据包中的客户名</th>
+              <th scope="col">处理方式</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for name in preview.unresolved_customers %}
+              <tr>
+                <td><strong>{{ name }}</strong></td>
+                <td>
+                  <input type="hidden" name="customer_mapping_name" value="{{ name }}">
+                  <select name="customer_mapping_target">
+                    <option value="" selected>新建客户「{{ name }}」</option>
+                    {% for option in preview.customer_options %}
+                      <option value="{{ option }}">映射到：{{ option }}</option>
+                    {% endfor %}
+                  </select>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  {% endif %}
+
   {% for key, info in preview.summary.items() %}
     <details class="import-preview-dataset" id="import-preview-{{ key }}" {% if info.conflicts or info.rows %}open{% endif %}>
       <summary>

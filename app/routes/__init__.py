@@ -6,6 +6,7 @@ def register_routes(app) -> None:
     from app.modules.admin import register as register_admin
     from app.modules.business_sync import register as register_business_sync
     from app.modules.contracts import register as register_contracts
+    from app.modules.customers import register as register_customers
     from app.modules.inquiry import register as register_inquiry_api
     from app.modules.materials import register as register_materials
     from app.modules.tubes import register as register_tubes
@@ -21,6 +22,7 @@ def register_routes(app) -> None:
     register_materials(app)
     register_tubes(app)
     register_contracts(app)
+    register_customers(app)
     register_quotes(app)
     register_admin(app)
     register_business_sync(app)

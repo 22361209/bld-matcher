@@ -225,6 +225,7 @@ def dynamic_route():
 
     def test_split_page_assets_are_declared_by_owning_templates(self):
         asset_owners = {
+            "customers.html": ("pages/customers.css",),
             "index.html": (
                 "pages/inquiry.css",
                 "pages/home.css",

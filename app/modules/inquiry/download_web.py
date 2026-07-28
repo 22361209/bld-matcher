@@ -26,6 +26,7 @@ from app.modules.inquiry.web_helpers import (
     selected_match_columns,
     validated_user_upload_path,
 )
+from app.modules.customers.factory import get_customer_service
 from app.modules.quotes.factory import get_quote_service
 from app.security import actor_name, permission_required
 
@@ -142,6 +143,8 @@ def register(app) -> None:
         customer_name = request.form.get("customer_name", "").strip()
         if not customer_name:
             return fail("写入报价前请填写客户名称。")
+        if not get_customer_service().find_by_name(customer_name):
+            return fail(f"客户 {customer_name} 未登记，请先在客户列表中新增。")
 
         price_options, price_error = price_options_from_request()
         if price_error:

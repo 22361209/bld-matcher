@@ -95,6 +95,20 @@ class WebAppTest(unittest.TestCase):
             follow_redirects=False,
         )
 
+    def register_customer_and_product(self, customer_name: str, bld_no: str):
+        from app.modules.customers.service import customer_sync_id
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO customers (name, sync_id) VALUES (?, ?)",
+                (customer_name, customer_sync_id(customer_name)),
+            )
+            conn.execute(
+                "INSERT OR IGNORE INTO products (bld_no, created_at, updated_at) VALUES (?, datetime('now','localtime'), datetime('now','localtime'))",
+                (bld_no,),
+            )
+            conn.commit()
+
     def cleanup_products(self, bld_pattern):
         with self.web.connect(self.web.DB_PATH) as conn:
             conn.execute("DELETE FROM products WHERE bld_no LIKE ?", (bld_pattern,))
@@ -2514,6 +2528,7 @@ class WebAppTest(unittest.TestCase):
 
     def test_quote_records_page_can_create_search_and_edit(self):
         self.login()
+        self.register_customer_and_product("博世", "K48620")
         response = self.client.get("/quotes")
         html = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
@@ -2916,6 +2931,7 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(audit["actor"], "Product Price Writer")
 
     def test_quote_v1_contract_idempotency_and_optimistic_concurrency(self):
+        self.register_customer_and_product("V1 Contract Customer", "V1-BLD-001")
         token = self.create_internal_api_token(
             scopes=["api:read", "quotes:read", "quotes:write"],
             name="WorkBuddy Quote V1",
@@ -3140,6 +3156,7 @@ class WebAppTest(unittest.TestCase):
         from openpyxl import Workbook
 
         self.login()
+        self.register_customer_and_product("导入客户", "K-IMPORT-QUOTE")
         workbook = Workbook()
         sheet = workbook.active
         sheet.append(["BLD号", "客户产品编码", "含税单价", "不含税单价", "报价日期", "报价人", "来源", "原文", "备注"])
@@ -3180,6 +3197,28 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(row["quoted_by"], "007")
         self.assertEqual(row["source_type"], "excel")
         self.assertEqual(row["source_text"], "")
+
+    def test_customers_page_lookup_and_v1_endpoint(self):
+        self.login()
+        page = self.client.get("/customers")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("客户列表", page.get_data(as_text=True))
+
+        save = self.client.post("/customers/save", data={"name": "宁波多迦"}, follow_redirects=False)
+        self.assertEqual(save.status_code, 302)
+        duplicate = self.client.post("/customers/save", data={"name": "宁波多迦"}, follow_redirects=True)
+        self.assertIn("已存在", duplicate.get_data(as_text=True))
+
+        lookup = self.client.get("/customers/lookup?q=多迦")
+        self.assertEqual(lookup.status_code, 200)
+        self.assertEqual([row["name"] for row in lookup.get_json()], ["宁波多迦"])
+
+        token = self.create_internal_api_token(scopes=["quotes:read"], name="Customers Read")
+        v1 = self.client.get("/api/v1/customers?q=多迦", headers={"Authorization": f"Bearer {token}"})
+        self.assertEqual(v1.status_code, 200)
+        data = v1.get_json()["data"]
+        self.assertEqual(data["customers"], [{"name": "宁波多迦"}])
+        self.assertEqual(data["total"], 1)
 
     def test_quote_api_oversized_request_returns_json(self):
         response = self.client.post(
@@ -4820,6 +4859,7 @@ class WebAppTest(unittest.TestCase):
                 "024_drop_quote_record_price",
                 "025_create_product_option_values",
                 "026_quote_record_quote_no",
+                "027_customers",
             ],
         )
 
@@ -6189,6 +6229,7 @@ with connect(database_path) as conn:
         buffer.seek(0)
 
         self.login()
+        self.register_customer_and_product("测试客户WQ", "KWQ01")
         response = self.client.post(
             "/match",
             data={"inquiry": (buffer, "write-quotes.xlsx")},
@@ -6327,6 +6368,7 @@ with connect(database_path) as conn:
         buffer.seek(0)
 
         self.login()
+        self.register_customer_and_product("测试客户WQ2", "KWQ09")
         response = self.client.post(
             "/match",
             data={"inquiry": (buffer, "write-quotes-guard.xlsx")},

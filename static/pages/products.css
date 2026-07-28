@@ -303,7 +303,8 @@
   cursor: pointer;
 }
 
-.product-option-picker-option:hover {
+.product-option-picker-option:hover,
+.product-option-picker-option.active {
   background: #f2f7fb;
 }
 

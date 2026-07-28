@@ -73,6 +73,7 @@ API Key 创建时只显示一次，数据库保存哈希、名称、后缀、Sco
 - 财务、停用、覆盖和批量操作支持 `dry_run`；高风险动作需要短期确认令牌。
 - 所有修订保存 before/after、Principal、request ID、原因和时间。
 - 报价记录的 `quoted_by` 和 `source_type` 是服务端归因字段：创建时按登录账号、导入账号或 API Principal 自动确定，之后不可由客户端修订。
+- 报价的客户和 BLD 号必须已登记：客户见网页「客户列表」，BLD 号见产品目录；未登记时创建/修订返回 `422 quote.customer_unknown` / `quote.bld_unknown`。调用方拿到客户简称时先 `GET /api/v1/customers?q=<简称>` 匹配，多个候选向用户确认，无候选请用户先登记，不要自行拼写全称。
 - Key 默认只读，写 Scope 单独授予。管理页按 `BLD_API_KEY_ROTATION_DAYS` 提醒轮换，但不会自动删除；应先验证新 Key 再删除旧 Key。
 - 幂等记录默认保留 24 小时；相同 Principal、端点、方法和 Key 的同一请求重放原响应，不同请求返回稳定冲突错误。
 

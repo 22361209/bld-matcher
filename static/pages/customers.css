@@ -1,0 +1,23 @@
+/* 客户列表管理页（admin.customers） */
+
+.customer-add-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0;
+}
+
+.customer-add-form input[name="name"] {
+  flex: 1;
+  max-width: 360px;
+}
+
+.customer-edit-form {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.customer-edit-form input[name="name"] {
+  width: 220px;
+}
