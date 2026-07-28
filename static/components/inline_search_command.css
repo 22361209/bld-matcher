@@ -1,0 +1,44 @@
+/* Shared one-field command rows: an input followed by its immediate action. */
+
+.inline-search-command {
+  --search-content-inset: 16px;
+  align-items: center;
+  flex-wrap: nowrap;
+  margin: 12px var(--search-content-inset);
+}
+
+.search-form {
+  --search-field-width: 320px;
+}
+
+.search-form input {
+  width: var(--search-field-width);
+}
+
+.inline-search-command > input:not([type="hidden"]),
+.inline-search-command > .search-input-wrap {
+  flex: 0 0 var(--search-field-width);
+  width: var(--search-field-width);
+}
+
+.inline-search-command > .search-input-wrap > input {
+  width: 100%;
+}
+
+.inline-search-command > .linear-button,
+.inline-search-command > .linear-popover {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 760px) {
+  .inline-search-command {
+    flex-wrap: wrap;
+    margin-inline: 12px;
+  }
+
+  .inline-search-command > input:not([type="hidden"]),
+  .inline-search-command > .search-input-wrap {
+    flex-basis: 100%;
+    width: 100%;
+  }
+}

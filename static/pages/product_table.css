@@ -245,7 +245,7 @@
 
 .products-column-filter-option:hover,
 .products-column-filter-option:focus-within {
-  background: #eef5fb;
+  background: var(--linear-subtle);
 }
 
 .products-column-filter-option input {

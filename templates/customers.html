@@ -18,7 +18,7 @@
           </div>
           <span>{{ customers|length }} 个</span>
         </div>
-        <form action="{{ url_for('save_customer') }}" method="post" class="search-form customer-add-form">
+        <form action="{{ url_for('save_customer') }}" method="post" class="search-form inline-search-command customer-add-form">
           {{ csrf_field() }}
           <input name="name" placeholder="新增客户名称，例如 宁波多迦" required>
           <button class="linear-button primary" type="submit">新增</button>

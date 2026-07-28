@@ -1,5 +1,7 @@
 # BLD Page Protocol
 
+UI protocol version: 1.1.
+
 ## Page Shell
 
 所有完整页面最终继承 `templates/base.html`。基础模板负责语言、meta、资源版本、导航、消息区、页面宽度、全局对话框和脚本入口。业务模板只填充页面插槽。
@@ -67,6 +69,17 @@
 - 长任务立即返回任务状态，不阻塞请求，也不伪造进度。
 - 所有弹窗支持 Escape、焦点圈定、返回焦点和可访问名称。
 - 主要操作在桌面与移动端均可见，长文本不得遮挡按钮或表格内容。
+
+## Search, Action And Candidate Controls
+
+搜索、操作按钮和候选下拉必须按控件职责组合，不能由页面临时调宽、调色来修正。
+
+- 普通 `search-form` 的单个文本输入在桌面端使用共享的 `--search-field-width: 320px`；窄屏时输入占满可用行宽。多条件筛选、表格列筛选和弹窗字段按其容器网格布局，不套用单字段命令行规则。
+- “一个输入 + 立即执行的一个操作”（例如新增客户、增加产品候选值）使用 `search-form inline-search-command`。它在桌面端保持输入与按钮同一行、8px 间距和 16px 内容缩进；搜索清除按钮生成的 `.search-input-wrap` 也必须保持该宽度，不能把操作挤到下一行或远端。窄屏才允许换行，并使用 12px 横向缩进。
+- 搜索/筛选和创建等当前主动作使用 `linear-button primary`；保存、取消、重置、返回等可逆或次要动作使用 `linear-button subtle`；删除、停用等不可逆动作使用 `linear-button danger` 并遵循确认规则。一个操作组只保留一个 primary，工具栏操作放入 `command-actions`，弹窗或编辑表单的提交与取消放入 `form-actions`，不要为对齐给按钮写页面级尺寸或颜色。
+- 所有候选下拉（combobox、产品候选选择器、列筛选候选）必须显式设置 `--linear-surface` 背景和 `--linear-text` 主文字色，说明文字使用 `--linear-muted`，新增候选使用 `--linear-accent`，悬浮/键盘当前项使用 `--linear-subtle`。不得依赖浏览器按钮默认文字色、父元素继承色或只在悬浮时才获得可读对比度。
+
+这些规则由共享样式和 `tests/test_admin_add_form_layout.py`、`tests/test_combobox_styles.py` 的回归检查共同约束。新增控件类型或需要偏离该规则时，先更新本协议和相应回归测试；本次协议演进记录在 ADR 0017。
 
 ## CSS And JavaScript
 

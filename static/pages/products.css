@@ -287,7 +287,7 @@
   padding: 4px;
   border: 1px solid var(--linear-line);
   border-radius: 7px;
-  background: #ffffff;
+  background: var(--linear-surface);
   box-shadow: 0 8px 20px rgb(31 48 65 / 18%);
   overflow-y: auto;
 }
@@ -305,7 +305,7 @@
 
 .product-option-picker-option:hover,
 .product-option-picker-option.active {
-  background: #f2f7fb;
+  background: var(--linear-subtle);
 }
 
 .product-option-picker-add {

@@ -1,32 +1,5 @@
 /* 客户列表管理页（admin.customers） */
 
-.customer-add-form {
-  align-items: center;
-  flex-wrap: nowrap;
-  margin: 12px 16px;
-}
-
-.customer-add-form > .linear-button {
-  flex: 0 0 auto;
-}
-
-.customer-add-form > .search-input-wrap {
-  flex: 0 0 320px;
-  width: 320px;
-}
-
-@media (max-width: 760px) {
-  .customer-add-form {
-    flex-wrap: wrap;
-    margin-inline: 12px;
-  }
-
-  .customer-add-form > .search-input-wrap,
-  .customer-add-form > .search-input-wrap input {
-    width: 100%;
-  }
-}
-
 .customer-edit-form {
   display: flex;
   gap: 6px;
