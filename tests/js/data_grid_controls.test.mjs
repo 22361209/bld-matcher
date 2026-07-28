@@ -4,9 +4,9 @@ import test from "node:test";
 import {
   buildColumnFilterSearchState,
   isImeCompositionEvent,
-} from "../../static/pages/product_table.js";
+} from "../../static/components/data_grid_controls.js";
 
-test("column filter search trims and matches labels case-insensitively", () => {
+test("data-grid filter search trims and matches labels case-insensitively", () => {
   assert.deepEqual(
     buildColumnFilterSearchState("  kia  ", ["HYUNDAI", "KIA", "Kia Motors"]),
     { query: "kia", matches: [false, true, true] }

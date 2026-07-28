@@ -4,7 +4,7 @@ from collections.abc import Callable, Mapping
 from datetime import datetime
 from pathlib import Path
 
-from .domain import MaterialImportResult, MaterialPage, normalize_status
+from .domain import MaterialImportResult, MaterialPage, normalize_column_filters, normalize_status
 from .infrastructure import MaterialFileAdapter
 
 
@@ -24,21 +24,49 @@ class MaterialService:
         with self.unit_of_work_factory() as unit_of_work:
             return unit_of_work.repository.stats()
 
-    def list_items(self, *, query: str, status: str, limit: int, offset: int) -> MaterialPage:
+    def list_items(
+        self,
+        *,
+        query: str,
+        status: str,
+        limit: int,
+        offset: int,
+        column_filters: Mapping[str, object] | None = None,
+    ) -> MaterialPage:
         self.bootstrap()
         normalized_status = normalize_status(status)
         safe_limit = max(1, min(500, int(limit)))
         safe_offset = max(0, int(offset))
+        normalized_column_filters = normalize_column_filters(column_filters)
         with self.unit_of_work_factory() as unit_of_work:
-            total = unit_of_work.repository.count(query=query, status=normalized_status)
+            total = unit_of_work.repository.count(
+                query=query, status=normalized_status, column_filters=normalized_column_filters
+            )
             records = unit_of_work.repository.list(
                 query=query,
                 status=normalized_status,
                 limit=safe_limit,
                 offset=safe_offset,
+                column_filters=normalized_column_filters,
             )
             stats = unit_of_work.repository.stats()
         return MaterialPage(records=records, total=total, limit=safe_limit, offset=safe_offset, stats=stats)
+
+    def filter_options(
+        self,
+        *,
+        query: str,
+        status: str,
+        column_filters: Mapping[str, object] | None = None,
+    ) -> dict[str, list[dict[str, object]]]:
+        normalized_status = normalize_status(status)
+        normalized_column_filters = normalize_column_filters(column_filters)
+        with self.unit_of_work_factory() as unit_of_work:
+            return unit_of_work.repository.filter_options(
+                query=query,
+                status=normalized_status,
+                column_filters=normalized_column_filters,
+            )
 
     def get_item(self, item_id: int) -> dict[str, object] | None:
         self.bootstrap()

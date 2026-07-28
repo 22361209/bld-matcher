@@ -23,3 +23,4 @@ ADR 用于记录难以撤销或会影响多个领域的决定。新增框架、�
 - [ADR 0015: Product BLD NO. Rename](0015-product-bld-no-rename.md)
 - [ADR 0016: Customer Master Data And Quote Target Validation](0016-customer-master-and-quote-target-validation.md)
 - [ADR 0017: Search, Action And Candidate Control Protocol](0017-search-action-and-candidate-control-protocol.md)
+- [ADR 0018: Dense List Layout And Data Grid Controls](0018-dense-list-layout-and-data-grid-controls.md)

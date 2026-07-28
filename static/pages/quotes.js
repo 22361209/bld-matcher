@@ -5,11 +5,13 @@ import {
   inlineResultsHistoryUrl,
 } from "./inline_results_navigation.js?v=20260721-2";
 import { setupQuoteFieldComboboxes } from "../components/quote_comboboxes.js?v=20260728-1";
+import { setupDataGridControls } from "../components/data_grid_controls.js?v=20260729-2";
 
 if (document.body.dataset.page === "quotes.list") {
   const resultsHost = document.querySelector("[data-quote-results-host]");
   const requestGate = createInlineResultsRequestGate();
   let requestController = null;
+  let cleanupQuoteTable = () => {};
 
   const notifyDataGrids = (action) => {
     document.dispatchEvent(new CustomEvent(`bld:data-grids:${action}`, { detail: { root: resultsHost } }));
@@ -72,6 +74,27 @@ if (document.body.dataset.page === "quotes.list") {
   }
 
   const initializeResults = () => {
+    cleanupQuoteTable();
+    const table = resultsHost?.querySelector("#quotes-table");
+    cleanupQuoteTable = setupDataGridControls(table, {
+      columns: [
+        "quote-no",
+        "date",
+        "customer",
+        "bld",
+        "customer-code",
+        "tax-price",
+        "net-price",
+        "currency",
+        "quoted-by",
+        "source",
+        "remark",
+      ],
+      storagePrefix: "bld.quotes",
+      resultsHash: "quote-results",
+      navigate: (url) => loadResults(url),
+      filterPortal: table?.closest("[data-quote-results]"),
+    });
     setupQuoteFieldComboboxes(resultsHost || document);
     resultsHost?.querySelector("[data-quote-search-form]")?.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -135,6 +158,7 @@ if (document.body.dataset.page === "quotes.list") {
       const nextResults = template.content.querySelector("[data-quote-results]");
       if (!(nextResults instanceof HTMLElement)) throw new Error("invalid fragment");
 
+      cleanupQuoteTable();
       notifyDataGrids("cleanup");
       resultsHost.replaceChildren(template.content);
       const canonicalHref = new URL(nextResults.dataset.canonicalUrl || targetHref, window.location.href).toString();

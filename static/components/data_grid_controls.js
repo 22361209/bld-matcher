@@ -95,7 +95,7 @@ const tableColumnLabel = (table, column) => (
   table.querySelector(`th[data-col="${column}"] [data-column-label]`)?.dataset.columnLabel || column
 );
 
-export function setupProductTable(table, options = {}) {
+export function setupDataGridControls(table, options = {}) {
   if (!(table instanceof HTMLTableElement)) return () => {};
 
   const availableColumns = options.columns || DEFAULT_COLUMNS;
@@ -107,7 +107,10 @@ export function setupProductTable(table, options = {}) {
   const storageScope = table.dataset.columnStorageScope || "guest";
   const orderStorageKey = `${storagePrefix}.column-order.v${COLUMN_ORDER_VERSION}.u${storageScope}`;
   const orderStatus = document.querySelector("[data-column-order-status]");
-  const filterPortal = table.closest("[data-products-results], [data-table-results]") || table.closest(".app-surface") || document.body;
+  const filterPortal = options.filterPortal
+    || table.closest("[data-products-results], [data-table-results]")
+    || table.closest(".app-surface")
+    || document.body;
   let currentOrder = [...availableColumns];
   const savedOrder = safeStorageGet(orderStorageKey);
   if (savedOrder) {
@@ -416,8 +419,8 @@ export function setupProductTable(table, options = {}) {
   window.addEventListener("resize", positionColumnFilter);
 
   const clearDropMarker = () => {
-    table.querySelectorAll(".products-column-drop-before, .products-column-drop-after").forEach((heading) => {
-      heading.classList.remove("products-column-drop-before", "products-column-drop-after");
+    table.querySelectorAll(".data-grid-column-drop-before, .data-grid-column-drop-after").forEach((heading) => {
+      heading.classList.remove("data-grid-column-drop-before", "data-grid-column-drop-after");
     });
   };
   const insertionAt = (sourceColumn, clientX) => {
@@ -438,7 +441,7 @@ export function setupProductTable(table, options = {}) {
     clearDropMarker();
     const markerColumn = index < remaining.length ? remaining[index] : remaining[remaining.length - 1];
     const marker = markerColumn ? table.querySelector(`th[data-col="${markerColumn}"]`) : null;
-    if (marker) marker.classList.add(index < remaining.length ? "products-column-drop-before" : "products-column-drop-after");
+    if (marker) marker.classList.add(index < remaining.length ? "data-grid-column-drop-before" : "data-grid-column-drop-after");
   };
 
   const startColumnDrag = (handle, event) => {
@@ -455,7 +458,7 @@ export function setupProductTable(table, options = {}) {
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
       window.removeEventListener("blur", onBlur);
-      document.body.classList.remove("products-column-dragging");
+      document.body.classList.remove("data-grid-column-dragging");
       handle.setAttribute("aria-grabbed", "false");
       clearDropMarker();
     };
@@ -465,7 +468,7 @@ export function setupProductTable(table, options = {}) {
       if (!dragging) {
         if (Math.abs(deltaX) < 6 || Math.abs(deltaX) <= Math.abs(deltaY)) return;
         dragging = true;
-        document.body.classList.add("products-column-dragging");
+        document.body.classList.add("data-grid-column-dragging");
         handle.setAttribute("aria-grabbed", "true");
         window.getSelection()?.removeAllRanges();
       }

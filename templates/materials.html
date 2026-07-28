@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_table_filter_macros.html" import choice_heading %}
 {% set active_page = "material_items" if show_material_items else "materials" %}
 {% block page_title %}生产料单{% endblock %}
 {% block page_id %}materials.workspace{% endblock %}
@@ -56,8 +57,7 @@
       {% if show_material_items %}
       {% set status_label = "包含停用" if status == "all" else ("只看停用" if status == "inactive" else "只看启用") %}
       <section class="data-section" id="materials-results">
-        <div class="material-items-command">
-          <div class="material-table-toolbar">
+        <div class="workspace-command material-items-command">
             <form class="search-form material-table-search" method="get" action="{{ url_for('material_items') }}#materials-results">
               <label>
                 <span>搜索材料明细</span>
@@ -96,12 +96,11 @@
               </details>
             {% endif %}
             </div>
-          </div>
         </div>
 
         <div class="data-grid" data-resizable-grid data-grid-key="materials">
         <div class="data-table-scroll" data-grid-scroll>
-          <table class="data-table" id="materials-table" data-column-storage-scope="{{ g.user['id'] if g.user else 'guest' }}">
+          <table class="data-table data-grid-table" id="materials-table" data-grid-heading-overflow data-column-storage-scope="{{ g.user['id'] if g.user else 'guest' }}">
             <colgroup>
               <col class="col-width-62" data-col="model">
               <col class="col-width-80" data-col="code">
@@ -116,31 +115,31 @@
             </colgroup>
             <thead>
               <tr>
-                <th>母件编码</th>
-                <th>零件编码</th>
-                <th>类别</th>
-                <th>车型</th>
-                <th>零件名称</th>
-                <th>规格尺寸</th>
-                <th>下料只数</th>
-                <th>单件重量kg</th>
-                <th>状态</th>
-                <th>操作</th>
+                <th data-col="model">{{ choice_heading("materials", "model", "母件编码", "mf_model", material_filter_options.get("model", []), material_column_filters.get("model", [])) }}</th>
+                <th data-col="code">{{ choice_heading("materials", "code", "零件编码", "mf_code", material_filter_options.get("code", []), material_column_filters.get("code", [])) }}</th>
+                <th data-col="category">{{ choice_heading("materials", "category", "类别", "mf_category", material_filter_options.get("category", []), material_column_filters.get("category", [])) }}</th>
+                <th data-col="car">{{ choice_heading("materials", "car", "车型", "mf_car", material_filter_options.get("car", []), material_column_filters.get("car", [])) }}</th>
+                <th data-col="part">{{ choice_heading("materials", "part", "零件名称", "mf_part", material_filter_options.get("part", []), material_column_filters.get("part", [])) }}</th>
+                <th data-col="specification">{{ choice_heading("materials", "specification", "规格尺寸", "mf_spec_text", material_filter_options.get("spec_text", []), material_column_filters.get("spec_text", [])) }}</th>
+                <th data-col="pieces">{{ choice_heading("materials", "pieces", "下料只数", "mf_pieces", material_filter_options.get("pieces", []), material_column_filters.get("pieces", [])) }}</th>
+                <th data-col="unit-weight">{{ choice_heading("materials", "unit-weight", "单件重量kg", "mf_unit_weight", material_filter_options.get("unit_weight", []), material_column_filters.get("unit_weight", [])) }}</th>
+                <th data-col="status">{{ choice_heading("materials", "status", "状态", "mf_active", material_filter_options.get("active", []), material_column_filters.get("active", [])) }}</th>
+                <th class="sticky-actions" data-col="actions"><span class="data-grid-static-column-label">操作</span></th>
               </tr>
             </thead>
             <tbody>
               {% for item in material_items %}
                 <tr class="{% if not item.active %}muted-row{% endif %}">
-                  <td><strong>{{ item.model }}</strong></td>
-                  <td>{{ item.code }}</td>
-                  <td>{{ item.category }}</td>
-                  <td>{{ item.car }}</td>
-                  <td>{{ item.part }}</td>
-                  <td>{{ item.spec_text }}</td>
-                  <td>{{ "%.0f"|format(item.pieces) if item.pieces == item.pieces|int else item.pieces }}</td>
-                  <td>{{ "%.2f"|format(item.unit_weight) }}</td>
-                  <td>{% if item.active %}<span class="linear-status active">启用</span>{% else %}<span class="linear-status inactive">停用</span>{% endif %}</td>
-                  <td class="row-actions">
+                  <td data-col="model"><strong>{{ item.model }}</strong></td>
+                  <td data-col="code">{{ item.code }}</td>
+                  <td data-col="category">{{ item.category }}</td>
+                  <td data-col="car">{{ item.car }}</td>
+                  <td data-col="part">{{ item.part }}</td>
+                  <td data-col="specification">{{ item.spec_text }}</td>
+                  <td data-col="pieces">{{ "%.0f"|format(item.pieces) if item.pieces == item.pieces|int else item.pieces }}</td>
+                  <td data-col="unit-weight">{{ "%.2f"|format(item.unit_weight) }}</td>
+                  <td data-col="status">{% if item.active %}<span class="linear-status active">启用</span>{% else %}<span class="linear-status inactive">停用</span>{% endif %}</td>
+                  <td class="row-actions" data-col="actions">
                     {% if can("manage_materials") %}
                       <a href="{{ url_for('edit_material_item', item_id=item.id) }}">编辑</a>
                       {% if item.active %}

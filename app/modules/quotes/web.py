@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from math import ceil
 from pathlib import Path
 
 from flask import Blueprint, flash, make_response, redirect, render_template, request, url_for
@@ -11,6 +10,7 @@ from app.security import actor_name, permission_required, safe_referrer
 
 from .domain import QuoteValidationError
 from .factory import get_quote_service
+from .list_query import filters_from_request, page_url, pagination as build_pagination, requested_page
 from .service import QuoteImportBusyError, QuoteImportError, QuoteNotFoundError, QuoteVersionConflictError
 
 
@@ -30,66 +30,7 @@ WEB_EDITABLE_QUOTE_FIELDS = (
 
 
 def _web_quote_data() -> dict[str, str]:
-    return {
-        field: request.form.get(field, "")
-        for field in WEB_EDITABLE_QUOTE_FIELDS
-        if field in request.form
-    }
-
-
-def _filters() -> dict[str, str]:
-    return {
-        "customer_name": request.args.get("customer_name", request.args.get("customer", "")).strip(),
-        "bld_no": request.args.get(
-            "bld_no",
-            request.args.get("product_model", request.args.get("model", "")),
-        ).strip(),
-        "date_from": request.args.get("date_from", "").strip(),
-        "date_to": request.args.get("date_to", "").strip(),
-        "currency": request.args.get("currency", "").strip().upper(),
-        "quoted_by": request.args.get("quoted_by", "").strip(),
-        "quote_no": request.args.get("quote_no", "").strip(),
-    }
-
-
-def _request_page() -> int:
-    try:
-        return max(1, int(request.args.get("page", 1)))
-    except ValueError:
-        return 1
-
-
-def _page_url(filters: dict[str, str], page: int) -> str:
-    params = {key: value for key, value in filters.items() if value}
-    if page > 1:
-        params["page"] = str(page)
-    return f"{url_for('quote_web.quotes', **params)}#quote-results"
-
-
-def _pagination(filters: dict[str, str], page: int, total: int) -> dict[str, object]:
-    total_pages = max(1, ceil(total / QUOTE_PAGE_SIZE))
-    page = min(max(1, page), total_pages)
-    start = ((page - 1) * QUOTE_PAGE_SIZE) + 1 if total else 0
-    end = min(total, page * QUOTE_PAGE_SIZE)
-    window = {1, total_pages, page - 1, page, page + 1}
-    links = []
-    previous_page = 0
-    for item in sorted(value for value in window if 1 <= value <= total_pages):
-        if previous_page and item - previous_page > 1:
-            links.append({"gap": True})
-        links.append({"page": item, "url": _page_url(filters, item), "current": item == page})
-        previous_page = item
-    return {
-        "page": page,
-        "total_pages": total_pages,
-        "start": start,
-        "end": end,
-        "has_prev": page > 1,
-        "has_next": page < total_pages,
-        "prev_url": _page_url(filters, page - 1) if page > 1 else "",
-        "next_url": _page_url(filters, page + 1) if page < total_pages else "",
-        "links": links,
-    }
+    return {field: request.form.get(field, "") for field in WEB_EDITABLE_QUOTE_FIELDS if field in request.form}
 
 
 @quote_web.get("/customer-prices")
@@ -105,12 +46,12 @@ def quotes():
 
 
 def _quote_list_context() -> dict[str, object]:
-    filters = _filters()
-    requested_page = _request_page()
+    filters = filters_from_request()
+    page = requested_page()
     try:
         service = get_quote_service()
         first_page = service.list_records(filters, limit=QUOTE_PAGE_SIZE, offset=0)
-        pagination = _pagination(filters, requested_page, first_page.total)
+        pagination = build_pagination(filters, page, first_page.total, page_size=QUOTE_PAGE_SIZE)
         page_number = int(pagination["page"])
         page = (
             first_page
@@ -128,6 +69,8 @@ def _quote_list_context() -> dict[str, object]:
                 bld_no=filters["bld_no"],
             )
         stats = service.stats().as_dict()
+        quote_filter_options = service.filter_options(filters)
+        quote_column_filters = dict(filters.get("column_filters", {}))
         records = page.records
         total = page.total
     except QuoteValidationError as exc:
@@ -135,25 +78,31 @@ def _quote_list_context() -> dict[str, object]:
         records = []
         latest = None
         stats = {"total": 0, "customers": 0, "models": 0}
-        pagination = _pagination(filters, 1, 0)
+        pagination = build_pagination(filters, 1, 0, page_size=QUOTE_PAGE_SIZE)
         total = 0
+        quote_filter_options = {}
+        quote_column_filters = {}
     except Exception:
         logger.exception("Quote page query failed")
         flash("查询失败，请稍后重试。", "error")
         records = []
         latest = None
         stats = {"total": 0, "customers": 0, "models": 0}
-        pagination = _pagination(filters, 1, 0)
+        pagination = build_pagination(filters, 1, 0, page_size=QUOTE_PAGE_SIZE)
         total = 0
+        quote_filter_options = {}
+        quote_column_filters = {}
     return {
         "records": records,
         "latest": latest,
         "filters": filters,
+        "quote_filter_options": quote_filter_options,
+        "quote_column_filters": quote_column_filters,
         "total_records": total,
         "stats": stats,
         "pagination": pagination,
         "page_size": QUOTE_PAGE_SIZE,
-        "canonical_url": _page_url(filters, int(pagination["page"])).split("#", 1)[0],
+        "canonical_url": page_url(filters, int(pagination["page"])).split("#", 1)[0],
     }
 
 

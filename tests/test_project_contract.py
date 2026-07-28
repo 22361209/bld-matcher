@@ -222,6 +222,29 @@ def dynamic_route():
         base = (contract.ROOT / "templates" / "base.html").read_text(encoding="utf-8")
         self.assertIn("components/data_grid.css", base)
         self.assertIn("components/data_grid.js", base)
+        self.assertIn("components/data_grid_controls.css", base)
+
+        list_sources = {
+            "products": product_shell + product_results,
+            "materials": materials_template,
+            "quotes": quote_results,
+            "tubes": tube_results,
+            "inquiry-result": (contract.ROOT / "templates" / "result.html").read_text(encoding="utf-8"),
+        }
+        for name, source in list_sources.items():
+            self.assertIn("data-grid-table", source, name)
+
+        for source in list_sources.values():
+            self.assertNotIn("products-column", source)
+        shared_controls = (contract.ROOT / "static/components/data_grid_controls.css").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(".data-grid-column-heading", shared_controls)
+        self.assertIn("align-items: center;", shared_controls)
+        self.assertIn(".data-grid-filter-panel", shared_controls)
+        self.assertNotIn("products-column", shared_controls)
+        self.assertFalse((contract.ROOT / "static/pages/product_table.css").exists())
+        self.assertFalse((contract.ROOT / "static/pages/product_table.js").exists())
 
     def test_split_page_assets_are_declared_by_owning_templates(self):
         asset_owners = {

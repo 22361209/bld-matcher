@@ -105,6 +105,11 @@ class QuoteService:
             records = unit_of_work.repository.list(normalized, limit=safe_limit, offset=safe_offset)
         return QuotePage(records=records, total=total, limit=safe_limit, offset=safe_offset)
 
+    def filter_options(self, filters: Mapping[str, object] | QuoteFilters) -> dict[str, list[dict[str, object]]]:
+        normalized = filters if isinstance(filters, QuoteFilters) else build_quote_filters(filters)
+        with self.unit_of_work_factory() as unit_of_work:
+            return unit_of_work.repository.filter_options(normalized)
+
     def get_record(self, quote_id: int) -> QuoteRecord:
         with self.unit_of_work_factory() as unit_of_work:
             record = unit_of_work.repository.get(quote_id)

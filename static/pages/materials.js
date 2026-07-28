@@ -1,3 +1,5 @@
+import { setupDataGridControls } from "../components/data_grid_controls.js?v=20260729-2";
+
 if (document.body.dataset.page === "materials.workspace") {
   const materialStatusInput = document.querySelector("#material-status-input");
   document.querySelectorAll("[data-material-status]").forEach((button) => {
@@ -46,5 +48,10 @@ if (document.body.dataset.page === "materials.workspace") {
     if (materialModal?.classList.contains("open")) {
       closeMaterialModal();
     }
+  });
+  setupDataGridControls(document.querySelector("#materials-table"), {
+    columns: ["model", "code", "category", "car", "part", "specification", "pieces", "unit-weight", "status"],
+    storagePrefix: "bld.materials",
+    resultsHash: "materials-results",
   });
 }

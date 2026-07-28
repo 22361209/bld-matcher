@@ -8,9 +8,9 @@
   {% set filter_options_for_column = options or [] %}
   {% set selected_values = selected or [] %}
   {% set selected_values_lower = selected_values | map('lower') | list %}
-  <div class="products-column-heading">
+  <div class="data-grid-column-heading">
     <button
-      class="products-column-label"
+      class="data-grid-column-label"
       type="button"
       data-column-drag-handle
       data-column-label="{{ label }}"
@@ -18,7 +18,7 @@
     >{{ label }}</button>
     {% if filter_key %}
       <button
-        class="products-column-filter-trigger{% if selected_values %} active{% endif %}"
+        class="data-grid-filter-trigger{% if selected_values %} active{% endif %}"
         type="button"
         data-column-filter-trigger
         data-filter-key="{{ filter_key }}"
@@ -31,7 +31,7 @@
   </div>
   {% if filter_key %}
     <div
-      class="products-column-filter"
+      class="data-grid-filter-panel"
       id="products-filter-{{ column_id }}"
       role="dialog"
       aria-label="筛选{{ label }}"
@@ -39,22 +39,22 @@
       data-filter-key="{{ filter_key }}"
       hidden
     >
-      <div class="products-column-filter-header">
+      <div class="data-grid-filter-header">
         <strong>筛选{{ label }}</strong>
         <button type="button" data-column-filter-close aria-label="关闭{{ label }}筛选">×</button>
       </div>
-      <label class="products-column-filter-search">
+      <label class="data-grid-filter-search">
         <span>搜索候选项</span>
         <input type="search" autocomplete="off" placeholder="输入关键词" data-column-filter-search>
       </label>
-      <div class="products-column-filter-bulk">
+      <div class="data-grid-filter-bulk">
         <button class="linear-button subtle" type="button" data-column-filter-select-all aria-label="全选所有{{ label }}候选项">全选</button>
         <button class="linear-button subtle" type="button" data-column-filter-select-none aria-label="全不选所有{{ label }}候选项">全不选</button>
         <span data-column-filter-selection aria-live="polite"></span>
       </div>
-      <div class="products-column-filter-options" role="group" aria-label="{{ label }}候选项">
+      <div class="data-grid-filter-options" role="group" aria-label="{{ label }}候选项">
         {% for option in filter_options_for_column %}
-          <label class="products-column-filter-option" data-column-filter-option>
+          <label class="data-grid-filter-option" data-column-filter-option>
             <input
               type="checkbox"
               value="{{ option.value }}"
@@ -64,12 +64,12 @@
             {% if option.count is defined %}<small>{{ option.count }}</small>{% endif %}
           </label>
         {% else %}
-          <p class="products-column-filter-empty">暂无可筛选项。</p>
+          <p class="data-grid-filter-empty">暂无可筛选项。</p>
         {% endfor %}
       </div>
-      <p class="products-column-filter-no-match" data-column-filter-no-match hidden>没有匹配项。</p>
-      <p class="products-column-filter-validation" data-column-filter-validation aria-live="polite"></p>
-      <div class="products-column-filter-actions">
+      <p class="data-grid-filter-empty-search" data-column-filter-no-match hidden>没有匹配项。</p>
+      <p class="data-grid-filter-validation" data-column-filter-validation aria-live="polite"></p>
+      <div class="data-grid-filter-actions">
         <button class="linear-button subtle" type="button" data-column-filter-reset>重置筛选</button>
         <button class="linear-button primary" type="button" data-column-filter-apply>应用</button>
       </div>
@@ -78,14 +78,13 @@
 {% endmacro %}
 
 <section
-  class="data-section"
   id="products-results"
   data-products-results
   data-canonical-url="{{ product_canonical_url }}"
 >
   <div class="data-grid" data-resizable-grid data-grid-key="products">
     <div class="data-table-scroll" data-grid-scroll>
-      <table class="data-table products-table" id="products-table" data-grid-heading-overflow data-column-storage-scope="{{ g.user['id'] if g.user else 'guest' }}">
+      <table class="data-table data-grid-table" id="products-table" data-grid-heading-overflow data-column-storage-scope="{{ g.user['id'] if g.user else 'guest' }}">
         <colgroup>
           <col data-col="bld" class="col-width-104">
           <col data-col="series" class="col-width-82">
@@ -109,7 +108,7 @@
             <th data-col="image">{{ product_column_heading("image", "产品图片") }}</th>
             <th data-col="price">{{ product_column_heading("price", "含税单价") }}</th>
             <th data-col="product-status">{{ product_column_heading("product-status", "产品状态", "product_status", product_filter_options.get("product_status", []), selected_product_status_filters) }}</th>
-            <th class="sticky-actions" data-col="actions"><span class="products-static-column-label">操作</span></th>
+            <th class="sticky-actions" data-col="actions"><span class="data-grid-static-column-label">操作</span></th>
           </tr>
         </thead>
         <tbody>

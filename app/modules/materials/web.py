@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from math import ceil
 from pathlib import Path
 from typing import Any, cast
 
@@ -19,6 +18,7 @@ from app.security import actor_name, can, login_required, permission_required
 
 from .factory import get_material_service
 from .infrastructure import MaterialImportBusyError
+from .list_query import column_filters_from_request, pagination as build_pagination
 
 
 logger = logging.getLogger(__name__)
@@ -31,44 +31,6 @@ def _request_page() -> int:
         return max(1, int(request.args.get("page", "1") or 1))
     except ValueError:
         return 1
-
-
-def _material_page_url(query: str, status: str, page: int) -> str:
-    params: dict[str, object] = {}
-    if query.strip():
-        params["q"] = query
-    if status != "active":
-        params["status"] = status
-    if page > 1:
-        params["page"] = page
-    return f"{url_for('material_items', **cast(Any, params))}#materials-results"
-
-
-def _material_pagination(query: str, status: str, page: int, total: int) -> dict[str, object]:
-    total_pages = max(1, ceil(total / MATERIAL_PAGE_SIZE))
-    page = min(max(1, page), total_pages)
-    start = ((page - 1) * MATERIAL_PAGE_SIZE) + 1 if total else 0
-    end = min(total, page * MATERIAL_PAGE_SIZE)
-    window = {1, total_pages, page - 1, page, page + 1}
-    pages = sorted(item for item in window if 1 <= item <= total_pages)
-    links = []
-    previous_page = 0
-    for item in pages:
-        if previous_page and item - previous_page > 1:
-            links.append({"gap": True})
-        links.append({"page": item, "url": _material_page_url(query, status, item), "current": item == page})
-        previous_page = item
-    return {
-        "page": page,
-        "total_pages": total_pages,
-        "start": start,
-        "end": end,
-        "has_prev": page > 1,
-        "has_next": page < total_pages,
-        "prev_url": _material_page_url(query, status, page - 1) if page > 1 else "",
-        "next_url": _material_page_url(query, status, page + 1) if page < total_pages else "",
-        "links": links,
-    }
 
 
 def register(app) -> None:
@@ -97,8 +59,22 @@ def register(app) -> None:
         service = get_material_service()
         query = request.args.get("q", "")
         status = request.args.get("status", "active")
-        first_page = service.list_items(query=query, status=status, limit=MATERIAL_PAGE_SIZE, offset=0)
-        pagination = _material_pagination(query, status, _request_page(), first_page.total)
+        column_filters = column_filters_from_request()
+        first_page = service.list_items(
+            query=query,
+            status=status,
+            limit=MATERIAL_PAGE_SIZE,
+            offset=0,
+            column_filters=column_filters,
+        )
+        pagination = build_pagination(
+            query,
+            status,
+            _request_page(),
+            first_page.total,
+            page_size=MATERIAL_PAGE_SIZE,
+            column_filters=column_filters,
+        )
         page_number = int(cast(Any, pagination["page"]))
         page = (
             first_page
@@ -108,7 +84,13 @@ def register(app) -> None:
                 status=status,
                 limit=MATERIAL_PAGE_SIZE,
                 offset=(page_number - 1) * MATERIAL_PAGE_SIZE,
+                column_filters=column_filters,
             )
+        )
+        material_filter_options = service.filter_options(
+            query=query,
+            status=status,
+            column_filters=column_filters,
         )
         return render_template(
             "materials.html",
@@ -121,6 +103,8 @@ def register(app) -> None:
             pagination=pagination,
             query=query,
             status=status,
+            material_filter_options=material_filter_options,
+            material_column_filters=column_filters,
         )
 
     @app.get("/materials/template")

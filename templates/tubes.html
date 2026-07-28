@@ -4,7 +4,7 @@
 {% block page_id %}tubes.list{% endblock %}
 {% block page_type %}list{% endblock %}
 {% block page_class %}shell wide app-surface{% endblock %}
-{% block page_head %}<link rel="stylesheet" href="{{ url_for('static', filename='pages/product_table.css', v=static_version('pages/product_table.css')) }}"><link rel="stylesheet" href="{{ url_for('static', filename='pages/tubes.css', v=static_version('pages/tubes.css')) }}">{% endblock %}
+{% block page_head %}<link rel="stylesheet" href="{{ url_for('static', filename='pages/tubes.css', v=static_version('pages/tubes.css')) }}">{% endblock %}
 {% block page_scripts %}<script type="module" src="{{ url_for('static', filename='pages/tubes.js', v=static_version('pages/tubes.js')) }}"></script>{% endblock %}
 {% block page_content %}
   <div data-tube-results-host data-tube-results-fragment-url="{{ url_for('tube_items_fragment') }}" aria-live="polite">

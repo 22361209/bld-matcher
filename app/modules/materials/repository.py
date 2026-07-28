@@ -13,6 +13,7 @@ from .item_store import (
     deactivate_material_item,
     get_material_item,
     list_material_items,
+    material_filter_options,
     material_item_stats,
     rows_for_material_sheet,
     upsert_material_item,
@@ -27,15 +28,24 @@ class SQLiteMaterialRepository:
     def stats(self) -> dict[str, int]:
         return material_item_stats(self.connection)
 
-    def count(self, *, query: str, status: str) -> int:
+    def count(self, *, query: str, status: str, column_filters: Mapping[str, tuple[str, ...]] | None = None) -> int:
         return count_material_items(
             self.connection,
             query=query,
             include_inactive=status == "all",
             only_inactive=status == "inactive",
+            column_filters=column_filters,
         )
 
-    def list(self, *, query: str, status: str, limit: int, offset: int) -> list[dict[str, object]]:
+    def list(
+        self,
+        *,
+        query: str,
+        status: str,
+        limit: int,
+        offset: int,
+        column_filters: Mapping[str, tuple[str, ...]] | None = None,
+    ) -> list[dict[str, object]]:
         return [
             dict(row)
             for row in list_material_items(
@@ -45,8 +55,20 @@ class SQLiteMaterialRepository:
                 only_inactive=status == "inactive",
                 limit=limit,
                 offset=offset,
+                column_filters=column_filters,
             )
         ]
+
+    def filter_options(
+        self, *, query: str, status: str, column_filters: Mapping[str, tuple[str, ...]]
+    ) -> dict[str, list[dict[str, object]]]:
+        return material_filter_options(
+            self.connection,
+            query=query,
+            include_inactive=status == "all",
+            only_inactive=status == "inactive",
+            column_filters=column_filters,
+        )
 
     def get(self, item_id: int) -> dict[str, object] | None:
         row = get_material_item(self.connection, item_id)

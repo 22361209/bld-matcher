@@ -2,13 +2,28 @@ from __future__ import annotations
 
 import math
 import re
-from collections.abc import Mapping
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from datetime import date, datetime
 
 
 QUOTE_CURRENCIES = frozenset({"CNY", "USD", "EUR"})
 QUOTE_SOURCE_TYPES = frozenset({"manual", "api", "excel", "wechat", "pdf", "image"})
+QUOTE_COLUMN_FILTER_FIELDS = frozenset(
+    {
+        "quote_no",
+        "quote_date",
+        "customer_name",
+        "bld_no",
+        "customer_product_code",
+        "tax_price",
+        "net_price",
+        "currency",
+        "quoted_by",
+        "source_type",
+        "remark",
+    }
+)
 
 
 class QuoteValidationError(ValueError):
@@ -124,6 +139,7 @@ class QuoteFilters:
     currency: str = ""
     quoted_by: str = ""
     quote_no: str = ""
+    column_filters: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, str]:
         return {
@@ -287,6 +303,18 @@ def build_quote_filters(data: Mapping[str, object]) -> QuoteFilters:
             "date_from 不能晚于 date_to。",
             field="date_from",
         )
+    raw_column_filters = data.get("column_filters", {})
+    column_filters: dict[str, tuple[str, ...]] = {}
+    if isinstance(raw_column_filters, Mapping):
+        for field, raw_values in raw_column_filters.items():
+            if field not in QUOTE_COLUMN_FILTER_FIELDS:
+                continue
+            values = (
+                raw_values if isinstance(raw_values, Sequence) and not isinstance(raw_values, str) else (raw_values,)
+            )
+            normalized = tuple(dict.fromkeys(str(value).strip() for value in values if str(value).strip()))
+            if normalized:
+                column_filters[field] = normalized
     return QuoteFilters(
         customer_name=compact_text(data.get("customer_name")),
         bld_no=compact_text(data.get("bld_no") or data.get("product_model")),
@@ -295,4 +323,5 @@ def build_quote_filters(data: Mapping[str, object]) -> QuoteFilters:
         currency=currency,
         quoted_by=compact_text(data.get("quoted_by")),
         quote_no=compact_text(data.get("quote_no")),
+        column_filters=column_filters,
     )

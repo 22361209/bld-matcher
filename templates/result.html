@@ -8,7 +8,6 @@
 {% block page_type %}workbench{% endblock %}
 {% block page_class %}shell wide app-surface{% endblock %}
 {% block page_head %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='pages/product_table.css', v=static_version('pages/product_table.css')) }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='pages/inquiry.css', v=static_version('pages/inquiry.css')) }}">
 {% endblock %}
 
@@ -27,7 +26,7 @@
           </div>
           <div class="data-section-actions">
             <span>{{ summary.rows|length }} 条</span>
-            <span class="products-visually-hidden" aria-live="polite" data-column-order-status></span>
+            <span class="data-grid-controls-visually-hidden" aria-live="polite" data-column-order-status></span>
             {% if upload_path and selected_match_columns %}
               <form action="{{ url_for('match_inquiry_with_column') }}" method="post" class="inline-form" data-submit-wait data-submit-wait-text="正在重新查询...">
                 {{ csrf_field() }}
@@ -93,7 +92,7 @@
         </div>
         <div class="data-grid" data-resizable-grid data-grid-key="inquiry-result">
         <div class="data-table-scroll" data-grid-scroll>
-        <table class="data-table products-table" data-grid-heading-overflow data-column-storage-scope="{{ g.user['id'] if g.user else 'guest' }}">
+        <table class="data-table data-grid-table" data-grid-heading-overflow data-column-storage-scope="{{ g.user['id'] if g.user else 'guest' }}">
           <colgroup>
             <col data-col="row">
             <col data-col="oe">
@@ -106,14 +105,14 @@
           </colgroup>
           <thead>
             <tr>
-              <th data-col="row"><button class="products-column-label" type="button" data-column-drag-handle data-column-label="行号" aria-label="移动行号列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">行号</button></th>
-              <th data-col="oe"><button class="products-column-label" type="button" data-column-drag-handle data-column-label="OE号" aria-label="移动OE号列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">OE号</button></th>
-              <th data-col="customer-code"><button class="products-column-label" type="button" data-column-drag-handle data-column-label="客户产品编码" aria-label="移动客户产品编码列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">客户产品编码</button></th>
-              <th data-col="bld"><button class="products-column-label" type="button" data-column-drag-handle data-column-label="BLD NO." aria-label="移动BLD NO.列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">BLD NO.</button></th>
-              <th data-col="price"><button class="products-column-label" type="button" data-column-drag-handle data-column-label="含税单价" aria-label="移动含税单价列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">含税单价</button></th>
-              <th data-col="status"><button class="products-column-label" type="button" data-column-drag-handle data-column-label="产品状态" aria-label="移动产品状态列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">产品状态</button></th>
-              <th data-col="score"><button class="products-column-label" type="button" data-column-drag-handle data-column-label="分数" aria-label="移动分数列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">分数</button></th>
-              <th data-col="reason"><button class="products-column-label" type="button" data-column-drag-handle data-column-label="说明" aria-label="移动说明列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">说明</button></th>
+              <th data-col="row"><button class="data-grid-column-label" type="button" data-column-drag-handle data-column-label="行号" aria-label="移动行号列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">行号</button></th>
+              <th data-col="oe"><button class="data-grid-column-label" type="button" data-column-drag-handle data-column-label="OE号" aria-label="移动OE号列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">OE号</button></th>
+              <th data-col="customer-code"><button class="data-grid-column-label" type="button" data-column-drag-handle data-column-label="客户产品编码" aria-label="移动客户产品编码列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">客户产品编码</button></th>
+              <th data-col="bld"><button class="data-grid-column-label" type="button" data-column-drag-handle data-column-label="BLD NO." aria-label="移动BLD NO.列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">BLD NO.</button></th>
+              <th data-col="price"><button class="data-grid-column-label" type="button" data-column-drag-handle data-column-label="含税单价" aria-label="移动含税单价列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">含税单价</button></th>
+              <th data-col="status"><button class="data-grid-column-label" type="button" data-column-drag-handle data-column-label="产品状态" aria-label="移动产品状态列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">产品状态</button></th>
+              <th data-col="score"><button class="data-grid-column-label" type="button" data-column-drag-handle data-column-label="分数" aria-label="移动分数列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">分数</button></th>
+              <th data-col="reason"><button class="data-grid-column-label" type="button" data-column-drag-handle data-column-label="说明" aria-label="移动说明列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">说明</button></th>
             </tr>
           </thead>
           <tbody>

@@ -8,7 +8,7 @@ import {
   invalidateProductOptionCache,
   setProductOptionPickerValue,
 } from "./product_option_picker.js?v=20260725-2";
-import { setupProductTable } from "./product_table.js?v=20260720-1";
+import { setupDataGridControls } from "../components/data_grid_controls.js?v=20260729-2";
 
 if (document.body.dataset.page === "products.list") {
   const searchForm = document.querySelector("[data-products-search-form]");
@@ -92,7 +92,7 @@ if (document.body.dataset.page === "products.list") {
   const initializeResults = (navigate) => {
     cleanupProductTable();
     const table = resultsHost?.querySelector("#products-table");
-    cleanupProductTable = setupProductTable(table, { navigate });
+    cleanupProductTable = setupDataGridControls(table, { navigate });
     notifyDataGrids("setup");
   };
 

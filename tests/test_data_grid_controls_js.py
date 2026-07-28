@@ -7,12 +7,12 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-NODE_TEST = PROJECT_ROOT / "tests" / "js" / "product_table.test.mjs"
+NODE_TEST = PROJECT_ROOT / "tests" / "js" / "data_grid_controls.test.mjs"
 
 
-class ProductTableJavaScriptTest(unittest.TestCase):
-    @unittest.skipUnless(shutil.which("node"), "Node.js is unavailable; product-table browser logic was not run.")
-    def test_product_table_filter_logic_with_node(self) -> None:
+class DataGridControlsJavaScriptTest(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("node"), "Node.js is unavailable; data-grid control browser logic was not run.")
+    def test_data_grid_controls_filter_logic_with_node(self) -> None:
         node = shutil.which("node")
         assert node is not None
         completed = subprocess.run(

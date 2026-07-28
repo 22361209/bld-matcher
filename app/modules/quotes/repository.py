@@ -14,6 +14,22 @@ from app.platform.clock import now_text
 from .domain import QuoteDraft, QuoteFilters, QuoteRecord, QuoteStats
 
 
+QUOTE_COLUMN_EXPRESSIONS = {
+    "quote_no": "COALESCE(quote_no, '')",
+    "quote_date": "COALESCE(quote_date, '')",
+    "customer_name": "COALESCE(customer_name, '')",
+    "bld_no": "COALESCE(NULLIF(bld_no, ''), product_model, '')",
+    "customer_product_code": "COALESCE(customer_product_code, '')",
+    "tax_price": "CASE WHEN tax_price IS NULL THEN '' ELSE printf('%.4f', tax_price) END",
+    "net_price": "CASE WHEN net_price IS NULL THEN '' ELSE printf('%.4f', net_price) END",
+    "currency": "COALESCE(currency, '')",
+    "quoted_by": "COALESCE(quoted_by, '')",
+    "source_type": "COALESCE(source_type, '')",
+    "remark": "COALESCE(remark, '')",
+}
+EMPTY_FILTER_VALUE = "__blank__"
+
+
 def _record(row: sqlite3.Row | None) -> QuoteRecord | None:
     if row is None:
         return None
@@ -64,6 +80,19 @@ def _filter_clauses(filters: QuoteFilters) -> tuple[list[str], list[object]]:
     if filters.quote_no:
         clauses.append("quote_no = ?")
         params.append(filters.quote_no)
+    for field, values in filters.column_filters.items():
+        expression = QUOTE_COLUMN_EXPRESSIONS.get(field)
+        if not expression:
+            continue
+        normal_values = [value for value in values if value != EMPTY_FILTER_VALUE]
+        predicates: list[str] = []
+        if normal_values:
+            predicates.append(f"{expression} IN ({', '.join('?' for _ in normal_values)})")
+            params.extend(normal_values)
+        if EMPTY_FILTER_VALUE in values:
+            predicates.append(f"{expression} = ''")
+        if predicates:
+            clauses.append("(" + " OR ".join(predicates) + ")")
     return clauses, params
 
 
@@ -112,6 +141,36 @@ class SQLiteQuoteRepository:
         if clauses:
             sql += " WHERE " + " AND ".join(clauses)
         return int(self.connection.execute(sql, params).fetchone()[0] or 0)
+
+    def filter_options(self, filters: QuoteFilters) -> dict[str, list[dict[str, object]]]:
+        options: dict[str, list[dict[str, object]]] = {}
+        for field, expression in QUOTE_COLUMN_EXPRESSIONS.items():
+            remaining = {key: value for key, value in filters.column_filters.items() if key != field}
+            scoped = QuoteFilters(
+                customer_name=filters.customer_name,
+                bld_no=filters.bld_no,
+                date_from=filters.date_from,
+                date_to=filters.date_to,
+                currency=filters.currency,
+                quoted_by=filters.quoted_by,
+                quote_no=filters.quote_no,
+                column_filters=remaining,
+            )
+            clauses, params = _filter_clauses(scoped)
+            sql = f"SELECT {expression} AS value, COUNT(*) AS count FROM quote_records"
+            if clauses:
+                sql += " WHERE " + " AND ".join(clauses)
+            sql += f" GROUP BY {expression} ORDER BY count DESC, value COLLATE NOCASE"
+            rows = self.connection.execute(sql, params).fetchall()
+            options[field] = [
+                {
+                    "value": str(row["value"]) if row["value"] else EMPTY_FILTER_VALUE,
+                    "label": str(row["value"]) if row["value"] else "（空）",
+                    "count": int(row["count"]),
+                }
+                for row in rows
+            ]
+        return options
 
     def latest(self, *, customer_name: str, bld_no: str) -> QuoteRecord | None:
         return _record(

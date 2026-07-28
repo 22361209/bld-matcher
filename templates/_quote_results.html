@@ -10,6 +10,8 @@
   </section>
 {% endif %}
 
+{% from "_table_filter_macros.html" import choice_heading %}
+
 <section class="data-section" id="quote-results" data-quote-results data-canonical-url="{{ canonical_url }}">
   <div class="workspace-command quote-command">
     <form class="search-form quote-search" method="get" action="{{ url_for('quote_web.quotes') }}" data-quote-search-form>
@@ -111,7 +113,7 @@
   </div>
   <div class="data-grid" data-resizable-grid data-grid-key="quotes">
   <div class="data-table-scroll" data-grid-scroll>
-    <table class="data-table quote-table" id="quotes-table" data-column-storage-scope="{{ g.user['id'] if g.user else 'guest' }}">
+    <table class="data-table data-grid-table quote-table" id="quotes-table" data-grid-heading-overflow data-column-storage-scope="{{ g.user['id'] if g.user else 'guest' }}">
       <colgroup>
         <col class="col-width-128" data-col="quote-no">
         <col class="col-width-92" data-col="date">
@@ -128,14 +130,25 @@
       </colgroup>
       <thead>
         <tr>
-          <th>报价单号</th><th>日期</th><th>客户</th><th>BLD号</th><th>客户产品编码</th><th>含税单价</th><th>不含税单价</th><th>币种</th><th>报价人</th><th>来源</th><th>备注</th><th>操作</th>
+          <th data-col="quote-no">{{ choice_heading("quotes", "quote-no", "报价单号", "qf_quote_no", quote_filter_options.get("quote_no", []), quote_column_filters.get("quote_no", [])) }}</th>
+          <th data-col="date">{{ choice_heading("quotes", "date", "日期", "qf_quote_date", quote_filter_options.get("quote_date", []), quote_column_filters.get("quote_date", [])) }}</th>
+          <th data-col="customer">{{ choice_heading("quotes", "customer", "客户", "qf_customer_name", quote_filter_options.get("customer_name", []), quote_column_filters.get("customer_name", [])) }}</th>
+          <th data-col="bld">{{ choice_heading("quotes", "bld", "BLD号", "qf_bld_no", quote_filter_options.get("bld_no", []), quote_column_filters.get("bld_no", [])) }}</th>
+          <th data-col="customer-code">{{ choice_heading("quotes", "customer-code", "客户产品编码", "qf_customer_product_code", quote_filter_options.get("customer_product_code", []), quote_column_filters.get("customer_product_code", [])) }}</th>
+          <th data-col="tax-price">{{ choice_heading("quotes", "tax-price", "含税单价", "qf_tax_price", quote_filter_options.get("tax_price", []), quote_column_filters.get("tax_price", [])) }}</th>
+          <th data-col="net-price">{{ choice_heading("quotes", "net-price", "不含税单价", "qf_net_price", quote_filter_options.get("net_price", []), quote_column_filters.get("net_price", [])) }}</th>
+          <th data-col="currency">{{ choice_heading("quotes", "currency", "币种", "qf_currency", quote_filter_options.get("currency", []), quote_column_filters.get("currency", [])) }}</th>
+          <th data-col="quoted-by">{{ choice_heading("quotes", "quoted-by", "报价人", "qf_quoted_by", quote_filter_options.get("quoted_by", []), quote_column_filters.get("quoted_by", [])) }}</th>
+          <th data-col="source">{{ choice_heading("quotes", "source", "来源", "qf_source_type", quote_filter_options.get("source_type", []), quote_column_filters.get("source_type", [])) }}</th>
+          <th data-col="remark">{{ choice_heading("quotes", "remark", "备注", "qf_remark", quote_filter_options.get("remark", []), quote_column_filters.get("remark", [])) }}</th>
+          <th class="sticky-actions" data-col="actions"><span class="data-grid-static-column-label">操作</span></th>
         </tr>
       </thead>
       <tbody>
         {% for record in records %}
           <tr>
-            <td>{% if record.quote_no %}<button class="quote-edit-trigger" type="button" data-quote-number="{{ record.quote_no }}" data-quote-number-url="{{ url_for('quote_web.quote_number_detail', quote_no=record.quote_no) }}">{{ record.quote_no }}</button>{% endif %}</td><td>{{ record.quote_date }}</td><td><strong>{{ record.customer_name }}</strong></td><td>{{ record.bld_no or record.product_model }}</td><td>{{ record.customer_product_code }}</td><td>{% if record.tax_price is not none %}{{ "%.4f"|format(record.tax_price) }}{% endif %}</td><td>{% if record.net_price is not none %}{{ "%.4f"|format(record.net_price) }}{% endif %}</td><td>{{ record.currency }}</td><td>{{ record.quoted_by }}</td><td>{{ record.source_type }}</td><td>{{ record.remark }}</td>
-            <td>
+            <td data-col="quote-no">{% if record.quote_no %}<button class="quote-edit-trigger" type="button" data-quote-number="{{ record.quote_no }}" data-quote-number-url="{{ url_for('quote_web.quote_number_detail', quote_no=record.quote_no) }}">{{ record.quote_no }}</button>{% endif %}</td><td data-col="date">{{ record.quote_date }}</td><td data-col="customer"><strong>{{ record.customer_name }}</strong></td><td data-col="bld">{{ record.bld_no or record.product_model }}</td><td data-col="customer-code">{{ record.customer_product_code }}</td><td data-col="tax-price">{% if record.tax_price is not none %}{{ "%.4f"|format(record.tax_price) }}{% endif %}</td><td data-col="net-price">{% if record.net_price is not none %}{{ "%.4f"|format(record.net_price) }}{% endif %}</td><td data-col="currency">{{ record.currency }}</td><td data-col="quoted-by">{{ record.quoted_by }}</td><td data-col="source">{{ record.source_type }}</td><td data-col="remark">{{ record.remark }}</td>
+            <td data-col="actions">
               <a href="{{ url_for('quote_web.quotes', customer_name=record.customer_name, bld_no=record.bld_no or record.product_model) }}" data-quote-results-link>历史</a>
               {% if can("manage_customer_prices") %}
                 <button class="quote-edit-trigger" type="button" data-open-quote-edit="quote-edit-{{ record.id }}">修正</button>

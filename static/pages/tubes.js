@@ -4,7 +4,7 @@ import {
   inlineResultsFragmentUrl,
   inlineResultsHistoryUrl,
 } from "./inline_results_navigation.js?v=20260721-2";
-import { setupProductTable } from "./product_table.js?v=20260721-1";
+import { setupDataGridControls } from "../components/data_grid_controls.js?v=20260729-2";
 
 if (document.body.dataset.page === "tubes.list") {
   const resultsHost = document.querySelector("[data-tube-results-host]");
@@ -27,7 +27,7 @@ if (document.body.dataset.page === "tubes.list") {
   const initializeResults = () => {
     cleanupProductTable();
     const table = resultsHost?.querySelector("#tubes-table");
-    cleanupProductTable = setupProductTable(table, {
+    cleanupProductTable = setupDataGridControls(table, {
       columns: ["code", "type", "spec", "blank-length", "inner-tolerance", "purchase-base", "material", "weight", "tolerance", "consumption", "borrow"],
       storagePrefix: "bld.tubes",
       resultsHash: "tube-results",

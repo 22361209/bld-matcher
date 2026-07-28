@@ -8,7 +8,7 @@
 .tube-spec-line { display: block; }
 .tube-inner-tolerance-line { display: block; }
 .tube-borrow-code { display: block; }
-.tube-choice-filter-inner-tolerance .products-column-filter-option span { white-space: pre-line; }
+.tube-choice-filter-inner-tolerance .data-grid-filter-option span { white-space: pre-line; }
 .tube-command .search-form { flex-basis: 760px; }
 .tube-command .search-form label { min-width: 150px; }
 .tube-command { border-bottom: 0; }

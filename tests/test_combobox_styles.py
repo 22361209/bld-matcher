@@ -21,7 +21,7 @@ class ComboboxStyleTests(unittest.TestCase):
     def test_other_candidate_popovers_keep_an_explicit_readable_text_color(self):
         root = Path(__file__).resolve().parents[1]
         product_picker = (root / "static/pages/products.css").read_text(encoding="utf-8")
-        column_filter = (root / "static/pages/product_table.css").read_text(encoding="utf-8")
+        column_filter = (root / "static/components/data_grid_controls.css").read_text(encoding="utf-8")
 
         self.assertIn(".product-option-picker-dropdown", product_picker)
         self.assertIn("background: var(--linear-surface);", product_picker)
@@ -29,7 +29,7 @@ class ComboboxStyleTests(unittest.TestCase):
         self.assertIn("color: var(--linear-text);", product_picker)
         self.assertIn("background: var(--linear-subtle);", product_picker)
 
-        self.assertIn(".products-column-filter", column_filter)
+        self.assertIn(".data-grid-filter-panel", column_filter)
         self.assertIn("color: var(--linear-text);", column_filter)
-        self.assertIn(".products-column-filter-option", column_filter)
+        self.assertIn(".data-grid-filter-option", column_filter)
         self.assertIn("background: var(--linear-subtle);", column_filter)

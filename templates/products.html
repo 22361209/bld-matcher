@@ -11,13 +11,13 @@
 {% block page_type %}list{% endblock %}
 {% block page_class %}shell wide app-surface{% endblock %}
 {% block page_head %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='pages/product_table.css', v=static_version('pages/product_table.css')) }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='pages/products.css', v=static_version('pages/products.css')) }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='pages/product_media_uploader.css', v=static_version('pages/product_media_uploader.css')) }}">
 {% endblock %}
 
 {% block page_content %}
       {% set status_label = "包含停用" if status == "all" else ("只看停用" if status == "inactive" else "只看启用") %}
+      <section class="data-section products-list-section">
       <section class="workspace-command products-command">
         <form class="search-form" method="get" action="{{ url_for('products') }}#products-results" data-products-search-form>
           <label>
@@ -45,7 +45,7 @@
         <div class="secondary-actions command-actions">
           <button class="linear-button subtle" type="button" data-reset-product-columns>恢复默认列顺序</button>
           <button class="linear-button subtle" type="button" data-reset-column-widths-for="products">重置列宽</button>
-          <span class="products-visually-hidden" aria-live="polite" data-column-order-status></span>
+          <span class="data-grid-controls-visually-hidden" aria-live="polite" data-column-order-status></span>
           <span class="submit-wait-message" aria-live="polite" data-products-inline-status></span>
           {% if can("edit_products") %}
             <button class="linear-button primary" type="button" data-open-product-modal>新增产品</button>
@@ -59,7 +59,7 @@
                 <input type="hidden" name="next" value="products">
                 <a class="linear-button subtle" href="{{ url_for('download_catalog_template') }}">下载模板</a>
                 <label class="linear-button primary catalog-import-upload-label">
-                  <input class="products-visually-hidden" type="file" name="catalog" accept=".xlsx" required data-catalog-upload-input>
+                  <input class="visually-hidden-input" type="file" name="catalog" accept=".xlsx" required data-catalog-upload-input>
                   上传文件
                 </label>
               </form>
@@ -111,6 +111,7 @@
       >
         {% include "_products_results.html" %}
       </div>
+      </section>
 {% endblock %}
 
 {% block page_modals %}

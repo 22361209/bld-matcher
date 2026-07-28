@@ -38,7 +38,9 @@ def pollute_xlsx_tail(path: Path, *, declared_rows: int = 2000, after_row: int =
         for entry in source.infolist():
             data = source.read(entry.filename)
             if entry.filename == "xl/worksheets/sheet1.xml":
-                data = re.sub(rb'<dimension ref="[^"]+"', f'<dimension ref="A1:A{declared_rows}"'.encode(), data, count=1)
+                data = re.sub(
+                    rb'<dimension ref="[^"]+"', f'<dimension ref="A1:A{declared_rows}"'.encode(), data, count=1
+                )
                 empty_rows = b"".join(
                     f'<row r="{row_index}" s="1" customFormat="1"/>'.encode()
                     for row_index in range(after_row, declared_rows + 1)
@@ -151,7 +153,10 @@ class WebAppTest(unittest.TestCase):
         self.assertIn('class="search-hero"', html)
         self.assertNotIn('class="workspace-header"', html)
         self.assertIn('class="nav-menu contract-nav-menu" data-nav-menu', html)
-        self.assertIn('type="button" aria-haspopup="menu" aria-expanded="false" aria-label="选择合同类型" data-nav-menu-trigger>合同管理</button>', html)
+        self.assertIn(
+            'type="button" aria-haspopup="menu" aria-expanded="false" aria-label="选择合同类型" data-nav-menu-trigger>合同管理</button>',
+            html,
+        )
         self.assertIn('href="/contracts" role="menuitem">采购合同</a>', html)
         self.assertIn('href="/contracts/sales" role="menuitem">销售合同</a>', html)
 
@@ -170,7 +175,9 @@ class WebAppTest(unittest.TestCase):
         self.assertIn('class="material-landing"', materials_template)
 
     def test_navigation_dropdowns_stay_anchored_in_narrow_scrollable_navigation(self):
-        precision_css = (Path(__file__).resolve().parents[1] / "static" / "components" / "precision.css").read_text(encoding="utf-8")
+        precision_css = (Path(__file__).resolve().parents[1] / "static" / "components" / "precision.css").read_text(
+            encoding="utf-8"
+        )
         nav_js = (Path(__file__).resolve().parents[1] / "static" / "nav.js").read_text(encoding="utf-8")
 
         self.assertIn(".nav-menu-panel {\n  top: calc(100% - 1px);\n  min-width: 100%;", precision_css)
@@ -340,6 +347,7 @@ class WebAppTest(unittest.TestCase):
         html = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn('class="data-section products-list-section"', html)
         self.assertIn('class="workspace-command products-command"', html)
         self.assertIn("data-products-results-host", html)
         self.assertIn('data-products-fragment-url="/products/fragment"', html)
@@ -493,9 +501,7 @@ class WebAppTest(unittest.TestCase):
             data={"kind": "brand", "id": str(option_id), "value": "AAA/BBB"},
         )
         with self.web.connect(self.web.DB_PATH) as conn:
-            current = conn.execute(
-                "SELECT value FROM product_option_values WHERE id = ?", (option_id,)
-            ).fetchone()
+            current = conn.execute("SELECT value FROM product_option_values WHERE id = ?", (option_id,)).fetchone()
             self.assertEqual(current["value"], "ADMINOPT RENAMED")
 
         payload = self.client.get("/products/options").get_json()
@@ -506,9 +512,7 @@ class WebAppTest(unittest.TestCase):
         deleted = self.client.post("/product-options/delete", data={"id": str(option_id)})
         self.assertEqual(deleted.status_code, 302)
         with self.web.connect(self.web.DB_PATH) as conn:
-            gone = conn.execute(
-                "SELECT 1 FROM product_option_values WHERE id = ?", (option_id,)
-            ).fetchone()
+            gone = conn.execute("SELECT 1 FROM product_option_values WHERE id = ?", (option_id,)).fetchone()
             self.assertIsNone(gone)
             audit_actions = {
                 row["action"]
@@ -893,9 +897,7 @@ class WebAppTest(unittest.TestCase):
         self.login()
         product_service = SimpleNamespace(
             search=lambda filters, limit, offset: SimpleNamespace(records=[], total=0),
-            stats=lambda: SimpleNamespace(
-                as_dict=lambda: {"products": 17, "active": 13, "inactive": 4, "aliases": 2}
-            ),
+            stats=lambda: SimpleNamespace(as_dict=lambda: {"products": 17, "active": 13, "inactive": 4, "aliases": 2}),
             filter_options=lambda filters: SimpleNamespace(
                 web_payload=lambda: {"brand": [], "item": [], "product_status": []}
             ),
@@ -903,9 +905,8 @@ class WebAppTest(unittest.TestCase):
         )
         quote_service = SimpleNamespace(
             list_records=lambda filters, limit, offset: SimpleNamespace(records=[], total=0),
-            stats=lambda: SimpleNamespace(
-                as_dict=lambda: {"total": 19, "customers": 5, "models": 11}
-            ),
+            stats=lambda: SimpleNamespace(as_dict=lambda: {"total": 19, "customers": 5, "models": 11}),
+            filter_options=lambda filters: {},
         )
 
         class FooterTubeService:
@@ -922,11 +923,12 @@ class WebAppTest(unittest.TestCase):
                 }
 
         material_service = SimpleNamespace(
-            list_items=lambda query, status, limit, offset: SimpleNamespace(
+            list_items=lambda query, status, limit, offset, column_filters=None: SimpleNamespace(
                 records=[],
                 total=0,
                 stats={"items": 29, "active": 21, "inactive": 8, "models": 9},
             ),
+            filter_options=lambda query, status, column_filters=None: {},
             source_stats=lambda: {},
             source_path=lambda: None,
         )
@@ -1079,9 +1081,7 @@ class WebAppTest(unittest.TestCase):
         )
         self.assertEqual(stale_preview.status_code, 409)
         with self.web.connect(self.web.DB_PATH) as connection:
-            unchanged = connection.execute(
-                "SELECT series FROM products WHERE bld_no = 'BRAND-WEB-CLEANUP'"
-            ).fetchone()
+            unchanged = connection.execute("SELECT series FROM products WHERE bld_no = 'BRAND-WEB-CLEANUP'").fetchone()
         self.assertEqual(unchanged["series"], "DODGE RAM")
 
         applied_response = self.client.post(
@@ -1100,15 +1100,11 @@ class WebAppTest(unittest.TestCase):
         with sqlite3.connect(backup_path) as backup:
             self.assertEqual(backup.execute("PRAGMA integrity_check").fetchone()[0], "ok")
             self.assertEqual(
-                backup.execute(
-                    "SELECT series FROM products WHERE bld_no = 'BRAND-WEB-CLEANUP'"
-                ).fetchone()[0],
+                backup.execute("SELECT series FROM products WHERE bld_no = 'BRAND-WEB-CLEANUP'").fetchone()[0],
                 "DODGE RAM",
             )
         with self.web.connect(self.web.DB_PATH) as connection:
-            cleaned = connection.execute(
-                "SELECT series FROM products WHERE bld_no = 'BRAND-WEB-CLEANUP'"
-            ).fetchone()
+            cleaned = connection.execute("SELECT series FROM products WHERE bld_no = 'BRAND-WEB-CLEANUP'").fetchone()
             audit = connection.execute(
                 """
                 SELECT actor FROM audit_logs
@@ -1124,9 +1120,7 @@ class WebAppTest(unittest.TestCase):
     def test_product_brand_normalization_returns_stable_operational_error(self):
         self.login()
         with patch("app.modules.products.records_web.get_product_service") as service_factory:
-            service_factory.return_value.normalize_brands.side_effect = OSError(
-                "private disk path should not leak"
-            )
+            service_factory.return_value.normalize_brands.side_effect = OSError("private disk path should not leak")
             response = self.client.post(
                 "/products/brands/normalize",
                 data={
@@ -1147,10 +1141,13 @@ class WebAppTest(unittest.TestCase):
         self.login()
         from app.locks import ImportLockError
 
-        with patch(
-            "app.modules.products.records_web.import_lock",
-            side_effect=ImportLockError("当前已有用户正在执行导入操作，请稍后再试"),
-        ), patch("app.modules.products.records_web.get_product_service") as service_factory:
+        with (
+            patch(
+                "app.modules.products.records_web.import_lock",
+                side_effect=ImportLockError("当前已有用户正在执行导入操作，请稍后再试"),
+            ),
+            patch("app.modules.products.records_web.get_product_service") as service_factory,
+        ):
             response = self.client.post(
                 "/products/brands/normalize",
                 data={
@@ -1176,8 +1173,8 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("当前 1 个 / 共 2 个", html)
         self.assertIn("<strong>QD1000</strong>", html)
         self.assertIn("球销", html)
-        self.assertIn('data-material-drawing-select', html)
-        self.assertIn('data-material-drawing-frame', html)
+        self.assertIn("data-material-drawing-select", html)
+        self.assertIn("data-material-drawing-frame", html)
         self.assertIn("/material-drawings/preview/QD1000.pdf", html)
         self.assertIn("/material-drawings/preview/QD1000.pdf#page=1&zoom=100", html)
         self.assertNotIn("<strong>QD999</strong>", html)
@@ -1185,7 +1182,7 @@ class WebAppTest(unittest.TestCase):
         selected_page = self.client.get("/material-drawings?selected=QD999.pdf")
         selected_html = selected_page.get_data(as_text=True)
         self.assertEqual(selected_page.status_code, 200)
-        self.assertIn('data-material-drawing-current-code>QD999</h2>', selected_html)
+        self.assertIn("data-material-drawing-current-code>QD999</h2>", selected_html)
         self.assertIn('data-material-drawing-current-download href="/material-drawings/QD999.pdf"', selected_html)
 
         preview = self.client.get("/material-drawings/preview/QD1000.pdf")
@@ -1493,9 +1490,7 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("跳过包内旧数据 2 条", applied_html)
         with self.web.connect(self.web.DB_PATH) as conn:
             row = conn.execute("SELECT * FROM products WHERE bld_no = ?", ("SYNC-STALE",)).fetchone()
-            invalid_time_row = conn.execute(
-                "SELECT * FROM products WHERE bld_no = ?", ("SYNC-BAD-TIME",)
-            ).fetchone()
+            invalid_time_row = conn.execute("SELECT * FROM products WHERE bld_no = ?", ("SYNC-BAD-TIME",)).fetchone()
         self.assertEqual(row["series"], "LOCAL")
         self.assertEqual(row["oe_no_1"], "LOCAL-OE")
         self.assertEqual(invalid_time_row["series"], "LOCAL-VALID-TIME")
@@ -2170,7 +2165,7 @@ class WebAppTest(unittest.TestCase):
         self.assertNotIn("quotes:read", scope_list.group(1))
         self.assertIn("删除", html)
         self.assertIn("交给 AI Agent 的接入约束", html)
-        self.assertIn('data-copy-agent-guide', html)
+        self.assertIn("data-copy-agent-guide", html)
         self.assertIn("新集成不得调用 /api/internal/inquiry/*", html)
         self.assertIn("不得依赖、请求或暴露 output_path、source_path、本机绝对路径", html)
 
@@ -2179,9 +2174,7 @@ class WebAppTest(unittest.TestCase):
                 "SELECT id FROM internal_api_keys WHERE name = ?",
                 ("OpenClaw Visual",),
             ).fetchone()
-            key_columns = {
-                row["name"] for row in conn.execute("PRAGMA table_info(internal_api_keys)").fetchall()
-            }
+            key_columns = {row["name"] for row in conn.execute("PRAGMA table_info(internal_api_keys)").fetchall()}
         self.assertIsNotNone(first_key)
         self.assertNotIn("token_plain", key_columns)
         self.assertIn("scopes", key_columns)
@@ -2215,7 +2208,9 @@ class WebAppTest(unittest.TestCase):
         deleted = self.client.post("/internal-api-key/delete", data={"key_id": str(first_key["id"])})
         self.assertEqual(deleted.status_code, 302)
         with self.web.connect(self.web.DB_PATH) as conn:
-            self.assertIsNone(conn.execute("SELECT id FROM internal_api_keys WHERE id = ?", (first_key["id"],)).fetchone())
+            self.assertIsNone(
+                conn.execute("SELECT id FROM internal_api_keys WHERE id = ?", (first_key["id"],)).fetchone()
+            )
         rejected = self.client.post(
             "/api/internal/inquiry/analyze",
             json={"numbers": ["NO-MATCH-VISUAL"]},
@@ -2280,9 +2275,9 @@ class WebAppTest(unittest.TestCase):
         self.assertIn('name="product_code[]"', html)
         self.assertIn('name="oe_no[]"', html)
         self.assertIn('name="models[]"', html)
-        self.assertIn('data-add-purchase-row', html)
-        self.assertIn('data-supplier-sign-name', html)
-        self.assertIn('data-purchase-confirm-modal', html)
+        self.assertIn("data-add-purchase-row", html)
+        self.assertIn("data-supplier-sign-name", html)
+        self.assertIn("data-purchase-confirm-modal", html)
         self.assertIn("确认生成 PDF", html)
         self.assertNotIn("统一社会信用代码", html)
         self.assertIn('name="buyer_signature_address"', html)
@@ -2491,7 +2486,9 @@ class WebAppTest(unittest.TestCase):
                 self.assertEqual(response.status_code, 302)
                 self.assertTrue(response.headers["Location"].endswith("/"))
 
-        response = self.client.get("/purchase-contracts/product-lookup", query_string={"bld": "K-OUT-001"}, follow_redirects=False)
+        response = self.client.get(
+            "/purchase-contracts/product-lookup", query_string={"bld": "K-OUT-001"}, follow_redirects=False
+        )
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.headers["Location"].endswith("/"))
 
@@ -2505,7 +2502,12 @@ class WebAppTest(unittest.TestCase):
     def test_quote_and_tube_result_fragments_keep_list_state_without_a_document_shell(self):
         self.login()
         cases = (
-            ("/quotes/fragment", {"customer_name": "博世", "page": "2"}, "data-quote-results", "data-quote-results-host"),
+            (
+                "/quotes/fragment",
+                {"customer_name": "博世", "page": "2"},
+                "data-quote-results",
+                "data-quote-results-host",
+            ),
             ("/tubes/fragment", {"q": "KE8036", "page": "2"}, "data-tube-results", "data-tube-results-host"),
         )
         for path, query_string, result_marker, host_marker in cases:
@@ -2523,7 +2525,7 @@ class WebAppTest(unittest.TestCase):
                 self.assertEqual(response.headers["Cache-Control"], "no-store")
 
         tube_page = self.client.get("/tubes")
-        self.assertIn('data-tube-results-host', tube_page.get_data(as_text=True))
+        self.assertIn("data-tube-results-host", tube_page.get_data(as_text=True))
         self.assertIn('src="/static/pages/tubes.js?v=', tube_page.get_data(as_text=True))
 
     def test_quote_records_page_can_create_search_and_edit(self):
@@ -2539,7 +2541,7 @@ class WebAppTest(unittest.TestCase):
         self.assertLess(html.index('class="search-form quote-search"'), html.index('class="data-table-scroll"'))
         self.assertIn('<summary class="linear-button primary">新增报价</summary>', html)
         self.assertIn('<summary class="linear-button primary">导入报价记录</summary>', html)
-        self.assertIn('data-quote-results-host', html)
+        self.assertIn("data-quote-results-host", html)
         self.assertIn('data-quote-results-fragment-url="/quotes/fragment"', html)
         self.assertIn('action="/quotes" data-quote-search-form', html)
         new_quote_form = re.search(r'<form action="/quotes/save".*?</form>', html, re.S).group()
@@ -2655,7 +2657,9 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         with self.web.connect(self.web.DB_PATH) as conn:
             revised = conn.execute("SELECT * FROM quote_records WHERE id = ?", (quote_id,)).fetchone()
-            revisions = conn.execute("SELECT COUNT(*) FROM quote_record_revisions WHERE quote_id = ?", (quote_id,)).fetchone()[0]
+            revisions = conn.execute(
+                "SELECT COUNT(*) FROM quote_record_revisions WHERE quote_id = ?", (quote_id,)
+            ).fetchone()[0]
         self.assertEqual(revised["bld_no"], "K48620")
         self.assertEqual(revised["customer_product_code"], "BOSCH-K48620")
         self.assertEqual(revised["tax_price"], 5.65)
@@ -2841,9 +2845,7 @@ class WebAppTest(unittest.TestCase):
                 ("内部 API 生成号码结果",),
             ).fetchone()
         self.assertIsNotNone(stored)
-        self.assertTrue(
-            Path(stored["storage_path"]).resolve().is_relative_to((self.root / "outputs").resolve())
-        )
+        self.assertTrue(Path(stored["storage_path"]).resolve().is_relative_to((self.root / "outputs").resolve()))
         self.assertEqual(len(stored["sha256"]), 64)
         self.assertEqual(audit["actor"], "WorkBuddy Inquiry V1")
 
@@ -3123,12 +3125,8 @@ class WebAppTest(unittest.TestCase):
         self.assertNotIn("quoted_by", patch_schema["properties"])
         self.assertNotIn("source_type", patch_schema["properties"])
         self.assertIn("requestBody", create_operation)
-        self.assertTrue(
-            any(parameter["name"] == "Idempotency-Key" for parameter in create_operation["parameters"])
-        )
-        self.assertTrue(
-            any(parameter["name"] == "If-Match" for parameter in patch_operation["parameters"])
-        )
+        self.assertTrue(any(parameter["name"] == "Idempotency-Key" for parameter in create_operation["parameters"]))
+        self.assertTrue(any(parameter["name"] == "If-Match" for parameter in patch_operation["parameters"]))
         self.assertIn("ETag", patch_operation["responses"]["200"]["headers"])
         self.assertIn("/api/v1/docs/{doc_name}", document["paths"])
 
@@ -3160,7 +3158,19 @@ class WebAppTest(unittest.TestCase):
         workbook = Workbook()
         sheet = workbook.active
         sheet.append(["BLD号", "客户产品编码", "含税单价", "不含税单价", "报价日期", "报价人", "来源", "原文", "备注"])
-        sheet.append(["K-IMPORT-QUOTE", "CUST-IMPORT", 12.34, 10.92, "2026-07-01", "importer", "excel", "导入客户 K-IMPORT-QUOTE USD 12.34", "批量导入"])
+        sheet.append(
+            [
+                "K-IMPORT-QUOTE",
+                "CUST-IMPORT",
+                12.34,
+                10.92,
+                "2026-07-01",
+                "importer",
+                "excel",
+                "导入客户 K-IMPORT-QUOTE USD 12.34",
+                "批量导入",
+            ]
+        )
         buffer = io.BytesIO()
         workbook.save(buffer)
         workbook.close()
@@ -3319,7 +3329,7 @@ class WebAppTest(unittest.TestCase):
         self.assertIn('<button class="linear-button primary" type="submit">搜索</button>', html)
         self.assertIn('class="toolbar-popover-form catalog-import-actions"', html)
         self.assertIn('href="/catalog/template">下载模板', html)
-        self.assertIn('data-catalog-upload-input', html)
+        self.assertIn("data-catalog-upload-input", html)
         self.assertIn('id="product-modal"', html)
         self.assertIn('id="product-edit-modal"', html)
         self.assertIn("data-draggable-modal-panel", html)
@@ -3729,14 +3739,23 @@ class WebAppTest(unittest.TestCase):
         self.assertNotIn("data-product-media-replace", html)
         self.assertNotIn("file-picker-clear", html)
         self.assertIn('name="drawing"', html)
-        self.assertIn('{% include "_product_media_fields.html" %}', (PROJECT_ROOT / "templates" / "products.html").read_text(encoding="utf-8"))
-        self.assertIn('{% include "_product_media_fields.html" %}', (PROJECT_ROOT / "templates" / "product_form.html").read_text(encoding="utf-8"))
+        self.assertIn(
+            '{% include "_product_media_fields.html" %}',
+            (PROJECT_ROOT / "templates" / "products.html").read_text(encoding="utf-8"),
+        )
+        self.assertIn(
+            '{% include "_product_media_fields.html" %}',
+            (PROJECT_ROOT / "templates" / "product_form.html").read_text(encoding="utf-8"),
+        )
         self.assertIn("data-drawing-unavailable-modal", html)
         products_js = (PROJECT_ROOT / "static" / "pages" / "products.js").read_text(encoding="utf-8")
         self.assertIn("openDrawingUnavailableModal(drawingUnavailable.dataset.productBldNo);", products_js)
         self.assertNotIn("window.alert(", products_js)
         products_css = (PROJECT_ROOT / "static" / "pages" / "products.css").read_text(encoding="utf-8")
-        self.assertIn(".product-create-modal-panel .product-media-edit,\n.product-create-modal-panel .file-picker-control", products_css)
+        self.assertIn(
+            ".product-create-modal-panel .product-media-edit,\n.product-create-modal-panel .file-picker-control",
+            products_css,
+        )
         self.assertNotIn("PDF图纸", html)
         self.assertIn("批量上传图纸", html)
         self.assertNotIn(f'href="/products/{product["id"]}/drawing"', html)
@@ -4131,9 +4150,7 @@ class WebAppTest(unittest.TestCase):
         )
         self.assertEqual(source_upload.status_code, 302)
         with self.web.connect(self.web.DB_PATH) as conn:
-            source = conn.execute(
-                "SELECT * FROM products WHERE bld_no = ?", ("K-DRAW-ROLLBACK-SOURCE",)
-            ).fetchone()
+            source = conn.execute("SELECT * FROM products WHERE bld_no = ?", ("K-DRAW-ROLLBACK-SOURCE",)).fetchone()
         self.assertIsNotNone(source)
 
         with patch("app.modules.products.repository.save_product_drawing", side_effect=OSError("disk write failed")):
@@ -4156,9 +4173,7 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(copied.status_code, 302)
 
         with self.web.connect(self.web.DB_PATH) as conn:
-            target = conn.execute(
-                "SELECT * FROM products WHERE bld_no = ?", ("K-DRAW-ROLLBACK-COPY",)
-            ).fetchone()
+            target = conn.execute("SELECT * FROM products WHERE bld_no = ?", ("K-DRAW-ROLLBACK-COPY",)).fetchone()
         self.assertIsNone(target)
         self.assertTrue((self.root / "data" / "product_images" / "K-DRAW-ROLLBACK-SOURCE.png").exists())
         self.assertFalse((self.root / "data" / "product_images" / "K-DRAW-ROLLBACK-COPY.png").exists())
@@ -4514,6 +4529,68 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("ac3aa1a", html)
         self.assertIn("新增系统更新页面", html)
 
+    def test_quote_and_material_column_filters_apply_on_server_and_keep_table_headers(self):
+        self.login()
+        self.register_customer_and_product("列筛报价甲", "QF-QUOTE-A")
+        self.register_customer_and_product("列筛报价乙", "QF-QUOTE-B")
+        for customer_name, bld_no, currency in (
+            ("列筛报价甲", "QF-QUOTE-A", "CNY"),
+            ("列筛报价乙", "QF-QUOTE-B", "USD"),
+        ):
+            response = self.client.post(
+                "/quotes/save",
+                data={
+                    "customer_name": customer_name,
+                    "bld_no": bld_no,
+                    "tax_price": "12.34",
+                    "currency": currency,
+                    "quote_date": "2026-07-29",
+                },
+                follow_redirects=False,
+            )
+            self.assertEqual(response.status_code, 302)
+
+        response = self.client.get("/quotes", query_string=[("qf_customer_name", "列筛报价甲")])
+        quote_html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('id="quotes-table"', quote_html)
+        self.assertIn('data-filter-key="qf_customer_name"', quote_html)
+        self.assertIn('aria-label="筛选报价单号"', quote_html)
+        self.assertIn('data-col="quote-no"', quote_html)
+        self.assertIn("<strong>列筛报价甲</strong>", quote_html)
+        self.assertNotIn("<strong>列筛报价乙</strong>", quote_html)
+        self.assertIn('value="列筛报价甲" checked', quote_html)
+
+        for model, code, category in (
+            ("QF-MATERIAL-A", "QF-MA", "类别甲"),
+            ("QF-MATERIAL-B", "QF-MB", "类别乙"),
+        ):
+            response = self.client.post(
+                "/materials/items/save",
+                data={
+                    "model": model,
+                    "code": code,
+                    "category": category,
+                    "part": "列筛测试件",
+                    "pieces": "2",
+                    "spec_text": "2 100 200",
+                    "active": "1",
+                },
+                follow_redirects=False,
+            )
+            self.assertEqual(response.status_code, 302)
+
+        response = self.client.get("/materials/items", query_string=[("mf_model", "QF-MATERIAL-A")])
+        material_html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('id="materials-table"', material_html)
+        self.assertIn('data-filter-key="mf_model"', material_html)
+        self.assertIn('aria-label="筛选母件编码"', material_html)
+        self.assertIn('data-col="model"', material_html)
+        self.assertIn("<strong>QF-MATERIAL-A</strong>", material_html)
+        self.assertNotIn("<strong>QF-MATERIAL-B</strong>", material_html)
+        self.assertIn('value="QF-MATERIAL-A" checked', material_html)
+
     def test_new_material_item_uses_modal(self):
         self.login()
         response = self.client.get("/materials")
@@ -4538,6 +4615,7 @@ class WebAppTest(unittest.TestCase):
         self.assertIn('id="material-modal"', html)
         self.assertIn('action="/materials/items/save"', html)
         self.assertIn('id="materials-results"', html)
+        self.assertIn('class="workspace-command material-items-command"', html)
         self.assertIn('action="/materials/items#materials-results"', html)
         self.assertIn("data-enter-navigation", html)
         self.assertIn('name="spec_text"', html)
@@ -4547,9 +4625,9 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("零件编码", html)
         self.assertRegex(html, r'<input name="code"[^>]*required')
         self.assertRegex(html, r'<input name="part"[^>]*required')
-        self.assertIn("<th>母件编码</th>", html)
-        self.assertIn("<th>零件编码</th>", html)
-        self.assertIn("<th>单件重量kg</th>", html)
+        self.assertIn('aria-label="筛选母件编码"', html)
+        self.assertIn('aria-label="筛选零件编码"', html)
+        self.assertIn('aria-label="筛选单件重量kg"', html)
         self.assertNotIn("<th>型号</th>", html)
         self.assertNotIn("<th>编码</th>", html)
         self.assertNotIn('name="thickness"', html)
@@ -4685,7 +4763,9 @@ class WebAppTest(unittest.TestCase):
         workbook = Workbook()
         sheet = workbook.active
         sheet.title = "材料数据"
-        sheet.append(["型号", "型号", "类别", "车型", "零件名称", "规格尺寸", "下料只数", "单重", "规格1", "规格2", "规格3"])
+        sheet.append(
+            ["型号", "型号", "类别", "车型", "零件名称", "规格尺寸", "下料只数", "单重", "规格1", "规格2", "规格3"]
+        )
         sheet.append(["T-SPEC-IMPORT", "KA-IMPORT", "测试类别", "测试车型", "测试零件", "旧规格", 3, "", 4, 92.5, 1260])
         workbook.save(path)
         workbook.close()
@@ -4706,8 +4786,12 @@ class WebAppTest(unittest.TestCase):
         workbook = Workbook()
         sheet = workbook.active
         sheet.title = "材料数据"
-        sheet.append(["型号", "型号", "类别", "车型", "零件名称", "规格尺寸", "下料只数", "单重", "规格1", "规格2", "规格3"])
-        sheet.append(["T-SPEC-SOURCE", "KA-SOURCE", "测试类别", "测试车型", "测试零件", "旧规格", 3, "", 2.5, 312, 1260])
+        sheet.append(
+            ["型号", "型号", "类别", "车型", "零件名称", "规格尺寸", "下料只数", "单重", "规格1", "规格2", "规格3"]
+        )
+        sheet.append(
+            ["T-SPEC-SOURCE", "KA-SOURCE", "测试类别", "测试车型", "测试零件", "旧规格", 3, "", 2.5, 312, 1260]
+        )
         workbook.save(path)
         workbook.close()
 
@@ -4875,18 +4959,12 @@ class WebAppTest(unittest.TestCase):
                 "UPDATE internal_api_keys SET token_plain = ? WHERE id = (SELECT MIN(id) FROM internal_api_keys)",
                 ("historical-plaintext",),
             )
-            conn.execute(
-                "DELETE FROM schema_migrations WHERE id = '012_scrub_internal_api_key_plaintext'"
-            )
+            conn.execute("DELETE FROM schema_migrations WHERE id = '012_scrub_internal_api_key_plaintext'")
             conn.execute("UPDATE internal_api_keys SET scopes = '[]'")
-            conn.execute(
-                "DELETE FROM schema_migrations WHERE id = '013_api_principal_scopes_and_idempotency'"
-            )
+            conn.execute("DELETE FROM schema_migrations WHERE id = '013_api_principal_scopes_and_idempotency'")
             conn.commit()
             run_migrations(conn)
-            columns = {
-                row["name"] for row in conn.execute("PRAGMA table_info(internal_api_keys)").fetchall()
-            }
+            columns = {row["name"] for row in conn.execute("PRAGMA table_info(internal_api_keys)").fetchall()}
             principal = verify_internal_api_token(conn, token)
         self.assertNotIn("token_plain", columns)
         self.assertEqual(principal.integration_name, "OpenClaw Test")
@@ -5199,7 +5277,7 @@ with connect(database_path) as conn:
 
         self.login()
         homepage = self.client.get("/").get_data(as_text=True)
-        self.assertIn('data-quick-results-host', homepage)
+        self.assertIn("data-quick-results-host", homepage)
         self.assertIn('data-quick-results-url="/inquiry/quick-search"', homepage)
 
         response = self.client.get(
@@ -5527,10 +5605,10 @@ with connect(database_path) as conn:
         self.assertIn("粘贴号码询价.xlsx", html)
         self.assertIn("含税单价", html)
         self.assertIn("¥79.20", html)
-        self.assertIn("<td data-col=\"row\">1</td>", html)
-        self.assertIn("<td data-col=\"row\">2</td>", html)
-        self.assertIn("<td data-col=\"row\">3</td>", html)
-        self.assertNotIn("<td data-col=\"row\">4</td>", html)
+        self.assertIn('<td data-col="row">1</td>', html)
+        self.assertIn('<td data-col="row">2</td>', html)
+        self.assertIn('<td data-col="row">3</td>', html)
+        self.assertNotIn('<td data-col="row">4</td>', html)
         self.assertIn('id="download-excel-modal"', html)
         self.assertIn('action="/match/download"', html)
         self.assertNotIn("返回上一步", html)
@@ -5610,8 +5688,8 @@ with connect(database_path) as conn:
         self.assertIn("K8282RA", html)
         self.assertIn("OE 组合前缀命中", html)
         self.assertNotIn("K8235RA", html)
-        self.assertIn("<td data-col=\"row\">1</td>", html)
-        self.assertNotIn("<td data-col=\"row\">2</td>", html)
+        self.assertIn('<td data-col="row">1</td>', html)
+        self.assertNotIn('<td data-col="row">2</td>', html)
 
     def test_uploaded_inquiry_combined_oe_prefix_matches_before_fragments(self):
         from app.modules.products.persistence import upsert_product
@@ -6113,7 +6191,7 @@ with connect(database_path) as conn:
         self.assertIn("共 2 行，命中 2 行，未找到 0 行", result_html)
         self.assertIn("KCLEAN01", result_html)
         self.assertIn("KCLEAN02", result_html)
-        self.assertIn("<td data-col=\"row\">250</td>", result_html)
+        self.assertIn('<td data-col="row">250</td>', result_html)
 
     def test_uploaded_inquiry_can_match_multiple_selected_columns(self):
         from app.modules.products.persistence import upsert_product
@@ -6404,9 +6482,7 @@ with connect(database_path) as conn:
         self.assertIn("未选择单价方式", missing_price_mode.get_data(as_text=True))
 
         with self.web.connect(self.web.DB_PATH) as conn:
-            count = conn.execute(
-                "SELECT COUNT(*) AS total FROM quote_records WHERE bld_no = 'KWQ09'"
-            ).fetchone()
+            count = conn.execute("SELECT COUNT(*) AS total FROM quote_records WHERE bld_no = 'KWQ09'").fetchone()
         self.assertEqual(count["total"], 0)
 
     def test_item_header_with_code_values_prompts_for_match_column(self):
@@ -6473,8 +6549,8 @@ with connect(database_path) as conn:
         self.assertIn("共 1 行，命中 1 行，未找到 0 行", result_html)
         self.assertIn("KPIKA01", result_html)
         self.assertIn("¥66.00", result_html)
-        self.assertIn("<td data-col=\"row\">4</td>", result_html)
-        self.assertNotIn("<td data-col=\"row\">3</td>", result_html)
+        self.assertIn('<td data-col="row">4</td>', result_html)
+        self.assertNotIn('<td data-col="row">3</td>', result_html)
 
     def test_xlsx_without_dimension_can_preview_match_columns(self):
         from openpyxl import Workbook
@@ -6571,8 +6647,8 @@ with connect(database_path) as conn:
 
         self.assertEqual(result.status_code, 200)
         self.assertIn("共 4 行，命中 4 行，未找到 0 行", result_html)
-        self.assertNotIn("<td data-col=\"row\">2</td>", result_html)
-        self.assertNotIn("<td data-col=\"row\">6</td>", result_html)
+        self.assertNotIn('<td data-col="row">2</td>', result_html)
+        self.assertNotIn('<td data-col="row">6</td>', result_html)
         for index in range(1, 5):
             self.assertIn(f"KSEG{index:02d}", result_html)
 

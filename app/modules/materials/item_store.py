@@ -12,6 +12,20 @@ from app.platform.sync_identity import MATERIAL_IDENTITY_FIELDS, material_key, s
 from .specification import _material_values_from_data, _parse_material_spec_query
 
 
+MATERIAL_COLUMN_EXPRESSIONS = {
+    "model": "COALESCE(model, '')",
+    "code": "COALESCE(code, '')",
+    "category": "COALESCE(category, '')",
+    "car": "COALESCE(car, '')",
+    "part": "COALESCE(part, '')",
+    "spec_text": "COALESCE(spec_text, '')",
+    "pieces": "printf('%.2f', pieces)",
+    "unit_weight": "printf('%.2f', width * length * 7.85 * thickness / pieces / 1000000.0)",
+    "active": "CASE WHEN active = 1 THEN 'active' ELSE 'inactive' END",
+}
+EMPTY_FILTER_VALUE = "__blank__"
+
+
 def _material_changes(before: sqlite3.Row | None, after: Mapping[str, Any]) -> list[str]:
     labels = {
         "model": "母件编码",
@@ -147,6 +161,7 @@ def _filter_clauses(
     query: str = "",
     include_inactive: bool = False,
     only_inactive: bool = False,
+    column_filters: Mapping[str, tuple[str, ...]] | None = None,
 ) -> tuple[list[str], list[object]]:
     clauses: list[str] = []
     params: list[object] = []
@@ -164,6 +179,19 @@ def _filter_clauses(
             search_params.extend(spec_params)
         clauses.append("(" + " OR ".join(search) + ")")
         params.extend(search_params)
+    for field, values in (column_filters or {}).items():
+        expression = MATERIAL_COLUMN_EXPRESSIONS.get(field)
+        if not expression:
+            continue
+        regular = [value for value in values if value != EMPTY_FILTER_VALUE]
+        predicates: list[str] = []
+        if regular:
+            predicates.append(f"{expression} IN ({', '.join('?' for _ in regular)})")
+            params.extend(regular)
+        if EMPTY_FILTER_VALUE in values:
+            predicates.append(f"{expression} = ''")
+        if predicates:
+            clauses.append("(" + " OR ".join(predicates) + ")")
     return clauses, params
 
 
@@ -172,9 +200,10 @@ def count_material_items(
     query: str = "",
     include_inactive: bool = False,
     only_inactive: bool = False,
+    column_filters: Mapping[str, tuple[str, ...]] | None = None,
 ) -> int:
     sql = "SELECT COUNT(*) FROM material_items"
-    clauses, params = _filter_clauses(query, include_inactive, only_inactive)
+    clauses, params = _filter_clauses(query, include_inactive, only_inactive, column_filters)
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)
     row = connection.execute(sql, params).fetchone()
@@ -188,17 +217,48 @@ def list_material_items(
     only_inactive: bool = False,
     limit: int = 3000,
     offset: int = 0,
+    column_filters: Mapping[str, tuple[str, ...]] | None = None,
 ) -> list[sqlite3.Row]:
     sql = """
         SELECT *, (width * length * 7.85 * thickness / pieces / 1000000.0) AS unit_weight
         FROM material_items
     """
-    clauses, params = _filter_clauses(query, include_inactive, only_inactive)
+    clauses, params = _filter_clauses(query, include_inactive, only_inactive, column_filters)
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)
     sql += " ORDER BY model, code, id LIMIT ? OFFSET ?"
     params.extend((limit, max(0, offset)))
     return connection.execute(sql, params).fetchall()
+
+
+def material_filter_options(
+    connection: sqlite3.Connection,
+    *,
+    query: str,
+    include_inactive: bool,
+    only_inactive: bool,
+    column_filters: Mapping[str, tuple[str, ...]],
+) -> dict[str, list[dict[str, object]]]:
+    options: dict[str, list[dict[str, object]]] = {}
+    for field, expression in MATERIAL_COLUMN_EXPRESSIONS.items():
+        remaining = {key: value for key, value in column_filters.items() if key != field}
+        clauses, params = _filter_clauses(query, include_inactive, only_inactive, remaining)
+        sql = f"SELECT {expression} AS value, COUNT(*) AS count FROM material_items"
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += f" GROUP BY {expression} ORDER BY count DESC, value COLLATE NOCASE"
+        rows = connection.execute(sql, params).fetchall()
+        options[field] = [
+            {
+                "value": str(row["value"]) if row["value"] else EMPTY_FILTER_VALUE,
+                "label": ("启用" if row["value"] == "active" else "停用")
+                if field == "active"
+                else (str(row["value"]) if row["value"] else "（空）"),
+                "count": int(row["count"]),
+            }
+            for row in rows
+        ]
+    return options
 
 
 def deactivate_material_item(
