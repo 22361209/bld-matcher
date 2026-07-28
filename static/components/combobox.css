@@ -19,8 +19,8 @@
   overflow-y: auto;
   margin: 0;
   padding: 4px;
-  background: var(--surface, #fff);
-  border: 1px solid var(--line, #d8dce3);
+  background: var(--linear-surface);
+  border: 1px solid var(--linear-line);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgb(15 23 42 / 0.12);
 }
@@ -34,6 +34,7 @@
   border: 0;
   border-radius: 6px;
   background: none;
+  color: var(--linear-text);
   font: inherit;
   text-align: left;
   cursor: pointer;
@@ -41,7 +42,7 @@
 
 .combobox-option.active,
 .combobox-option:hover {
-  background: var(--wash, #eef2f7);
+  background: var(--linear-subtle);
 }
 
 .combobox-option-label {
@@ -49,17 +50,17 @@
 }
 
 .combobox-option-detail {
-  color: var(--ink-3, #667085);
+  color: var(--linear-muted);
   font-size: 12px;
 }
 
 .combobox-option-create {
-  color: var(--brand, #175cd3);
+  color: var(--linear-accent);
 }
 
 .combobox-empty {
   margin: 0;
   padding: 6px 8px;
-  color: var(--ink-3, #667085);
+  color: var(--linear-muted);
   font-size: 13px;
 }

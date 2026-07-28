@@ -1,0 +1,13 @@
+{
+  "date": "2026-07-29",
+  "version": "unreleased",
+  "title": "报价候选下拉列表文字可见性修复",
+  "entries": [
+    "报价记录新增和修正表单中的客户、BLD 号候选列表现在在未悬浮时也使用工作台标准主文字颜色，避免候选名称与面板背景混同。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "compatible",
+    "operations": "restart-required"
+  }
+}
