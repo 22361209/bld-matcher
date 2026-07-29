@@ -37,7 +37,7 @@
       <details class="admin-menu" data-admin-menu>
         <summary class="user-badge admin-menu-trigger {% if active_page in ['users', 'internal_api_key', 'logs', 'system_updates', 'product_data_sync', 'business_data_sync'] %}active{% endif %}">
           <span class="nav-user-code">{{ g.user.username[:3] | upper }}</span>
-          <span class="nav-user-copy"><strong>{{ g.user.username }}</strong><small>{{ ROLE_LABELS.get(g.user.role, g.user.role) }}</small></span>
+          <span class="nav-user-copy"><strong>{{ g.user.display_name or g.user.username }}</strong><small>{{ g.user.username }} · {{ ROLE_LABELS.get(g.user.role, g.user.role) }}</small></span>
         </summary>
         <div class="admin-menu-panel">
           {% if can("manage_users") %}
@@ -49,13 +49,12 @@
             <a class="{% if active_page == 'system_updates' %}active{% endif %}" href="{{ url_for('system_updates') }}">系统更新</a>
           {% endif %}
           {% if can("sync_product_data") %}
-            <a class="{% if active_page == 'product_data_sync' %}active{% endif %}" href="{{ url_for('product_data_sync') }}">产品数据同步</a>
             <a class="{% if active_page == 'business_data_sync' %}active{% endif %}" href="{{ url_for('business_data_sync') }}">业务数据同步</a>
           {% endif %}
         </div>
       </details>
     {% else %}
-      <span class="user-badge"><span class="nav-user-code">{{ g.user.username[:3] | upper }}</span><span class="nav-user-copy"><strong>{{ g.user.username }}</strong><small>{{ ROLE_LABELS.get(g.user.role, g.user.role) }}</small></span></span>
+      <span class="user-badge"><span class="nav-user-code">{{ g.user.username[:3] | upper }}</span><span class="nav-user-copy"><strong>{{ g.user.display_name or g.user.username }}</strong><small>{{ g.user.username }} · {{ ROLE_LABELS.get(g.user.role, g.user.role) }}</small></span></span>
     {% endif %}
     <form action="{{ url_for('logout') }}" method="post">{{ csrf_field() }}<button class="ghost compact" type="submit">退出</button></form>
   </div>

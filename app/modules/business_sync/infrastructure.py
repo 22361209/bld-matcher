@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import sqlite3
 import tarfile
 import tempfile
@@ -12,11 +13,17 @@ from pathlib import Path
 
 from app.database import connect
 from app.platform.audit_store import log_event
+from app.modules.products.brand_normalization import canonicalize_brands
+from app.modules.products.option_values import register_product_option_values
 from app.platform.sync_identity import material_match_key, quote_match_key, stable_sync_id
 
 
 PACKAGE_SUFFIX = ".tar.gz"
 PACKAGE_TYPE = "bld_business_data"
+MEDIA_DIRECTORIES = {
+    "drawings": "data/drawings",
+    "product_images": "data/product_images",
+}
 DATASETS = {
     "customers": ("customers", "sync_id", "客户"),
     "products": ("products", "bld_no", "产品目录"),
@@ -275,10 +282,28 @@ def _all_comparison_fields(key: str, local: sqlite3.Row, incoming: dict[str, obj
 
 
 class BusinessSyncRepository:
-    def __init__(self, database_path: Path) -> None:
+    def __init__(
+        self,
+        database_path: Path,
+        *,
+        drawing_dir: Path | None = None,
+        image_dir: Path | None = None,
+    ) -> None:
         self.database_path = database_path
+        self.media_dirs = {
+            "drawings": drawing_dir,
+            "product_images": image_dir,
+        }
 
-    def export(self, *, output_path: Path, selected: tuple[str, ...], actor: str) -> Path:
+    def export(
+        self,
+        *,
+        output_path: Path,
+        selected: tuple[str, ...],
+        actor: str,
+        include_drawings: bool = False,
+        include_images: bool = False,
+    ) -> Path:
         payload: dict[str, list[dict[str, object]]] = {}
         with connect(self.database_path) as connection:
             for key in selected:
@@ -291,7 +316,17 @@ class BusinessSyncRepository:
                 payload[key] = rows
             log_event(connection, "导出业务数据包", "business_sync", output_path.name, f"包含：{'、'.join(DATASETS[key][2] for key in selected)}", actor=actor)
             connection.commit()
-        manifest = {"package_type": PACKAGE_TYPE, "version": 1, "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "datasets": list(selected)}
+        includes = {
+            "drawings": bool("products" in selected and include_drawings),
+            "product_images": bool("products" in selected and include_images),
+        }
+        manifest = {
+            "package_type": PACKAGE_TYPE,
+            "version": 2,
+            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "datasets": list(selected),
+            "media": {**includes, "files": {"drawings": 0, "product_images": 0}},
+        }
         output_path.parent.mkdir(parents=True, exist_ok=True)
         temporary = output_path.with_name(f".{output_path.name}.{uuid.uuid4().hex}.tmp")
         try:
@@ -300,12 +335,35 @@ class BusinessSyncRepository:
                 (root / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
                 (root / "data.json").write_text(json.dumps(payload, ensure_ascii=False, default=str), encoding="utf-8")
                 with tarfile.open(temporary, "w:gz") as archive:
-                    archive.add(root / "manifest.json", arcname="manifest.json")
                     archive.add(root / "data.json", arcname="data.json")
+                    media = manifest["media"]
+                    if not isinstance(media, dict):
+                        raise RuntimeError("Business package manifest is invalid.")
+                    files = media["files"]
+                    if not isinstance(files, dict):
+                        raise RuntimeError("Business package media manifest is invalid.")
+                    for key, include in includes.items():
+                        if include:
+                            files[key] = self._add_media_directory(archive, key)
+                    (root / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+                    archive.add(root / "manifest.json", arcname="manifest.json")
             os.replace(temporary, output_path)
         finally:
             temporary.unlink(missing_ok=True)
         return output_path
+
+    def _add_media_directory(self, archive: tarfile.TarFile, key: str) -> int:
+        source = self.media_dirs[key]
+        if source is None or not source.exists():
+            return 0
+        source_root = source.resolve()
+        count = 0
+        for path in sorted(source.rglob("*")):
+            resolved = path.resolve()
+            if path.is_file() and not path.is_symlink() and source_root in resolved.parents:
+                archive.add(path, arcname=str(Path(MEDIA_DIRECTORIES[key]) / path.relative_to(source)))
+                count += 1
+        return count
 
     @staticmethod
     def read(package_path: Path) -> tuple[dict[str, object], dict[str, list[dict[str, object]]]]:
@@ -313,7 +371,7 @@ class BusinessSyncRepository:
             with tarfile.open(package_path, "r:gz") as archive:
                 raw_members = archive.getmembers()
                 members = {member.name: member for member in raw_members}
-                if len(raw_members) != 2 or len(members) != 2 or set(members) != {"manifest.json", "data.json"} or any(not member.isfile() or member.issym() or member.islnk() or member.size > 64 * 1024 * 1024 for member in members.values()):
+                if len(members) != len(raw_members) or not {"manifest.json", "data.json"}.issubset(members):
                     raise ValueError("业务数据包格式或文件大小无效。")
                 manifest_file = archive.extractfile(members["manifest.json"])
                 data_file = archive.extractfile(members["data.json"])
@@ -325,6 +383,17 @@ class BusinessSyncRepository:
             raise ValueError("业务数据包无法读取。") from exc
         if not isinstance(manifest, dict) or manifest.get("package_type") != PACKAGE_TYPE or not isinstance(payload, dict):
             raise ValueError("不是受支持的业务数据包。")
+        media = manifest.get("media", {})
+        if not isinstance(media, dict):
+            raise ValueError("业务数据包媒体信息无效。")
+        enabled_media = {key for key in MEDIA_DIRECTORIES if media.get(key) is True}
+        for member in raw_members:
+            if not member.isfile() or member.issym() or member.islnk() or member.size > 512 * 1024 * 1024:
+                raise ValueError("业务数据包格式或文件大小无效。")
+            if member.name in {"manifest.json", "data.json"}:
+                continue
+            if not any(member.name.startswith(f"{MEDIA_DIRECTORIES[key]}/") for key in enabled_media):
+                raise ValueError("业务数据包包含未声明的文件。")
         selected = tuple(key for key in manifest.get("datasets", []) if key in DATASETS)
         if not selected or set(payload) != set(selected) or any(not isinstance(payload.get(key), list) for key in selected):
             raise ValueError("业务数据包缺少可导入的数据集。")
@@ -357,7 +426,8 @@ class BusinessSyncRepository:
                 counts = {"new": 0, "updated": 0, "conflict": 0, "unchanged": 0}
                 rows: list[dict[str, object]] = []
                 conflicts: list[dict[str, object]] = []
-                for incoming in incoming_rows:
+                for raw_incoming in incoming_rows:
+                    incoming = self._normalized_incoming(key, raw_incoming)
                     if not isinstance(incoming, dict):
                         raise ValueError(f"{label}包含无效记录。")
                     status, local_row, _adopt_sync_id = _incoming_status(key, local, local_rows, incoming, columns)
@@ -373,6 +443,9 @@ class BusinessSyncRepository:
                         })
                     if status != "unchanged":
                         rows.append({"status": status, "key": str(incoming[identity]), "label": _preview_label(key, incoming), "local_updated_at": local_row["updated_at"] if local_row else "", "incoming_updated_at": incoming.get("updated_at", "")})
+                if key == "products":
+                    incoming_ids = {str(row[identity]) for row in incoming_rows if isinstance(row, dict)}
+                    counts["local_only"] = sum(1 for row in local_rows if str(row[identity]) not in incoming_ids)
                 summary[key] = {"label": label, "counts": counts, "rows": rows, "conflicts": conflicts}
             token = _state_token(connection, package_path, tuple(payload))
             unresolved_customers = _unresolved_customers(connection, payload)
@@ -387,6 +460,28 @@ class BusinessSyncRepository:
             "token": token,
             "unresolved_customers": unresolved_customers,
             "customer_options": customer_options,
+            "media": self._media_summary(manifest),
+        }
+
+    @staticmethod
+    def _normalized_incoming(key: str, incoming: object) -> dict[str, object]:
+        if not isinstance(incoming, dict):
+            raise ValueError(f"{DATASETS[key][2]}包含无效记录。")
+        normalized = dict(incoming)
+        if key == "products":
+            normalized["series"] = canonicalize_brands(normalized.get("series"))
+        return normalized
+
+    @staticmethod
+    def _media_summary(manifest: dict[str, object]) -> dict[str, object]:
+        media = manifest.get("media", {})
+        if not isinstance(media, dict):
+            return {"drawings": False, "product_images": False, "files": {"drawings": 0, "product_images": 0}}
+        files = media.get("files", {})
+        return {
+            "drawings": media.get("drawings") is True,
+            "product_images": media.get("product_images") is True,
+            "files": files if isinstance(files, dict) else {"drawings": 0, "product_images": 0},
         }
 
     @staticmethod
@@ -416,8 +511,8 @@ class BusinessSyncRepository:
                 if str(row.get("customer_name") or "").strip() == name:
                     row["customer_name"] = canonical
 
-    def apply(self, package_path: Path, *, backup_path: Path, actor: str, expected_token: str, selected_conflicts: dict[str, set[str]], customer_mappings: dict[str, str | None] | None = None) -> dict[str, dict[str, int]]:
-        _manifest, payload = self.read(package_path)
+    def apply(self, package_path: Path, *, backup_path: Path, actor: str, expected_token: str, selected_conflicts: dict[str, set[str]], customer_mappings: dict[str, str | None] | None = None, include_drawings: bool = False, include_images: bool = False, deactivate_local_only: bool = False) -> dict[str, dict[str, int]]:
+        manifest, payload = self.read(package_path)
         backup_path.parent.mkdir(parents=True, exist_ok=True)
         backup = sqlite3.connect(backup_path)
         try:
@@ -427,11 +522,15 @@ class BusinessSyncRepository:
         finally:
             backup.close()
         result: dict[str, dict[str, int]] = {}
+        media_changes: list[tuple[Path, Path | None]] = []
         connection = connect(self.database_path)
         try:
             connection.execute("BEGIN IMMEDIATE")
             if _state_token(connection, package_path, tuple(payload)) != expected_token:
                 raise ValueError("预览后数据包或本机数据已变化，请重新上传预览。")
+            if "products" in payload:
+                self._copy_media(package_path, manifest, "drawings", include_drawings, backup_path.parent, media_changes)
+                self._copy_media(package_path, manifest, "product_images", include_images, backup_path.parent, media_changes)
             preexisting_quote_ids = {
                 int(row["id"])
                 for row in connection.execute("SELECT id FROM quote_records").fetchall()
@@ -448,7 +547,8 @@ class BusinessSyncRepository:
                 local_rows = connection.execute(f"SELECT * FROM {table}").fetchall()
                 local = {str(row[identity]): row for row in local_rows}
                 counts = {"new": 0, "updated": 0, "conflict": 0, "unchanged": 0}
-                for incoming in incoming_rows:
+                for raw_incoming in incoming_rows:
+                    incoming = self._normalized_incoming(key, raw_incoming)
                     status, local_row, adopt_sync_id = _incoming_status(key, local, local_rows, incoming, columns)
                     selected_conflict = status == "conflict" and str(incoming[identity]) in selected_conflicts.get(key, set())
                     if selected_conflict:
@@ -473,6 +573,13 @@ class BusinessSyncRepository:
                         f"ON CONFLICT({identity}) DO UPDATE SET {updates}",
                         _write_values(key, write_columns, incoming, local_row),
                     )
+                    if key == "products":
+                        register_product_option_values(
+                            connection,
+                            series=str(incoming.get("series") or ""),
+                            item=str(incoming.get("item") or ""),
+                            product_status=str(incoming.get("product_status") or ""),
+                        )
                     if key == "quotes":
                         imported = connection.execute(
                             f"SELECT id FROM {table} WHERE {identity} = ?",
@@ -482,6 +589,14 @@ class BusinessSyncRepository:
                             raise RuntimeError("Imported quote could not be reloaded.")
                         imported_quote_ids.add(int(imported["id"]))
                 result[key] = counts
+            if deactivate_local_only and "products" in payload:
+                incoming_bld = {str(row["bld_no"]) for row in payload["products"]}
+                placeholders = ", ".join("?" for _ in incoming_bld) or "''"
+                cursor = connection.execute(
+                    f"UPDATE products SET active = 0, updated_at = ? WHERE active = 1 AND bld_no NOT IN ({placeholders})",
+                    [datetime.now().strftime("%Y-%m-%d %H:%M:%S"), *sorted(incoming_bld)],
+                )
+                result["products"]["deactivated"] = int(cursor.rowcount)
             if {"customers", "quotes"}.intersection(payload):
                 _normalize_quote_customer_links(
                     connection,
@@ -492,7 +607,61 @@ class BusinessSyncRepository:
             connection.commit()
         except Exception:
             connection.rollback()
+            self._restore_media(media_changes)
             raise
         finally:
             connection.close()
         return result
+
+    def _copy_media(self, package_path: Path, manifest: dict[str, object], key: str, requested: bool, backup_root: Path, changes: list[tuple[Path, Path | None]]) -> None:
+        if not requested or not self._media_summary(manifest).get(key):
+            return
+        destination = self.media_dirs[key]
+        if destination is None:
+            raise ValueError("当前系统未配置产品媒体目录。")
+        prefix = f"{MEDIA_DIRECTORIES[key]}/"
+        with tarfile.open(package_path, "r:gz") as archive:
+            for member in archive.getmembers():
+                if not member.isfile() or not member.name.startswith(prefix):
+                    continue
+                relative = Path(member.name.removeprefix(prefix))
+                if relative == Path(".") or ".." in relative.parts:
+                    raise ValueError("业务数据包包含不安全的媒体路径。")
+                source = archive.extractfile(member)
+                if source is None:
+                    raise ValueError("业务数据包媒体文件无法读取。")
+                target = destination / relative
+                backup = backup_root / "business-sync-media" / key / relative if target.exists() else None
+                if backup is not None:
+                    self._atomic_copy(target, backup)
+                changes.append((target, backup))
+                self._atomic_copy_stream(source, target)
+
+    @staticmethod
+    def _atomic_copy(source: Path, target: Path) -> None:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            shutil.copy2(source, temporary)
+            os.replace(temporary, target)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    @staticmethod
+    def _atomic_copy_stream(source, target: Path) -> None:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            with temporary.open("wb") as output:
+                shutil.copyfileobj(source, output)
+            os.replace(temporary, target)
+        finally:
+            source.close()
+            temporary.unlink(missing_ok=True)
+
+    def _restore_media(self, changes: list[tuple[Path, Path | None]]) -> None:
+        for target, backup in reversed(changes):
+            if backup is not None and backup.exists():
+                self._atomic_copy(backup, target)
+            else:
+                target.unlink(missing_ok=True)

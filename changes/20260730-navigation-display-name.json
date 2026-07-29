@@ -1,0 +1,13 @@
+{
+  "date": "2026-07-30",
+  "version": "unreleased",
+  "title": "导航显示账号显示名称",
+  "entries": [
+    "右上角账号区改为优先显示用户的显示名称；登录名和账号组同时保留在副行，便于辨识当前账号。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "compatible",
+    "operations": "restart-required"
+  }
+}

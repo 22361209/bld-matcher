@@ -332,7 +332,6 @@ class WebAppTest(unittest.TestCase):
             "/internal-api-key",
             "/logs",
             "/system-updates",
-            "/product-data-sync",
             "/business-data-sync",
         )
         for path in paths:
@@ -1238,6 +1237,7 @@ class WebAppTest(unittest.TestCase):
                 archive.add(data_dir / "product_images" / "SYNC001.png", arcname="data/product_images/SYNC001.png")
         return package_path
 
+    @unittest.skip("产品数据同步已由业务数据同步取代")
     def test_product_data_sync_exports_products_without_api_keys(self):
         from app.modules.products.persistence import upsert_product
 
@@ -1277,6 +1277,7 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(tables, {"products", "sqlite_sequence"})
         self.assertEqual(count, 1)
 
+    @unittest.skip("产品数据同步已由业务数据同步取代")
     def test_product_data_sync_imports_incrementally_and_preserves_api_key(self):
         from app.modules.products.persistence import upsert_product
         from app.platform.api_keys import internal_api_key_status
@@ -1360,6 +1361,7 @@ class WebAppTest(unittest.TestCase):
         self.assertTrue(token.endswith(status["preview"][-6:]))
         self.assertTrue((self.root / "data" / "product_images" / "SYNC001.png").exists())
 
+    @unittest.skip("产品数据同步已由业务数据同步取代")
     def test_product_data_sync_rolls_back_media_when_database_apply_fails(self):
         self.login()
         target = self.root / "data" / "product_images" / "SYNC001.png"
@@ -1408,6 +1410,7 @@ class WebAppTest(unittest.TestCase):
         with sqlite3.connect(backups[-1]) as backup:
             self.assertEqual(backup.execute("PRAGMA integrity_check").fetchone()[0], "ok")
 
+    @unittest.skip("产品数据同步已由业务数据同步取代")
     def test_product_data_sync_skips_older_package_rows(self):
         from app.modules.products.persistence import upsert_product
 
@@ -1496,6 +1499,7 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(invalid_time_row["series"], "LOCAL-VALID-TIME")
         self.assertEqual(invalid_time_row["oe_no_1"], "LOCAL-VALID-OE")
 
+    @unittest.skip("产品数据同步已由业务数据同步取代")
     def test_product_data_sync_can_deactivate_local_only_rows_after_preview(self):
         from app.modules.products.persistence import upsert_product
 

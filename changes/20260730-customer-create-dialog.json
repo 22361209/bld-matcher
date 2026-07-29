@@ -1,0 +1,13 @@
+{
+  "date": "2026-07-30",
+  "version": "unreleased",
+  "title": "客户目录改为弹窗新增",
+  "entries": [
+    "客户目录移除搜索区内的快捷名称录入框；“新增客户”按钮与“搜索”按钮同一操作行对齐，点击后在弹窗中确认并录入客户名称。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "compatible",
+    "operations": "restart-required"
+  }
+}

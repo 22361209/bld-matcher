@@ -12,6 +12,63 @@
   margin: 0;
 }
 
+.customer-create-trigger {
+  flex: 0 0 auto;
+}
+
+.customer-create-dialog {
+  width: min(440px, calc(100vw - 32px));
+  margin: auto;
+  padding: 18px;
+}
+
+.customer-create-dialog-header {
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.customer-create-dialog-header h2,
+.customer-create-dialog-header p {
+  margin: 0;
+}
+
+.customer-create-dialog-header h2 {
+  font-size: 18px;
+}
+
+.customer-create-dialog-header p {
+  margin-top: 5px;
+  color: var(--linear-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.customer-create-form {
+  display: grid;
+  gap: 16px;
+}
+
+.customer-create-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.customer-create-form label > span {
+  color: var(--linear-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.customer-create-form input {
+  width: 100%;
+}
+
+.customer-create-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .customer-directory-table td:first-child {
   min-width: 180px;
 }

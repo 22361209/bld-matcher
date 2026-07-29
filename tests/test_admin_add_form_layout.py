@@ -10,7 +10,9 @@ class AdminAddFormLayoutTest(unittest.TestCase):
         customer_template = (ROOT / "templates/customers.html").read_text()
         product_options_template = (ROOT / "templates/product_options.html").read_text()
 
-        self.assertIn('class="search-form inline-search-command customer-add-form"', customer_template)
+        self.assertIn('data-open-customer-create-modal', customer_template)
+        self.assertIn('id="customer-create-dialog"', customer_template)
+        self.assertNotIn('placeholder="新增客户名称，例如 宁波多迦"', customer_template)
         self.assertIn(
             'class="search-form inline-search-command product-option-add-form"',
             product_options_template,
@@ -30,7 +32,6 @@ class AdminAddFormLayoutTest(unittest.TestCase):
 
     def test_admin_pages_do_not_reimplement_the_shared_command_layout(self):
         for stylesheet, selector in (
-            ("static/pages/customers.css", ".customer-add-form"),
             ("static/pages/product_options.css", ".product-option-add-form"),
         ):
             self.assertNotIn(selector, (ROOT / stylesheet).read_text())

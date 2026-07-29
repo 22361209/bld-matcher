@@ -678,3 +678,53 @@ class BusinessSyncServiceTest(unittest.TestCase):
         summary = cast(dict[str, dict[str, object]], preview["summary"])
         rows = cast(list[dict[str, object]], summary["products"]["rows"])
         self.assertEqual(len(rows), 35)
+
+    def test_product_media_and_local_only_deactivation_use_business_sync(self) -> None:
+        source_drawings = self.root / "source-drawings"
+        source_images = self.root / "source-images"
+        target_drawings = self.root / "target-drawings"
+        target_images = self.root / "target-images"
+        source_drawings.mkdir()
+        source_images.mkdir()
+        (source_drawings / "SYNC-PRODUCT.pdf").write_bytes(b"source-drawing")
+        (source_images / "SYNC-PRODUCT.png").write_bytes(b"source-image")
+        with connect(self.source) as connection:
+            self._seed(connection)
+            connection.commit()
+        with connect(self.target) as connection:
+            connection.execute(
+                "INSERT INTO products (bld_no, active, created_at, updated_at) VALUES ('LOCAL-ONLY', 1, '2026-07-17 10:00:00', '2026-07-17 10:00:00')"
+            )
+            connection.commit()
+        package = self.root / "business-with-media.tar.gz"
+        source_service = BusinessSyncService(
+            BusinessSyncRepository(self.source, drawing_dir=source_drawings, image_dir=source_images)
+        )
+        source_service.export(
+            output_path=package,
+            selected=("products",),
+            include_drawings=True,
+            include_images=True,
+            actor="test",
+        )
+        target_service = BusinessSyncService(
+            BusinessSyncRepository(self.target, drawing_dir=target_drawings, image_dir=target_images)
+        )
+        preview = target_service.preview(package)
+        self.assertEqual(preview["media"]["files"], {"drawings": 1, "product_images": 1})
+        summary = cast(dict[str, dict[str, object]], preview["summary"])
+        self.assertEqual(cast(dict[str, int], summary["products"]["counts"])["local_only"], 1)
+        result = target_service.apply(
+            package,
+            backup_path=self.root / "media-backup.sqlite3",
+            actor="test",
+            expected_token=cast(str, preview["token"]),
+            include_drawings=True,
+            include_images=True,
+            deactivate_local_only=True,
+        )
+        self.assertEqual(result["products"]["deactivated"], 1)
+        self.assertEqual((target_drawings / "SYNC-PRODUCT.pdf").read_bytes(), b"source-drawing")
+        self.assertEqual((target_images / "SYNC-PRODUCT.png").read_bytes(), b"source-image")
+        with connect(self.target) as connection:
+            self.assertEqual(connection.execute("SELECT active FROM products WHERE bld_no = 'LOCAL-ONLY'").fetchone()[0], 0)

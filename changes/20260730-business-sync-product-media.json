@@ -1,0 +1,15 @@
+{
+  "date": "2026-07-30",
+  "version": "unreleased",
+  "title": "业务数据同步接管产品媒体",
+  "entries": [
+    "业务数据同步的产品目录可选携带并导入产品图纸和产品图片；媒体文件使用原子写入，数据库导入失败时恢复本次媒体变更。",
+    "产品目录导入预览会提示本机独有数量，并允许明确选择停用包内不存在的本机产品。",
+    "已移除独立的产品数据同步页面、路由和管理员菜单入口；旧产品数据包不再支持导入。"
+  ],
+  "impact": {
+    "data": "business sync packages may include product media; old product-only packages are unsupported",
+    "api": "breaking removal of product-data-sync web routes",
+    "operations": "restart-required"
+  }
+}

@@ -36,12 +36,29 @@
         <button class="linear-button primary" type="submit">搜索</button>
         {% if filters.q or filters.status %}<a class="linear-button subtle" href="{{ url_for('customers') }}">清除</a>{% endif %}
       </form>
-      <form action="{{ url_for('save_customer') }}" method="post" class="search-form inline-search-command customer-add-form">
-        {{ csrf_field() }}
-        <input name="name" placeholder="新增客户名称，例如 宁波多迦" required maxlength="200">
-        <button class="linear-button primary" type="submit">新增客户</button>
-      </form>
+      <button class="linear-button primary customer-create-trigger" type="button" data-open-customer-create-modal>新增客户</button>
     </div>
+
+    <dialog class="dialog-panel customer-create-dialog" id="customer-create-dialog" aria-labelledby="customer-create-dialog-title">
+      <div class="dialog-header customer-create-dialog-header">
+        <div>
+          <h2 id="customer-create-dialog-title">新增客户</h2>
+          <p>请确认客户名称后再保存，避免误录。</p>
+        </div>
+        <button class="dialog-close" type="button" data-close-customer-create-modal aria-label="关闭新增客户窗口">×</button>
+      </div>
+      <form action="{{ url_for('save_customer') }}" method="post" class="customer-create-form">
+        {{ csrf_field() }}
+        <label>
+          <span>客户名称</span>
+          <input name="name" placeholder="例如 宁波多迦" required maxlength="200" autocomplete="organization">
+        </label>
+        <div class="customer-create-actions">
+          <button class="linear-button subtle" type="button" data-close-customer-create-modal>取消</button>
+          <button class="linear-button primary" type="submit">保存客户</button>
+        </div>
+      </form>
+    </dialog>
 
     <div class="data-table-scroll">
       <table class="data-table customer-directory-table">
@@ -87,4 +104,8 @@
       </table>
     </div>
   </section>
+{% endblock %}
+
+{% block page_scripts %}
+  <script type="module" src="{{ url_for('static', filename='pages/customers.js', v=static_version('pages/customers.js')) }}"></script>
 {% endblock %}

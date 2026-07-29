@@ -259,7 +259,6 @@ def dynamic_route():
             "login.html": ("pages/login.css",),
             "material_drawings.html": ("pages/material_drawings.css", "pages/material_drawings.js"),
             "materials.html": ("pages/materials.css", "pages/history.css"),
-            "product_data_sync.html": ("pages/product_sync.css",),
             "product_form.html": ("pages/products.css",),
             "products.html": ("pages/products.css", "pages/products.js"),
             "purchase_contracts.html": ("pages/contracts.css", "pages/contracts.js"),
@@ -389,7 +388,7 @@ def update_quote(quote_id):
 
         suffixed_service_errors = []
         contract._check_module_layer(
-            "app/modules/products/sync_service.py",
+            "app/modules/business_sync/service.py",
             ast.parse("import sqlite3\n"),
             suffixed_service_errors,
         )

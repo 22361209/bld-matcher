@@ -568,34 +568,6 @@
       "rule": "/materials/template"
     },
     {
-      "endpoint": "product_data_sync",
-      "methods": [
-        "GET"
-      ],
-      "rule": "/product-data-sync"
-    },
-    {
-      "endpoint": "export_product_data_package",
-      "methods": [
-        "POST"
-      ],
-      "rule": "/product-data-sync/export"
-    },
-    {
-      "endpoint": "apply_product_data_package",
-      "methods": [
-        "POST"
-      ],
-      "rule": "/product-data-sync/import/apply"
-    },
-    {
-      "endpoint": "preview_product_data_package",
-      "methods": [
-        "POST"
-      ],
-      "rule": "/product-data-sync/import/preview"
-    },
-    {
       "endpoint": "product_image_thumb_data",
       "methods": [
         "GET"

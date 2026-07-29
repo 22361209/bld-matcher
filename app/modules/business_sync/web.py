@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
 
 
 def _service() -> BusinessSyncService:
-    from app.config import DB_PATH
-    return BusinessSyncService(BusinessSyncRepository(DB_PATH))
+    from app.config import DB_PATH, DRAWING_DIR, PRODUCT_IMAGE_DIR
+    return BusinessSyncService(BusinessSyncRepository(DB_PATH, drawing_dir=DRAWING_DIR, image_dir=PRODUCT_IMAGE_DIR))
 
 
 def _selected() -> tuple[str, ...]:
@@ -71,7 +71,16 @@ def register(app) -> None:
             return redirect(url_for("business_data_sync"))
         path = user_output_dir() / f"business-data-{user_file_label()}-{datetime.now().strftime('%Y%m%d-%H%M%S')}{PACKAGE_SUFFIX}"
         try:
-            return send_file(_service().export(output_path=path, selected=selected, actor=actor_name()), as_attachment=True)
+            return send_file(
+                _service().export(
+                    output_path=path,
+                    selected=selected,
+                    include_drawings=request.form.get("include_drawings") == "1",
+                    include_images=request.form.get("include_images") == "1",
+                    actor=actor_name(),
+                ),
+                as_attachment=True,
+            )
         except Exception:
             logger.exception("Business data package export failed")
             flash("业务数据包导出失败。", "error")
@@ -114,6 +123,9 @@ def register(app) -> None:
                     expected_token=request.form.get("preview_token", ""),
                     selected_conflicts=_selected_conflicts(),
                     customer_mappings=_customer_mappings(),
+                    include_drawings=request.form.get("include_drawings") == "1",
+                    include_images=request.form.get("include_images") == "1",
+                    deactivate_local_only=request.form.get("deactivate_local_only") == "1",
                 )
         except ImportLockError as exc:
             flash(str(exc), "error")
