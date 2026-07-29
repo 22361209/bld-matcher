@@ -3457,6 +3457,10 @@ class WebAppTest(unittest.TestCase):
         self.assertIn('data-reset-list-for="products"', html)
         self.assertIn('data-grid-page-jump', html)
         self.assertIn('max="3"', html)
+        pagination_start = html.index('<nav class="data-grid-pagination"')
+        pagination_end = html.index('</nav>', pagination_start)
+        pagination_html = html[pagination_start:pagination_end]
+        self.assertLess(pagination_html.index('>下一页<'), pagination_html.index('data-grid-page-jump'))
         self.assertIn("K-PAGE-000", html)
         self.assertIn("K-PAGE-049", html)
         self.assertNotIn("K-PAGE-050", html)
