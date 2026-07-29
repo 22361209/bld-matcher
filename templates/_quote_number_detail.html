@@ -1,57 +1,76 @@
-{% if attachments %}
-  <section class="quote-number-attachments" aria-label="报价文件">
-    <strong>报价文件</strong>
-    {% for attachment in attachments %}<a class="linear-button subtle compact" href="{{ attachment.url }}">下载 {{ attachment.name }}</a>{% endfor %}
-  </section>
-{% endif %}
-{% if contract_documents %}
-  <section class="quote-number-contracts" aria-label="已生成销售合同">
-    <strong>已生成销售合同</strong>
-    {% for document in contract_documents %}
-      <a class="linear-button subtle compact" href="{{ url_for('download_contract_document', document_id=document.id) }}">
-        下载 {{ document.contract_no }}（{{ document.language_label }} · {{ document.currency }}）
-      </a>
-    {% endfor %}
+{% if attachments or contract_documents %}
+  <section class="quote-number-resources" aria-label="报价相关文件">
+    {% if attachments %}
+      <section class="quote-number-resource-group" aria-label="报价文件">
+        <h3>报价文件</h3>
+        <div class="quote-number-resource-actions">
+          {% for attachment in attachments %}<a class="linear-button subtle compact" href="{{ attachment.url }}">下载 {{ attachment.name }}</a>{% endfor %}
+        </div>
+      </section>
+    {% endif %}
+    {% if contract_documents %}
+      <section class="quote-number-resource-group" aria-label="已生成销售合同">
+        <h3>已生成销售合同</h3>
+        <div class="quote-number-resource-actions">
+          {% for document in contract_documents %}
+            <a class="linear-button subtle compact" href="{{ url_for('download_contract_document', document_id=document.id) }}">
+              下载 {{ document.contract_no }}（{{ document.language_label }} · {{ document.currency }}）
+            </a>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
   </section>
 {% endif %}
 {% if records and can("generate_purchase_contract") %}
   <form class="quote-contract-draft" method="get" action="{{ url_for('sales_contracts') }}" data-quote-contract-form>
     <input type="hidden" name="source_quote_no" value="{{ quote_no }}">
-    <fieldset class="quote-contract-language">
-      <legend>销售合同语言</legend>
-      <label><input type="radio" name="language" value="zh-CN" required> 中文版</label>
-      <label class="disabled"><input type="radio" name="language" value="en-US" disabled> English（待支持）</label>
-    </fieldset>
-    <p class="quote-contract-help">选择需要写入合同的明细。数量和交期将在合同草稿中留空，由你确认后填写。</p>
-    <div class="quote-contract-feedback" data-quote-contract-feedback role="status" hidden></div>
+    <div class="quote-contract-settings">
+      <fieldset class="quote-contract-language">
+        <legend>销售合同版本</legend>
+        <div class="quote-contract-language-options">
+          <label><input type="checkbox" name="language" value="zh-CN"> 中文版</label>
+          <label class="disabled"><input type="checkbox" name="language" value="en-US" disabled> English（待支持）</label>
+        </div>
+      </fieldset>
+      <p class="quote-contract-help">选择需要写入合同的明细。数量和交期将在合同草稿中留空，由你确认后填写。</p>
+      <div class="quote-contract-feedback" data-quote-contract-feedback role="status" hidden></div>
+    </div>
 {% endif %}
-<table class="data-table quote-table quote-number-table">
-  <thead>
-    <tr>
-      {% if records and can("generate_purchase_contract") %}<th class="quote-contract-select-column">选择</th>{% endif %}
-      <th>日期</th><th>客户</th><th>BLD号</th><th>客户产品编码</th><th>含税单价</th><th>不含税单价</th><th>币种</th><th>报价人</th><th>备注</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for record in records %}
+<div class="quote-number-table-scroll" data-quote-number-table-scroll tabindex="0" role="region" aria-label="报价明细表格">
+  <table class="data-table quote-table quote-number-table">
+    <colgroup>
+      {% if records and can("generate_purchase_contract") %}<col class="quote-number-col-select">{% endif %}
+      <col class="quote-number-col-date"><col class="quote-number-col-customer"><col class="quote-number-col-bld"><col class="quote-number-col-customer-code">
+      <col class="quote-number-col-price"><col class="quote-number-col-price"><col class="quote-number-col-currency"><col class="quote-number-col-quoted-by"><col class="quote-number-col-remark">
+    </colgroup>
+    <thead>
       <tr>
-        {% if can("generate_purchase_contract") %}<td class="quote-contract-select-column"><input type="checkbox" name="quote_id" value="{{ record.id }}" checked aria-label="选择 {{ record.bld_no or record.product_model }}"></td>{% endif %}
-        <td>{{ record.quote_date }}</td>
-        <td>{{ record.customer_name }}</td>
-        <td>{{ record.bld_no or record.product_model }}</td>
-        <td>{{ record.customer_product_code }}</td>
-        <td>{% if record.tax_price is not none %}{{ "%.4f"|format(record.tax_price) }}{% endif %}</td>
-        <td>{% if record.net_price is not none %}{{ "%.4f"|format(record.net_price) }}{% endif %}</td>
-        <td>{{ record.currency }}</td>
-        <td>{{ record.quoted_by }}</td>
-        <td>{{ record.remark }}</td>
+        {% if records and can("generate_purchase_contract") %}<th class="quote-contract-select-column">选择</th>{% endif %}
+        <th>日期</th><th>客户</th><th>BLD号</th><th>客户产品编码</th><th>含税单价</th><th>不含税单价</th><th>币种</th><th>报价人</th><th>备注</th>
       </tr>
-    {% endfor %}
-    {% if not records %}
-      <tr><td colspan="9">没有找到报价单号 {{ quote_no }} 的记录。</td></tr>
-    {% endif %}
-  </tbody>
-</table>
+    </thead>
+    <tbody>
+      {% for record in records %}
+        <tr>
+          {% if can("generate_purchase_contract") %}<td class="quote-contract-select-column"><input type="checkbox" name="quote_id" value="{{ record.id }}" checked aria-label="选择 {{ record.bld_no or record.product_model }}"></td>{% endif %}
+          <td>{{ record.quote_date }}</td>
+          <td>{{ record.customer_name }}</td>
+          <td>{{ record.bld_no or record.product_model }}</td>
+          <td>{{ record.customer_product_code }}</td>
+          <td>{% if record.tax_price is not none %}{{ "%.4f"|format(record.tax_price) }}{% endif %}</td>
+          <td>{% if record.net_price is not none %}{{ "%.4f"|format(record.net_price) }}{% endif %}</td>
+          <td>{{ record.currency }}</td>
+          <td>{{ record.quoted_by }}</td>
+          <td>{{ record.remark }}</td>
+        </tr>
+      {% endfor %}
+      {% if not records %}
+        <tr><td colspan="9">没有找到报价单号 {{ quote_no }} 的记录。</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
 {% if records and can("generate_purchase_contract") %}
     <div class="quote-contract-actions">
       <span>已选择 <strong data-quote-contract-count>{{ records|length }}</strong> 条</span>

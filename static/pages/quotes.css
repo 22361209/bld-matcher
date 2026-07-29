@@ -129,54 +129,168 @@
 .quote-latest strong {
   color: var(--linear-accent);
 }
-.quote-number-attachments,
-.quote-number-contracts {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 0 0 12px;
+
+.quote-number-dialog {
+  box-sizing: border-box;
+  width: min(1120px, calc(100vw - 32px));
+  height: min(780px, calc(100vh - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+  padding: 0;
+  overflow: hidden;
 }
 
-.quote-number-attachments strong,
-.quote-number-contracts strong {
+.quote-number-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.dialog-header.quote-number-dialog-header {
+  flex: 0 0 auto;
+  min-width: 0;
+  margin-bottom: 0;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--linear-line);
+}
+
+.quote-number-dialog-title {
+  min-width: 0;
+}
+
+.quote-number-dialog-kicker {
+  margin: 0 0 3px;
+  color: var(--linear-muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.quote-number-dialog-header h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
   color: var(--linear-text);
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.quote-number-detail {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+  padding: 16px 18px 18px;
+  overflow: hidden;
+  background: #f7f9fb;
+}
+
+.quote-number-resources {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 8px;
+  max-height: 128px;
+  min-width: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.quote-number-resource-group {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--linear-line);
+  border-radius: 5px;
+  background: #ffffff;
+}
+
+.quote-number-resource-group h3 {
+  margin: 2px 0 0;
+  color: var(--linear-text);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.quote-number-resource-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.quote-number-resource-actions .linear-button {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: left;
+  white-space: normal;
 }
 
 .quote-contract-draft {
-  display: grid;
-  gap: 10px;
-  margin-top: 12px;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
   padding: 12px;
   border: 1px solid var(--linear-line);
-  border-radius: 8px;
-  background: #f8fafc;
+  border-radius: 5px;
+  background: #ffffff;
+}
+
+.quote-contract-settings {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 8px;
 }
 
 .quote-contract-language {
-  display: flex;
-  align-items: center;
-  gap: 18px;
+  min-inline-size: 0;
   margin: 0;
   padding: 0;
   border: 0;
 }
 
 .quote-contract-language legend {
-  float: left;
-  margin-right: 18px;
+  margin: 0 0 6px;
+  padding: 0;
   color: var(--linear-text);
   font-size: 13px;
   font-weight: 800;
 }
 
+.quote-contract-language-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+}
+
 .quote-contract-language label {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 6px;
   margin: 0;
+  min-width: 0;
   font-size: 13px;
   font-weight: 700;
+}
+
+.quote-contract-language input[type="checkbox"] {
+  box-sizing: border-box;
+  flex: 0 0 15px;
+  width: 15px;
+  min-width: 15px;
+  height: 15px;
+  margin: 0;
+  padding: 0;
 }
 
 .quote-contract-language .disabled {
@@ -187,6 +301,7 @@
   margin: 0;
   color: var(--linear-muted);
   font-size: 12px;
+  line-height: 1.5;
 }
 
 .quote-contract-feedback {
@@ -195,19 +310,151 @@
   font-weight: 700;
 }
 
+.quote-number-table-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 180px;
+  overflow: auto;
+  border: 1px solid var(--linear-line);
+  border-radius: 4px;
+  background: #ffffff;
+  scrollbar-gutter: stable;
+}
+
+.quote-number-table-scroll:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px var(--linear-focus);
+}
+
+.quote-number-table {
+  min-width: 1038px;
+  margin: 0;
+}
+
+.quote-number-table th {
+  top: 0;
+  z-index: 2;
+}
+
+.quote-number-table td {
+  vertical-align: middle;
+}
+
+.quote-number-table td:last-child {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.quote-number-col-select {
+  width: 54px;
+}
+
+.quote-number-col-date {
+  width: 96px;
+}
+
+.quote-number-col-customer {
+  width: 120px;
+}
+
+.quote-number-col-bld {
+  width: 116px;
+}
+
+.quote-number-col-customer-code {
+  width: 144px;
+}
+
+.quote-number-col-price {
+  width: 100px;
+}
+
+.quote-number-col-currency {
+  width: 70px;
+}
+
+.quote-number-col-quoted-by {
+  width: 92px;
+}
+
+.quote-number-col-remark {
+  width: 146px;
+}
+
 .quote-contract-select-column {
-  width: 50px;
   text-align: center;
 }
 
 .quote-contract-actions {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: flex-end;
   gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--linear-line);
 }
 
 .quote-contract-actions span {
+  margin-right: auto;
   color: var(--linear-muted);
   font-size: 13px;
+}
+
+@media (max-width: 720px) {
+  .quote-number-dialog {
+    width: calc(100vw - 20px);
+    height: calc(100vh - 20px);
+    max-width: calc(100vw - 20px);
+    max-height: calc(100vh - 20px);
+  }
+
+  .dialog-header.quote-number-dialog-header {
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .quote-number-dialog-header h2 {
+    font-size: 18px;
+  }
+
+  .quote-number-detail {
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .quote-number-resources {
+    grid-template-columns: minmax(0, 1fr);
+    max-height: 116px;
+  }
+
+  .quote-number-resource-group {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .quote-contract-draft {
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .quote-contract-language-options {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .quote-number-table-scroll {
+    min-height: 150px;
+  }
+
+  .quote-contract-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-top: 10px;
+  }
+
+  .quote-contract-actions .linear-button {
+    flex: 1 1 auto;
+  }
 }

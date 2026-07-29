@@ -41,24 +41,31 @@ if (document.body.dataset.page === "quotes.list") {
     const feedback = form.querySelector("[data-quote-contract-feedback]");
     const count = form.querySelector("[data-quote-contract-count]");
     const checkboxes = Array.from(form.querySelectorAll('input[name="quote_id"]'));
+    const versionOptions = Array.from(form.querySelectorAll('input[name="language"]'));
+    const selectedVersion = () => versionOptions.find(
+      (input) => input instanceof HTMLInputElement && input.checked,
+    );
     const syncSelection = () => {
       const selected = checkboxes.filter((input) => input instanceof HTMLInputElement && input.checked).length;
       if (count instanceof HTMLElement) count.textContent = String(selected);
-      if (selected && feedback instanceof HTMLElement) {
+      if (selected && selectedVersion() && feedback instanceof HTMLElement) {
         feedback.hidden = true;
         feedback.textContent = "";
       }
       return selected;
     };
     checkboxes.forEach((input) => input.addEventListener("change", syncSelection));
+    versionOptions.forEach((input) => input.addEventListener("change", syncSelection));
     form.addEventListener("submit", (event) => {
-      if (syncSelection()) return;
-      event.preventDefault();
-      if (feedback instanceof HTMLElement) {
-        feedback.textContent = "请至少选择一条报价明细。";
-        feedback.hidden = false;
+      const selected = syncSelection();
+      if (!selected || !selectedVersion()) {
+        event.preventDefault();
+        if (feedback instanceof HTMLElement) {
+          feedback.textContent = selected ? "请选择销售合同版本。" : "请至少选择一条报价明细。";
+          feedback.hidden = false;
+        }
+        (selected ? versionOptions[0] : checkboxes[0])?.focus();
       }
-      checkboxes[0]?.focus();
     });
     syncSelection();
   };

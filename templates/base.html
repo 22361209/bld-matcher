@@ -40,10 +40,10 @@
       {% block page_filters %}{% endblock %}
       {% block page_content %}{% endblock %}
     </main>
-    <dialog class="confirm-dialog" id="global-confirm-dialog" aria-labelledby="global-confirm-title">
-      <div class="confirm-dialog-header">
+    <dialog class="dialog-panel confirm-dialog" id="global-confirm-dialog" aria-labelledby="global-confirm-title">
+      <div class="dialog-header confirm-dialog-header">
         <h2 id="global-confirm-title">确认操作</h2>
-        <button class="confirm-dialog-close" type="button" data-close-global-confirm aria-label="关闭确认窗口">×</button>
+        <button class="dialog-close confirm-dialog-close" type="button" data-close-global-confirm aria-label="关闭确认窗口">×</button>
       </div>
       <p class="confirm-dialog-message" data-global-confirm-message></p>
       <div class="confirm-dialog-actions">
