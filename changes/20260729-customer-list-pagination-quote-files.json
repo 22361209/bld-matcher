@@ -1,0 +1,15 @@
+{
+  "date": "2026-07-29",
+  "version": "unreleased",
+  "title": "客户入口、统一列表操作与报价文件关联",
+  "entries": [
+    "客户信息成为报价左侧的独立导航入口；产品目录工具栏新增“基础信息”入口维护产品候选值。",
+    "产品、报价、材料和管件列表统一使用“重置列表”、指定页跳转和翻页后回到明细表顶部的交互。",
+    "询价、材料和合同相关文件默认长期保留，不改变同步包等其他网页上传和输出文件的保留期；报价单号弹窗在存在关联询价文件时提供受权限保护的下载链接。"
+  ],
+  "impact": {
+    "data": "询价写入报价时保存现有 quote_records.attachment_path 的输出相对引用",
+    "api": "compatible",
+    "operations": "restart-required; BLD_INQUIRY_*, BLD_MATERIAL_* and BLD_CONTRACT_OUTPUT_RETENTION_DAYS default to 0"
+  }
+}

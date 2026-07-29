@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -11,6 +13,12 @@ from app.platform.audit_store import log_event
 
 from .clock import datetime_text
 from .runtime_config import RuntimeSettings
+
+
+INQUIRY_UPLOAD_PREFIXES = ("inquiry-", "inquiry-text-")
+MATERIAL_UPLOAD_PREFIXES = ("material-plan-", "material-data-")
+INQUIRY_OUTPUT_PATTERN = re.compile(r"^re\d{6}-")
+MATERIAL_OUTPUT_PATTERN = re.compile(r"料单(?:_\d+)?\.xlsx$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,17 +121,19 @@ class RuntimeRetentionService:
 
         upload_files = tuple(
             path
-            for path in self._old_files(
+            for path in self._expired_files(
                 self.upload_root,
-                before=current - timedelta(days=self.settings.upload_retention_days),
+                current=current,
+                retention_days_for=self._upload_retention_days,
             )
             if not self._is_protected(path, protected_job_paths)
         )
         output_files = tuple(
             path
-            for path in self._old_files(
+            for path in self._expired_files(
                 self.output_root,
-                before=current - timedelta(days=self.settings.output_retention_days),
+                current=current,
+                retention_days_for=self._output_retention_days,
             )
             if path.resolve() not in active_artifact_paths and not self._is_protected(path, protected_job_paths)
         )
@@ -215,6 +225,53 @@ class RuntimeRetentionService:
             except OSError:
                 continue
         return tuple(files)
+
+    def _expired_files(
+        self,
+        root: Path,
+        *,
+        current: datetime,
+        retention_days_for: Callable[[Path], int],
+    ) -> tuple[Path, ...]:
+        expired: list[Path] = []
+        for path in self._old_files(root, before=current):
+            retention_days = retention_days_for(path)
+            if retention_days == 0:
+                continue
+            try:
+                if path.stat().st_mtime <= (current - timedelta(days=retention_days)).timestamp():
+                    expired.append(path)
+            except OSError:
+                continue
+        return tuple(expired)
+
+    @staticmethod
+    def _is_inquiry_upload(path: Path) -> bool:
+        return path.name.startswith(INQUIRY_UPLOAD_PREFIXES)
+
+    @staticmethod
+    def _is_material_upload(path: Path) -> bool:
+        return path.name.startswith(MATERIAL_UPLOAD_PREFIXES)
+
+    @staticmethod
+    def _is_inquiry_output(path: Path) -> bool:
+        return bool(INQUIRY_OUTPUT_PATTERN.match(path.name)) or path.name.startswith("drawings-")
+
+    def _upload_retention_days(self, path: Path) -> int:
+        if self._is_inquiry_upload(path):
+            return self.settings.inquiry_upload_retention_days
+        if self._is_material_upload(path):
+            return self.settings.material_upload_retention_days
+        return self.settings.upload_retention_days
+
+    def _output_retention_days(self, path: Path) -> int:
+        if self._is_inquiry_output(path):
+            return self.settings.inquiry_output_retention_days
+        if MATERIAL_OUTPUT_PATTERN.search(path.name):
+            return self.settings.material_output_retention_days
+        if {"采购合同", "销售合同"}.intersection(path.relative_to(self.output_root).parts):
+            return self.settings.contract_output_retention_days
+        return self.settings.output_retention_days
 
     def _protected_job_paths(self, connection: sqlite3.Connection) -> tuple[Path, ...]:
         protected: set[Path] = set()

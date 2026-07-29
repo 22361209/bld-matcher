@@ -6,6 +6,9 @@
   <div class="nav-primary">
     <div class="nav-links">
     <a class="{% if active_page == 'match' %}active{% endif %}" href="{{ url_for('index') }}">询价处理</a>
+    {% if can("manage_customers") %}
+      <a class="{% if active_page == 'customers' %}active{% endif %}" href="{{ url_for('customers') }}">客户信息</a>
+    {% endif %}
     {% if can("view_customer_prices") %}
       <a class="{% if active_page == 'quotes' %}active{% endif %}" href="{{ url_for('quote_web.quotes') }}">报价记录</a>
     {% endif %}
@@ -32,7 +35,7 @@
   <div class="nav-user">
     {% if can("manage_users") or can("view_logs") %}
       <details class="admin-menu" data-admin-menu>
-        <summary class="user-badge admin-menu-trigger {% if active_page in ['users', 'internal_api_key', 'logs', 'system_updates', 'product_data_sync', 'business_data_sync', 'product_option_values', 'customers'] %}active{% endif %}">
+        <summary class="user-badge admin-menu-trigger {% if active_page in ['users', 'internal_api_key', 'logs', 'system_updates', 'product_data_sync', 'business_data_sync'] %}active{% endif %}">
           <span class="nav-user-code">{{ g.user.username[:3] | upper }}</span>
           <span class="nav-user-copy"><strong>{{ g.user.username }}</strong><small>{{ ROLE_LABELS.get(g.user.role, g.user.role) }}</small></span>
         </summary>
@@ -40,12 +43,6 @@
           {% if can("manage_users") %}
             <a class="{% if active_page == 'users' %}active{% endif %}" href="{{ url_for('users') }}">账号管理</a>
             <a class="{% if active_page == 'internal_api_key' %}active{% endif %}" href="{{ url_for('internal_api_key') }}">内部 API Key</a>
-          {% endif %}
-          {% if can("manage_product_options") %}
-            <a class="{% if active_page == 'product_option_values' %}active{% endif %}" href="{{ url_for('product_option_values') }}">产品候选值</a>
-          {% endif %}
-          {% if can("manage_customers") %}
-            <a class="{% if active_page == 'customers' %}active{% endif %}" href="{{ url_for('customers') }}">客户列表</a>
           {% endif %}
           {% if can("view_logs") %}
             <a class="{% if active_page == 'logs' %}active{% endif %}" href="{{ url_for('logs') }}">操作日志</a>

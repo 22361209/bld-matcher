@@ -22,6 +22,18 @@ export const formGetUrl = (form, baseHref) => {
   return target.toString();
 };
 
+export const scrollDataGridToTop = (root = document) => {
+  const grid = root instanceof Element ? root.querySelector("[data-resizable-grid]") : null;
+  if (!(grid instanceof HTMLElement)) return;
+  const scroll = grid.querySelector("[data-grid-scroll]");
+  if (scroll instanceof HTMLElement) scroll.scrollTop = 0;
+  const navHeight = Number.parseFloat(
+    window.getComputedStyle(document.documentElement).getPropertyValue("--revealed-nav-height")
+  ) || 0;
+  const top = Math.max(0, Math.round(grid.getBoundingClientRect().top + window.scrollY - navHeight - 12));
+  window.scrollTo({ left: window.scrollX, top });
+};
+
 export const createInlineResultsRequestGate = () => {
   let generation = 0;
   return {

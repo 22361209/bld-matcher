@@ -248,6 +248,7 @@ export function setupDataGrid(grid) {
   const resetButtons = [
     ...grid.querySelectorAll("[data-reset-column-widths]"),
     ...document.querySelectorAll(`[data-reset-column-widths-for="${gridKey}"]`),
+    ...document.querySelectorAll(`[data-reset-list-for="${gridKey}"]`),
   ];
   resetButtons.forEach((button) => button.addEventListener("click", resetWidths));
 

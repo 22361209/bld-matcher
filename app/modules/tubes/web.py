@@ -78,7 +78,7 @@ def _pagination(filters: dict[str, object], page: int, total: int) -> dict[str, 
             links.append({"gap": True})
         links.append({"page": candidate, "url": _page_url(filters, candidate), "current": candidate == current_page})
         previous = candidate
-    return {"page": current_page, "total_pages": total_pages, "start": start, "end": end, "links": links, "has_prev": current_page > 1, "has_next": current_page < total_pages, "prev_url": _page_url(filters, current_page - 1) if current_page > 1 else "", "next_url": _page_url(filters, current_page + 1) if current_page < total_pages else ""}
+    return {"page": current_page, "total_pages": total_pages, "start": start, "end": end, "links": links, "has_prev": current_page > 1, "has_next": current_page < total_pages, "prev_url": _page_url(filters, current_page - 1) if current_page > 1 else "", "next_url": _page_url(filters, current_page + 1) if current_page < total_pages else "", "jump_url": _page_url(filters, 1)}
 
 
 def _tube_list_context() -> dict[str, object]:

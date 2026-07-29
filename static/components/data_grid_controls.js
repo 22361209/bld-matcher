@@ -105,6 +105,7 @@ export function setupDataGridControls(table, options = {}) {
     ? options.navigate
     : (url) => window.location.assign(url);
   const storageScope = table.dataset.columnStorageScope || "guest";
+  const gridKey = table.closest("[data-resizable-grid]")?.dataset.gridKey || "";
   const orderStorageKey = `${storagePrefix}.column-order.v${COLUMN_ORDER_VERSION}.u${storageScope}`;
   const orderStatus = document.querySelector("[data-column-order-status]");
   const filterPortal = options.filterPortal
@@ -325,7 +326,18 @@ export function setupDataGridControls(table, options = {}) {
     currentOrder = [...availableColumns];
     applyColumnOrder(table, currentOrder, availableColumns);
     safeStorageRemove(orderStorageKey);
-    announceOrder("产品目录列顺序已恢复为默认顺序。");
+    announceOrder("列表列顺序已恢复为默认顺序。");
+  };
+
+  const resetList = () => {
+    resetColumnOrder();
+    const filterParams = Array.isArray(options.resetFilterParams) ? options.resetFilterParams : [];
+    if (!filterParams.length) return;
+    const url = new URL(window.location.href);
+    filterParams.forEach((key) => url.searchParams.delete(key));
+    url.searchParams.delete("page");
+    url.hash = resultsHash;
+    navigate(url.toString());
   };
 
   filterPortal.addEventListener("click", (event) => {
@@ -354,16 +366,16 @@ export function setupDataGridControls(table, options = {}) {
       }
       return;
     }
-    if (event.target.closest("[data-reset-product-columns]")) {
-      resetColumnOrder();
+    if (gridKey && event.target.closest(`[data-reset-list-for="${gridKey}"]`)) {
+      resetList();
     }
   });
 
-  const resetColumnButton = document.querySelector("[data-reset-product-columns]");
-  const externalResetColumnButton = resetColumnButton && !filterPortal.contains(resetColumnButton)
-    ? resetColumnButton
+  const resetListButton = gridKey ? document.querySelector(`[data-reset-list-for="${gridKey}"]`) : null;
+  const externalResetListButton = resetListButton && !filterPortal.contains(resetListButton)
+    ? resetListButton
     : null;
-  externalResetColumnButton?.addEventListener("click", resetColumnOrder);
+  externalResetListButton?.addEventListener("click", resetList);
 
   filterPortal.addEventListener("keydown", (event) => {
     if (!(event.target instanceof Element)) return;
@@ -505,6 +517,6 @@ export function setupDataGridControls(table, options = {}) {
     document.removeEventListener("click", handleOutsideClick);
     window.removeEventListener("scroll", positionColumnFilter, { capture: true });
     window.removeEventListener("resize", positionColumnFilter);
-    externalResetColumnButton?.removeEventListener("click", resetColumnOrder);
+    externalResetListButton?.removeEventListener("click", resetList);
   };
 }

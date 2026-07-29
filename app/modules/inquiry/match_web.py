@@ -34,6 +34,7 @@ def _single_page_pagination(total: int) -> dict:
         "has_next": False,
         "prev_url": "",
         "next_url": "",
+        "jump_url": "",
     }
 
 

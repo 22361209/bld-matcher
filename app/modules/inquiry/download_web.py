@@ -7,6 +7,7 @@ from pathlib import Path
 
 from flask import flash, jsonify, redirect, request, send_file, url_for
 
+from app.config import OUTPUT_DIR
 from app.helpers import (
     clean_original_filename,
     result_output_path,
@@ -156,12 +157,19 @@ def register(app) -> None:
         customer_code_column = customer_code_column_from_request()
         original_filename = request.form.get("original_filename") or upload_path.name
         remark = request.form.get("remark", "").strip()
+        output_name = Path(request.form.get("output_name") or "").name
+        output_path = (
+            user_output_dir() / output_name
+            if output_name
+            else result_output_path(original_filename, fallback_suffix=upload_path.suffix)
+        )
         try:
             summary = service.analyze_workbook(
                 upload_path,
-                user_output_dir() / "__write-quotes-analysis.xlsx",
+                output_path,
                 match_column=match_column_payload(match_columns),
-                write_output=False,
+                write_output=True,
+                options=parse_price_options(price_options, default="none"),
                 customer_code_column=customer_code_column,
             )
         except ValueError as exc:
@@ -174,6 +182,10 @@ def register(app) -> None:
         seen_keys: set[tuple[str, str]] = set()
         skipped = 0
         actor = actor_name()
+        try:
+            attachment_path = output_path.resolve().relative_to(OUTPUT_DIR.resolve()).as_posix()
+        except ValueError:
+            return fail("报价文件保存位置无效。", 500)
         for row in summary["rows"]:
             bld_no = str(row.get("bld_no") or "").strip()
             price_cny = row.get("price_cny")
@@ -192,6 +204,7 @@ def register(app) -> None:
                 "quoted_by": actor,
                 "source_type": "excel",
                 "source_text": original_filename,
+                "attachment_path": attachment_path,
                 "remark": remark,
             }
             data.update(_write_quote_price_fields(float(price_cny), price_options))

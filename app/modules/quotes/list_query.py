@@ -80,5 +80,6 @@ def pagination(filters: dict[str, object], page: int, total: int, *, page_size: 
         "has_next": page < total_pages,
         "prev_url": page_url(filters, page - 1) if page > 1 else "",
         "next_url": page_url(filters, page + 1) if page < total_pages else "",
+        "jump_url": page_url(filters, 1),
         "links": links,
     }

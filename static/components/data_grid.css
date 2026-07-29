@@ -119,6 +119,30 @@
   gap: 6px;
 }
 
+.data-grid-page-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.data-grid-page-jump input {
+  width: 52px;
+  min-height: 28px;
+  padding: 3px 6px;
+  border: 1px solid #cbd6e2;
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--linear-text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.data-grid-page-jump input:focus-visible {
+  outline: 2px solid var(--linear-accent);
+  outline-offset: 1px;
+}
+
 .data-grid-pages {
   gap: 4px;
 }
@@ -245,5 +269,6 @@
     grid-column: 1 / -1;
     grid-row: 2;
     justify-content: center;
+    flex-wrap: wrap;
   }
 }

@@ -1,3 +1,9 @@
+{% if attachments %}
+  <section class="quote-number-attachments" aria-label="报价文件">
+    <strong>报价文件</strong>
+    {% for attachment in attachments %}<a class="linear-button subtle compact" href="{{ attachment.url }}">下载 {{ attachment.name }}</a>{% endfor %}
+  </section>
+{% endif %}
 <table class="data-table quote-table quote-number-table">
   <thead>
     <tr>

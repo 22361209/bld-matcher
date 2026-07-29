@@ -79,5 +79,6 @@ def pagination(
         "has_next": page < total_pages,
         "prev_url": page_url(query, status, page - 1, column_filters) if page > 1 else "",
         "next_url": page_url(query, status, page + 1, column_filters) if page < total_pages else "",
+        "jump_url": page_url(query, status, 1, column_filters),
         "links": links,
     }

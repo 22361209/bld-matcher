@@ -22,6 +22,13 @@
           {% endif %}
         {% endfor %}
       </div>
+      <form class="data-grid-page-jump" action="{{ pagination.jump_url }}" method="get" data-grid-page-jump data-total-pages="{{ pagination.total_pages }}">
+        {% for key in request.args.keys() if key != "page" %}
+          {% for value in request.args.getlist(key) %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
+        {% endfor %}
+        <label><span class="data-grid-visually-hidden">跳转到指定页</span><input name="page" type="number" min="1" max="{{ pagination.total_pages }}" inputmode="numeric" value="{{ pagination.page }}" aria-label="跳转到指定页，共 {{ pagination.total_pages }} 页"></label>
+        <button class="linear-button subtle" type="submit">跳转</button>
+      </form>
       {% if pagination.has_next %}
         <a class="linear-button subtle" href="{{ pagination.next_url }}"{% if inline_results_links %} data-inline-results-link{% endif %}>下一页</a>
       {% else %}

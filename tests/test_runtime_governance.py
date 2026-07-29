@@ -646,6 +646,66 @@ class RuntimeGovernanceTest(unittest.TestCase):
             ).fetchone()
         self.assertEqual(audit["action"], "执行运行数据保留期清理")
 
+    def test_zero_scoped_retention_keeps_inquiry_material_and_contract_files_indefinitely(self) -> None:
+        settings = RuntimeSettings(
+            upload_retention_days=1,
+            output_retention_days=1,
+            inquiry_upload_retention_days=0,
+            inquiry_output_retention_days=0,
+            material_upload_retention_days=0,
+            material_output_retention_days=0,
+            contract_output_retention_days=0,
+        )
+        uploads = self.root / "uploads"
+        outputs = self.root / "outputs"
+        old_upload = uploads / "u1-user" / "inquiry-20260729-120000-user.xlsx"
+        old_output = outputs / "u1-user" / "re260729-user-inquiry.xlsx"
+        old_material_upload = uploads / "u1-user" / "material-plan-20260729-120000-user.xlsx"
+        old_material_output = outputs / "u1-user" / "007-七月料单.xlsx"
+        old_duplicate_material_output = outputs / "u1-user" / "007-七月料单_2.xlsx"
+        old_contract_output = outputs / "u1-user" / "销售合同" / "客户甲" / "SC-001客户甲.pdf"
+        old_non_scoped_upload = uploads / "u1-user" / "product-data-20260729-120000-user.tar.gz"
+        old_non_scoped_output = outputs / "u1-user" / "business-data-007-20260729.tar.gz"
+        old_upload.parent.mkdir(parents=True)
+        old_output.parent.mkdir(parents=True)
+        old_contract_output.parent.mkdir(parents=True)
+        old_upload.write_bytes(b"source")
+        old_output.write_bytes(b"result")
+        old_material_upload.write_bytes(b"material-source")
+        old_material_output.write_bytes(b"material-result")
+        old_duplicate_material_output.write_bytes(b"duplicate-material-result")
+        old_contract_output.write_bytes(b"contract")
+        old_non_scoped_upload.write_bytes(b"other-source")
+        old_non_scoped_output.write_bytes(b"other-result")
+        old_stamp = (datetime.now() - timedelta(days=400)).timestamp()
+        for path in (
+            old_upload,
+            old_output,
+            old_material_upload,
+            old_material_output,
+            old_duplicate_material_output,
+            old_contract_output,
+            old_non_scoped_upload,
+            old_non_scoped_output,
+        ):
+            os.utime(path, (old_stamp, old_stamp))
+        retention = RuntimeRetentionService(
+            self.database_path,
+            upload_root=uploads,
+            output_root=outputs,
+            backup_roots=(),
+            settings=settings,
+        )
+        plan = retention.build_plan()
+        self.assertNotIn(old_upload.resolve(), plan.files["uploads"])
+        self.assertNotIn(old_output.resolve(), plan.files["outputs"])
+        self.assertNotIn(old_material_upload.resolve(), plan.files["uploads"])
+        self.assertNotIn(old_material_output.resolve(), plan.files["outputs"])
+        self.assertNotIn(old_duplicate_material_output.resolve(), plan.files["outputs"])
+        self.assertNotIn(old_contract_output.resolve(), plan.files["outputs"])
+        self.assertIn(old_non_scoped_upload.resolve(), plan.files["uploads"])
+        self.assertIn(old_non_scoped_output.resolve(), plan.files["outputs"])
+
     def test_historical_database_fixture_matrix_upgrades_without_data_loss(self) -> None:
         expected_migrations = {migration_id for migration_id, _migration in MIGRATIONS}
         for fixture_path in sorted(FIXTURE_ROOT.glob("*.sql")):

@@ -129,3 +129,14 @@
 .quote-latest strong {
   color: var(--linear-accent);
 }
+.quote-number-attachments {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.quote-number-attachments strong {
+  color: var(--linear-text);
+}

@@ -4,6 +4,7 @@ import {
   productCatalogHistoryUrl,
   productCatalogState,
 } from "./product_catalog_navigation.js?v=20260720-1";
+import { scrollDataGridToTop } from "./inline_results_navigation.js?v=20260729-3";
 import {
   invalidateProductOptionCache,
   setProductOptionPickerValue,
@@ -92,11 +93,14 @@ if (document.body.dataset.page === "products.list") {
   const initializeResults = (navigate) => {
     cleanupProductTable();
     const table = resultsHost?.querySelector("#products-table");
-    cleanupProductTable = setupDataGridControls(table, { navigate });
+    cleanupProductTable = setupDataGridControls(table, {
+      navigate,
+      resetFilterParams: ["brand", "item", "product_status"],
+    });
     notifyDataGrids("setup");
   };
 
-  const loadProducts = async (targetHref, { history = "push" } = {}) => {
+  const loadProducts = async (targetHref, { history = "push", scroll = "preserve" } = {}) => {
     if (!(resultsHost instanceof HTMLElement) || !resultsHost.dataset.productsFragmentUrl) {
       window.location.assign(targetHref);
       return false;
@@ -160,9 +164,10 @@ if (document.body.dataset.page === "products.list") {
         const nextGridScroll = resultsHost.querySelector("[data-grid-scroll]");
         if (nextGridScroll instanceof HTMLElement) {
           nextGridScroll.scrollLeft = scrollState.gridLeft;
-          nextGridScroll.scrollTop = scrollState.gridTop;
+          nextGridScroll.scrollTop = scroll === "grid-top" ? 0 : scrollState.gridTop;
         }
-        window.scrollTo(scrollState.windowX, scrollState.windowY);
+        if (scroll === "grid-top") scrollDataGridToTop(resultsHost);
+        else window.scrollTo(scrollState.windowX, scrollState.windowY);
       });
       return true;
     } catch (error) {
@@ -467,7 +472,7 @@ if (document.body.dataset.page === "products.list") {
     const pageLink = event.target.closest(".data-grid-pagination a");
     if (pageLink) {
       event.preventDefault();
-      loadProducts(pageLink.href, { history: "push" });
+      loadProducts(pageLink.href, { history: "push", scroll: "grid-top" });
       return;
     }
     const editLink = event.target.closest("[data-open-edit-product-modal]");
@@ -494,6 +499,18 @@ if (document.body.dataset.page === "products.list") {
     if (!imageLink) return;
     event.preventDefault();
     openImageModal(imageLink);
+  });
+  resultsHost?.addEventListener("submit", (event) => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement) || !form.matches("[data-grid-page-jump]")) return;
+    event.preventDefault();
+    const page = Number.parseInt(form.elements.page?.value || "", 10);
+    const totalPages = Number.parseInt(form.dataset.totalPages || "", 10);
+    if (!Number.isInteger(page) || page < 1 || page > totalPages) return;
+    const target = new URL(window.location.href);
+    target.searchParams.set("page", String(page));
+    target.hash = "products-results";
+    loadProducts(target.toString(), { history: "push", scroll: "grid-top" });
   });
   const positionBldActionMenu = (menu) => {
     const trigger = menu.querySelector(".bld-action-trigger");

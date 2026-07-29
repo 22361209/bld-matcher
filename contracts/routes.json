@@ -757,6 +757,13 @@
       "rule": "/quotes/number/<quote_no>"
     },
     {
+      "endpoint": "quote_web.download_quote_attachment",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/quotes/number/<quote_no>/attachment/<int:quote_id>"
+    },
+    {
       "endpoint": "quote_web.save_quote",
       "methods": [
         "POST"

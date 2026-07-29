@@ -121,6 +121,11 @@ docker compose --profile maintenance run --rm bld-retention
 ```text
 BLD_UPLOAD_RETENTION_DAYS
 BLD_OUTPUT_RETENTION_DAYS
+BLD_INQUIRY_UPLOAD_RETENTION_DAYS
+BLD_INQUIRY_OUTPUT_RETENTION_DAYS
+BLD_MATERIAL_UPLOAD_RETENTION_DAYS
+BLD_MATERIAL_OUTPUT_RETENTION_DAYS
+BLD_CONTRACT_OUTPUT_RETENTION_DAYS
 BLD_JOB_RETENTION_DAYS
 BLD_BACKUP_RETENTION_DAYS
 BLD_ARTIFACT_RETENTION_HOURS
@@ -128,6 +133,8 @@ BLD_IDEMPOTENCY_RETENTION_HOURS
 BLD_AI_CALL_RETENTION_DAYS
 BLD_HEARTBEAT_RETENTION_DAYS
 ```
+
+一般上传和输出继续分别由 `BLD_UPLOAD_RETENTION_DAYS`、`BLD_OUTPUT_RETENTION_DAYS` 管理，默认 30 天。`BLD_INQUIRY_*` 仅覆盖询价上传（`inquiry-*`）、询价 Excel（`reYYMMDD-*`）和询价图纸压缩包（`drawings-*`）；`BLD_MATERIAL_*` 覆盖材料上传（`material-plan-*`、`material-data-*`）和生成料单（`*料单.xlsx`、`*料单_2.xlsx` 等重复生成文件）；`BLD_CONTRACT_OUTPUT_RETENTION_DAYS` 覆盖用户输出目录下的采购合同与销售合同。上述专项变量设为 `0` 表示长期保留，NAS 默认使用此值。API v1 artifact 的时效独立由 `BLD_ARTIFACT_RETENTION_HOURS` 管理，仍维持其 Key 所有权隔离。
 
 清理器只处理受控 `uploads/`、`outputs/` 和备份目录。未过期 artifact 引用的输出文件，以及排队或运行任务声明的上传路径受保护。默认命令始终是 dry-run；不要把 `--apply` 加入未经审查的日常 shell alias。
 

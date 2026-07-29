@@ -3,7 +3,8 @@ import {
   formGetUrl,
   inlineResultsFragmentUrl,
   inlineResultsHistoryUrl,
-} from "./inline_results_navigation.js?v=20260721-2";
+  scrollDataGridToTop,
+} from "./inline_results_navigation.js?v=20260729-3";
 import { setupDataGridControls } from "../components/data_grid_controls.js?v=20260729-2";
 
 if (document.body.dataset.page === "tubes.list") {
@@ -32,6 +33,10 @@ if (document.body.dataset.page === "tubes.list") {
       storagePrefix: "bld.tubes",
       resultsHash: "tube-results",
       navigate: (url) => loadResults(url),
+      resetFilterParams: [
+        "type", "blank_length", "inner_tolerance", "purchase_base", "material", "tolerance",
+        "consumption", "weight_eq", "weight_min", "weight_max", "outer_diameter", "inner_diameter",
+      ],
     });
     resultsHost?.querySelector("[data-tube-search-form]")?.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -40,7 +45,7 @@ if (document.body.dataset.page === "tubes.list") {
     notifyDataGrids("setup");
   };
 
-  const loadResults = async (targetHref, { history = "push" } = {}) => {
+  const loadResults = async (targetHref, { history = "push", scroll = "preserve" } = {}) => {
     if (!(resultsHost instanceof HTMLElement) || !resultsHost.dataset.tubeResultsFragmentUrl) {
       window.location.assign(targetHref);
       return false;
@@ -97,9 +102,10 @@ if (document.body.dataset.page === "tubes.list") {
         const nextGridScroll = resultsHost.querySelector("[data-grid-scroll]");
         if (nextGridScroll instanceof HTMLElement) {
           nextGridScroll.scrollLeft = scrollState.gridLeft;
-          nextGridScroll.scrollTop = scrollState.gridTop;
+          nextGridScroll.scrollTop = scroll === "grid-top" ? 0 : scrollState.gridTop;
         }
-        window.scrollTo(scrollState.windowX, scrollState.windowY);
+        if (scroll === "grid-top") scrollDataGridToTop(resultsHost);
+        else window.scrollTo(scrollState.windowX, scrollState.windowY);
       });
       return true;
     } catch (error) {
@@ -120,7 +126,20 @@ if (document.body.dataset.page === "tubes.list") {
     const target = new URL(link.href, window.location.href);
     if (target.pathname !== window.location.pathname) return;
     event.preventDefault();
-    loadResults(target.toString());
+    loadResults(target.toString(), { scroll: link.closest(".data-grid-pagination") ? "grid-top" : "preserve" });
+  });
+
+  resultsHost?.addEventListener("submit", (event) => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement) || !form.matches("[data-grid-page-jump]")) return;
+    event.preventDefault();
+    const page = Number.parseInt(form.elements.page?.value || "", 10);
+    const totalPages = Number.parseInt(form.dataset.totalPages || "", 10);
+    if (!Number.isInteger(page) || page < 1 || page > totalPages) return;
+    const target = new URL(window.location.href);
+    target.searchParams.set("page", String(page));
+    target.hash = "tube-results";
+    loadResults(target.toString(), { scroll: "grid-top" });
   });
 
   window.addEventListener("popstate", () => loadResults(window.location.href, { history: "none" }));

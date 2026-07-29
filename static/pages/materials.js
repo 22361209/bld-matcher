@@ -53,5 +53,9 @@ if (document.body.dataset.page === "materials.workspace") {
     columns: ["model", "code", "category", "car", "part", "specification", "pieces", "unit-weight", "status"],
     storagePrefix: "bld.materials",
     resultsHash: "materials-results",
+    resetFilterParams: [
+      "mf_model", "mf_code", "mf_category", "mf_car", "mf_part", "mf_spec_text", "mf_pieces",
+      "mf_unit_weight", "mf_active",
+    ],
   });
 }

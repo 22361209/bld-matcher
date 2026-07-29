@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
-from flask import Blueprint, flash, make_response, redirect, render_template, request, url_for
+from flask import Blueprint, flash, make_response, redirect, render_template, request, send_file, url_for
 
+from app.config import OUTPUT_DIR
 from app.helpers import user_upload_path
 from app.security import actor_name, permission_required, safe_referrer
 
@@ -27,6 +28,17 @@ WEB_EDITABLE_QUOTE_FIELDS = (
     "quote_date",
     "remark",
 )
+
+
+def _quote_attachment_path(reference: str) -> Path | None:
+    candidate = PurePosixPath(reference)
+    if not reference or candidate.is_absolute() or ".." in candidate.parts:
+        return None
+    path = (OUTPUT_DIR / candidate.as_posix()).resolve()
+    output_root = OUTPUT_DIR.resolve()
+    if output_root not in path.parents or not path.is_file():
+        return None
+    return path
 
 
 def _web_quote_data() -> dict[str, str]:
@@ -118,9 +130,37 @@ def quotes_fragment():
 @permission_required("view_customer_prices")
 def quote_number_detail(quote_no: str):
     records = get_quote_service().records_by_quote_no(quote_no)
-    response = make_response(render_template("_quote_number_detail.html", quote_no=quote_no, records=records))
+    attachments = []
+    seen_paths: set[str] = set()
+    for record in records:
+        if record.attachment_path in seen_paths or not _quote_attachment_path(record.attachment_path):
+            continue
+        seen_paths.add(record.attachment_path)
+        attachments.append(
+            {
+                "name": Path(record.attachment_path).name,
+                "url": url_for("quote_web.download_quote_attachment", quote_no=quote_no, quote_id=record.id),
+            }
+        )
+    response = make_response(
+        render_template("_quote_number_detail.html", quote_no=quote_no, records=records, attachments=attachments)
+    )
     response.headers["Cache-Control"] = "no-store"
     return response
+
+
+@quote_web.get("/quotes/number/<quote_no>/attachment/<int:quote_id>", endpoint="download_quote_attachment")
+@permission_required("view_customer_prices")
+def download_quote_attachment(quote_no: str, quote_id: int):
+    record = next(
+        (item for item in get_quote_service().records_by_quote_no(quote_no) if item.id == quote_id),
+        None,
+    )
+    path = _quote_attachment_path(record.attachment_path) if record else None
+    if path is None:
+        flash("报价文件不存在或无权访问。", "error")
+        return redirect(url_for("quote_web.quotes", quote_no=quote_no) + "#quote-results")
+    return send_file(path, as_attachment=True, download_name=path.name)
 
 
 @quote_web.post("/quotes/save", endpoint="save_quote")

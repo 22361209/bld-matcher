@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% set active_page = "customers" %}
-{% block page_title %}客户列表{% endblock %}
-{% block page_id %}admin.customers{% endblock %}
-{% block page_type %}system-admin{% endblock %}
+{% block page_title %}客户信息{% endblock %}
+{% block page_id %}customers.directory{% endblock %}
+{% block page_type %}list{% endblock %}
 {% block page_class %}shell wide app-surface{% endblock %}
 
 {% block page_head %}
@@ -13,7 +13,7 @@
       <section class="data-section">
         <div class="data-section-header">
           <div>
-            <h2>客户列表</h2>
+            <h2>客户信息</h2>
             <p>报价只能写入这里登记的客户；改名会同步更新该客户的全部历史报价记录，被报价记录引用的客户不能删除。</p>
           </div>
           <span>{{ customers|length }} 个</span>

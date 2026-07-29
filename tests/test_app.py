@@ -462,7 +462,7 @@ class WebAppTest(unittest.TestCase):
         html = page.get_data(as_text=True)
         self.assertEqual(page.status_code, 200)
         self.assertIn('data-page="admin.product_options"', html)
-        self.assertIn("产品候选值", html)
+        self.assertIn("产品基础信息", html)
 
         saved = self.client.post(
             "/product-options/save",
@@ -3212,7 +3212,7 @@ class WebAppTest(unittest.TestCase):
         self.login()
         page = self.client.get("/customers")
         self.assertEqual(page.status_code, 200)
-        self.assertIn("客户列表", page.get_data(as_text=True))
+        self.assertIn("客户信息", page.get_data(as_text=True))
 
         save = self.client.post("/customers/save", data={"name": "宁波多迦"}, follow_redirects=False)
         self.assertEqual(save.status_code, 302)
@@ -3454,6 +3454,9 @@ class WebAppTest(unittest.TestCase):
         self.assertNotIn("第 1-50 条 / 共 121 条", html)
         self.assertIn("1–50</strong><span> / 121", html)
         self.assertEqual(html.count('aria-label="产品分页"'), 1)
+        self.assertIn('data-reset-list-for="products"', html)
+        self.assertIn('data-grid-page-jump', html)
+        self.assertIn('max="3"', html)
         self.assertIn("K-PAGE-000", html)
         self.assertIn("K-PAGE-049", html)
         self.assertNotIn("K-PAGE-050", html)
@@ -6400,11 +6403,12 @@ with connect(database_path) as conn:
 
         with self.web.connect(self.web.DB_PATH) as conn:
             batch = conn.execute(
-                "SELECT bld_no, customer_product_code, quote_no FROM quote_records WHERE quote_no = ? ORDER BY id",
+                "SELECT id, bld_no, customer_product_code, quote_no, attachment_path FROM quote_records WHERE quote_no = ? ORDER BY id",
                 (quote_no,),
             ).fetchall()
         self.assertEqual(len(batch), 3)
         self.assertTrue(all(row["quote_no"] == quote_no for row in batch))
+        self.assertTrue(all(row["attachment_path"] for row in batch))
 
         detail = self.client.get(f"/quotes/number/{quote_no}")
         detail_html = detail.get_data(as_text=True)
@@ -6412,6 +6416,13 @@ with connect(database_path) as conn:
         self.assertIn("CUST-A1", detail_html)
         self.assertIn("CUST-B2", detail_html)
         self.assertIn("CUST-C3", detail_html)
+        self.assertIn("报价文件", detail_html)
+        attachment_url = re.search(r'href="(/quotes/number/[^\"]+/attachment/\d+)"', detail_html)
+        self.assertIsNotNone(attachment_url)
+        attachment = self.client.get(attachment_url.group(1))
+        self.assertEqual(attachment.status_code, 200)
+        self.assertIn("attachment", attachment.headers.get("Content-Disposition", ""))
+        attachment.close()
 
         list_page = self.client.get(f"/quotes?quote_no={quote_no}")
         list_html = list_page.get_data(as_text=True)

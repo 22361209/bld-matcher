@@ -102,6 +102,7 @@ def _product_pagination(filters: ProductFilters, page: int, total: int) -> dict[
         "has_next": page < total_pages,
         "prev_url": _product_page_url(filters, page - 1) if page > 1 else "",
         "next_url": _product_page_url(filters, page + 1) if page < total_pages else "",
+        "jump_url": _product_page_url(filters, 1),
         "links": links,
     }
 

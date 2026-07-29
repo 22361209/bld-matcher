@@ -43,10 +43,12 @@
           </details>
         </form>
         <div class="secondary-actions command-actions">
-          <button class="linear-button subtle" type="button" data-reset-product-columns>恢复默认列顺序</button>
-          <button class="linear-button subtle" type="button" data-reset-column-widths-for="products">重置列宽</button>
+          <button class="linear-button subtle" type="button" data-reset-list-for="products">重置列表</button>
           <span class="data-grid-controls-visually-hidden" aria-live="polite" data-column-order-status></span>
           <span class="submit-wait-message" aria-live="polite" data-products-inline-status></span>
+          {% if can("manage_product_options") %}
+            <a class="linear-button subtle" href="{{ url_for('product_option_values') }}">基础信息</a>
+          {% endif %}
           {% if can("edit_products") %}
             <button class="linear-button primary" type="button" data-open-product-modal>新增产品</button>
             <a class="linear-button subtle" href="{{ url_for('batch_drawings') }}">批量上传图纸</a>

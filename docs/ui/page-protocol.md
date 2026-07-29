@@ -90,7 +90,7 @@ UI protocol version: 1.2.
 - 列筛选的触发按钮、浮层和候选项分别使用 `data-grid-filter-trigger`、`data-grid-filter-panel` 和 `data-grid-filter-option`。候选项继续遵循上节的可读色 token，不能从产品、报价或材料页面复制一套筛选皮肤。
 - `static/components/data_grid_controls.css` 是上述视觉规则的唯一来源；`static/components/data_grid_controls.js` 提供列排序与筛选交互。页面只传入自身列键、URL 状态和业务筛选，不复制控件代码或使用业务域前缀命名共享类。
 
-这些结构由 `tests/test_project_contract.py`、`tests/test_admin_add_form_layout.py` 和 `tests/test_combobox_styles.py` 一并守护。新增密集列表必须复用此结构；若需要改变其通用布局或交互，先更新协议、回归测试和 ADR 0018。
+这些结构由 `tests/test_project_contract.py`、`tests/test_admin_add_form_layout.py` 和 `tests/test_combobox_styles.py` 一并守护。新增密集列表必须复用此结构；若需要改变其通用布局或交互，先更新协议、回归测试和 ADR 0018 的后继 ADR。
 
 ## CSS And JavaScript
 
@@ -110,7 +110,7 @@ UI protocol version: 1.2.
 
 页面资产按模板归属：页面 CSS 通过 `page_head` 引入，页面 JavaScript 通过 `page_scripts` 引入。`static/styles.css`、`static/components/` 和 `static/app.js` 只保留跨页面共享协议；禁止为了复用加载顺序，把单页选择器、弹窗或业务流程重新放回全局文件。项目继续使用浏览器原生 CSS 与 ES Module，不引入仅用于资产拆分的构建流水线。
 
-共享数据列表使用 `data-resizable-grid` 框体、`data-grid-scroll` 滚动区和 `_data_grid_footer.html` 底栏协议。表头固定在框内滚动区顶部，表体支持双向滚动并以浅色细竖线区分列；底栏展示当前记录范围、筛选总数和服务端分页。桌面端列宽调节必须提供独立于排序、筛选和列拖拽的边缘命中区，支持鼠标、键盘、双击重置和按登录用户持久化，并在指针取消、捕获丢失或窗口失焦时完整清理拖动状态。
+共享数据列表使用 `data-resizable-grid` 框体、`data-grid-scroll` 滚动区和 `_data_grid_footer.html` 底栏协议。表头固定在框内滚动区顶部，表体支持双向滚动并以浅色细竖线区分列；底栏展示当前记录范围、筛选总数、相邻页码以及指定页跳转。跳转必须保留当前 query string 筛选并由服务端校正越界页码；局部刷新分页后表格纵向滚动归零，视口定位到明细表顶部。`data-reset-list-for` 是统一的“重置列表”入口：恢复适用的列顺序和列宽、清除列头筛选并回到第一页，但不清除主搜索或独立状态筛选。桌面端列宽调节必须提供独立于排序、筛选和列拖拽的边缘命中区，支持鼠标、键盘、双击重置和按登录用户持久化，并在指针取消、捕获丢失或窗口失焦时完整清理拖动状态。
 
 ## Acceptance
 
