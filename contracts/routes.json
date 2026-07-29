@@ -820,6 +820,27 @@
       "rule": "/quotes/save"
     },
     {
+      "endpoint": "delete_role_route",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/roles/<role_key>/delete"
+    },
+    {
+      "endpoint": "edit_role",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/roles/<role_key>/edit"
+    },
+    {
+      "endpoint": "save_role_route",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/roles/save"
+    },
+    {
       "endpoint": "generate_sales_contract",
       "methods": [
         "POST"

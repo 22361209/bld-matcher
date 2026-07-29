@@ -1,85 +1,174 @@
 {% extends "base.html" %}
 {% set active_page = "users" %}
-{% block page_title %}账号管理{% endblock %}
+{% block page_title %}账号与权限{% endblock %}
 {% block page_id %}admin.users{% endblock %}
 {% block page_type %}system-admin{% endblock %}
 {% block page_class %}shell wide app-surface{% endblock %}
+{% block page_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='pages/users.css', v=static_version('pages/users.css')) }}">
+{% endblock %}
 
 {% block page_content %}
-      <section class="workbench-split">
+  <nav class="access-view-nav" aria-label="账号与角色管理视图">
+    <a href="{{ url_for('users') }}" {% if view == "accounts" %}aria-current="page"{% endif %}>账号</a>
+    <a href="{{ url_for('users', view='roles') }}" {% if view == "roles" %}aria-current="page"{% endif %}>角色与权限</a>
+  </nav>
+
+  {% if view == "accounts" %}
+    {% set is_editing_user = editing_user and editing_user.id %}
+    {% set selected_role_key = editing_user.role if editing_user else default_role_key %}
+    {% set selected_role = namespace(permissions=[], is_system=false, found=false) %}
+    {% for role in roles %}
+      {% if role.role_key == selected_role_key %}
+        {% set selected_role.permissions = role.permissions %}
+        {% set selected_role.is_system = role.is_system %}
+        {% set selected_role.found = true %}
+      {% endif %}
+    {% endfor %}
+    {% if not is_editing_user and not can_create_user %}
+      <section class="workbench-section access-role-required" aria-labelledby="access-role-required-title">
+        <h2 id="access-role-required-title">请先创建非管理员角色</h2>
+        <p>当前没有可用于快速建号的普通角色。为避免新账号误设为管理员，新增账号已暂停。</p>
+        <a class="linear-button primary" href="{{ url_for('users', view='roles') }}">前往创建角色</a>
+      </section>
+    {% else %}
+    <form action="{{ url_for('save_user_route') }}" method="post" class="access-editor-form" data-user-access-form data-submit-wait data-submit-wait-text="正在保存账号，请稍候..." data-submit-wait-button-text="保存中...">
+      {{ csrf_field() }}
+      <input type="hidden" name="id" value="{{ editing_user.id if editing_user else '' }}">
+      <input type="hidden" name="permission_selection_present" value="1">
+      <section class="workbench-split access-account-basics">
         <article class="workbench-section">
-          <h2>{{ "编辑账号" if editing else "新增账号" }}</h2>
-          <form action="{{ url_for('save_user_route') }}" method="post" class="workbench-form">
-            {{ csrf_field() }}
-            <input type="hidden" name="id" value="{{ editing.id if editing else '' }}">
+          <h2>{{ "编辑账号" if is_editing_user else "新增账号" }}</h2>
+          <div class="workbench-form">
             <label>
               <span>登录名</span>
-              <input name="username" value="{{ editing.username if editing else '' }}" required>
+              <input name="username" value="{{ editing_user.username if editing_user else '' }}" maxlength="80" required autocomplete="username">
             </label>
             <label>
               <span>显示名</span>
-              <input name="display_name" value="{{ editing.display_name if editing else '' }}">
+              <input name="display_name" value="{{ editing_user.display_name if editing_user else '' }}" maxlength="80" autocomplete="name">
             </label>
             <label>
-              <span>角色</span>
-              <select name="role">
-                {% for role, label in ROLE_LABELS.items() %}
-                  <option value="{{ role }}" {% if editing and editing.role == role %}selected{% endif %}>{{ label }}</option>
+              <span>角色模板</span>
+              <select name="role" data-role-select required>
+                {% if not selected_role.found %}
+                  <option value="" selected disabled>请选择可用角色</option>
+                {% endif %}
+                {% for role in roles %}
+                  <option
+                    value="{{ role.role_key }}"
+                    data-permissions="{{ role.permissions | join(' ') }}"
+                    data-system-role="{{ 1 if role.is_system else 0 }}"
+                    {% if selected_role_key == role.role_key %}selected{% endif %}
+                  >{{ role.name }}</option>
                 {% endfor %}
               </select>
+              <small>角色用于快速建号，个人权限在角色基础上叠加。</small>
             </label>
             <label>
-              <span>{{ "新密码（留空则不修改）" if editing else "初始密码" }}</span>
-              <input name="password" type="password" {% if not editing %}required{% endif %}>
+              <span>{{ "新密码（留空则不修改）" if is_editing_user else "初始密码" }}</span>
+              <input name="password" type="password" {% if not is_editing_user %}required{% endif %} autocomplete="new-password">
             </label>
             <label class="check">
-              <input type="checkbox" name="active" value="1" {% if not editing or editing.active %}checked{% endif %}>
-              启用
+              <input type="checkbox" name="active" value="1" {% if not editing_user or editing_user.active %}checked{% endif %}>
+              启用账号
             </label>
-            <button class="linear-button primary" type="submit">保存账号</button>
-          </form>
+          </div>
         </article>
-
-        <article class="workbench-section">
-          <h2>角色权限</h2>
-          <table class="data-table">
-            <thead><tr><th>角色</th><th>说明</th></tr></thead>
-            <tbody>
-              <tr><td>管理员</td><td>账号管理、目录导入、产品维护、映射维护、生成匹配、生成生产料单、材料数据维护、查看操作日志</td></tr>
-              <tr><td>编辑员</td><td>产品维护、映射维护、生成匹配、生成生产料单、查看操作日志</td></tr>
-              <tr><td>普通用户</td><td>查看目录、生成匹配结果、生成生产料单</td></tr>
-              <tr><td>只读用户</td><td>仅查看产品目录</td></tr>
-            </tbody>
-          </table>
+        <article class="workbench-section access-account-summary">
+          <h2>权限计算规则</h2>
+          <ol>
+            <li>先继承角色模板中的权限。</li>
+            <li>“额外授权”可在角色之外增加权限。</li>
+            <li>“明确禁止”优先于角色权限。</li>
+          </ol>
+          <p class="note">管理员角色始终拥有全部权限，不接受个人覆盖。权限保存后在下一次请求即时生效。</p>
         </article>
       </section>
 
-      <section class="data-section">
-        <div class="data-section-header">
+      <section class="permission-editor" aria-labelledby="account-permissions-title">
+        <div class="permission-editor-heading">
           <div>
-            <h2>账号列表</h2>
-            <p>管理系统登录账号和角色。</p>
+            <h2 id="account-permissions-title">账号个人权限</h2>
+            <p>保持“跟随角色”即可快速建号；只对特殊账号设置额外授权或明确禁止。</p>
           </div>
-          <span>{{ users|length }} 个</span>
+          <button class="linear-button subtle compact" type="button" data-reset-permission-overrides>全部跟随角色</button>
         </div>
-        <div class="data-table-scroll">
-        <table class="data-table">
+        {% for group_name, definitions in permission_groups %}
+          <section class="permission-group" aria-labelledby="account-permission-group-{{ loop.index }}">
+            <h3 id="account-permission-group-{{ loop.index }}">{{ group_name }}</h3>
+            <div class="permission-list">
+              {% for permission in definitions %}
+                {% set role_allows = selected_role.is_system or permission.key in selected_role.permissions %}
+                {% set override = editing_user.permission_overrides.get(permission.key, 'inherit') if editing_user else 'inherit' %}
+                {% set final_allows = selected_role.is_system or override == 'allow' or (override == 'inherit' and role_allows) %}
+                <fieldset
+                  class="permission-row{% if not permission.active %} permission-row-retained{% endif %}"
+                  data-permission-row
+                  data-permission="{{ permission.key }}"
+                >
+                  <legend>
+                    <span>{{ permission.label }}</span>
+                    <code>{{ permission.key }}</code>
+                  </legend>
+                  <p>{{ permission.description }}</p>
+                  {% if permission.assignable %}
+                    <div class="permission-choices">
+                      <label>
+                        <input type="radio" name="permission_{{ permission.key }}" value="inherit" {% if override == 'inherit' %}checked{% endif %} {% if selected_role.is_system %}disabled{% endif %}>
+                        <span>跟随角色</span>
+                      </label>
+                      <label>
+                        <input type="radio" name="permission_{{ permission.key }}" value="allow" {% if override == 'allow' %}checked{% endif %} {% if selected_role.is_system %}disabled{% endif %}>
+                        <span>额外授权</span>
+                      </label>
+                      <label>
+                        <input type="radio" name="permission_{{ permission.key }}" value="deny" {% if override == 'deny' %}checked{% endif %} {% if selected_role.is_system %}disabled{% endif %}>
+                        <span>明确禁止</span>
+                      </label>
+                    </div>
+                    <div class="permission-result-line">
+                      <span data-role-result>角色当前：{{ "允许" if role_allows else "禁止" }}</span>
+                      <strong data-permission-result data-state="{{ 'allow' if final_allows else 'deny' }}">最终结果：{{ "允许" if final_allows else "禁止" }}</strong>
+                    </div>
+                  {% else %}
+                    <div class="permission-fixed-note">仅系统管理员拥有，不可分配或覆盖。</div>
+                  {% endif %}
+                </fieldset>
+              {% endfor %}
+            </div>
+          </section>
+        {% endfor %}
+        <div class="form-actions access-save-actions">
+          <button class="linear-button primary" type="submit">保存账号</button>
+          {% if is_editing_user %}<a class="linear-button subtle" href="{{ url_for('users') }}">取消编辑</a>{% endif %}
+          <p class="submit-wait-message" data-submit-wait-message aria-live="polite"></p>
+        </div>
+      </section>
+    </form>
+    {% endif %}
+
+    <section class="data-section">
+      <div class="data-section-header">
+        <div>
+          <h2>账号列表</h2>
+          <p>角色用于快速建号，“个性设置”显示该账号单独设置的权限数量。</p>
+        </div>
+        <span>{{ users | length }} 个</span>
+      </div>
+      <div class="data-table-scroll">
+        <table class="data-table access-table">
           <thead>
-            <tr>
-              <th>登录名</th>
-              <th>显示名</th>
-              <th>角色</th>
-              <th>状态</th>
-              <th>更新时间</th>
-              <th></th>
-            </tr>
+            <tr><th>登录名</th><th>显示名</th><th>角色</th><th>有效权限</th><th>个性设置</th><th>状态</th><th>更新时间</th><th>操作</th></tr>
           </thead>
           <tbody>
             {% for user in users %}
               <tr class="{% if not user.active %}muted-row{% endif %}">
                 <td><strong>{{ user.username }}</strong></td>
-                <td>{{ user.display_name }}</td>
-                <td>{{ ROLE_LABELS.get(user.role, user.role) }}</td>
+                <td>{{ user.display_name or "—" }}</td>
+                <td>{{ user.role_name }}</td>
+                <td>{{ user.permissions | length }} 项</td>
+                <td>{{ user.permission_overrides | length }} 项</td>
                 <td><span class="status-pill {{ 'on' if user.active else 'off' }}">{{ "启用" if user.active else "停用" }}</span></td>
                 <td>{{ user.updated_at }}</td>
                 <td><a href="{{ url_for('edit_user', user_id=user.id) }}">编辑</a></td>
@@ -87,6 +176,99 @@
             {% endfor %}
           </tbody>
         </table>
+      </div>
+    </section>
+  {% else %}
+    <form action="{{ url_for('save_role_route') }}" method="post" class="access-editor-form" data-submit-wait data-submit-wait-text="正在保存角色，请稍候..." data-submit-wait-button-text="保存中...">
+      {{ csrf_field() }}
+      <input type="hidden" name="role_key" value="{{ editing_role.role_key if editing_role else '' }}">
+      <input type="hidden" name="permission_selection_present" value="1">
+      <section class="workbench-split access-role-basics">
+        <article class="workbench-section">
+          <h2>{{ "编辑角色" if editing_role else "新增角色" }}</h2>
+          <div class="workbench-form">
+            <label><span>角色名称</span><input name="name" value="{{ editing_role.name if editing_role else '' }}" maxlength="40" required></label>
+            <label><span>角色说明</span><textarea name="description" rows="3" maxlength="200" placeholder="说明该角色适用的岗位或工作范围">{{ editing_role.description if editing_role else '' }}</textarea></label>
+          </div>
+        </article>
+        <article class="workbench-section access-account-summary">
+          <h2>角色生效方式</h2>
+          <p>新建账号选择角色后即可继承下方权限。修改角色会立即影响所有继承账号，账号的个人授权和明确禁止保持不变。</p>
+          {% if editing_role and editing_role.user_count %}
+            <p class="access-impact-note">当前有 {{ editing_role.user_count }} 个账号使用该角色，保存后会立即重新计算它们的有效权限。</p>
+          {% endif %}
+        </article>
+      </section>
+
+      <section class="permission-editor" aria-labelledby="role-permissions-title">
+        <div class="permission-editor-heading">
+          <div><h2 id="role-permissions-title">角色权限</h2><p>只勾选该岗位必需的权限，新角色允许不授予任何额外权限。</p></div>
+        </div>
+        {% for group_name, definitions in permission_groups %}
+          <fieldset class="role-permission-group">
+            <legend>{{ group_name }}</legend>
+            <div class="role-permission-grid">
+              {% for permission in definitions %}
+                <label class="role-permission-option{% if not permission.assignable %} role-permission-locked{% endif %}{% if not permission.active %} role-permission-retained{% endif %}">
+                  {% if permission.assignable %}
+                    <input type="checkbox" name="permissions" value="{{ permission.key }}" {% if editing_role and permission.key in editing_role.permissions %}checked{% endif %}>
+                  {% else %}
+                    <input type="checkbox" disabled>
+                  {% endif %}
+                  <span><strong>{{ permission.label }}</strong><small>{{ permission.description }}</small><code>{{ permission.key }}</code></span>
+                </label>
+              {% endfor %}
+            </div>
+          </fieldset>
+        {% endfor %}
+        <div class="form-actions access-save-actions">
+          <button class="linear-button primary" type="submit">保存角色</button>
+          {% if editing_role %}<a class="linear-button subtle" href="{{ url_for('users', view='roles') }}">取消编辑</a>{% endif %}
+          <p class="submit-wait-message" data-submit-wait-message aria-live="polite"></p>
         </div>
       </section>
+    </form>
+
+    <section class="data-section">
+      <div class="data-section-header">
+        <div><h2>角色列表</h2><p>管理员是系统固定角色；其他角色可编辑，未被账号使用时可删除。</p></div>
+        <span>{{ roles | length }} 个</span>
+      </div>
+      <div class="data-table-scroll">
+        <table class="data-table access-table role-table">
+          <thead><tr><th>角色</th><th>说明</th><th>权限</th><th>使用账号</th><th>更新时间</th><th>操作</th></tr></thead>
+          <tbody>
+            {% for role in roles %}
+              <tr>
+                <td><strong>{{ role.name }}</strong>{% if role.is_system %}<span class="access-system-badge">系统固定</span>{% endif %}</td>
+                <td>{{ role.description or "—" }}</td>
+                <td>{{ role.permissions | length }} 项</td>
+                <td>{{ role.user_count }} 个</td>
+                <td>{{ role.updated_at }}</td>
+                <td class="access-row-actions">
+                  {% if role.is_system %}
+                    <span class="muted-cell">不可编辑</span>
+                  {% else %}
+                    <a href="{{ url_for('edit_role', role_key=role.role_key) }}">编辑</a>
+                    {% if role.user_count %}
+                      <small>使用中，不可删除</small>
+                    {% else %}
+                      <form action="{{ url_for('delete_role_route', role_key=role.role_key) }}" method="post">
+                        {{ csrf_field() }}
+                        <button class="link-button danger-link" type="submit" data-confirm="确认删除角色“{{ role.name }}”？该角色当前未被账号使用，删除后不能恢复。">删除</button>
+                      </form>
+                    {% endif %}
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  {% endif %}
+{% endblock %}
+
+{% block page_scripts %}
+  <script type="module" src="{{ url_for('static', filename='pages/users.js', v=static_version('pages/users.js')) }}"></script>
 {% endblock %}

@@ -2,15 +2,51 @@ from __future__ import annotations
 
 import logging
 
-from flask import flash, make_response, redirect, render_template, request, url_for
+from flask import flash, g, make_response, redirect, render_template, request, url_for
 
 from app.platform.api_principal import API_SCOPE_LABELS, DEFAULT_API_SCOPES
+from app.platform.permissions import PERMISSION_DEFINITIONS, permission_groups
 from app.security import actor_name, permission_required
 
 from .factory import get_admin_service
 
 
 logger = logging.getLogger(__name__)
+
+
+def _access_page_context(
+    *,
+    view: str = "accounts",
+    editing_user_id: int | None = None,
+    editing_role_key: str = "",
+    form_user: dict[str, object] | None = None,
+    form_role: dict[str, object] | None = None,
+) -> dict[str, object]:
+    page = get_admin_service().access_page(
+        editing_user_id=editing_user_id,
+        editing_role_key=editing_role_key,
+    )
+    return {
+        "view": "roles" if view == "roles" else "accounts",
+        "users": page.users,
+        "roles": page.roles,
+        "editing_user": form_user if form_user is not None else page.editing_user,
+        "editing_role": form_role if form_role is not None else page.editing_role,
+        "default_role_key": page.default_role_key,
+        "can_create_user": page.can_create_user,
+        "permission_groups": permission_groups(),
+        "permission_count": len(PERMISSION_DEFINITIONS),
+    }
+
+
+def _user_permission_overrides() -> dict[str, str]:
+    if request.form.get("permission_selection_present") != "1":
+        raise ValueError("权限表单不完整，请刷新后重试。")
+    return {
+        definition.key: request.form.get(f"permission_{definition.key}", "inherit")
+        for definition in PERMISSION_DEFINITIONS
+        if definition.assignable
+    }
 
 
 def _api_key_template_context(page, *, generated_token: str = "") -> dict[str, object]:
@@ -27,40 +63,124 @@ def register(app) -> None:
     @app.get("/users")
     @permission_required("manage_users")
     def users():
-        rows, _editing = get_admin_service().users()
-        return render_template("users.html", users=rows, editing=None)
+        return render_template(
+            "users.html",
+            **_access_page_context(view=request.args.get("view", "accounts")),
+        )
 
     @app.get("/users/<int:user_id>/edit")
     @permission_required("manage_users")
     def edit_user(user_id: int):
-        rows, editing = get_admin_service().users(editing_id=user_id)
-        if not editing:
+        context = _access_page_context(editing_user_id=user_id)
+        if not context["editing_user"]:
             flash("账号不存在。", "error")
             return redirect(url_for("users"))
-        return render_template("users.html", users=rows, editing=editing)
+        return render_template("users.html", **context)
 
     @app.post("/users/save")
     @permission_required("manage_users")
     def save_user_route():
-        data = {
-            "id": request.form.get("id", ""),
-            "username": request.form.get("username", ""),
-            "display_name": request.form.get("display_name", ""),
-            "role": request.form.get("role", "viewer"),
-            "active": request.form.get("active", "0"),
-            "password": request.form.get("password", ""),
-        }
         try:
-            get_admin_service().save_user(data, actor=actor_name())
+            data = {
+                "id": request.form.get("id", ""),
+                "username": request.form.get("username", ""),
+                "display_name": request.form.get("display_name", ""),
+                "role": request.form.get("role", "viewer"),
+                "active": request.form.get("active", "0"),
+                "password": request.form.get("password", ""),
+                "permission_overrides": _user_permission_overrides(),
+            }
+            get_admin_service().save_user(
+                data,
+                actor=actor_name(),
+                actor_user_id=int(g.user["id"]),
+            )
         except ValueError as exc:
             flash(f"账号保存失败：{exc}", "error")
-            return redirect(url_for("users"))
+            form_user = {
+                "id": request.form.get("id", ""),
+                "username": request.form.get("username", ""),
+                "display_name": request.form.get("display_name", ""),
+                "role": request.form.get("role", "viewer"),
+                "active": request.form.get("active", "0") == "1",
+                "permission_overrides": {
+                    definition.key: request.form.get(f"permission_{definition.key}", "inherit")
+                    for definition in PERMISSION_DEFINITIONS
+                    if definition.assignable
+                },
+            }
+            return render_template(
+                "users.html",
+                **_access_page_context(form_user=form_user),
+            ), 400
         except Exception:
             logger.exception("User save failed")
             flash("账号保存失败，请稍后重试。", "error")
             return redirect(url_for("users"))
         flash("账号已保存。", "success")
         return redirect(url_for("users"))
+
+    @app.get("/roles/<role_key>/edit")
+    @permission_required("manage_users")
+    def edit_role(role_key: str):
+        context = _access_page_context(view="roles", editing_role_key=role_key)
+        role = context["editing_role"]
+        if not isinstance(role, dict):
+            flash("角色不存在。", "error")
+            return redirect(url_for("users", view="roles"))
+        if bool(role["is_system"]):
+            flash("管理员角色是系统固定角色，不能修改。", "error")
+            return redirect(url_for("users", view="roles"))
+        return render_template("users.html", **context)
+
+    @app.post("/roles/save")
+    @permission_required("manage_users")
+    def save_role_route():
+        data = {
+            "role_key": request.form.get("role_key", ""),
+            "name": request.form.get("name", ""),
+            "description": request.form.get("description", ""),
+        }
+        permissions = request.form.getlist("permissions")
+        try:
+            if request.form.get("permission_selection_present") != "1":
+                raise ValueError("权限表单不完整，请刷新后重试。")
+            get_admin_service().save_role(data, permissions, actor=actor_name())
+        except ValueError as exc:
+            flash(f"角色保存失败：{exc}", "error")
+            current = get_admin_service().access_page(
+                editing_role_key=str(data["role_key"]),
+            ).editing_role
+            form_role = {
+                **data,
+                "permissions": permissions,
+                "is_system": False,
+                "user_count": int(str(current["user_count"])) if current else 0,
+            }
+            return render_template(
+                "users.html",
+                **_access_page_context(view="roles", form_role=form_role),
+            ), 400
+        except Exception:
+            logger.exception("Role save failed")
+            flash("角色保存失败，请稍后重试。", "error")
+            return redirect(url_for("users", view="roles"))
+        flash("角色已保存，继承该角色的账号已即时生效。", "success")
+        return redirect(url_for("users", view="roles"))
+
+    @app.post("/roles/<role_key>/delete")
+    @permission_required("manage_users")
+    def delete_role_route(role_key: str):
+        try:
+            get_admin_service().delete_role(role_key, actor=actor_name())
+        except ValueError as exc:
+            flash(f"角色删除失败：{exc}", "error")
+        except Exception:
+            logger.exception("Role delete failed")
+            flash("角色删除失败，请稍后重试。", "error")
+        else:
+            flash("角色已删除。", "success")
+        return redirect(url_for("users", view="roles"))
 
     @app.get("/internal-api-key")
     @permission_required("manage_users")

@@ -76,6 +76,34 @@ CREATE TABLE IF NOT EXISTS users (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS roles (
+  role_key TEXT PRIMARY KEY,
+  name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+  description TEXT NOT NULL DEFAULT '',
+  is_system INTEGER NOT NULL DEFAULT 0 CHECK (is_system IN (0, 1)),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS role_permissions (
+  role_key TEXT NOT NULL,
+  permission TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (role_key, permission),
+  FOREIGN KEY (role_key) REFERENCES roles(role_key) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS user_permission_overrides (
+  user_id INTEGER NOT NULL,
+  permission TEXT NOT NULL,
+  effect TEXT NOT NULL CHECK (effect IN ('allow', 'deny')),
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, permission),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+
 CREATE TABLE IF NOT EXISTS material_items (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   model TEXT NOT NULL,

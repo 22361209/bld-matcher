@@ -28,6 +28,16 @@ class ApiKeyPage:
     keys: list[dict[str, object]]
 
 
+@dataclass(frozen=True, slots=True)
+class AccessPage:
+    users: list[dict[str, object]]
+    roles: list[dict[str, object]]
+    editing_user: dict[str, object] | None
+    editing_role: dict[str, object] | None
+    default_role_key: str
+    can_create_user: bool
+
+
 class AdminService:
     def __init__(
         self,
@@ -58,9 +68,78 @@ class AdminService:
             editing = unit_of_work.repository.user(editing_id) if editing_id is not None else None
         return rows, editing
 
-    def save_user(self, data: Mapping[str, object], *, actor: str) -> None:
+    def access_page(
+        self,
+        *,
+        editing_user_id: int | None = None,
+        editing_role_key: str = "",
+    ) -> AccessPage:
         with self.unit_of_work_factory() as unit_of_work:
-            unit_of_work.repository.save_user(data, actor=actor)
+            users = unit_of_work.repository.users()
+            roles = unit_of_work.repository.roles()
+            editing_user = (
+                unit_of_work.repository.user(editing_user_id)
+                if editing_user_id is not None
+                else None
+            )
+            editing_role = (
+                unit_of_work.repository.role(editing_role_key)
+                if editing_role_key
+                else None
+            )
+        non_system_role_keys = [
+            str(role["role_key"])
+            for role in roles
+            if not bool(role["is_system"])
+        ]
+        default_role_key = (
+            "viewer"
+            if "viewer" in non_system_role_keys
+            else next(iter(non_system_role_keys), "")
+        )
+        return AccessPage(
+            users=users,
+            roles=roles,
+            editing_user=editing_user,
+            editing_role=editing_role,
+            default_role_key=default_role_key,
+            can_create_user=bool(non_system_role_keys),
+        )
+
+    def save_user(
+        self,
+        data: Mapping[str, object],
+        *,
+        actor: str,
+        actor_user_id: int | None = None,
+    ) -> int:
+        with self.unit_of_work_factory() as unit_of_work:
+            unit_of_work.repository.begin_write()
+            user_id = unit_of_work.repository.save_user(
+                data,
+                actor=actor,
+                actor_user_id=actor_user_id,
+            )
+            unit_of_work.commit()
+        return user_id
+
+    def save_role(
+        self,
+        data: Mapping[str, object],
+        permissions: Iterable[str],
+        *,
+        actor: str,
+    ) -> str:
+        with self.unit_of_work_factory() as unit_of_work:
+            unit_of_work.repository.begin_write()
+            role_key = unit_of_work.repository.save_role(data, permissions, actor=actor)
+            unit_of_work.commit()
+        return role_key
+
+    def delete_role(self, role_key: str, *, actor: str) -> None:
+        with self.unit_of_work_factory() as unit_of_work:
+            unit_of_work.repository.begin_write()
+            unit_of_work.repository.delete_role(role_key, actor=actor)
             unit_of_work.commit()
 
     def api_keys(self) -> ApiKeyPage:

@@ -9,41 +9,13 @@ from flask import flash, g, jsonify, redirect, request, session, url_for
 from markupsafe import Markup, escape
 from werkzeug.security import check_password_hash
 
+from app.platform.permissions import LEGACY_ROLE_LABELS, LEGACY_ROLE_PERMISSIONS
+
 
 CSRF_SESSION_KEY = "_csrf_token"
 
-ROLE_LABELS = {
-    "admin": "管理员",
-    "editor": "编辑员",
-    "user": "普通用户",
-    "viewer": "只读用户",
-}
-
-ROLE_PERMISSIONS = {
-    "admin": {
-        "manage_users",
-        "import_catalog",
-        "edit_products",
-        "export_catalog",
-        "manage_aliases",
-        "generate_match",
-        "view_logs",
-        "generate_material_sheet",
-        "generate_purchase_contract",
-        "manage_materials",
-        "view_customer_prices",
-        "manage_customer_prices",
-        "recognize_shipments",
-        "generate_shipping_notice",
-        "sync_product_data",
-        "manage_product_options",
-        "manage_customers",
-        "rename_products",
-    },
-    "editor": {"edit_products", "manage_aliases", "generate_match", "view_logs", "generate_material_sheet", "recognize_shipments", "generate_shipping_notice"},
-    "user": {"generate_match", "generate_material_sheet", "recognize_shipments", "generate_shipping_notice"},
-    "viewer": set(),
-}
+ROLE_LABELS = LEGACY_ROLE_LABELS
+ROLE_PERMISSIONS = LEGACY_ROLE_PERMISSIONS
 
 
 def actor_name() -> str:
@@ -57,6 +29,9 @@ def can(permission: str) -> bool:
     user = getattr(g, "user", None)
     if not user:
         return False
+    loaded_permissions = user.get("permissions") if hasattr(user, "get") else None
+    if loaded_permissions is not None:
+        return permission in loaded_permissions
     return permission in ROLE_PERMISSIONS.get(user["role"], set())
 
 

@@ -6,7 +6,18 @@ from pathlib import Path
 from types import TracebackType
 
 from app.database import connect
-from app.modules.admin.persistence import get_user, get_user_by_username, list_audit_logs, list_log_actors, list_users, save_user
+from app.modules.admin.persistence import (
+    delete_role,
+    get_role,
+    get_user,
+    get_user_by_username,
+    list_audit_logs,
+    list_log_actors,
+    list_roles,
+    list_users,
+    save_role,
+    save_user,
+)
 from app.platform.api_keys import (
     create_internal_api_key,
     delete_internal_api_key,
@@ -27,14 +38,48 @@ class SQLiteAdminRepository:
     def users(self) -> list[dict[str, object]]:
         return [dict(row) for row in list_users(self.connection)]
 
+    def roles(self) -> list[dict[str, object]]:
+        return [dict(row) for row in list_roles(self.connection)]
+
     def user(self, user_id: int) -> dict[str, object] | None:
         return _mapping(get_user(self.connection, user_id))
 
     def user_by_username(self, username: str) -> dict[str, object] | None:
         return _mapping(get_user_by_username(self.connection, username))
 
-    def save_user(self, data: Mapping[str, object], *, actor: str) -> None:
-        save_user(self.connection, dict(data), actor=actor, commit=False)
+    def role(self, role_key: str) -> dict[str, object] | None:
+        return _mapping(get_role(self.connection, role_key))
+
+    def begin_write(self) -> None:
+        if not self.connection.in_transaction:
+            self.connection.execute("BEGIN IMMEDIATE")
+
+    def save_user(
+        self,
+        data: Mapping[str, object],
+        *,
+        actor: str,
+        actor_user_id: int | None,
+    ) -> int:
+        return save_user(
+            self.connection,
+            dict(data),
+            actor=actor,
+            actor_user_id=actor_user_id,
+            commit=False,
+        )
+
+    def save_role(
+        self,
+        data: Mapping[str, object],
+        permissions: Iterable[str],
+        *,
+        actor: str,
+    ) -> str:
+        return save_role(self.connection, data, permissions, actor=actor, commit=False)
+
+    def delete_role(self, role_key: str, *, actor: str) -> None:
+        delete_role(self.connection, role_key, actor=actor, commit=False)
 
     def logs(self, *, query: str, actor: str) -> list[dict[str, object]]:
         return [dict(row) for row in list_audit_logs(self.connection, query=query, actor=actor)]

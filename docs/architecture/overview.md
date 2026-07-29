@@ -58,6 +58,8 @@ api.py                   # /api/v1 适配
 5. 已完成：`app/modules/contracts/`、`materials/`、`shipping/` 和 `admin/` 负责事务、审计与文件补偿；全部页面纳入基础模板协议，模板内联资源清零。
 6. 已完成：SQLite 持久任务、独立 Worker、统一 jobs API、AI Provider、readiness/业务探针、结构化日志、保留期执行器和历史数据库 fixture 矩阵；剩余运行/路由债务清零。
 
+网页访问控制的原子权限目录位于无 Flask/SQLite 依赖的平台模块，角色、角色权限和账号权限覆盖保存在 SQLite。固定管理员拥有全部已注册权限；非管理员按 `(role grants + user allow) - user deny` 计算有效权限，每次请求重新读取账号以保证角色变更即时生效。API Key Scope 保持独立，不与网页账号角色混用。
+
 ## Technology Triggers
 
 - SQLite 保留，直到出现多主机写入、持续锁冲突或需要复杂并发事务。

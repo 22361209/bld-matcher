@@ -7,6 +7,12 @@ from collections.abc import Callable
 from datetime import datetime, timedelta
 
 from .platform.api_principal import LEGACY_COMPATIBILITY_SCOPES
+from .platform.permissions import (
+    ADMIN_ROLE_KEY,
+    LEGACY_ROLE_DESCRIPTIONS,
+    LEGACY_ROLE_LABELS,
+    LEGACY_ROLE_PERMISSIONS,
+)
 from .platform.sync_identity import MATERIAL_IDENTITY_FIELDS, QUOTE_MATCH_FIELDS, material_key, quote_match_key, stable_sync_id
 
 
@@ -804,6 +810,104 @@ def _repair_customer_workspace_integrity(conn: sqlite3.Connection) -> None:
     _backfill_quote_customer_ids(conn)
 
 
+def _add_editable_roles_and_user_permission_overrides(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS roles (
+          role_key TEXT PRIMARY KEY,
+          name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+          description TEXT NOT NULL DEFAULT '',
+          is_system INTEGER NOT NULL DEFAULT 0 CHECK (is_system IN (0, 1)),
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS role_permissions (
+          role_key TEXT NOT NULL,
+          permission TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          PRIMARY KEY (role_key, permission),
+          FOREIGN KEY (role_key) REFERENCES roles(role_key) ON DELETE CASCADE
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS user_permission_overrides (
+          user_id INTEGER NOT NULL,
+          permission TEXT NOT NULL,
+          effect TEXT NOT NULL CHECK (effect IN ('allow', 'deny')),
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (user_id, permission),
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+        """
+    )
+    user_columns = _columns(conn, "users")
+    if "role" in user_columns:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)")
+    timestamp = conn.execute("SELECT datetime('now','localtime')").fetchone()[0]
+    for role_key, name in LEGACY_ROLE_LABELS.items():
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO roles (
+              role_key, name, description, is_system, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                role_key,
+                name,
+                LEGACY_ROLE_DESCRIPTIONS[role_key],
+                1 if role_key == ADMIN_ROLE_KEY else 0,
+                timestamp,
+                timestamp,
+            ),
+        )
+        conn.executemany(
+            """
+            INSERT OR IGNORE INTO role_permissions (role_key, permission, created_at)
+            VALUES (?, ?, ?)
+            """,
+            (
+                (role_key, permission, timestamp)
+                for permission in sorted(LEGACY_ROLE_PERMISSIONS[role_key])
+            ),
+        )
+    existing_role_keys = (
+        {
+            str(row["role"])
+            for row in conn.execute("SELECT DISTINCT role FROM users ORDER BY role").fetchall()
+        }
+        if "role" in user_columns
+        else set()
+    )
+    for role_key in sorted(existing_role_keys - set(LEGACY_ROLE_LABELS)):
+        if conn.execute(
+            "SELECT 1 FROM roles WHERE role_key = ?",
+            (role_key,),
+        ).fetchone():
+            continue
+        base_name = role_key.strip() or "历史角色"
+        candidate = base_name
+        suffix = 2
+        while conn.execute(
+            "SELECT 1 FROM roles WHERE name = ? COLLATE NOCASE",
+            (candidate,),
+        ).fetchone():
+            candidate = f"{base_name} ({suffix})"
+            suffix += 1
+        conn.execute(
+            """
+            INSERT INTO roles (role_key, name, description, is_system, created_at, updated_at)
+            VALUES (?, ?, '从历史账号记录迁移的角色。', 0, ?, ?)
+            """,
+            (role_key, candidate, timestamp, timestamp),
+        )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -835,6 +939,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("028_customer_profiles_documents_and_quote_contracts", _add_customer_profiles_documents_and_quote_contracts),
     ("029_customer_workspace_integrity", _finalize_customer_workspace_integrity),
     ("030_repair_customer_workspace_integrity", _repair_customer_workspace_integrity),
+    ("031_editable_roles_and_user_permission_overrides", _add_editable_roles_and_user_permission_overrides),
 )
 
 

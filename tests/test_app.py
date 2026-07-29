@@ -160,6 +160,222 @@ class WebAppTest(unittest.TestCase):
         self.assertIn('href="/contracts" role="menuitem">采购合同</a>', html)
         self.assertIn('href="/contracts/sales" role="menuitem">销售合同</a>', html)
 
+    def test_admin_can_manage_roles_and_account_permission_overrides(self):
+        role_name = "WEB 询价专员"
+        username = "web-role-specialist"
+
+        def cleanup_access_records():
+            self.client.post("/logout")
+            with self.web.connect(self.web.DB_PATH) as connection:
+                user = connection.execute(
+                    "SELECT id FROM users WHERE username = ?",
+                    (username,),
+                ).fetchone()
+                if user:
+                    connection.execute(
+                        "DELETE FROM user_permission_overrides WHERE user_id = ?",
+                        (user["id"],),
+                    )
+                    connection.execute("DELETE FROM users WHERE id = ?", (user["id"],))
+                role = connection.execute(
+                    "SELECT role_key FROM roles WHERE name = ?",
+                    (role_name,),
+                ).fetchone()
+                if role:
+                    connection.execute(
+                        "DELETE FROM role_permissions WHERE role_key = ?",
+                        (role["role_key"],),
+                    )
+                    connection.execute(
+                        "DELETE FROM roles WHERE role_key = ?",
+                        (role["role_key"],),
+                    )
+                connection.commit()
+
+        self.addCleanup(cleanup_access_records)
+        self.login()
+        account_page = self.client.get("/users")
+        account_html = account_page.get_data(as_text=True)
+        self.assertEqual(account_page.status_code, 200)
+        self.assertIn("账号个人权限", account_html)
+        self.assertIn('name="permission_generate_match" value="inherit"', account_html)
+        self.assertIn('href="/users?view=roles"', account_html)
+
+        role_page = self.client.get("/users", query_string={"view": "roles"})
+        role_html = role_page.get_data(as_text=True)
+        self.assertEqual(role_page.status_code, 200)
+        self.assertIn("新增角色", role_html)
+        self.assertIn("系统固定", role_html)
+        self.assertIn("保留能力（当前无网页入口）", role_html)
+
+        created_role = self.client.post(
+            "/roles/save",
+            data={
+                "name": role_name,
+                "description": "用于验证角色和个人权限",
+                "permission_selection_present": "1",
+                "permissions": ["generate_match", "manage_aliases", "sync_product_data"],
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(created_role.status_code, 302)
+        with self.web.connect(self.web.DB_PATH) as connection:
+            role = connection.execute(
+                "SELECT role_key FROM roles WHERE name = ?",
+                (role_name,),
+            ).fetchone()
+        self.assertIsNotNone(role)
+        role_key = role["role_key"]
+
+        created_user = self.client.post(
+            "/users/save",
+            data={
+                "username": username,
+                "display_name": "Web 权限专员",
+                "password": "specialist-password",
+                "role": role_key,
+                "active": "1",
+                "permission_selection_present": "1",
+                "permission_generate_match": "deny",
+                "permission_view_customer_prices": "allow",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(created_user.status_code, 302)
+        with self.web.connect(self.web.DB_PATH) as connection:
+            user = connection.execute(
+                "SELECT id FROM users WHERE username = ?",
+                (username,),
+            ).fetchone()
+            overrides = {
+                row["permission"]: row["effect"]
+                for row in connection.execute(
+                    "SELECT permission, effect FROM user_permission_overrides WHERE user_id = ?",
+                    (user["id"],),
+                ).fetchall()
+            }
+        self.assertEqual(
+            overrides,
+            {"generate_match": "deny", "view_customer_prices": "allow"},
+        )
+
+        editing = self.client.get(f"/users/{user['id']}/edit")
+        editing_html = editing.get_data(as_text=True)
+        self.assertEqual(editing.status_code, 200)
+        self.assertIn('name="permission_generate_match" value="deny" checked', editing_html)
+        self.assertIn(f'<option\n                    value="{role_key}"', editing_html)
+
+        blocked_delete = self.client.post(
+            f"/roles/{role_key}/delete",
+            follow_redirects=False,
+        )
+        self.assertEqual(blocked_delete.status_code, 302)
+        with self.web.connect(self.web.DB_PATH) as connection:
+            self.assertIsNotNone(
+                connection.execute("SELECT 1 FROM roles WHERE role_key = ?", (role_key,)).fetchone()
+            )
+
+        self.client.post("/logout")
+        login = self.client.post(
+            "/login",
+            data={"username": username, "password": "specialist-password", "next": "/"},
+            follow_redirects=False,
+        )
+        self.assertEqual(login.status_code, 302)
+        homepage = self.client.get("/").get_data(as_text=True)
+        self.assertIn(f"{username} · {role_name}", homepage)
+        self.assertIn("报价记录", homepage)
+        self.assertIn("业务数据同步", homepage)
+
+        quote_page = self.client.get("/quotes", follow_redirects=False)
+        self.assertEqual(quote_page.status_code, 200)
+        denied_match = self.client.post(
+            "/match",
+            data={"quick_oe": "TEST"},
+            follow_redirects=False,
+        )
+        self.assertEqual(denied_match.status_code, 302)
+        self.assertTrue(denied_match.headers["Location"].endswith("/"))
+        denied_admin = self.client.get("/users", follow_redirects=False)
+        self.assertEqual(denied_admin.status_code, 302)
+        self.assertTrue(denied_admin.headers["Location"].endswith("/"))
+
+        with self.web.connect(self.web.DB_PATH) as connection:
+            actions = {
+                row["action"]
+                for row in connection.execute(
+                    "SELECT action FROM audit_logs WHERE target_key IN (?, ?)",
+                    (role_key, username),
+                ).fetchall()
+            }
+        self.assertIn("新增角色", actions)
+        self.assertIn("新增账号", actions)
+
+    def test_admin_account_page_never_defaults_to_admin_when_roles_are_missing(self):
+        self.login()
+        with self.web.connect(self.web.DB_PATH) as connection:
+            roles = connection.execute(
+                """
+                SELECT role_key, name, description, is_system, created_at, updated_at
+                FROM roles
+                WHERE is_system = 0
+                """
+            ).fetchall()
+            permissions = connection.execute(
+                """
+                SELECT role_key, permission, created_at
+                FROM role_permissions
+                WHERE role_key != 'admin'
+                """
+            ).fetchall()
+            connection.execute("DELETE FROM role_permissions WHERE role_key != 'admin'")
+            connection.execute("DELETE FROM roles WHERE is_system = 0")
+            connection.commit()
+
+        try:
+            response = self.client.get("/users")
+            html = response.get_data(as_text=True)
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("请先创建非管理员角色", html)
+            self.assertNotIn('action="/users/save"', html)
+            self.assertIn('href="/users?view=roles"', html)
+        finally:
+            with self.web.connect(self.web.DB_PATH) as connection:
+                connection.executemany(
+                    """
+                    INSERT INTO roles (
+                        role_key, name, description, is_system, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    [tuple(row) for row in roles],
+                )
+                connection.executemany(
+                    """
+                    INSERT INTO role_permissions (role_key, permission, created_at)
+                    VALUES (?, ?, ?)
+                    """,
+                    [tuple(row) for row in permissions],
+                )
+                connection.commit()
+
+        invalid = self.client.post(
+            "/users/save",
+            data={
+                "username": "invalid-role-user",
+                "display_name": "失效角色测试",
+                "password": "invalid-role-password",
+                "role": "deleted-role",
+                "active": "1",
+                "permission_selection_present": "1",
+            },
+        )
+        invalid_html = invalid.get_data(as_text=True)
+        self.assertEqual(invalid.status_code, 400)
+        self.assertIn('<option value="" selected disabled>请选择可用角色</option>', invalid_html)
+        admin_option = re.search(r'<option\s+value="admin"(?P<attrs>.*?)>', invalid_html, re.S)
+        self.assertIsNotNone(admin_option)
+        self.assertNotIn("selected", admin_option.group("attrs"))
+
     def test_page_templates_keep_only_approved_spacious_homepage_headers(self):
         template_dir = Path(__file__).resolve().parents[1] / "templates"
         page_templates = sorted(template_dir.glob("*.html"))
@@ -4998,6 +5214,7 @@ class WebAppTest(unittest.TestCase):
                 "028_customer_profiles_documents_and_quote_contracts",
                 "029_customer_workspace_integrity",
                 "030_repair_customer_workspace_integrity",
+                "031_editable_roles_and_user_permission_overrides",
             ],
         )
 

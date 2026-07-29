@@ -33,11 +33,11 @@
     </div>
   </div>
   <div class="nav-user">
-    {% if can("manage_users") or can("view_logs") %}
+    {% if can("manage_users") or can("view_logs") or can("sync_product_data") %}
       <details class="admin-menu" data-admin-menu>
         <summary class="user-badge admin-menu-trigger {% if active_page in ['users', 'internal_api_key', 'logs', 'system_updates', 'product_data_sync', 'business_data_sync'] %}active{% endif %}">
           <span class="nav-user-code">{{ g.user.username[:3] | upper }}</span>
-          <span class="nav-user-copy"><strong>{{ g.user.display_name or g.user.username }}</strong><small>{{ g.user.username }} · {{ ROLE_LABELS.get(g.user.role, g.user.role) }}</small></span>
+          <span class="nav-user-copy"><strong>{{ g.user.display_name or g.user.username }}</strong><small>{{ g.user.username }} · {{ g.user.role_name or ROLE_LABELS.get(g.user.role, g.user.role) }}</small></span>
         </summary>
         <div class="admin-menu-panel">
           {% if can("manage_users") %}
@@ -54,7 +54,7 @@
         </div>
       </details>
     {% else %}
-      <span class="user-badge"><span class="nav-user-code">{{ g.user.username[:3] | upper }}</span><span class="nav-user-copy"><strong>{{ g.user.display_name or g.user.username }}</strong><small>{{ g.user.username }} · {{ ROLE_LABELS.get(g.user.role, g.user.role) }}</small></span></span>
+      <span class="user-badge"><span class="nav-user-code">{{ g.user.username[:3] | upper }}</span><span class="nav-user-copy"><strong>{{ g.user.display_name or g.user.username }}</strong><small>{{ g.user.username }} · {{ g.user.role_name or ROLE_LABELS.get(g.user.role, g.user.role) }}</small></span></span>
     {% endif %}
     <form action="{{ url_for('logout') }}" method="post">{{ csrf_field() }}<button class="ghost compact" type="submit">退出</button></form>
   </div>
