@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import logging
+import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
 from .domain import (
     QUOTE_CURRENCIES,
+    QUOTE_MAX_PRICE,
     QuoteFilters,
     QuoteRecord,
     QuoteStats,
@@ -19,6 +21,7 @@ from .domain import (
 )
 from .ports import (
     CustomerDirectoryPort,
+    ContractDocumentDirectoryPort,
     ImportLockBusyError,
     ImportLockPort,
     ProductCatalogPort,
@@ -69,26 +72,36 @@ class QuoteService:
         import_lock_port: ImportLockPort,
         product_catalog: ProductCatalogPort,
         customer_directory: CustomerDirectoryPort,
+        contract_document_directory: ContractDocumentDirectoryPort | None = None,
     ) -> None:
         self.unit_of_work_factory = unit_of_work_factory
         self.import_port = import_port
         self.import_lock_port = import_lock_port
         self.product_catalog = product_catalog
         self.customer_directory = customer_directory
+        self.contract_document_directory = contract_document_directory
 
-    def _validate_targets(self, *, bld_no: str, customer_name: str) -> None:
+    def _validate_product(self, bld_no: str) -> None:
         if not self.product_catalog.exists(bld_no):
             raise QuoteValidationError(
                 "quote.bld_unknown",
                 f"产品目录中不存在 BLD 号 {bld_no}，请先在产品目录中新增。",
                 field="bld_no",
             )
+
+    def _validate_customer(self, customer_name: str) -> int | None:
         if not self.customer_directory.exists(customer_name):
             raise QuoteValidationError(
                 "quote.customer_unknown",
                 f"客户 {customer_name} 未登记，请先在客户列表中新增。",
                 field="customer_name",
             )
+        resolver = getattr(self.customer_directory, "find_id", None)
+        return resolver(customer_name) if callable(resolver) else None
+
+    def _validate_targets(self, *, bld_no: str, customer_name: str) -> int | None:
+        self._validate_product(bld_no)
+        return self._validate_customer(customer_name)
 
     def list_records(
         self,
@@ -138,7 +151,8 @@ class QuoteService:
                 datetime.now().strftime("%y%m%d")
             )
             draft = build_quote_draft({**data, "quote_no": quote_no}, actor=actor)
-            self._validate_targets(bld_no=draft.bld_no, customer_name=draft.customer_name)
+            customer_id = self._validate_targets(bld_no=draft.bld_no, customer_name=draft.customer_name)
+            draft = replace(draft, customer_id=customer_id)
             record = unit_of_work.repository.add(draft)
             unit_of_work.repository.audit("新增报价记录", record, actor=actor)
             unit_of_work.commit()
@@ -158,7 +172,8 @@ class QuoteService:
             for data in rows:
                 try:
                     draft = build_quote_draft({**data, "quote_no": quote_no}, actor=actor)
-                    self._validate_targets(bld_no=draft.bld_no, customer_name=draft.customer_name)
+                    customer_id = self._validate_targets(bld_no=draft.bld_no, customer_name=draft.customer_name)
+                    draft = replace(draft, customer_id=customer_id)
                 except QuoteValidationError:
                     skipped += 1
                     continue
@@ -175,6 +190,199 @@ class QuoteService:
             return []
         with self.unit_of_work_factory() as unit_of_work:
             return unit_of_work.repository.list_by_quote_no(number)
+
+    def sales_contract_draft(
+        self,
+        quote_no: object,
+        quote_ids: Sequence[object],
+        language: object,
+    ) -> dict[str, object]:
+        number = compact_text(quote_no)
+        language_code = compact_text(language)
+        if not language_code:
+            raise QuoteValidationError(
+                "quote.contract_language_required",
+                "请选择销售合同语言版本。",
+                field="language",
+            )
+        if language_code == "en-US":
+            raise QuoteValidationError(
+                "quote.contract_language_unavailable",
+                "英文版销售合同暂未开放。",
+                field="language",
+            )
+        if language_code != "zh-CN":
+            raise QuoteValidationError(
+                "quote.contract_language_invalid",
+                "销售合同语言版本无效。",
+                field="language",
+            )
+        if not number:
+            raise QuoteValidationError("quote.contract_quote_required", "报价单号不能为空。", field="source_quote_no")
+
+        selected_ids: list[int] = []
+        for value in quote_ids:
+            text = compact_text(value)
+            if not text.isdigit():
+                raise QuoteValidationError("quote.contract_selection_invalid", "报价明细选择无效。", field="quote_id")
+            quote_id = int(text)
+            if quote_id not in selected_ids:
+                selected_ids.append(quote_id)
+        if not selected_ids:
+            raise QuoteValidationError(
+                "quote.contract_selection_required",
+                "请至少选择一条报价明细。",
+                field="quote_id",
+            )
+
+        with self.unit_of_work_factory() as unit_of_work:
+            records = unit_of_work.repository.list_by_quote_no(number)
+            selected = [record for record in records if record.id in selected_ids]
+            if len(selected) != len(selected_ids):
+                raise QuoteValidationError(
+                    "quote.contract_selection_mismatch",
+                    "所选报价明细不属于当前报价单，请刷新后重试。",
+                    field="quote_id",
+                )
+            customer_ids = {record.customer_id for record in selected if record.customer_id is not None}
+            customer_names = {record.customer_name.strip().casefold() for record in selected}
+            currencies = {record.currency.strip().upper() for record in selected}
+            if len(customer_names) != 1 or len(customer_ids) > 1:
+                raise QuoteValidationError(
+                    "quote.contract_customer_mismatch",
+                    "所选报价明细必须属于同一个客户。",
+                    field="quote_id",
+                )
+            if len(currencies) != 1:
+                raise QuoteValidationError(
+                    "quote.contract_currency_mismatch",
+                    "所选报价明细必须使用同一种币种。",
+                    field="quote_id",
+                )
+            customer_id = next(iter(customer_ids), None)
+
+        customer_id = self.customer_directory.find_active_id(customer_id, selected[0].customer_name)
+        if customer_id is None:
+            raise QuoteValidationError(
+                "quote.contract_customer_inactive",
+                f"客户 {selected[0].customer_name} 已停用或不存在，不能生成新销售合同。",
+                field="quote_id",
+            )
+
+        items: list[dict[str, object]] = []
+        price_kinds: set[str] = set()
+        for record in selected:
+            if record.tax_price is not None and record.net_price is not None:
+                raise QuoteValidationError(
+                    "quote.contract_price_ambiguous",
+                    f"报价明细 {record.bld_no} 同时存在含税价和不含税价，无法判断合同应采用的原报价口径。",
+                    field="quote_id",
+                )
+            if record.tax_price is not None:
+                price = record.tax_price
+                price_kind = "tax"
+            elif record.net_price is not None:
+                price = record.net_price
+                price_kind = "net"
+            else:
+                raise QuoteValidationError(
+                    "quote.contract_price_required",
+                    f"报价明细 {record.bld_no} 缺少有效价格。",
+                    field="quote_id",
+                )
+            if not math.isfinite(price):
+                raise QuoteValidationError(
+                    "quote.contract_price_invalid",
+                    f"报价明细 {record.bld_no} 的价格必须是有限数字。",
+                    field="quote_id",
+                )
+            if price < 0:
+                raise QuoteValidationError(
+                    "quote.contract_price_invalid",
+                    f"报价明细 {record.bld_no} 的价格不能为负数。",
+                    field="quote_id",
+                )
+            if price > QUOTE_MAX_PRICE:
+                raise QuoteValidationError(
+                    "quote.contract_price_invalid",
+                    f"报价明细 {record.bld_no} 的价格数值过大。",
+                    field="quote_id",
+                )
+            price_kinds.add(price_kind)
+            items.append(
+                {
+                    "quote_id": record.id,
+                    "quote_version": record.version,
+                    "product_code": record.bld_no or record.product_model,
+                    "customer_code": record.customer_product_code,
+                    "oe_no": "",
+                    "product_name": "",
+                    "models": "",
+                    "quantity": "",
+                    "unit_price": f"{price:.4f}",
+                    "price_kind": price_kind,
+                    "delivery_date": "",
+                    "note": record.remark,
+                }
+            )
+        price_basis = next(iter(price_kinds)) if len(price_kinds) == 1 else "mixed"
+        return {
+            "source_quote_no": number,
+            "quote_ids": selected_ids,
+            "language": language_code,
+            "currency": next(iter(currencies)),
+            "customer_id": customer_id,
+            "customer_name": selected[0].customer_name,
+            "price_basis": price_basis,
+            "items": items,
+        }
+
+    def contract_documents_by_quote_no(self, quote_no: object) -> list[dict[str, object]]:
+        number = compact_text(quote_no)
+        if not number or self.contract_document_directory is None:
+            return []
+        return self.contract_document_directory.list_by_quote_no(number)
+
+    def customer_summaries(self, customers: Sequence[tuple[int, str]]) -> dict[int, dict[str, object]]:
+        if not customers:
+            return {}
+        with self.unit_of_work_factory() as unit_of_work:
+            return {
+                int(customer_id): unit_of_work.repository.customer_summary(int(customer_id), str(customer_name))
+                for customer_id, customer_name in customers
+            }
+
+    def customer_quote_history(
+        self,
+        customer_id: int,
+        customer_name: str,
+        *,
+        limit: int = 50,
+    ) -> list[dict[str, object]]:
+        with self.unit_of_work_factory() as unit_of_work:
+            return unit_of_work.repository.customer_history(
+                int(customer_id),
+                str(customer_name),
+                limit=max(1, min(200, int(limit))),
+            )
+
+    def rename_customer_references(self, customer_id: int, old_name: object, new_name: object) -> int:
+        previous = clean_multiline(old_name)
+        replacement = clean_multiline(new_name)
+        if not previous or not replacement:
+            raise QuoteValidationError(
+                "quote.customer_rename_invalid",
+                "客户改名前后的名称不能为空。",
+                field="customer_name",
+            )
+        with self.unit_of_work_factory() as unit_of_work:
+            updated = unit_of_work.repository.rename_customer_references(
+                int(customer_id),
+                previous,
+                replacement,
+            )
+            unit_of_work.commit()
+        return updated
 
     def update(
         self,
@@ -202,7 +410,21 @@ class QuoteService:
                     field=sorted(immutable_fields)[0],
                 )
             draft = build_quote_draft(data, actor=actor, existing=before)
-            self._validate_targets(bld_no=draft.bld_no, customer_name=draft.customer_name)
+            self._validate_product(draft.bld_no)
+            same_customer = clean_multiline(draft.customer_name).casefold() == clean_multiline(
+                before.customer_name
+            ).casefold()
+            if same_customer:
+                draft = replace(
+                    draft,
+                    customer_id=before.customer_id,
+                    customer_name=before.customer_name,
+                )
+            else:
+                draft = replace(
+                    draft,
+                    customer_id=self._validate_customer(draft.customer_name),
+                )
             after = unit_of_work.repository.update(
                 quote_id,
                 draft,
@@ -302,7 +524,8 @@ class QuoteService:
                 )
                 try:
                     draft = build_quote_draft(values, actor=actor)
-                    self._validate_targets(bld_no=draft.bld_no, customer_name=draft.customer_name)
+                    customer_id = self._validate_targets(bld_no=draft.bld_no, customer_name=draft.customer_name)
+                    draft = replace(draft, customer_id=customer_id)
                 except QuoteValidationError:
                     skipped += 1
                     continue

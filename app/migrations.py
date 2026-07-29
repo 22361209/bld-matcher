@@ -581,6 +581,229 @@ def _add_customers(conn: sqlite3.Connection) -> None:
         conn.execute("INSERT OR IGNORE INTO customers (name, sync_id) VALUES (?, ?)", (name, sync_id))
 
 
+def _backfill_quote_customer_ids(conn: sqlite3.Connection) -> None:
+    if "customer_id" not in _columns(conn, "quote_records"):
+        return
+    customers = conn.execute("SELECT id, name FROM customers ORDER BY id").fetchall()
+    customers_by_id = {int(row["id"]): str(row["name"]) for row in customers}
+    normalized: dict[str, list[tuple[int, str]]] = {}
+    for row in customers:
+        canonical_name = " ".join(str(row["name"]).split())
+        normalized.setdefault(canonical_name.casefold(), []).append(
+            (int(row["id"]), str(row["name"]))
+        )
+
+    rows = conn.execute(
+        "SELECT id, customer_id, customer_name FROM quote_records ORDER BY id"
+    ).fetchall()
+    for row in rows:
+        customer_id = int(row["customer_id"]) if row["customer_id"] is not None else None
+        canonical_name = customers_by_id.get(customer_id) if customer_id is not None else None
+        if canonical_name is None:
+            lookup_name = " ".join(str(row["customer_name"] or "").split())
+            matches = normalized.get(lookup_name.casefold(), [])
+            if len(matches) != 1:
+                continue
+            customer_id, canonical_name = matches[0]
+        if row["customer_id"] != customer_id or str(row["customer_name"]) != canonical_name:
+            conn.execute(
+                "UPDATE quote_records SET customer_id = ?, customer_name = ? WHERE id = ?",
+                (customer_id, canonical_name, int(row["id"])),
+            )
+
+
+def _add_customer_profiles_documents_and_quote_contracts(conn: sqlite3.Connection) -> None:
+    _add_customers(conn)
+    customer_columns = _columns(conn, "customers")
+    if "code" not in customer_columns:
+        conn.execute("ALTER TABLE customers ADD COLUMN code TEXT NOT NULL DEFAULT ''")
+    if "status" not in customer_columns:
+        conn.execute("ALTER TABLE customers ADD COLUMN status TEXT NOT NULL DEFAULT 'active'")
+    if "owner_username" not in customer_columns:
+        conn.execute("ALTER TABLE customers ADD COLUMN owner_username TEXT NOT NULL DEFAULT ''")
+    conn.execute("UPDATE customers SET status = 'active' WHERE COALESCE(status, '') = ''")
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_code "
+        "ON customers(code COLLATE NOCASE) WHERE code <> ''"
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_customers_status_owner ON customers(status, owner_username)")
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS customer_contacts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          customer_id INTEGER NOT NULL REFERENCES customers(id),
+          name TEXT NOT NULL,
+          title TEXT NOT NULL DEFAULT '',
+          role TEXT NOT NULL DEFAULT '',
+          phone TEXT NOT NULL DEFAULT '',
+          email TEXT NOT NULL DEFAULT '',
+          wechat TEXT NOT NULL DEFAULT '',
+          is_primary INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_customer_contacts_customer ON customer_contacts(customer_id, is_primary DESC, id)"
+    )
+
+    if _columns(conn, "quote_records") and "customer_id" not in _columns(conn, "quote_records"):
+        conn.execute("ALTER TABLE quote_records ADD COLUMN customer_id INTEGER REFERENCES customers(id)")
+    if "customer_id" in _columns(conn, "quote_records"):
+        _backfill_quote_customer_ids(conn)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_quote_records_customer_id ON quote_records(customer_id)")
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS customer_document_groups (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          customer_id INTEGER NOT NULL REFERENCES customers(id),
+          sync_id TEXT NOT NULL UNIQUE,
+          category TEXT NOT NULL,
+          title TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          language TEXT NOT NULL DEFAULT 'zh-CN',
+          current_version INTEGER NOT NULL DEFAULT 0,
+          archived INTEGER NOT NULL DEFAULT 0,
+          created_by TEXT NOT NULL DEFAULT '',
+          updated_by TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_customer_document_groups_customer ON customer_document_groups(customer_id, archived, updated_at)"
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS customer_document_files (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          group_id INTEGER NOT NULL REFERENCES customer_document_groups(id),
+          sync_id TEXT NOT NULL UNIQUE,
+          version_no INTEGER NOT NULL,
+          original_name TEXT NOT NULL,
+          storage_path TEXT NOT NULL UNIQUE,
+          content_type TEXT NOT NULL,
+          size_bytes INTEGER NOT NULL,
+          sha256 TEXT NOT NULL,
+          created_by TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_customer_document_files_version ON customer_document_files(group_id, version_no, id)"
+    )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS contract_documents (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          contract_type TEXT NOT NULL DEFAULT 'sales',
+          contract_no TEXT NOT NULL,
+          customer_id INTEGER REFERENCES customers(id),
+          customer_name TEXT NOT NULL,
+          source_quote_no TEXT NOT NULL DEFAULT '',
+          language TEXT NOT NULL DEFAULT 'zh-CN',
+          currency TEXT NOT NULL DEFAULT 'CNY',
+          source_snapshot_json TEXT NOT NULL DEFAULT '',
+          source_snapshot_sha256 TEXT NOT NULL DEFAULT '',
+          file_path TEXT NOT NULL UNIQUE,
+          created_by TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_contract_documents_customer ON contract_documents(customer_id, created_at)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_contract_documents_quote_no ON contract_documents(source_quote_no, created_at)"
+    )
+
+
+def _enforce_case_insensitive_customer_codes(conn: sqlite3.Connection) -> None:
+    if not {"id", "code"}.issubset(_columns(conn, "customers")):
+        return
+    # 早期 028 的唯一索引区分大小写，可能同时存在 ABC 与 abc。
+    # 客户编号可为空，因此确定性保留最小 id 的编号并清空后续冲突项。
+    conn.execute(
+        """
+        UPDATE customers
+        SET code = ''
+        WHERE COALESCE(code, '') <> ''
+          AND EXISTS (
+            SELECT 1
+            FROM customers AS retained
+            WHERE retained.id < customers.id
+              AND retained.code = customers.code COLLATE NOCASE
+          )
+        """
+    )
+    conn.execute("DROP INDEX IF EXISTS idx_customers_code")
+    conn.execute(
+        "CREATE UNIQUE INDEX idx_customers_code "
+        "ON customers(code COLLATE NOCASE) WHERE code <> ''"
+    )
+
+
+def _normalize_customer_primary_contacts(conn: sqlite3.Connection) -> None:
+    if not {"id", "customer_id", "is_primary"}.issubset(
+        _columns(conn, "customer_contacts")
+    ):
+        return
+    preferred_rows = conn.execute(
+        """
+        SELECT customer_id,
+               COALESCE(
+                 MIN(CASE WHEN is_primary <> 0 THEN id END),
+                 MIN(id)
+               ) AS primary_id
+        FROM customer_contacts
+        GROUP BY customer_id
+        ORDER BY customer_id
+        """
+    ).fetchall()
+    for row in preferred_rows:
+        conn.execute(
+            """
+            UPDATE customer_contacts
+            SET is_primary = CASE WHEN id = ? THEN 1 ELSE 0 END
+            WHERE customer_id = ?
+            """,
+            (int(row["primary_id"]), int(row["customer_id"])),
+        )
+
+
+def _finalize_customer_workspace_integrity(conn: sqlite3.Connection) -> None:
+    contract_columns = _columns(conn, "contract_documents")
+    if "source_snapshot_json" not in contract_columns:
+        conn.execute(
+            "ALTER TABLE contract_documents "
+            "ADD COLUMN source_snapshot_json TEXT NOT NULL DEFAULT ''"
+        )
+    if "source_snapshot_sha256" not in contract_columns:
+        conn.execute(
+            "ALTER TABLE contract_documents "
+            "ADD COLUMN source_snapshot_sha256 TEXT NOT NULL DEFAULT ''"
+        )
+
+    _enforce_case_insensitive_customer_codes(conn)
+    _normalize_customer_primary_contacts(conn)
+    _backfill_quote_customer_ids(conn)
+
+
+def _repair_customer_workspace_integrity(conn: sqlite3.Connection) -> None:
+    # 030 会在已记录 029 的数据库上顺序执行，确保新加入的数据修复不会
+    # 依赖重跑已应用 migration。
+    _enforce_case_insensitive_customer_codes(conn)
+    _normalize_customer_primary_contacts(conn)
+    _backfill_quote_customer_ids(conn)
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -609,6 +832,9 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("025_create_product_option_values", _add_product_option_values),
     ("026_quote_record_quote_no", _add_quote_record_quote_no),
     ("027_customers", _add_customers),
+    ("028_customer_profiles_documents_and_quote_contracts", _add_customer_profiles_documents_and_quote_contracts),
+    ("029_customer_workspace_integrity", _finalize_customer_workspace_integrity),
+    ("030_repair_customer_workspace_integrity", _repair_customer_workspace_integrity),
 )
 
 

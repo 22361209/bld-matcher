@@ -129,7 +129,8 @@
 .quote-latest strong {
   color: var(--linear-accent);
 }
-.quote-number-attachments {
+.quote-number-attachments,
+.quote-number-contracts {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -137,6 +138,76 @@
   margin: 0 0 12px;
 }
 
-.quote-number-attachments strong {
+.quote-number-attachments strong,
+.quote-number-contracts strong {
   color: var(--linear-text);
+}
+
+.quote-contract-draft {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--linear-line);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.quote-contract-language {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.quote-contract-language legend {
+  float: left;
+  margin-right: 18px;
+  color: var(--linear-text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.quote-contract-language label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.quote-contract-language .disabled {
+  color: var(--linear-muted);
+}
+
+.quote-contract-help {
+  margin: 0;
+  color: var(--linear-muted);
+  font-size: 12px;
+}
+
+.quote-contract-feedback {
+  color: #9f3a3a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.quote-contract-select-column {
+  width: 50px;
+  text-align: center;
+}
+
+.quote-contract-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.quote-contract-actions span {
+  color: var(--linear-muted);
+  font-size: 13px;
 }

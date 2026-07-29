@@ -38,8 +38,11 @@ FIELD_LABELS = {
 }
 COMPARISON_EXCLUDED_COLUMNS = {"sync_id", "attachment_path", "created_at", "updated_at", "version"}
 LOCAL_MEDIA_COLUMNS = {
+    # 负责人账号属于设备本地身份，不随客户主数据跨设备覆盖。
+    "customers": {"owner_username"},
     "products": {"image_path", "image_path_2", "image_path_3", "image_path_4", "image_path_5", "drawing_path", "drawing_original_name", "drawing_updated_at"},
-    "quotes": {"attachment_path"},
+    # customer_id 是每台设备的本地主键，跨设备同步时按 customer_name 重新解析。
+    "quotes": {"attachment_path", "customer_id"},
 }
 
 
@@ -75,6 +78,104 @@ def _unresolved_customers(connection: sqlite3.Connection, payload: dict[str, lis
     local = {str(row["name"]).upper() for row in connection.execute("SELECT name FROM customers").fetchall()}
     incoming = {str(row.get("name") or "").strip().upper() for row in payload.get("customers", [])}
     return sorted(name for name in names if name.upper() not in local and name.upper() not in incoming)
+
+
+def _customer_name_key(value: object) -> str:
+    return " ".join(str(value or "").split()).casefold()
+
+
+def _normalize_quote_customer_links(
+    connection: sqlite3.Connection,
+    *,
+    preexisting_quote_ids: set[int],
+    imported_quote_ids: set[int],
+) -> None:
+    """Keep quote customer names aligned with device-local customer identities."""
+
+    customers = connection.execute("SELECT id, name FROM customers ORDER BY id").fetchall()
+    customers_by_id = {int(row["id"]): str(row["name"]) for row in customers}
+    customers_by_name: dict[str, list[tuple[int, str]]] = {}
+    for row in customers:
+        customer_id = int(row["id"])
+        customer_name = str(row["name"])
+        customers_by_name.setdefault(_customer_name_key(customer_name), []).append((customer_id, customer_name))
+
+    quotes = connection.execute(
+        "SELECT id, customer_id, customer_name FROM quote_records ORDER BY id"
+    ).fetchall()
+    for row in quotes:
+        quote_id = int(row["id"])
+        raw_customer_id = row["customer_id"]
+        try:
+            local_customer_id = int(raw_customer_id) if raw_customer_id is not None else None
+        except (TypeError, ValueError):
+            local_customer_id = None
+
+        if quote_id in imported_quote_ids:
+            matches = customers_by_name.get(_customer_name_key(row["customer_name"]), [])
+            if len(matches) != 1:
+                raise ValueError(f"报价客户 {row['customer_name']} 无法映射到本机客户。")
+            target_customer_id, target_customer_name = matches[0]
+        else:
+            canonical_name = customers_by_id.get(local_customer_id) if local_customer_id is not None else None
+            if canonical_name is not None:
+                target_customer_id = local_customer_id
+                target_customer_name = canonical_name
+            else:
+                matches = customers_by_name.get(_customer_name_key(row["customer_name"]), [])
+                if len(matches) != 1:
+                    if raw_customer_id is not None:
+                        if quote_id in preexisting_quote_ids:
+                            connection.execute(
+                                """
+                                UPDATE quote_records
+                                SET customer_id = NULL, version = version + 1,
+                                    updated_at = datetime('now','localtime')
+                                WHERE id = ?
+                                """,
+                                (quote_id,),
+                            )
+                        else:
+                            connection.execute(
+                                "UPDATE quote_records SET customer_id = NULL WHERE id = ?",
+                                (quote_id,),
+                            )
+                    continue
+                target_customer_id, target_customer_name = matches[0]
+
+        if raw_customer_id != target_customer_id or row["customer_name"] != target_customer_name:
+            if quote_id in imported_quote_ids:
+                connection.execute(
+                    "UPDATE quote_records SET customer_id = ?, customer_name = ? WHERE id = ?",
+                    (target_customer_id, target_customer_name, quote_id),
+                )
+            elif quote_id in preexisting_quote_ids:
+                connection.execute(
+                    """
+                    UPDATE quote_records
+                    SET customer_id = ?, customer_name = ?, version = version + 1,
+                        updated_at = datetime('now','localtime')
+                    WHERE id = ?
+                    """,
+                    (target_customer_id, target_customer_name, quote_id),
+                )
+            else:
+                connection.execute(
+                    "UPDATE quote_records SET customer_id = ?, customer_name = ? WHERE id = ?",
+                    (target_customer_id, target_customer_name, quote_id),
+                )
+
+
+def _write_values(
+    key: str,
+    write_columns: list[str],
+    incoming: dict[str, object],
+    local_row: sqlite3.Row | None,
+) -> list[object]:
+    values = [incoming[column] for column in write_columns]
+    if key == "quotes" and local_row is not None and "version" in write_columns:
+        values[write_columns.index("version")] = int(local_row["version"] or 0) + 1
+    return values
 
 
 def _package_digest(package_path: Path) -> str:
@@ -331,6 +432,11 @@ class BusinessSyncRepository:
             connection.execute("BEGIN IMMEDIATE")
             if _state_token(connection, package_path, tuple(payload)) != expected_token:
                 raise ValueError("预览后数据包或本机数据已变化，请重新上传预览。")
+            preexisting_quote_ids = {
+                int(row["id"])
+                for row in connection.execute("SELECT id FROM quote_records").fetchall()
+            }
+            imported_quote_ids: set[int] = set()
             self._resolve_quote_customers(connection, payload, customer_mappings or {})
             for key, incoming_rows in payload.items():
                 table, identity, _label = DATASETS[key]
@@ -352,13 +458,36 @@ class BusinessSyncRepository:
                         continue
                     if selected_conflict and local_row is not None and str(local_row[identity]) != str(incoming[identity]):
                         assignments = ", ".join(f"{column} = ?" for column in write_columns)
-                        connection.execute(f"UPDATE {table} SET {assignments} WHERE id = ?", [incoming[column] for column in write_columns] + [local_row["id"]])
+                        connection.execute(
+                            f"UPDATE {table} SET {assignments} WHERE id = ?",
+                            _write_values(key, write_columns, incoming, local_row) + [local_row["id"]],
+                        )
+                        if key == "quotes":
+                            imported_quote_ids.add(int(local_row["id"]))
                         continue
                     if adopt_sync_id and local_row is not None:
                         connection.execute(f"UPDATE {table} SET sync_id = ? WHERE id = ?", (incoming[identity], local_row["id"]))
                         continue
-                    connection.execute(f"INSERT INTO {table} ({insert_sql}) VALUES ({placeholders}) ON CONFLICT({identity}) DO UPDATE SET {updates}", [incoming[column] for column in write_columns])
+                    connection.execute(
+                        f"INSERT INTO {table} ({insert_sql}) VALUES ({placeholders}) "
+                        f"ON CONFLICT({identity}) DO UPDATE SET {updates}",
+                        _write_values(key, write_columns, incoming, local_row),
+                    )
+                    if key == "quotes":
+                        imported = connection.execute(
+                            f"SELECT id FROM {table} WHERE {identity} = ?",
+                            (incoming[identity],),
+                        ).fetchone()
+                        if imported is None:
+                            raise RuntimeError("Imported quote could not be reloaded.")
+                        imported_quote_ids.add(int(imported["id"]))
                 result[key] = counts
+            if {"customers", "quotes"}.intersection(payload):
+                _normalize_quote_customer_links(
+                    connection,
+                    preexisting_quote_ids=preexisting_quote_ids,
+                    imported_quote_ids=imported_quote_ids,
+                )
             log_event(connection, "导入业务数据包", "business_sync", package_path.name, "；".join(f"{DATASETS[key][2]}新增 {counts['new']}、更新 {counts['updated']}、冲突 {counts['conflict']}" for key, counts in result.items()), actor=actor)
             connection.commit()
         except Exception:

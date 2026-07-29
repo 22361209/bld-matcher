@@ -26,3 +26,4 @@ ADR 用于记录难以撤销或会影响多个领域的决定。新增框架、�
 - [ADR 0018: Dense List Layout And Data Grid Controls](0018-dense-list-layout-and-data-grid-controls.md)
 - [ADR 0019: List Reset And Pagination Navigation Protocol](0019-list-reset-and-pagination-navigation-protocol.md)
 - [ADR 0020: Inquiry, Material And Contract File Retention Scope](0020-inquiry-file-retention-scope.md)
+- [ADR 0021: Customer Workspace, Long-Lived Documents And Quote-Sourced Contracts](0021-customer-workspace-documents-and-quote-contracts.md)

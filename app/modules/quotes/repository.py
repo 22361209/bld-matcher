@@ -35,6 +35,7 @@ def _record(row: sqlite3.Row | None) -> QuoteRecord | None:
         return None
     return QuoteRecord(
         id=int(row["id"]),
+        customer_id=int(row["customer_id"]) if "customer_id" in row.keys() and row["customer_id"] is not None else None,
         customer_name=str(row["customer_name"]),
         bld_no=str(row["bld_no"] or row["product_model"]),
         customer_product_code=str(row["customer_product_code"] or ""),
@@ -105,11 +106,11 @@ class SQLiteQuoteRepository:
         cursor = self.connection.execute(
             """
             INSERT INTO quote_records
-              (sync_id, customer_name, bld_no, customer_product_code, product_model, tax_price, net_price,
+              (sync_id, customer_id, customer_name, bld_no, customer_product_code, product_model, tax_price, net_price,
                currency, moq, quote_date, quoted_by, source_type, source_text, attachment_path, remark,
                quote_no, version, created_at, updated_at)
             VALUES
-              (:sync_id, :customer_name, :bld_no, :customer_product_code, :product_model, :tax_price, :net_price,
+              (:sync_id, :customer_id, :customer_name, :bld_no, :customer_product_code, :product_model, :tax_price, :net_price,
                :currency, :moq, :quote_date, :quoted_by, :source_type, :source_text, :attachment_path, :remark,
                :quote_no, 1, :created_at, :updated_at)
             """,
@@ -191,7 +192,8 @@ class SQLiteQuoteRepository:
         cursor = self.connection.execute(
             """
             UPDATE quote_records
-            SET customer_name=:customer_name, bld_no=:bld_no, customer_product_code=:customer_product_code,
+            SET customer_id=:customer_id, customer_name=:customer_name, bld_no=:bld_no,
+                customer_product_code=:customer_product_code,
                 product_model=:product_model, tax_price=:tax_price, net_price=:net_price,
                 currency=:currency, moq=:moq, quote_date=:quote_date, quoted_by=:quoted_by,
                 source_type=:source_type, source_text=:source_text, attachment_path=:attachment_path,
@@ -261,6 +263,67 @@ class SQLiteQuoteRepository:
             (quote_no,),
         ).fetchall()
         return [record for record in (_record(row) for row in rows) if record is not None]
+
+    def customer_summary(self, customer_id: int, customer_name: str) -> dict[str, object]:
+        row = self.connection.execute(
+            """
+            SELECT
+              COUNT(DISTINCT CASE
+                WHEN COALESCE(quote_no, '') <> '' THEN quote_no
+                ELSE 'legacy-' || id
+              END) AS quote_count,
+              COUNT(DISTINCT COALESCE(NULLIF(bld_no, ''), product_model)) AS product_count,
+              COALESCE(MAX(quote_date), '') AS latest_quote_date
+            FROM quote_records
+            WHERE customer_id = ? OR (customer_id IS NULL AND customer_name = ? COLLATE NOCASE)
+            """,
+            (customer_id, customer_name),
+        ).fetchone()
+        return {
+            "quote_count": int(row["quote_count"] or 0),
+            "product_count": int(row["product_count"] or 0),
+            "latest_quote_date": str(row["latest_quote_date"] or ""),
+        }
+
+    def customer_history(self, customer_id: int, customer_name: str, *, limit: int) -> list[dict[str, object]]:
+        rows = self.connection.execute(
+            """
+            SELECT COALESCE(NULLIF(quote_no, ''), '历史报价-' || id) AS quote_no,
+                   quote_date,
+                   COUNT(*) AS line_count,
+                   COUNT(DISTINCT COALESCE(NULLIF(bld_no, ''), product_model)) AS product_count,
+                   GROUP_CONCAT(DISTINCT currency) AS currency,
+                   GROUP_CONCAT(DISTINCT quoted_by) AS quoted_by
+            FROM quote_records
+            WHERE customer_id = ? OR (customer_id IS NULL AND customer_name = ? COLLATE NOCASE)
+            GROUP BY COALESCE(NULLIF(quote_no, ''), '历史报价-' || id), quote_date
+            ORDER BY quote_date DESC, quote_no DESC
+            LIMIT ?
+            """,
+            (customer_id, customer_name, max(1, min(200, int(limit)))),
+        ).fetchall()
+        return [
+            {
+                "quote_no": str(row["quote_no"]),
+                "quote_date": str(row["quote_date"]),
+                "line_count": int(row["line_count"]),
+                "product_count": int(row["product_count"]),
+                "currency": str(row["currency"] or ""),
+                "quoted_by": str(row["quoted_by"] or ""),
+            }
+            for row in rows
+        ]
+
+    def rename_customer_references(self, customer_id: int, old_name: str, new_name: str) -> int:
+        cursor = self.connection.execute(
+            """
+            UPDATE quote_records
+            SET customer_id = ?, customer_name = ?, version = version + 1, updated_at = ?
+            WHERE customer_id = ? OR (customer_id IS NULL AND customer_name = ? COLLATE NOCASE)
+            """,
+            (customer_id, new_name, now_text(), customer_id, old_name),
+        )
+        return int(cursor.rowcount)
 
     def audit(self, action: str, quote: QuoteRecord, *, actor: str) -> None:
         log_event(

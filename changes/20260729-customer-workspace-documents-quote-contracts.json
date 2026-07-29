@@ -1,0 +1,21 @@
+{
+  "date": "2026-07-29",
+  "version": "unreleased",
+  "title": "客户工作区、客户资料库与报价生成销售合同",
+  "entries": [
+    "客户信息升级为轻量工作区：可维护客户编号、状态、负责人和联系人，并汇总该客户的历史报价与已生成销售合同。",
+    "客户不再通过物理删除清理，停用后保留全部报价、联系人、合同和资料历史；停用客户不能用于新报价，但既有报价仍可修正非客户字段。",
+    "客户详情新增长期资料库，可按标贴、外箱、内袋/包装、包装示例、出库单、PI、PL、CI 和其他分类保存文字要求与文件，并保留每次上传版本。",
+    "报价单号明细可选择报价行并生成销售合同草稿；必须先选择语言，当前启用中文版，英文版显示为待支持占位。",
+    "合同草稿自动带入客户、BLD号、客户产品编码、报价价格、币种和备注，数量与交期由经办人确认后填写；生成时复核客户仍为启用状态，并用签名令牌校验完整来源快照，生成文件可从来源报价和客户详情下载。",
+    "客户改名和业务数据同步只要改变既有报价的来源字段，都会递增本机报价版本并使旧合同选择令牌失效；手工销售合同也会按启用客户名称保存稳定的客户关联。",
+    "业务同步覆盖报价时按导入后的客户名称解析本机客户关联；合同数量、单价、行金额和合计金额都拒绝非有限值或超出可生成范围的数值，并返回明确提示。",
+    "客户数据修复迁移可自动处理早期大小写重复编号、异常主要联系人和历史报价关联，不需要手工补数据。",
+    "所有复用共享数据表格页脚的页面，页码输入框与“跳转”按钮保持紧邻，避免被通用表单样式拉开。"
+  ],
+  "impact": {
+    "data": "migrations 028-030 expand customers, repair case-insensitive code collisions and primary contacts, normalize and backfill quote_records.customer_id, and add contacts, customer document metadata, file versions, and auditable contract-to-quote snapshots; customer files live under data/customer_files; owner usernames and customer IDs remain device-local during business sync",
+    "api": "compatible; no new public API",
+    "operations": "restart-required; back up data/customer_files together with the SQLite database"
+  }
+}

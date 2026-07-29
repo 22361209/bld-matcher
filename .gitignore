@@ -30,6 +30,7 @@ data/product_images-backup-*/
 data/manual_map.json
 data/drawings/
 data/material_drawings/
+data/customer_files/
 data/product_images/
 data/deploy-backups/
 data/locks/

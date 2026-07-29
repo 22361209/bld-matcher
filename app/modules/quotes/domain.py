@@ -9,6 +9,7 @@ from datetime import date, datetime
 
 QUOTE_CURRENCIES = frozenset({"CNY", "USD", "EUR"})
 QUOTE_SOURCE_TYPES = frozenset({"manual", "api", "excel", "wechat", "pdf", "image"})
+QUOTE_MAX_PRICE = 999_999_999_999.9999
 QUOTE_COLUMN_FILTER_FIELDS = frozenset(
     {
         "quote_no",
@@ -37,6 +38,7 @@ class QuoteValidationError(ValueError):
 @dataclass(frozen=True, slots=True)
 class QuoteRecord:
     id: int
+    customer_id: int | None
     customer_name: str
     bld_no: str
     customer_product_code: str
@@ -59,6 +61,7 @@ class QuoteRecord:
     def payload(self) -> dict[str, object]:
         return {
             "id": self.id,
+            "customer_id": self.customer_id,
             "customer_name": self.customer_name,
             "bld_no": self.bld_no,
             "customer_product_code": self.customer_product_code,
@@ -82,11 +85,13 @@ class QuoteRecord:
     def api_payload(self) -> dict[str, object]:
         payload = self.payload()
         payload.pop("attachment_path")
+        payload.pop("customer_id")
         return payload
 
 
 @dataclass(frozen=True, slots=True)
 class QuoteDraft:
+    customer_id: int | None
     customer_name: str
     bld_no: str
     customer_product_code: str
@@ -109,6 +114,7 @@ class QuoteDraft:
         return {
             field: getattr(self, field)
             for field in (
+                "customer_id",
                 "customer_name",
                 "bld_no",
                 "customer_product_code",
@@ -193,6 +199,10 @@ def _optional_price(value: object, field: str) -> float | None:
         raise QuoteValidationError(f"quote.invalid_{field}", f"{field} 必须是数字。", field=field) from exc
     if not math.isfinite(parsed):
         raise QuoteValidationError(f"quote.invalid_{field}", f"{field} 必须是有限数字。", field=field)
+    if parsed < 0:
+        raise QuoteValidationError(f"quote.invalid_{field}", f"{field} 不能为负数。", field=field)
+    if parsed > QUOTE_MAX_PRICE:
+        raise QuoteValidationError(f"quote.invalid_{field}", f"{field} 数值过大。", field=field)
     return round(parsed, 4)
 
 
@@ -266,6 +276,7 @@ def build_quote_draft(
         )
 
     return QuoteDraft(
+        customer_id=existing.customer_id if existing else None,
         customer_name=customer_name,
         bld_no=bld_no,
         customer_product_code=compact_text(_value(data, "customer_product_code", existing)),

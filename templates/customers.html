@@ -6,59 +6,85 @@
 {% block page_class %}shell wide app-surface{% endblock %}
 
 {% block page_head %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='pages/customers.css', v=static_version('pages/customers.css')) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='pages/customers.css', v=static_version('pages/customers.css')) }}">
 {% endblock %}
 
 {% block page_content %}
-      <section class="data-section">
-        <div class="data-section-header">
-          <div>
-            <h2>客户信息</h2>
-            <p>报价只能写入这里登记的客户；改名会同步更新该客户的全部历史报价记录，被报价记录引用的客户不能删除。</p>
-          </div>
-          <span>{{ customers|length }} 个</span>
-        </div>
-        <form action="{{ url_for('save_customer') }}" method="post" class="search-form inline-search-command customer-add-form">
-          {{ csrf_field() }}
-          <input name="name" placeholder="新增客户名称，例如 宁波多迦" required>
-          <button class="linear-button primary" type="submit">新增</button>
-        </form>
-        <div class="data-table-scroll">
-        <table class="data-table">
-          <thead>
+  <section class="data-section customer-directory">
+    <div class="data-section-header">
+      <div>
+        <h2>客户信息</h2>
+        <p>集中查看客户负责人、主要联系人、报价活动和业务资料；停用客户仍保留全部历史记录。</p>
+      </div>
+      <span>{{ customer_summaries|length }} 个</span>
+    </div>
+
+    <div class="workspace-command customer-directory-command">
+      <form class="search-form customer-filter-form" method="get" action="{{ url_for('customers') }}">
+        <label>
+          <span>客户</span>
+          <input name="q" value="{{ filters.q }}" placeholder="名称、编号或负责人" maxlength="200">
+        </label>
+        <label>
+          <span>状态</span>
+          <select name="status">
+            <option value="" {% if not filters.status %}selected{% endif %}>全部客户</option>
+            <option value="active" {% if filters.status == "active" %}selected{% endif %}>正常</option>
+            <option value="inactive" {% if filters.status == "inactive" %}selected{% endif %}>已停用</option>
+          </select>
+        </label>
+        <button class="linear-button primary" type="submit">搜索</button>
+        {% if filters.q or filters.status %}<a class="linear-button subtle" href="{{ url_for('customers') }}">清除</a>{% endif %}
+      </form>
+      <form action="{{ url_for('save_customer') }}" method="post" class="search-form inline-search-command customer-add-form">
+        {{ csrf_field() }}
+        <input name="name" placeholder="新增客户名称，例如 宁波多迦" required maxlength="200">
+        <button class="linear-button primary" type="submit">新增客户</button>
+      </form>
+    </div>
+
+    <div class="data-table-scroll">
+      <table class="data-table customer-directory-table">
+        <thead>
+          <tr>
+            <th>客户名称</th>
+            <th>状态</th>
+            <th>负责人</th>
+            <th>主要联系人</th>
+            <th>报价单数</th>
+            <th>报价产品</th>
+            <th>最近报价</th>
+            <th>模板与文件</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for summary in customer_summaries %}
+            {% set customer = summary.customer %}
             <tr>
-              <th>客户名称</th>
-              <th>更新时间</th>
-              <th>改名</th>
-              <th></th>
+              <td>
+                <a class="customer-name-link" href="{{ url_for('customer_detail', customer_id=customer.id) }}">{{ customer.name }}</a>
+                {% if customer.code %}<small>{{ customer.code }}</small>{% endif %}
+              </td>
+              <td><span class="linear-status {{ 'active' if customer.status == 'active' else 'inactive' }}">{{ "正常" if customer.status == "active" else "停用" }}</span></td>
+              <td>{{ owner_labels.get(customer.owner_username, customer.owner_username) if customer.owner_username else "未指定" }}</td>
+              <td>
+                {% if summary.primary_contact %}
+                  <strong>{{ summary.primary_contact.name }}</strong>
+                  <small>{{ summary.primary_contact.role or summary.primary_contact.title or summary.primary_contact.phone }}</small>
+                {% else %}
+                  <span class="customer-muted">未登记</span>
+                {% endif %}
+              </td>
+              <td><a href="{{ url_for('customer_detail', customer_id=customer.id, view='business') }}">{{ summary.quote_count }}</a></td>
+              <td>{{ summary.quoted_product_count }}</td>
+              <td>{{ summary.latest_quote_date or "暂无" }}</td>
+              <td><a href="{{ url_for('customer_detail', customer_id=customer.id, view='documents') }}">{{ summary.file_count }}</a></td>
             </tr>
-          </thead>
-          <tbody>
-            {% for customer in customers %}
-              <tr>
-                <td><strong>{{ customer.name }}</strong></td>
-                <td>{{ customer.updated_at }}</td>
-                <td>
-                  <form action="{{ url_for('save_customer') }}" method="post" class="customer-edit-form">
-                    {{ csrf_field() }}
-                    <input type="hidden" name="id" value="{{ customer.id }}">
-                    <input name="name" value="{{ customer.name }}" required>
-                    <button class="linear-button subtle compact" type="submit">保存</button>
-                  </form>
-                </td>
-                <td>
-                  <form action="{{ url_for('delete_customer') }}" method="post">
-                    {{ csrf_field() }}
-                    <input type="hidden" name="id" value="{{ customer.id }}">
-                    <button class="linear-button danger compact" type="submit" data-confirm="确认删除客户“{{ customer.name }}”？只有没有报价记录的客户才能删除。">删除</button>
-                  </form>
-                </td>
-              </tr>
-            {% else %}
-              <tr><td colspan="4">暂无客户，请先新增。</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-        </div>
-      </section>
+          {% else %}
+            <tr><td colspan="8">{{ "没有找到匹配客户。" if filters.q or filters.status else "暂无客户，请先新增。" }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
 {% endblock %}

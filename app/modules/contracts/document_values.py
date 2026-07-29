@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import Decimal, DecimalException, InvalidOperation, ROUND_HALF_UP, localcontext
 
 
 MONEY_QUANT = Decimal("0.01")
+MAX_DECIMAL_ADJUSTED_EXPONENT = 12
+MAX_CONTRACT_AMOUNT = Decimal("999999999999999.99")
 
 
 def _text(value: object) -> str:
@@ -20,6 +22,10 @@ def _quantity(value: Decimal) -> str:
 
 
 def _rmb_upper(value: Decimal) -> str:
+    if not value.is_finite():
+        raise ValueError("金额必须是有限数字。")
+    if value > MAX_CONTRACT_AMOUNT:
+        raise ValueError("金额数值过大。")
     value = value.quantize(MONEY_QUANT, rounding=ROUND_HALF_UP)
     if value < 0:
         raise ValueError("金额不能为负数。")
@@ -74,6 +80,34 @@ def _rmb_upper(value: Decimal) -> str:
     return yuan_text + fraction_text
 
 
+def _contract_line_amount(quantity: Decimal, unit_price: Decimal, label: str) -> Decimal:
+    try:
+        with localcontext() as context:
+            context.prec = 64
+            amount = quantity * unit_price
+            if not amount.is_finite():
+                raise ValueError(f"{label}金额必须是有限数字。")
+            if amount > MAX_CONTRACT_AMOUNT:
+                raise ValueError(f"{label}金额数值过大。")
+            return amount.quantize(MONEY_QUANT, rounding=ROUND_HALF_UP)
+    except DecimalException as exc:
+        raise ValueError(f"{label}金额数值过大。") from exc
+
+
+def _contract_total_amount(current: Decimal, amount: Decimal) -> Decimal:
+    try:
+        with localcontext() as context:
+            context.prec = 64
+            total = current + amount
+            if not total.is_finite():
+                raise ValueError("合同合计金额必须是有限数字。")
+            if total > MAX_CONTRACT_AMOUNT:
+                raise ValueError("合同合计金额数值过大。")
+            return total
+    except DecimalException as exc:
+        raise ValueError("合同合计金额数值过大。") from exc
+
+
 def _parse_decimal(
     value: object,
     label: str,
@@ -88,6 +122,10 @@ def _parse_decimal(
         number = Decimal(text.replace(",", ""))
     except (InvalidOperation, AttributeError) as exc:
         raise ValueError(f"{label}必须是数字：{text}") from exc
+    if not number.is_finite():
+        raise ValueError(f"{label}必须是有限数字。")
+    if number and number.adjusted() > MAX_DECIMAL_ADJUSTED_EXPONENT:
+        raise ValueError(f"{label}数值过大。")
     if positive and number <= 0:
         raise ValueError(f"{label}必须大于 0。")
     if not allow_zero and number == 0:

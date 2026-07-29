@@ -87,8 +87,22 @@
       {% if can("generate_purchase_contract") %}
         <form action="{{ url_for('generate_sales_contract') if is_sales else url_for('generate_purchase_contract') }}" method="post" class="purchase-contract-form" data-purchase-contract-form data-contract-kind="{{ 'sales' if is_sales else 'purchase' }}" data-enter-navigation>
           {{ csrf_field() }}
+          {% if is_sales %}
+            <input type="hidden" name="language" value="{{ contract_draft.language }}">
+            <input type="hidden" name="currency" value="{{ contract_draft.currency }}">
+            <input type="hidden" name="source_quote_no" value="{{ contract_draft.source_quote_no }}">
+            <input type="hidden" name="source_quote_token" value="{{ contract_draft.source_token }}">
+          {% endif %}
           <div class="purchase-contract-action-bar">
-            <h1>{{ contract_label }}</h1>
+            <div>
+              <h1>{{ contract_label }}</h1>
+              {% if is_sales and contract_draft.source_quote_no %}
+                <p class="contract-source-summary">
+                  来源报价 {{ contract_draft.source_quote_no }} · 中文版 · {{ contract_draft.currency }} ·
+                  {% if contract_draft.price_basis == "tax" %}含税价{% elif contract_draft.price_basis == "net" %}不含税价{% else %}按原报价口径{% endif %}
+                </p>
+              {% endif %}
+            </div>
             <button class="linear-button primary" type="submit" data-purchase-submit-button>生成 PDF</button>
           </div>
           <div class="purchase-generate-feedback" data-purchase-feedback role="status" hidden></div>
@@ -100,7 +114,7 @@
               <label>合同编号：<input class="paper-input" name="contract_no" value="{{ default_contract_no }}" required></label>
               <label class="right">签订日期：<input class="paper-input date-input" type="date" name="contract_date" value="{{ default_date }}" required></label>
               <label>{{ party_a_label }}：<input class="paper-input" name="buyer_name" value="{{ defaults.buyer_name }}" required></label>
-              <label class="supplier-line">{{ party_b_label }}：<input class="paper-input" name="supplier_name" required></label>
+              <label class="supplier-line">{{ party_b_label }}：<input class="paper-input" name="supplier_name" value="{{ contract_draft.customer_name if is_sales else '' }}" {% if is_sales and contract_draft.source_quote_no %}readonly{% endif %} required></label>
               <label>联系人：<input class="paper-input compact" name="buyer_contact"></label>
               <label class="supplier-detail-line">联系人：<input class="paper-input compact" name="supplier_contact"></label>
               <label>电话：<input class="paper-input compact" name="buyer_phone"></label>
@@ -115,7 +129,7 @@
 
             <div class="purchase-section-heading">
               <h2>第一条 产品名称、规格、数量及价格</h2>
-              <button class="linear-button subtle" type="button" data-add-purchase-row>新增一行</button>
+              <button class="linear-button subtle" type="button" data-add-purchase-row {% if is_sales and contract_draft.source_quote_no %}hidden disabled{% endif %}>新增一行</button>
             </div>
             <div class="purchase-doc-table-wrap">
               <table class="purchase-contract-table purchase-doc-table">
@@ -142,7 +156,7 @@
                     <th>产品名称</th>
                     <th>适用车型</th>
                     <th>数量</th>
-                    <th>单价</th>
+                    <th>单价{% if is_sales %}（{{ contract_draft.currency }}）{% endif %}</th>
                     <th>金额</th>
                     <th>备注</th>
                     <th>交期</th>
@@ -150,20 +164,26 @@
                   </tr>
                 </thead>
                 <tbody data-purchase-rows>
-                  {% for row in range(3) %}
+                  {% for row in contract_rows %}
                     <tr>
                       <td class="purchase-row-index" data-purchase-index>{{ loop.index }}</td>
-                      <td><input name="product_code[]" data-purchase-bld {% if loop.first %}required{% endif %}></td>
-                      {% if is_sales %}<td><input name="customer_code[]" data-customer-code></td>{% endif %}
-                      <td><input name="oe_no[]" data-purchase-oe></td>
-                      <td><input name="product_name[]" data-purchase-name></td>
-                      <td><input name="models[]" data-purchase-models></td>
-                      <td><input name="quantity[]" inputmode="decimal" {% if loop.first %}required{% endif %}></td>
-                      <td><input name="unit_price[]" inputmode="decimal" {% if loop.first %}required{% endif %}></td>
+                      <td>
+                        {% if is_sales %}
+                          <input type="hidden" name="source_quote_row_id[]" value="{{ row.quote_id }}">
+                          <input type="hidden" name="source_quote_row_version[]" value="{{ row.quote_version }}">
+                        {% endif %}
+                        <input name="product_code[]" value="{{ row.product_code }}" data-purchase-bld {% if is_sales and contract_draft.source_quote_no %}readonly{% endif %} {% if loop.first %}required{% endif %}>
+                      </td>
+                      {% if is_sales %}<td><input name="customer_code[]" value="{{ row.customer_code }}" data-customer-code {% if contract_draft.source_quote_no %}readonly{% endif %}></td>{% endif %}
+                      <td><input name="oe_no[]" value="{{ row.oe_no }}" data-purchase-oe {% if is_sales and contract_draft.source_quote_no %}readonly{% endif %}></td>
+                      <td><input name="product_name[]" value="{{ row.product_name }}" data-purchase-name {% if is_sales and contract_draft.source_quote_no %}readonly{% endif %}></td>
+                      <td><input name="models[]" value="{{ row.models }}" data-purchase-models {% if is_sales and contract_draft.source_quote_no %}readonly{% endif %}></td>
+                      <td><input name="quantity[]" value="{{ row.quantity }}" inputmode="decimal" {% if loop.first %}required{% endif %}></td>
+                      <td><input name="unit_price[]" value="{{ row.unit_price }}" inputmode="decimal" {% if is_sales and contract_draft.source_quote_no %}readonly{% endif %} {% if loop.first %}required{% endif %}></td>
                       <td class="purchase-amount-cell" data-purchase-amount></td>
-                      <td><input name="item_note[]"></td>
-                      <td><input name="delivery_date[]"></td>
-                      <td><button class="link-button danger-link" type="button" data-remove-purchase-row>删除</button></td>
+                      <td><input name="item_note[]" value="{{ row.note }}" {% if is_sales and contract_draft.source_quote_no %}readonly{% endif %}></td>
+                      <td><input name="delivery_date[]" value="{{ row.delivery_date }}"></td>
+                      <td><button class="link-button danger-link" type="button" data-remove-purchase-row {% if is_sales and contract_draft.source_quote_no %}hidden disabled{% endif %}>删除</button></td>
                     </tr>
                   {% endfor %}
                 </tbody>
@@ -180,7 +200,11 @@
             </div>
 
             <div class="purchase-note">注：<input class="paper-input note-input" name="price_note" value="{{ defaults.price_note }}"></div>
-            <p class="purchase-body">合计金额（大写）：<span data-purchase-total-upper>零元整</span>；¥ <span data-purchase-total-small>0.00</span></p>
+            {% if not is_sales or contract_draft.currency == "CNY" %}
+              <p class="purchase-body">合计金额（大写）：<span data-purchase-total-upper>零元整</span>；¥ <span data-purchase-total-small>0.00</span></p>
+            {% else %}
+              <p class="purchase-body">合计金额：{{ contract_draft.currency }} <span data-purchase-total-small>0.00</span><span data-purchase-total-upper hidden></span></p>
+            {% endif %}
 
             <h2 class="purchase-clause-title">第二条 质量标准</h2>
             <textarea class="paper-textarea clause-textarea" name="quality_terms" rows="5">{{ defaults.quality_terms }}</textarea>

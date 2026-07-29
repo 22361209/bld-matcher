@@ -12,8 +12,19 @@ from .document_values import _money, _quantity
 from .pdf_support import PDF_FONT, _p, _styles
 
 
+def _sales_currency_text(contract: dict[str, Any]) -> tuple[str, str]:
+    currency = str(contract.get("currency") or "CNY").upper()
+    if currency == "CNY":
+        return (
+            "单价（元）",
+            f"合计金额（大写）：{contract['total_amount_upper']}　　¥：{_money(contract['total_amount'])}",
+        )
+    return f"单价（{currency}）", f"合计金额：{currency} {_money(contract['total_amount'])}"
+
+
 def generate_sales_contract_pdf(contract: dict[str, Any], output_path: Path) -> None:
     styles = _styles()
+    unit_price_heading, total_clause = _sales_currency_text(contract)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     doc = SimpleDocTemplate(
         str(output_path),
@@ -83,7 +94,7 @@ def generate_sales_contract_pdf(contract: dict[str, Any], output_path: Path) -> 
             _p("产品名称", styles["table_center"]),
             _p("适用车型", styles["table_center"]),
             _p("数量", styles["table_center"]),
-            _p("单价（元）", styles["table_center"]),
+            _p(unit_price_heading, styles["table_center"]),
             _p("金额", styles["table_center"]),
             _p("备注", styles["table_center"]),
             _p("交期", styles["table_center"]),
@@ -158,7 +169,7 @@ def generate_sales_contract_pdf(contract: dict[str, Any], output_path: Path) -> 
 
     clauses = [
         f"注：{contract['price_note']}",
-        f"合计金额（大写）：{contract['total_amount_upper']}　　¥：{_money(contract['total_amount'])}",
+        total_clause,
         "第二条　质量标准",
         contract["quality_terms"],
         "第三条　包装要求",

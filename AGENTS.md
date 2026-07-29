@@ -63,6 +63,7 @@ Do not overwrite or delete:
 - `data/catalog.xlsx`
 - `data/stamping_materials.xlsx`
 - `data/drawings/`
+- `data/customer_files/`
 - `data/product_images/`
 - `uploads/`
 - `outputs/`

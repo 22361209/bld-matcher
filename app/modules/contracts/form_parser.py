@@ -14,7 +14,14 @@ from .document_defaults import (
     DEFAULT_SALES_PRICE_NOTE,
     DEFAULT_SALES_QUALITY_TERMS,
 )
-from .document_values import MONEY_QUANT, _parse_decimal, _rmb_upper, _text
+from .document_values import (
+    MONEY_QUANT,
+    _contract_line_amount,
+    _contract_total_amount,
+    _parse_decimal,
+    _rmb_upper,
+    _text,
+)
 
 
 def default_contract_no(username: str = "") -> str:
@@ -96,9 +103,9 @@ def purchase_contract_from_form(form: Any) -> dict[str, Any]:
             raise ValueError(f"{row_label}型号不能为空。")
         quantity = _parse_decimal(quantity_text, f"{row_label}数量", positive=True)
         unit_price = _parse_decimal(price_text, f"{row_label}单价")
-        amount = (quantity * unit_price).quantize(MONEY_QUANT, rounding=ROUND_HALF_UP)
+        amount = _contract_line_amount(quantity, unit_price, row_label)
         total_quantity += quantity
-        total += amount
+        total = _contract_total_amount(total, amount)
         contract["items"].append(
             {
                 "product_code": code,
@@ -123,8 +130,28 @@ def purchase_contract_from_form(form: Any) -> dict[str, Any]:
     return contract
 
 
-def sales_contract_from_form(form: Any) -> dict[str, Any]:
+def sales_contract_from_form(
+    form: Any,
+    *,
+    source_controlled: bool = False,
+    require_language: bool = False,
+) -> dict[str, Any]:
+    language = _text(form.get("language"))
+    if require_language and not language:
+        raise ValueError("请选择销售合同语言版本。")
+    language = language or "zh-CN"
+    if language == "en-US":
+        raise ValueError("英文版销售合同暂未开放。")
+    if language != "zh-CN":
+        raise ValueError("销售合同语言版本无效。")
+    currency = _text(form.get("currency")).upper() or "CNY"
+    if not source_controlled and currency not in {"CNY", "USD", "EUR"}:
+        raise ValueError("销售合同币种只允许 CNY、USD 或 EUR。")
     contract = {
+        "language": language,
+        "currency": currency,
+        "source_quote_no": _text(form.get("source_quote_no")),
+        "customer_id": None,
         "contract_no": _text(form.get("contract_no")),
         "contract_date": _text(form.get("contract_date")) or date.today().isoformat(),
         "seller_name": _text(form.get("seller_name") or form.get("buyer_name")) or DEFAULT_BUYER_NAME,
@@ -158,7 +185,7 @@ def sales_contract_from_form(form: Any) -> dict[str, Any]:
     }
     if not contract["contract_no"]:
         raise ValueError("合同编号不能为空。")
-    if not contract["customer_name"]:
+    if not source_controlled and not contract["customer_name"]:
         raise ValueError("需方不能为空。")
 
     codes = form.getlist("product_code[]")
@@ -170,6 +197,8 @@ def sales_contract_from_form(form: Any) -> dict[str, Any]:
     prices = form.getlist("unit_price[]")
     deliveries = form.getlist("delivery_date[]")
     notes = form.getlist("item_note[]")
+    source_quote_ids = form.getlist("source_quote_row_id[]")
+    source_quote_versions = form.getlist("source_quote_row_version[]")
     row_count = max(
         len(codes),
         len(customer_codes),
@@ -180,6 +209,8 @@ def sales_contract_from_form(form: Any) -> dict[str, Any]:
         len(prices),
         len(deliveries),
         len(notes),
+        len(source_quote_ids),
+        len(source_quote_versions),
     )
 
     total = Decimal("0")
@@ -194,16 +225,34 @@ def sales_contract_from_form(form: Any) -> dict[str, Any]:
         price_text = _text(prices[index] if index < len(prices) else "")
         delivery = _text(deliveries[index] if index < len(deliveries) else "")
         note = _text(notes[index] if index < len(notes) else "")
-        if not any([code, customer_code, oe_no, name, model_text, quantity_text, price_text, delivery, note]):
+        source_quote_id = _text(source_quote_ids[index] if index < len(source_quote_ids) else "")
+        source_quote_version = _text(
+            source_quote_versions[index] if index < len(source_quote_versions) else ""
+        )
+        if not any(
+            [
+                code,
+                customer_code,
+                oe_no,
+                name,
+                model_text,
+                quantity_text,
+                price_text,
+                delivery,
+                note,
+                source_quote_id,
+                source_quote_version,
+            ]
+        ):
             continue
         row_label = f"第 {index + 1} 行"
-        if not code:
+        if not source_controlled and not code:
             raise ValueError(f"{row_label}型号不能为空。")
         quantity = _parse_decimal(quantity_text, f"{row_label}数量", positive=True)
-        unit_price = _parse_decimal(price_text, f"{row_label}单价")
-        amount = (quantity * unit_price).quantize(MONEY_QUANT, rounding=ROUND_HALF_UP)
+        unit_price = Decimal("0") if source_controlled else _parse_decimal(price_text, f"{row_label}单价")
+        amount = _contract_line_amount(quantity, unit_price, row_label)
         total_quantity += quantity
-        total += amount
+        total = _contract_total_amount(total, amount)
         contract["items"].append(
             {
                 "product_code": code,
@@ -217,6 +266,8 @@ def sales_contract_from_form(form: Any) -> dict[str, Any]:
                 "amount": amount,
                 "delivery_date": delivery,
                 "note": note,
+                "source_quote_id": source_quote_id,
+                "source_quote_version": source_quote_version,
             }
         )
 
@@ -225,5 +276,5 @@ def sales_contract_from_form(form: Any) -> dict[str, Any]:
 
     contract["total_amount"] = total.quantize(MONEY_QUANT, rounding=ROUND_HALF_UP)
     contract["total_quantity"] = total_quantity
-    contract["total_amount_upper"] = _rmb_upper(contract["total_amount"])
+    contract["total_amount_upper"] = _rmb_upper(contract["total_amount"]) if currency == "CNY" else ""
     return contract

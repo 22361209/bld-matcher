@@ -35,6 +35,34 @@ if (document.body.dataset.page === "quotes.list") {
 
   const numberDialog = document.querySelector("#quote-number-dialog");
 
+  const setupQuoteContractForm = (root) => {
+    const form = root?.querySelector("[data-quote-contract-form]");
+    if (!(form instanceof HTMLFormElement)) return;
+    const feedback = form.querySelector("[data-quote-contract-feedback]");
+    const count = form.querySelector("[data-quote-contract-count]");
+    const checkboxes = Array.from(form.querySelectorAll('input[name="quote_id"]'));
+    const syncSelection = () => {
+      const selected = checkboxes.filter((input) => input instanceof HTMLInputElement && input.checked).length;
+      if (count instanceof HTMLElement) count.textContent = String(selected);
+      if (selected && feedback instanceof HTMLElement) {
+        feedback.hidden = true;
+        feedback.textContent = "";
+      }
+      return selected;
+    };
+    checkboxes.forEach((input) => input.addEventListener("change", syncSelection));
+    form.addEventListener("submit", (event) => {
+      if (syncSelection()) return;
+      event.preventDefault();
+      if (feedback instanceof HTMLElement) {
+        feedback.textContent = "请至少选择一条报价明细。";
+        feedback.hidden = false;
+      }
+      checkboxes[0]?.focus();
+    });
+    syncSelection();
+  };
+
   const openQuoteNumber = (button) => {
     if (!(numberDialog instanceof HTMLDialogElement)) return;
     const label = numberDialog.querySelector("[data-quote-number-label]");
@@ -58,6 +86,7 @@ if (document.body.dataset.page === "quotes.list") {
       .then((html) => {
         if (detail instanceof HTMLElement) {
           detail.innerHTML = html;
+          setupQuoteContractForm(detail);
         }
       })
       .catch(() => {

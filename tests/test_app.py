@@ -3230,6 +3230,33 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(data["customers"], [{"name": "宁波多迦"}])
         self.assertEqual(data["total"], 1)
 
+    def test_customer_page_filters_by_owner_label_and_bounds_long_queries(self):
+        self.login()
+        with self.web.connect(self.web.DB_PATH) as connection:
+            owner = connection.execute(
+                "SELECT display_name FROM users WHERE username = '007'"
+            ).fetchone()
+            connection.execute(
+                """
+                INSERT INTO customers (name, owner_username, sync_id)
+                VALUES ('负责人页面筛选客户', '007', 'customer-owner-filter-test')
+                """
+            )
+            connection.commit()
+
+        self.assertIsNotNone(owner)
+        display_name = str(owner["display_name"] or "")
+        self.assertTrue(display_name)
+
+        long_query = self.client.get("/customers", query_string={"q": "x" * 201})
+        by_display_name = self.client.get("/customers", query_string={"q": display_name})
+        by_username = self.client.get("/customers", query_string={"q": "007"})
+
+        self.assertEqual(long_query.status_code, 200)
+        self.assertIn('maxlength="200"', long_query.get_data(as_text=True))
+        self.assertIn("负责人页面筛选客户", by_display_name.get_data(as_text=True))
+        self.assertIn("负责人页面筛选客户", by_username.get_data(as_text=True))
+
     def test_quote_api_oversized_request_returns_json(self):
         response = self.client.post(
             "/api/v1/quotes",
@@ -3474,6 +3501,13 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("K-PAGE-100", third_html)
         self.assertIn("K-PAGE-120", third_html)
         self.assertNotIn("K-PAGE-099", third_html)
+
+    def test_shared_page_jump_controls_remain_compact(self):
+        styles = (PROJECT_ROOT / "static" / "components" / "data_grid.css").read_text(encoding="utf-8")
+        self.assertRegex(
+            styles,
+            r"\.data-grid-page-jump > label\s*\{[^}]*flex:\s*0 0 auto;[^}]*min-width:\s*0;",
+        )
 
     def test_product_column_filters_preserve_multiselect_in_pagination_and_export_form(self):
         from app.modules.products.persistence import upsert_product
@@ -4951,6 +4985,9 @@ class WebAppTest(unittest.TestCase):
                 "025_create_product_option_values",
                 "026_quote_record_quote_no",
                 "027_customers",
+                "028_customer_profiles_documents_and_quote_contracts",
+                "029_customer_workspace_integrity",
+                "030_repair_customer_workspace_integrity",
             ],
         )
 

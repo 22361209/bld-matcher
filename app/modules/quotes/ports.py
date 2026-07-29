@@ -28,6 +28,14 @@ class QuoteRepository(Protocol):
 
     def audit(self, action: str, quote: QuoteRecord, *, actor: str) -> None: ...
 
+    def list_by_quote_no(self, quote_no: str) -> list[QuoteRecord]: ...
+
+    def customer_summary(self, customer_id: int, customer_name: str) -> dict[str, object]: ...
+
+    def customer_history(self, customer_id: int, customer_name: str, *, limit: int) -> list[dict[str, object]]: ...
+
+    def rename_customer_references(self, customer_id: int, old_name: str, new_name: str) -> int: ...
+
 
 class QuoteUnitOfWork(Protocol):
     repository: QuoteRepository
@@ -64,6 +72,14 @@ class ProductCatalogPort(Protocol):
 
 class CustomerDirectoryPort(Protocol):
     def exists(self, customer_name: str) -> bool: ...
+
+    def find_id(self, customer_name: str) -> int | None: ...
+
+    def find_active_id(self, customer_id: int | None, customer_name: str) -> int | None: ...
+
+
+class ContractDocumentDirectoryPort(Protocol):
+    def list_by_quote_no(self, quote_no: str) -> list[dict[str, object]]: ...
 
 
 QuoteRows = Iterable[dict[str, object]]

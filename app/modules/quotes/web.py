@@ -129,7 +129,9 @@ def quotes_fragment():
 @quote_web.get("/quotes/number/<quote_no>", endpoint="quote_number_detail")
 @permission_required("view_customer_prices")
 def quote_number_detail(quote_no: str):
-    records = get_quote_service().records_by_quote_no(quote_no)
+    service = get_quote_service()
+    records = service.records_by_quote_no(quote_no)
+    contract_documents = service.contract_documents_by_quote_no(quote_no)
     attachments = []
     seen_paths: set[str] = set()
     for record in records:
@@ -143,7 +145,13 @@ def quote_number_detail(quote_no: str):
             }
         )
     response = make_response(
-        render_template("_quote_number_detail.html", quote_no=quote_no, records=records, attachments=attachments)
+        render_template(
+            "_quote_number_detail.html",
+            quote_no=quote_no,
+            records=records,
+            attachments=attachments,
+            contract_documents=contract_documents,
+        )
     )
     response.headers["Cache-Control"] = "no-store"
     return response

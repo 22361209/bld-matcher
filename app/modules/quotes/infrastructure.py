@@ -42,3 +42,34 @@ class CustomerDirectoryAdapter:
         from app.modules.customers.factory import get_customer_service
 
         return get_customer_service().find_by_name(customer_name) is not None
+
+    def find_id(self, customer_name: str) -> int | None:
+        from app.modules.customers.factory import get_customer_service
+
+        customer = get_customer_service().find_by_name(customer_name)
+        return customer.id if customer is not None else None
+
+    def find_active_id(self, customer_id: int | None, customer_name: str) -> int | None:
+        from app.modules.customers.domain import CustomerValidationError
+        from app.modules.customers.factory import get_customer_service
+
+        service = get_customer_service()
+        if customer_id is None:
+            customer = service.find_by_name(customer_name)
+            return customer.id if customer is not None else None
+        try:
+            customer = service.get(customer_id)
+        except CustomerValidationError:
+            return None
+        expected_name = " ".join(str(customer_name or "").split()).casefold()
+        actual_name = " ".join(customer.name.split()).casefold()
+        if customer.status != "active" or actual_name != expected_name:
+            return None
+        return customer.id
+
+
+class ContractDocumentDirectoryAdapter:
+    def list_by_quote_no(self, quote_no: str) -> list[dict[str, object]]:
+        from app.modules.contracts.factory import get_contract_service
+
+        return get_contract_service().documents_for_quote(quote_no)

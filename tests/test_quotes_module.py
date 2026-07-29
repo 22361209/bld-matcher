@@ -78,6 +78,10 @@ class QuoteModuleTest(unittest.TestCase):
             build_quote_draft(self.quote_data(customer_name=""))
         with self.assertRaisesRegex(QuoteValidationError, "tax_price"):
             build_quote_draft(self.quote_data(tax_price="bad"))
+        with self.assertRaisesRegex(QuoteValidationError, "不能为负数"):
+            build_quote_draft(self.quote_data(tax_price="-0.01"))
+        with self.assertRaisesRegex(QuoteValidationError, "数值过大"):
+            build_quote_draft(self.quote_data(tax_price="1e100"))
 
         created = self.service.create(self.quote_data(remark="initial"), actor="module-test")
         updated = self.service.update(
@@ -168,6 +172,50 @@ class QuoteModuleTest(unittest.TestCase):
         self.assertEqual(unchanged.version, 1)
         self.assertEqual(unchanged.quoted_by, "creator")
         self.assertEqual(unchanged.source_type, "manual")
+
+    def test_inactive_customer_blocks_new_selection_but_not_historical_quote_correction(self):
+        with connect(self.db_path) as connection:
+            cursor = connection.execute(
+                "INSERT INTO customers (name, status, sync_id) VALUES (?, 'active', ?)",
+                ("Lifecycle Customer", "lifecycle-customer"),
+            )
+            customer_id = int(cursor.lastrowid)
+            connection.commit()
+
+        class CustomerDirectory:
+            active = True
+
+            def exists(self, customer_name: str) -> bool:
+                return self.active and customer_name == "Lifecycle Customer"
+
+            def find_id(self, customer_name: str) -> int | None:
+                return customer_id if self.exists(customer_name) else None
+
+        directory = CustomerDirectory()
+        self.service.customer_directory = directory
+        created = self.service.create(
+            self.quote_data(customer_name="Lifecycle Customer"),
+            actor="creator",
+        )
+        self.assertEqual(created.customer_id, customer_id)
+
+        directory.active = False
+        corrected = self.service.update(
+            created.id,
+            {"remark": "historical correction"},
+            actor="editor",
+            expected_version=created.version,
+        )
+        self.assertEqual(corrected.customer_id, customer_id)
+        self.assertEqual(corrected.customer_name, "Lifecycle Customer")
+
+        with self.assertRaisesRegex(QuoteValidationError, "未登记"):
+            self.service.update(
+                corrected.id,
+                {"customer_name": "Replacement Customer"},
+                actor="editor",
+                expected_version=corrected.version,
+            )
 
     def test_delete_removes_record_revisions_and_audits(self):
         created = self.service.create(self.quote_data(), actor="deleter")

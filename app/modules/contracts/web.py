@@ -28,6 +28,9 @@ def _render_contract_management(mode: str):
         output_reader=output_reader,
         history_type=request.args.get("contract_type", "all"),
         history_query=request.args.get("contract_q", ""),
+        source_quote_no=request.args.get("source_quote_no", ""),
+        quote_ids=request.args.getlist("quote_id"),
+        language=request.args.get("language", ""),
     )
     return render_template("purchase_contracts.html", **context)
 
@@ -46,7 +49,21 @@ def register(app) -> None:
     @app.get("/contracts/sales")
     @permission_required("generate_purchase_contract")
     def sales_contracts():
-        return _render_contract_management("sales")
+        try:
+            return _render_contract_management("sales")
+        except ValueError as exc:
+            flash(f"无法生成销售合同草稿：{exc}", "error")
+            return redirect(url_for("quote_web.quotes") + "#quote-results")
+
+    @app.get("/contracts/documents/<int:document_id>/download")
+    @permission_required("generate_purchase_contract")
+    def download_contract_document(document_id: int):
+        resolved = get_contract_service().document_path(document_id)
+        if resolved is None:
+            flash("销售合同文件不存在或无权访问。", "error")
+            return redirect(url_for("quote_web.quotes") + "#quote-results")
+        path, document = resolved
+        return send_file(path, as_attachment=True, download_name=str(document["name"]))
 
     @app.get("/purchase-contracts/product-lookup")
     @permission_required("generate_purchase_contract")

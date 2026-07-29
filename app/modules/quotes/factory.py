@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.config import DB_PATH
 
 from .infrastructure import (
+    ContractDocumentDirectoryAdapter,
     CustomerDirectoryAdapter,
     ExcelQuoteImportAdapter,
     FileImportLockAdapter,
@@ -19,4 +20,5 @@ def get_quote_service() -> QuoteService:
         FileImportLockAdapter(),
         ProductCatalogAdapter(),
         CustomerDirectoryAdapter(),
+        ContractDocumentDirectoryAdapter(),
     )

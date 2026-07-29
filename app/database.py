@@ -147,8 +147,23 @@ CREATE TABLE IF NOT EXISTS customer_price_records (
 CREATE INDEX IF NOT EXISTS idx_customer_price_records_customer ON customer_price_records(customer_name);
 CREATE INDEX IF NOT EXISTS idx_customer_price_records_date ON customer_price_records(record_date);
 
+CREATE TABLE IF NOT EXISTS customers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  code TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'active',
+  owner_username TEXT NOT NULL DEFAULT '',
+  sync_id TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_name ON customers(name COLLATE NOCASE);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_sync_id ON customers(sync_id);
+
 CREATE TABLE IF NOT EXISTS quote_records (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id INTEGER REFERENCES customers(id),
   customer_name TEXT NOT NULL,
   bld_no TEXT DEFAULT '',
   customer_product_code TEXT DEFAULT '',
@@ -184,6 +199,75 @@ CREATE TABLE IF NOT EXISTS quote_record_revisions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_quote_record_revisions_quote ON quote_record_revisions(quote_id);
+
+CREATE TABLE IF NOT EXISTS customer_contacts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id INTEGER NOT NULL REFERENCES customers(id),
+  name TEXT NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
+  role TEXT NOT NULL DEFAULT '',
+  phone TEXT NOT NULL DEFAULT '',
+  email TEXT NOT NULL DEFAULT '',
+  wechat TEXT NOT NULL DEFAULT '',
+  is_primary INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_customer_contacts_customer ON customer_contacts(customer_id, is_primary DESC, id);
+
+CREATE TABLE IF NOT EXISTS customer_document_groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id INTEGER NOT NULL REFERENCES customers(id),
+  sync_id TEXT NOT NULL UNIQUE,
+  category TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  language TEXT NOT NULL DEFAULT 'zh-CN',
+  current_version INTEGER NOT NULL DEFAULT 0,
+  archived INTEGER NOT NULL DEFAULT 0,
+  created_by TEXT NOT NULL DEFAULT '',
+  updated_by TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_customer_document_groups_customer ON customer_document_groups(customer_id, archived, updated_at);
+
+CREATE TABLE IF NOT EXISTS customer_document_files (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  group_id INTEGER NOT NULL REFERENCES customer_document_groups(id),
+  sync_id TEXT NOT NULL UNIQUE,
+  version_no INTEGER NOT NULL,
+  original_name TEXT NOT NULL,
+  storage_path TEXT NOT NULL UNIQUE,
+  content_type TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL,
+  sha256 TEXT NOT NULL,
+  created_by TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_customer_document_files_version ON customer_document_files(group_id, version_no, id);
+
+CREATE TABLE IF NOT EXISTS contract_documents (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  contract_type TEXT NOT NULL DEFAULT 'sales',
+  contract_no TEXT NOT NULL,
+  customer_id INTEGER REFERENCES customers(id),
+  customer_name TEXT NOT NULL,
+  source_quote_no TEXT NOT NULL DEFAULT '',
+  language TEXT NOT NULL DEFAULT 'zh-CN',
+  currency TEXT NOT NULL DEFAULT 'CNY',
+  source_snapshot_json TEXT NOT NULL DEFAULT '',
+  source_snapshot_sha256 TEXT NOT NULL DEFAULT '',
+  file_path TEXT NOT NULL UNIQUE,
+  created_by TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_contract_documents_customer ON contract_documents(customer_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_contract_documents_quote_no ON contract_documents(source_quote_no, created_at);
 
 CREATE TABLE IF NOT EXISTS internal_api_keys (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

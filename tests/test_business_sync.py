@@ -111,6 +111,334 @@ class BusinessSyncServiceTest(unittest.TestCase):
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM tube_items WHERE code = 'SYNC-TUBE'").fetchone()[0], 1)
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM material_items WHERE sync_id = 'material-sync-id'").fetchone()[0], 1)
 
+    def test_customer_owner_is_device_local_and_not_overwritten_by_sync(self) -> None:
+        with connect(self.source) as connection:
+            connection.execute(
+                "INSERT INTO customers (name, code, owner_username, sync_id) VALUES (?, ?, ?, ?)",
+                ("负责人同步客户", "SYNC-CUSTOMER", "source-owner", "owner-customer-sync-id"),
+            )
+            connection.commit()
+        with connect(self.target) as connection:
+            connection.execute(
+                "INSERT INTO customers (name, code, owner_username, sync_id) VALUES (?, ?, ?, ?)",
+                ("负责人同步客户", "SYNC-CUSTOMER", "local-owner", "owner-customer-sync-id"),
+            )
+            connection.commit()
+
+        package = self.root / "customer-owner-business.tar.gz"
+        source_repository = BusinessSyncRepository(self.source)
+        source_repository.export(output_path=package, selected=("customers",), actor="test")
+        _manifest, payload = source_repository.read(package)
+        self.assertEqual(payload["customers"][0]["owner_username"], "")
+
+        service = BusinessSyncService(BusinessSyncRepository(self.target))
+        preview = service.preview(package)
+        result = service.apply(
+            package,
+            backup_path=self.root / "customer-owner-backup.sqlite3",
+            actor="test",
+            expected_token=cast(str, preview["token"]),
+        )
+
+        self.assertEqual(result["customers"]["unchanged"], 1)
+        with connect(self.target) as connection:
+            owner = connection.execute(
+                "SELECT owner_username FROM customers WHERE sync_id = 'owner-customer-sync-id'"
+            ).fetchone()[0]
+        self.assertEqual(owner, "local-owner")
+
+    def test_customer_rename_keeps_linked_quote_canonical_for_customer_and_combined_packages(self) -> None:
+        with connect(self.source) as connection:
+            source_customer_id = connection.execute(
+                """
+                INSERT INTO customers (name, sync_id, created_at, updated_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                ("客户新名称", "renamed-customer-sync-id", "2026-07-17 10:00:00", "2026-07-19 10:00:00"),
+            ).lastrowid
+            connection.execute(
+                """
+                INSERT INTO quote_records
+                  (customer_id, customer_name, bld_no, product_model, tax_price, currency,
+                   quote_date, remark, version, sync_id, quote_no, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    source_customer_id,
+                    "客户新名称",
+                    "RENAME-001",
+                    "RENAME-001",
+                    10,
+                    "CNY",
+                    "2026-07-19",
+                    "source",
+                    4,
+                    "renamed-quote-sync-id",
+                    "Q-RENAME-001",
+                    "2026-07-17 10:00:00",
+                    "2026-07-19 10:00:00",
+                ),
+            )
+            connection.commit()
+
+        def seed_target(database_path: Path) -> int:
+            with connect(database_path) as connection:
+                customer_id = connection.execute(
+                    """
+                    INSERT INTO customers (name, sync_id, created_at, updated_at)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    ("客户旧名称", "renamed-customer-sync-id", "2026-07-17 10:00:00", "2026-07-18 10:00:00"),
+                ).lastrowid
+                connection.execute(
+                    """
+                    INSERT INTO quote_records
+                      (customer_id, customer_name, bld_no, product_model, tax_price, currency,
+                       quote_date, remark, version, sync_id, quote_no, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        customer_id,
+                        "客户旧名称",
+                        "RENAME-001",
+                        "RENAME-001",
+                        10,
+                        "CNY",
+                        "2026-07-19",
+                        "target",
+                        4,
+                        "renamed-quote-sync-id",
+                        "Q-RENAME-001",
+                        "2026-07-17 10:00:00",
+                        "2026-07-18 10:00:00",
+                    ),
+                )
+                connection.commit()
+                return int(customer_id)
+
+        repository = BusinessSyncRepository(self.source)
+        customer_package = self.root / "customer-rename-only.tar.gz"
+        combined_package = self.root / "customer-rename-with-quotes.tar.gz"
+        repository.export(output_path=customer_package, selected=("customers",), actor="test")
+        repository.export(output_path=combined_package, selected=("customers", "quotes"), actor="test")
+
+        targets = (
+            (self.target, customer_package, "customer-only-backup.sqlite3"),
+            (self.root / "combined-target.sqlite3", combined_package, "combined-backup.sqlite3"),
+        )
+        for database_path, package, backup_name in targets:
+            with self.subTest(package=package.name):
+                local_customer_id = seed_target(database_path)
+                service = BusinessSyncService(BusinessSyncRepository(database_path))
+                preview = service.preview(package)
+                service.apply(
+                    package,
+                    backup_path=self.root / backup_name,
+                    actor="test",
+                    expected_token=cast(str, preview["token"]),
+                )
+                with connect(database_path) as connection:
+                    customer = connection.execute(
+                        "SELECT id, name FROM customers WHERE sync_id = 'renamed-customer-sync-id'"
+                    ).fetchone()
+                    quote = connection.execute(
+                        """
+                        SELECT customer_id, customer_name, version
+                        FROM quote_records
+                        WHERE sync_id = 'renamed-quote-sync-id'
+                        """
+                    ).fetchone()
+                self.assertEqual(tuple(customer), (local_customer_id, "客户新名称"))
+                self.assertEqual(tuple(quote), (local_customer_id, "客户新名称", 5))
+
+    def test_selected_quote_conflicts_increment_local_version_for_older_and_equal_packages(self) -> None:
+        with connect(self.source) as connection:
+            source_customer_id = connection.execute(
+                "INSERT INTO customers (name, sync_id) VALUES (?, ?)",
+                ("版本客户", "version-source-customer-id"),
+            ).lastrowid
+            for sync_id, bld_no, version, tax_price in (
+                ("quote-equal-version", "VERSION-EQUAL", 5, 25),
+                ("quote-older-version", "VERSION-OLDER", 2, 22),
+            ):
+                connection.execute(
+                    """
+                    INSERT INTO quote_records
+                      (customer_id, customer_name, bld_no, product_model, tax_price, currency,
+                       quote_date, remark, version, sync_id, quote_no, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        source_customer_id,
+                        "版本客户",
+                        bld_no,
+                        bld_no,
+                        tax_price,
+                        "CNY",
+                        "2026-07-19",
+                        "incoming",
+                        version,
+                        sync_id,
+                        f"Q-{bld_no}",
+                        "2026-07-17 10:00:00",
+                        "2026-07-19 10:00:00",
+                    ),
+                )
+            connection.commit()
+
+        with connect(self.target) as connection:
+            local_customer_id = connection.execute(
+                "INSERT INTO customers (name, sync_id) VALUES (?, ?)",
+                ("版本客户", "version-target-customer-id"),
+            ).lastrowid
+            for sync_id, bld_no in (
+                ("quote-equal-version", "VERSION-EQUAL"),
+                ("quote-older-version", "VERSION-OLDER"),
+            ):
+                connection.execute(
+                    """
+                    INSERT INTO quote_records
+                      (customer_id, customer_name, bld_no, product_model, tax_price, currency,
+                       quote_date, remark, version, sync_id, quote_no, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        local_customer_id,
+                        "版本客户",
+                        bld_no,
+                        bld_no,
+                        10,
+                        "CNY",
+                        "2026-07-19",
+                        "local",
+                        5,
+                        sync_id,
+                        f"Q-{bld_no}",
+                        "2026-07-17 10:00:00",
+                        "2026-07-18 10:00:00",
+                    ),
+                )
+            connection.commit()
+
+        package = self.root / "quote-version-conflicts.tar.gz"
+        BusinessSyncRepository(self.source).export(output_path=package, selected=("quotes",), actor="test")
+        service = BusinessSyncService(BusinessSyncRepository(self.target))
+        preview = service.preview(package)
+        summary = cast(dict[str, dict[str, object]], preview["summary"])
+        self.assertEqual(cast(dict[str, int], summary["quotes"]["counts"])["conflict"], 2)
+
+        result = service.apply(
+            package,
+            backup_path=self.root / "quote-version-backup.sqlite3",
+            actor="test",
+            expected_token=cast(str, preview["token"]),
+            selected_conflicts={"quotes": {"quote-equal-version", "quote-older-version"}},
+        )
+        self.assertEqual(result["quotes"]["updated"], 2)
+        with connect(self.target) as connection:
+            rows = connection.execute(
+                """
+                SELECT sync_id, version, tax_price, remark, customer_id, customer_name
+                FROM quote_records
+                ORDER BY sync_id
+                """
+            ).fetchall()
+        self.assertEqual(
+            [tuple(row) for row in rows],
+            [
+                ("quote-equal-version", 6, 25.0, "incoming", local_customer_id, "版本客户"),
+                ("quote-older-version", 6, 22.0, "incoming", local_customer_id, "版本客户"),
+            ],
+        )
+
+    def test_selected_quote_conflict_resolves_an_incoming_customer_change_by_name(self) -> None:
+        with connect(self.source) as connection:
+            source_customer_id = connection.execute(
+                "INSERT INTO customers (name, sync_id) VALUES (?, ?)",
+                ("客户 B", "source-customer-b"),
+            ).lastrowid
+            connection.execute(
+                """
+                INSERT INTO quote_records
+                  (customer_id, customer_name, bld_no, product_model, tax_price, currency,
+                   quote_date, remark, version, sync_id, quote_no, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    source_customer_id,
+                    "客户 B",
+                    "MOVE-CUSTOMER",
+                    "MOVE-CUSTOMER",
+                    22,
+                    "CNY",
+                    "2026-07-19",
+                    "incoming B",
+                    2,
+                    "quote-move-customer",
+                    "Q-MOVE-CUSTOMER",
+                    "2026-07-17 10:00:00",
+                    "2026-07-19 10:00:00",
+                ),
+            )
+            connection.commit()
+
+        with connect(self.target) as connection:
+            customer_a_id = connection.execute(
+                "INSERT INTO customers (name, sync_id) VALUES (?, ?)",
+                ("客户 A", "target-customer-a"),
+            ).lastrowid
+            customer_b_id = connection.execute(
+                "INSERT INTO customers (name, sync_id) VALUES (?, ?)",
+                ("客户 B", "target-customer-b"),
+            ).lastrowid
+            connection.execute(
+                """
+                INSERT INTO quote_records
+                  (customer_id, customer_name, bld_no, product_model, tax_price, currency,
+                   quote_date, remark, version, sync_id, quote_no, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    customer_a_id,
+                    "客户 A",
+                    "MOVE-CUSTOMER",
+                    "MOVE-CUSTOMER",
+                    10,
+                    "CNY",
+                    "2026-07-19",
+                    "local A",
+                    5,
+                    "quote-move-customer",
+                    "Q-MOVE-CUSTOMER",
+                    "2026-07-17 10:00:00",
+                    "2026-07-18 10:00:00",
+                ),
+            )
+            connection.commit()
+
+        package = self.root / "quote-customer-change.tar.gz"
+        BusinessSyncRepository(self.source).export(output_path=package, selected=("quotes",), actor="test")
+        service = BusinessSyncService(BusinessSyncRepository(self.target))
+        preview = service.preview(package)
+        result = service.apply(
+            package,
+            backup_path=self.root / "quote-customer-change-backup.sqlite3",
+            actor="test",
+            expected_token=cast(str, preview["token"]),
+            selected_conflicts={"quotes": {"quote-move-customer"}},
+        )
+
+        self.assertEqual(result["quotes"]["updated"], 1)
+        with connect(self.target) as connection:
+            row = connection.execute(
+                """
+                SELECT customer_id, customer_name, tax_price, remark, version
+                FROM quote_records
+                WHERE sync_id = 'quote-move-customer'
+                """
+            ).fetchone()
+        self.assertEqual(tuple(row), (customer_b_id, "客户 B", 22.0, "incoming B", 6))
+
     def test_older_product_and_different_quote_are_reported_as_conflicts(self) -> None:
         package = self._package()
         with connect(self.target) as connection:

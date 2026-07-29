@@ -211,6 +211,13 @@
       "rule": "/contracts"
     },
     {
+      "endpoint": "download_contract_document",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/contracts/documents/<int:document_id>/download"
+    },
+    {
       "endpoint": "sales_contracts",
       "methods": [
         "GET"
@@ -230,6 +237,76 @@
         "GET"
       ],
       "rule": "/customers"
+    },
+    {
+      "endpoint": "customer_detail",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/customers/<int:customer_id>"
+    },
+    {
+      "endpoint": "delete_customer_contact",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/customers/<int:customer_id>/contacts/<int:contact_id>/delete"
+    },
+    {
+      "endpoint": "save_customer_contact",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/customers/<int:customer_id>/contacts/save"
+    },
+    {
+      "endpoint": "create_customer_document",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/customers/<int:customer_id>/documents"
+    },
+    {
+      "endpoint": "archive_customer_document",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/customers/<int:customer_id>/documents/<int:group_id>/archive"
+    },
+    {
+      "endpoint": "update_customer_document",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/customers/<int:customer_id>/documents/<int:group_id>/update"
+    },
+    {
+      "endpoint": "add_customer_document_version",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/customers/<int:customer_id>/documents/<int:group_id>/versions"
+    },
+    {
+      "endpoint": "download_customer_document_file",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/customers/<int:customer_id>/documents/files/<int:file_id>/download"
+    },
+    {
+      "endpoint": "preview_customer_document_file",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/customers/<int:customer_id>/documents/files/<int:file_id>/preview"
+    },
+    {
+      "endpoint": "set_customer_status",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/customers/<int:customer_id>/status"
     },
     {
       "endpoint": "delete_customer",

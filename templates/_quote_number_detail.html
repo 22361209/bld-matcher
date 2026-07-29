@@ -4,15 +4,38 @@
     {% for attachment in attachments %}<a class="linear-button subtle compact" href="{{ attachment.url }}">下载 {{ attachment.name }}</a>{% endfor %}
   </section>
 {% endif %}
+{% if contract_documents %}
+  <section class="quote-number-contracts" aria-label="已生成销售合同">
+    <strong>已生成销售合同</strong>
+    {% for document in contract_documents %}
+      <a class="linear-button subtle compact" href="{{ url_for('download_contract_document', document_id=document.id) }}">
+        下载 {{ document.contract_no }}（{{ document.language_label }} · {{ document.currency }}）
+      </a>
+    {% endfor %}
+  </section>
+{% endif %}
+{% if records and can("generate_purchase_contract") %}
+  <form class="quote-contract-draft" method="get" action="{{ url_for('sales_contracts') }}" data-quote-contract-form>
+    <input type="hidden" name="source_quote_no" value="{{ quote_no }}">
+    <fieldset class="quote-contract-language">
+      <legend>销售合同语言</legend>
+      <label><input type="radio" name="language" value="zh-CN" required> 中文版</label>
+      <label class="disabled"><input type="radio" name="language" value="en-US" disabled> English（待支持）</label>
+    </fieldset>
+    <p class="quote-contract-help">选择需要写入合同的明细。数量和交期将在合同草稿中留空，由你确认后填写。</p>
+    <div class="quote-contract-feedback" data-quote-contract-feedback role="status" hidden></div>
+{% endif %}
 <table class="data-table quote-table quote-number-table">
   <thead>
     <tr>
+      {% if records and can("generate_purchase_contract") %}<th class="quote-contract-select-column">选择</th>{% endif %}
       <th>日期</th><th>客户</th><th>BLD号</th><th>客户产品编码</th><th>含税单价</th><th>不含税单价</th><th>币种</th><th>报价人</th><th>备注</th>
     </tr>
   </thead>
   <tbody>
     {% for record in records %}
       <tr>
+        {% if can("generate_purchase_contract") %}<td class="quote-contract-select-column"><input type="checkbox" name="quote_id" value="{{ record.id }}" checked aria-label="选择 {{ record.bld_no or record.product_model }}"></td>{% endif %}
         <td>{{ record.quote_date }}</td>
         <td>{{ record.customer_name }}</td>
         <td>{{ record.bld_no or record.product_model }}</td>
@@ -29,3 +52,10 @@
     {% endif %}
   </tbody>
 </table>
+{% if records and can("generate_purchase_contract") %}
+    <div class="quote-contract-actions">
+      <span>已选择 <strong data-quote-contract-count>{{ records|length }}</strong> 条</span>
+      <button class="linear-button primary" type="submit">生成销售合同</button>
+    </div>
+  </form>
+{% endif %}
