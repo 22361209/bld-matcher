@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sqlite3
 import tempfile
 import unittest
@@ -15,6 +16,7 @@ from app.platform.permissions import (
     ALL_PERMISSION_KEYS,
     LEGACY_ROLE_PERMISSIONS,
     effective_permissions,
+    permission_groups,
 )
 
 
@@ -317,3 +319,136 @@ class AdminPermissionTest(unittest.TestCase):
         self.assertIn('body[data-page="admin.users"]', script)
         self.assertEqual(template.count("data-submit-wait data-submit-wait-text="), 2)
         self.assertEqual(template.count("data-submit-wait-message"), 2)
+
+    def test_account_permission_matrix_has_stable_headers_groups_and_accessible_controls(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        template = (root / "templates" / "users.html").read_text()
+        account_table = re.search(
+            r'<table\b[^>]*aria-labelledby="account-permissions-title"[^>]*>(.*?)</table>',
+            template,
+            re.DOTALL,
+        )
+
+        self.assertIsNotNone(account_table)
+        assert account_table is not None
+        header = re.search(r"<thead\b[^>]*>(.*?)</thead>", account_table.group(1), re.DOTALL)
+        self.assertIsNotNone(header)
+        assert header is not None
+        headings = (
+            "功能权限",
+            "角色基线",
+            "跟随角色",
+            "额外授权",
+            "明确禁止",
+            "最终结果",
+        )
+        self.assertEqual(header.group(1).count('scope="col"'), len(headings))
+        positions = [header.group(1).index(heading) for heading in headings]
+        self.assertEqual(positions, sorted(positions))
+
+        self.assertEqual(len(permission_groups()), 6)
+        self.assertIn("{% set group_index = loop.index %}", account_table.group(1))
+        self.assertIn('id="account-permission-group-{{ group_index }}"', template)
+        self.assertIn('href="#account-permission-group-{{ loop.index }}"', template)
+        group_loop = account_table.group(1).index(
+            "{% for group_name, definitions in permission_groups %}"
+        )
+        group_body = account_table.group(1).index("<tbody", group_loop)
+        permission_loop = account_table.group(1).index(
+            "{% for permission in definitions %}", group_body
+        )
+        permission_loop_end = account_table.group(1).index("{% endfor %}", permission_loop)
+        group_body_end = account_table.group(1).index("</tbody>", permission_loop_end)
+        group_loop_end = account_table.group(1).index("{% endfor %}", group_body_end)
+        self.assertLess(group_loop, group_body)
+        self.assertLess(group_body, permission_loop)
+        self.assertLess(permission_loop_end, group_body_end)
+        self.assertLess(group_body_end, group_loop_end)
+        for choice in ("跟随角色", "额外授权", "明确禁止"):
+            self.assertIn(
+                f'aria-label="{{{{ permission.label }}}}－{choice}"',
+                account_table.group(1),
+            )
+
+    def test_role_permission_matrix_has_stable_groups_and_accessible_controls(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        template = (root / "templates" / "users.html").read_text()
+        role_table = re.search(
+            r'<table\b[^>]*aria-labelledby="role-permissions-title"[^>]*>(.*?)</table>',
+            template,
+            re.DOTALL,
+        )
+
+        self.assertIsNotNone(role_table)
+        assert role_table is not None
+        self.assertIn("功能权限", role_table.group(1))
+        self.assertIn("授予角色", role_table.group(1))
+        self.assertIn("{% set group_index = loop.index %}", role_table.group(1))
+        self.assertIn('id="role-permission-group-{{ group_index }}"', template)
+        self.assertIn('href="#role-permission-group-{{ loop.index }}"', template)
+        group_loop = role_table.group(1).index(
+            "{% for group_name, definitions in permission_groups %}"
+        )
+        group_body = role_table.group(1).index("<tbody", group_loop)
+        permission_loop = role_table.group(1).index(
+            "{% for permission in definitions %}", group_body
+        )
+        permission_loop_end = role_table.group(1).index("{% endfor %}", permission_loop)
+        group_body_end = role_table.group(1).index("</tbody>", permission_loop_end)
+        group_loop_end = role_table.group(1).index("{% endfor %}", group_body_end)
+        self.assertLess(group_loop, group_body)
+        self.assertLess(group_body, permission_loop)
+        self.assertLess(permission_loop_end, group_body_end)
+        self.assertLess(group_body_end, group_loop_end)
+        self.assertIn(
+            'aria-label="授予角色：{{ permission.label }}"',
+            role_table.group(1),
+        )
+
+    def test_permission_matrix_preserves_page_assets_and_form_submission_contract(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        template = (root / "templates" / "users.html").read_text()
+        script = (root / "static" / "pages" / "users.js").read_text()
+        stylesheet = (root / "static" / "pages" / "users.css").read_text()
+
+        self.assertIn("filename='pages/users.css'", template)
+        self.assertIn("filename='pages/users.js'", template)
+        self.assertIn('<script type="module"', template)
+        self.assertEqual(
+            template.count(
+                '<input type="hidden" name="permission_selection_present" value="1">'
+            ),
+            2,
+        )
+        for value in ("inherit", "allow", "deny"):
+            self.assertIn(
+                f'name="permission_{{{{ permission.key }}}}" value="{value}"',
+                template,
+            )
+        self.assertIn('name="permissions" value="{{ permission.key }}"', template)
+        self.assertIn("[data-permission-row]", script)
+        self.assertIn('input[type="radio"][value="inherit"]', script)
+        mobile_styles = stylesheet.split("@media (max-width: 760px) {", 1)[1]
+        self.assertRegex(
+            mobile_styles,
+            r"\.permission-category-nav\s*\{[^}]*position:\s*static;",
+        )
+        self.assertRegex(
+            mobile_styles,
+            r"\.access-permission-grid\s+\.permission-matrix\s+"
+            r"\.permission-name-cell\s*\{[^}]*position:\s*static;",
+        )
+        self.assertRegex(
+            stylesheet,
+            r"\.permission-matrix\s+\.permission-choice-cell\s*\{[^}]*padding:\s*0;",
+        )
+        self.assertRegex(
+            stylesheet,
+            r"\.permission-choice-cell label\s*\{[^}]*width:\s*100%;"
+            r"[^}]*min-width:\s*0;",
+        )
+        self.assertRegex(
+            stylesheet,
+            r"\.role-permission-choice-cell label\s*\{[^}]*min-width:\s*0;"
+            r"[^}]*flex:\s*0 0 auto;",
+        )

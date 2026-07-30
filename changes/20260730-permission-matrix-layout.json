@@ -1,0 +1,14 @@
+{
+  "date": "2026-07-30",
+  "version": "unreleased",
+  "title": "权限配置改为分组矩阵布局",
+  "entries": [
+    "账号个人权限和角色权限改为分组矩阵，角色基线、个人覆盖和最终结果可以横向对照。",
+    "权限分类支持页内快速定位，每个授权控件都有明确的可访问名称；原有跟随角色、额外授权和明确禁止三态规则保持不变。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "compatible",
+    "operations": "restart-required"
+  }
+}
