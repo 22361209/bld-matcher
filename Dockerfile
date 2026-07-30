@@ -1,3 +1,29 @@
+FROM python:3.12-slim AS app-source
+
+WORKDIR /source
+
+COPY . .
+
+RUN set -eu; \
+    revision=""; \
+    if [ -f .git/HEAD ]; then \
+      head_value="$(cat .git/HEAD)"; \
+      case "$head_value" in \
+        "ref: refs/heads/"*) ref_path="${head_value#ref: }"; revision="$(cat ".git/$ref_path" 2>/dev/null || true)" ;; \
+        *) revision="$head_value" ;; \
+      esac; \
+    fi; \
+    if printf '%s' "$revision" | grep -Eq '^[0-9a-fA-F]{40}$'; then \
+      printf '%s\n' "$revision" | cut -c1-7 > /deployment-version; \
+    else \
+      printf 'unknown\n' > /deployment-version; \
+    fi; \
+    rm -rf .git
+
+FROM scratch AS version-artifact
+
+COPY --from=app-source /deployment-version /deployment-version
+
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -9,7 +35,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY --from=app-source /source/ .
+COPY --from=version-artifact /deployment-version /app/.deployment-version
 
 RUN mkdir -p /app/data /app/uploads /app/outputs
 

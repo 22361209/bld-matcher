@@ -302,7 +302,7 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 - `PROJECT_CONSTITUTION.md`：长期工程边界和 Definition of Done。
 - `docs/governance/enforcement-matrix.md`：宪章规则的自动化覆盖、现有债务和下一道门禁。
 - `PROJECT_BRIEF.md`：当前状态和快速接手说明，保持短。
-- `changes/*.json`：系统更新的当前事实来源，由检查器强制。
+- `changes/*.json`：系统更新的当前事实来源，由检查器强制；`unreleased` 片段在页面上显示镜像构建写入的 `.deployment-version`，本机开发时回退读取 Git HEAD。
 - `项目交接说明.md`：详细历史档案，按需搜索。
 - `README.md`：安装、启动和通用说明。
 - `OPENCLAW_API.md`：机器人内部 API 调用说明。

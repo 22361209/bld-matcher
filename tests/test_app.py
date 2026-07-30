@@ -4795,6 +4795,8 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("改进 OpenClaw 询价命令行启动和调用体验", html)
         self.assertIn("ac3aa1a", html)
         self.assertIn("新增系统更新页面", html)
+        self.assertNotIn(">unreleased<", html)
+        self.assertIn("当前版本", html)
 
     def test_quote_and_material_column_filters_apply_on_server_and_keep_table_headers(self):
         self.login()

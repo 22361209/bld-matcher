@@ -1,4 +1,9 @@
-.git
+.git/*
+!.git/HEAD
+!.git/refs/
+.git/refs/*
+!.git/refs/heads/
+!.git/refs/heads/**
 .DS_Store
 .env*
 __pycache__/

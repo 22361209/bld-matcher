@@ -1,0 +1,14 @@
+{
+  "date": "2026-07-30",
+  "version": "unreleased",
+  "title": "系统更新显示当前部署版本",
+  "entries": [
+    "系统更新页不再直接显示变更片段中的 unreleased，而是显示当前部署版本的 Git 短提交号；已有历史版本号保持不变。",
+    "Docker 镜像构建时写入当前提交号，运行容器优先读取该部署版本；本机开发环境继续以 Git 查询作为后备。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "compatible",
+    "operations": "restart-required"
+  }
+}
