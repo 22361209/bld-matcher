@@ -126,7 +126,7 @@
   box-sizing: border-box;
   width: 72px;
   min-width: 0;
-  max-width: calc(100% - 14px);
+  max-width: 100%;
   flex: 0 1 72px;
   padding: 4px 5px;
   border: 1px solid var(--linear-line-strong);

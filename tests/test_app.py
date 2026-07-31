@@ -6439,6 +6439,7 @@ with connect(database_path) as conn:
         self.assertEqual(result.status_code, 200)
         self.assertIn("KPRICE01", result_html)
         self.assertIn('value="88.80" data-inquiry-tax-price', result_html)
+        self.assertNotIn('<span aria-hidden="true">¥</span>', result_html)
         self.assertIn('value="KPRICE01"', result_html)
         self.assertIn('data-inquiry-bld-input', result_html)
         self.assertIn('id="inquiry-bld-options"', result_html)
