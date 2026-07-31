@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from uuid import uuid4
 
 from flask import request
 
 from app.excel_io import PRICE_EXPORT_MODES
-from app.helpers import column_display, user_upload_dir
+from app.helpers import column_display, result_output_path, user_upload_dir
 from app.modules.inquiry.adjustments import InquiryAdjustment, parse_adjustments
 
 
@@ -16,6 +17,25 @@ def validated_user_upload_path() -> Path | None:
     if user_upload_root not in upload_path.parents or not upload_path.exists():
         return None
     return upload_path
+
+
+def normalized_workbook_output_path(output_path: Path, source_suffix: str) -> Path:
+    normalized_suffix = str(source_suffix or output_path.suffix).lower()
+    if normalized_suffix in {".xls", ".xlsx"}:
+        return output_path.with_suffix(normalized_suffix)
+    return output_path
+
+
+def quote_output_paths(original_filename: str, fallback_suffix: str) -> tuple[Path, Path]:
+    """Return request-unique final and temporary quote attachment paths."""
+    base_path = normalized_workbook_output_path(
+        result_output_path(original_filename, fallback_suffix=fallback_suffix),
+        fallback_suffix,
+    )
+    request_id = uuid4().hex
+    output_path = base_path.with_name(f"{base_path.stem}-{request_id}{base_path.suffix}")
+    temporary_path = output_path.with_name(f".{output_path.stem}.tmp{output_path.suffix}")
+    return output_path, temporary_path
 
 
 def match_columns_from_request(*, required: bool) -> list[int] | None:

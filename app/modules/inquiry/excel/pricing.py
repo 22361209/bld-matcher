@@ -45,7 +45,7 @@ def match_export_price(
     if " / " in (match.bld_no or ""):
         return None
 
-    price = tax_price_override or decimal_price(match.row.get("price_cny"))
+    price = tax_price_override if tax_price_override is not None else decimal_price(match.row.get("price_cny"))
     if price is None:
         return None
     if price_mode == "tax":

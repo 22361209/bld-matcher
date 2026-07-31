@@ -10,7 +10,7 @@ from xlutils.copy import copy as copy_xls
 from app.matcher import ProductCatalog
 from app.product_status import product_status_header_for_price_mode
 
-from ..adjustments import InquiryAdjustment, apply_adjustment
+from ..adjustments import InquiryAdjustment, apply_adjustment, ensure_adjustments_consumed, workbook_row_adjustment_key
 from .analysis import (
     analyze_xlsx_with_bld,
     annotate_row_summary_with_match_columns,
@@ -64,9 +64,8 @@ def generate_xls_with_bld(
     )
     writable = copy_xls(book) if write_output else None
     summary = {"total": 0, "matched": 0, "unmatched": 0, "rows": []}
+    consumed_adjustment_keys: set[str] = set()
     manual_match_columns = _manual_match_columns(match_column)
-
-    adjustment_index = 0
     for sheet_index in range(book.nsheets):
         source_sheet = book.sheet_by_index(sheet_index)
         target_sheet = writable.get_sheet(sheet_index) if writable else None
@@ -115,12 +114,15 @@ def generate_xls_with_bld(
                 continue
 
             match = catalog.match(inquiry_name, inquiry_oe, inquiry_desc)
-            adjustment_index += 1
+            adjustment_key = workbook_row_adjustment_key(sheet_index + 1, row_index + 1)
+            adjustment = (adjustments or {}).get(adjustment_key)
             match, tax_price_override, adjustment_note = apply_adjustment(
                 catalog,
                 match,
-                (adjustments or {}).get(str(adjustment_index)),
+                adjustment,
             )
+            if adjustment is not None:
+                consumed_adjustment_keys.add(adjustment_key)
             summary["total"] += 1
             if match:
                 if target_sheet:
@@ -144,7 +146,7 @@ def generate_xls_with_bld(
                     match_values,
                     match,
                 )
-                row_summary["adjustment_key"] = str(adjustment_index)
+                row_summary["adjustment_key"] = adjustment_key
                 if tax_price_override is not None:
                     row_summary["price_cny"] = float(tax_price_override)
                 if adjustment_note:
@@ -165,11 +167,12 @@ def generate_xls_with_bld(
                         target_sheet.write(row_index, status_col, "")
                 summary["unmatched"] += 1
                 row_summary = summary_row(row_index + 1, inquiry_oe, inquiry_name, None, customer_product_code)
-                row_summary["adjustment_key"] = str(adjustment_index)
+                row_summary["adjustment_key"] = adjustment_key
                 if target_sheet:
                     target_sheet.write(row_index, note_col, row_summary["match_note"])
                 summary["rows"].append(row_summary)
 
+    ensure_adjustments_consumed(adjustments, consumed_adjustment_keys)
     if writable:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         writable.save(str(output_path))
@@ -201,9 +204,9 @@ def generate_xlsx_with_bld(
     workbook = load_workbook(inquiry_path)
     try:
         summary = {"total": 0, "matched": 0, "unmatched": 0, "rows": []}
+        consumed_adjustment_keys: set[str] = set()
 
-        adjustment_index = 0
-        for sheet in workbook.worksheets:
+        for sheet_number, sheet in enumerate(workbook.worksheets, start=1):
             if sheet.max_row == 0:
                 continue
             data_end_row = sheet.max_row
@@ -251,12 +254,15 @@ def generate_xlsx_with_bld(
                     continue
 
                 match = catalog.match(inquiry_name, inquiry_oe, inquiry_desc)
-                adjustment_index += 1
+                adjustment_key = workbook_row_adjustment_key(sheet_number, row_index)
+                adjustment = (adjustments or {}).get(adjustment_key)
                 match, tax_price_override, adjustment_note = apply_adjustment(
                     catalog,
                     match,
-                    (adjustments or {}).get(str(adjustment_index)),
+                    adjustment,
                 )
+                if adjustment is not None:
+                    consumed_adjustment_keys.add(adjustment_key)
                 summary["total"] += 1
                 if match:
                     _write_cell(sheet, row_index, output_col, match.bld_no)
@@ -282,7 +288,7 @@ def generate_xlsx_with_bld(
                         match_values,
                         match,
                     )
-                    row_summary["adjustment_key"] = str(adjustment_index)
+                    row_summary["adjustment_key"] = adjustment_key
                     if tax_price_override is not None:
                         row_summary["price_cny"] = float(tax_price_override)
                     if adjustment_note:
@@ -301,11 +307,12 @@ def generate_xlsx_with_bld(
                         _write_cell(sheet, row_index, status_col, "")
                     summary["unmatched"] += 1
                     row_summary = summary_row(row_index, inquiry_oe, inquiry_name, None, customer_product_code)
-                    row_summary["adjustment_key"] = str(adjustment_index)
+                    row_summary["adjustment_key"] = adjustment_key
                     _write_cell(sheet, row_index, note_col, row_summary["match_note"])
                     summary["rows"].append(row_summary)
             trim_unused_row_dimensions(sheet, data_end_row)
 
+        ensure_adjustments_consumed(adjustments, consumed_adjustment_keys)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         workbook.save(output_path)
         return summary

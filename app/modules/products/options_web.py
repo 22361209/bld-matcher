@@ -38,8 +38,14 @@ def register(app) -> None:
     @app.get("/products/lookup")
     @login_required
     def product_lookup():
+        active_only = request.args.get("active_only") == "1"
         try:
-            filters = build_product_filters({"q": request.args.get("q", ""), "status": "all"})
+            filters = build_product_filters(
+                {
+                    "q": request.args.get("q", ""),
+                    "status": "active" if active_only else "all",
+                }
+            )
         except ProductFilterValidationError as exc:
             return jsonify({"ok": False, "error": f"筛选条件无效：{exc}"}), 400
         page = get_product_service().search(filters, limit=20, offset=0)
@@ -57,6 +63,7 @@ def register(app) -> None:
                     {
                         "price_cny": record.price_cny,
                         "product_status": format_product_status(record.product_status, "zh"),
+                        "active": record.active,
                     }
                 )
             rows.append(row)

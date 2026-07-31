@@ -10,6 +10,7 @@ from flask import flash, jsonify, redirect, request, send_file, url_for
 from app.config import OUTPUT_DIR
 from app.helpers import (
     clean_original_filename,
+    download_name,
     result_output_path,
     unique_prefixed_path,
     user_file_label,
@@ -22,9 +23,11 @@ from app.modules.inquiry.web_helpers import (
     adjustments_from_request,
     match_column_payload,
     match_columns_display,
+    normalized_workbook_output_path,
     optional_match_columns,
     price_log_text,
     price_options_from_request,
+    quote_output_paths,
     selected_match_columns,
     validated_user_upload_path,
 )
@@ -96,6 +99,7 @@ def register(app) -> None:
             if output_name
             else result_output_path(original_filename, fallback_suffix=upload_path.suffix)
         )
+        output_path = normalized_workbook_output_path(output_path, upload_path.suffix)
         try:
             summary = service.analyze_workbook(
                 upload_path,
@@ -171,26 +175,26 @@ def register(app) -> None:
         customer_code_column = customer_code_column_from_request()
         original_filename = request.form.get("original_filename") or upload_path.name
         remark = request.form.get("remark", "").strip()
-        output_name = Path(request.form.get("output_name") or "").name
-        output_path = (
-            user_output_dir() / output_name
-            if output_name
-            else result_output_path(original_filename, fallback_suffix=upload_path.suffix)
-        )
+        output_path, temporary_path = quote_output_paths(original_filename, upload_path.suffix)
         try:
             summary = service.analyze_workbook(
                 upload_path,
-                output_path,
+                temporary_path,
                 match_column=match_column_payload(match_columns),
                 write_output=True,
                 options=parse_price_options(price_options, default="none"),
                 customer_code_column=customer_code_column,
                 adjustments=adjustments,
             )
+            temporary_path.replace(output_path)
         except ValueError as exc:
+            temporary_path.unlink(missing_ok=True)
+            output_path.unlink(missing_ok=True)
             return fail(f"生成失败：{exc}")
         except Exception:
             logger.exception("Quote write-back analysis failed")
+            temporary_path.unlink(missing_ok=True)
+            output_path.unlink(missing_ok=True)
             return fail("生成失败，请稍后重试。", 500)
 
         rows_data: list[dict] = []
@@ -200,6 +204,7 @@ def register(app) -> None:
         try:
             attachment_path = output_path.resolve().relative_to(OUTPUT_DIR.resolve()).as_posix()
         except ValueError:
+            output_path.unlink(missing_ok=True)
             return fail("报价文件保存位置无效。", 500)
         for row in summary["rows"]:
             bld_no = str(row.get("bld_no") or "").strip()
@@ -229,10 +234,12 @@ def register(app) -> None:
             written_records, service_skipped, quote_no = get_quote_service().create_many(rows_data, actor=actor)
         except Exception:
             logger.exception("Quote write-back failed")
+            output_path.unlink(missing_ok=True)
             return fail("写入报价失败，请稍后重试。", 500)
         skipped += service_skipped
         written = len(written_records)
         if not written:
+            output_path.unlink(missing_ok=True)
             return fail("没有可写入的报价行：需要命中有 BLD 号且带单价的条目。")
 
         quotes_url = url_for("quote_web.quotes", customer_name=customer_name, quote_no=quote_no) + "#quote-results"
@@ -244,6 +251,8 @@ def register(app) -> None:
                     "skipped": skipped,
                     "quote_no": quote_no,
                     "quotes_url": quotes_url,
+                    "download_url": url_for("download", name=download_name(output_path)),
+                    "download_filename": output_path.name,
                 }
             )
         flash(f"已写入 {written} 条报价记录（跳过 {skipped} 条未命中或无单价行）。", "success")

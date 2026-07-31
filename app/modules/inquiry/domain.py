@@ -18,6 +18,8 @@ from app.product_status import (
     product_status_language_for_price_mode,
 )
 
+from .adjustments import fragment_candidate_adjustment_key
+
 
 PRICE_EXPORT_MODES = frozenset({"none", "tax", "net", "usd"})
 PRICE_LABELS = {
@@ -298,6 +300,7 @@ def bld_fragment_matches(catalog: ProductCatalog, query: object) -> list[dict]:
                 "matched_oe_codes": [],
                 "unmatched_oe_codes": [],
                 "product": product_payload(row),
+                "adjustment_allowed": False,
             }
         )
     return sorted(matches, key=lambda item: normalize_code(item["bld_no"]))[:BLD_FRAGMENT_LIMIT]
@@ -312,6 +315,7 @@ def looks_like_bld_shorthand(query: object) -> bool:
 
 def bld_fragment_summary(catalog: ProductCatalog, query: object) -> dict:
     rows = bld_fragment_matches(catalog, query)
+    source_key = f"query:{normalize_code(query) or 'value'}:row:2"
     if not rows:
         return {
             "total": 1,
@@ -329,11 +333,15 @@ def bld_fragment_summary(catalog: ProductCatalog, query: object) -> dict:
                     "match_note": "",
                     "matched_oe_codes": [],
                     "unmatched_oe_codes": [],
+                    "adjustment_key": source_key,
+                    "adjustment_allowed": False,
                 }
             ],
         }
-    for row in rows:
+    for candidate_number, row in enumerate(rows, start=1):
         row["row"] = 2
+        row["adjustment_key"] = fragment_candidate_adjustment_key(source_key, candidate_number)
+        row["adjustment_allowed"] = False
     return {"total": len(rows), "matched": len(rows), "unmatched": 0, "rows": rows}
 
 
@@ -352,8 +360,11 @@ def augment_summary_with_bld_fragments(summary: dict, catalog: ProductCatalog) -
             rows.append(row)
             unmatched += 1
             continue
-        for fragment_row in fragment_rows:
+        source_key = compact_text(row.get("adjustment_key")) or f"source-row:{row.get('row') or 'unknown'}"
+        for candidate_number, fragment_row in enumerate(fragment_rows, start=1):
             fragment_row["row"] = row.get("row")
+            fragment_row["adjustment_key"] = fragment_candidate_adjustment_key(source_key, candidate_number)
+            fragment_row["adjustment_allowed"] = False
             rows.append(fragment_row)
             matched += 1
     augmented = dict(summary)

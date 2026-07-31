@@ -5870,7 +5870,7 @@ with connect(database_path) as conn:
         html = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("查询结果", html)
+        self.assertIn("<title>查询结果</title>", html)
         self.assertIn("下载 Excel", html)
         self.assertIn("K54500L", html)
         self.assertIn("K54501L", html)
@@ -5878,6 +5878,7 @@ with connect(database_path) as conn:
         self.assertIn("粘贴号码询价.xlsx", html)
         self.assertIn("含税单价", html)
         self.assertIn('value="79.20" data-inquiry-tax-price', html)
+        self.assertIn('data-adjustment-key="sheet:1:row:2"', html)
         self.assertIn('<td data-col="row">1</td>', html)
         self.assertIn('<td data-col="row">2</td>', html)
         self.assertIn('<td data-col="row">3</td>', html)
@@ -6289,6 +6290,56 @@ with connect(database_path) as conn:
         self.assertIn("K-BLD-BATCH-2", html)
         self.assertIn("BLD NO. 精准命中", html)
 
+    def test_pasted_bld_fragment_candidates_are_read_only(self):
+        from app.modules.products.persistence import upsert_product
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            for bld_no, price, status in (
+                ("K6004LB", "58", "2个衬套"),
+                ("K6004RB", "80", "2个衬套1个球头"),
+                ("K-EXACT-ADJUST-ROW", "66.6", "唯一命中"),
+            ):
+                upsert_product(
+                    conn,
+                    {
+                        "bld_no": bld_no,
+                        "series": "READONLY",
+                        "item": "FRAGMENT CONTROL ARM",
+                        "oe_no_1": f"{bld_no}-OE",
+                        "price_cny": price,
+                        "product_status": status,
+                        "active": "1",
+                    },
+                    actor="tester",
+                )
+
+        self.login()
+        response = self.client.post(
+            "/match",
+            data={"quick_oe": "6004,K-EXACT-ADJUST-ROW"},
+        )
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        result_rows = re.findall(r"<tr[^>]*>.*?</tr>", html, flags=re.DOTALL)
+        fragment_row = next(
+            (row for row in result_rows if "<strong data-current-bld>K6004LB</strong>" in row),
+            "",
+        )
+        self.assertTrue(fragment_row)
+        self.assertNotIn("data-adjustment-key", fragment_row)
+        self.assertNotIn("data-open-product-adjustment", fragment_row)
+        self.assertNotIn("data-inquiry-tax-price", fragment_row)
+
+        exact_row = next(
+            (row for row in result_rows if "<strong data-current-bld>K-EXACT-ADJUST-ROW</strong>" in row),
+            "",
+        )
+        self.assertTrue(exact_row)
+        self.assertIn('data-adjustment-key="sheet:1:row:3"', exact_row)
+        self.assertIn("data-open-product-adjustment", exact_row)
+        self.assertIn("data-inquiry-tax-price", exact_row)
+
     def test_uploaded_inquiry_can_export_tax_price(self):
         from app.modules.products.persistence import upsert_product
         from openpyxl import Workbook, load_workbook
@@ -6424,7 +6475,13 @@ with connect(database_path) as conn:
                 "match_column": "0",
                 "price_mode": "tax",
                 "inquiry_adjustments": json.dumps(
-                    {"1": {"target_bld_no": "KPRICE02", "tax_price": "123.45"}}
+                    {
+                        "sheet:1:row:2": {
+                            "expected_bld_no": "KPRICE01",
+                            "target_bld_no": "KPRICE02",
+                            "tax_price": "123.45",
+                        }
+                    }
                 ),
             },
         )
@@ -6654,6 +6711,13 @@ with connect(database_path) as conn:
         self.assertIn("CUST-A1", result_html)
         self.assertIn("写入报价", result_html)
         self.assertIn("重新查询", result_html)
+        result_rows = re.findall(r"<tr[^>]*>.*?</tr>", result_html, flags=re.DOTALL)
+        no_catalog_price_row = next(
+            (row for row in result_rows if "<strong data-current-bld>KWQ03</strong>" in row),
+            "",
+        )
+        self.assertTrue(no_catalog_price_row)
+        self.assertIn("data-inquiry-tax-price", no_catalog_price_row)
 
         write = self.client.post(
             "/match/write-quotes",
@@ -6713,6 +6777,8 @@ with connect(database_path) as conn:
         quote_no = payload["quote_no"]
         self.assertRegex(quote_no, r"^Q\d{9}$")
         self.assertIn(quote_no, payload["quotes_url"])
+        self.assertIn("/download/", payload["download_url"])
+        self.assertTrue(payload["download_filename"].endswith(".xlsx"))
 
         with self.web.connect(self.web.DB_PATH) as conn:
             batch = conn.execute(
@@ -6734,20 +6800,61 @@ with connect(database_path) as conn:
                 "customer_name": "测试客户WQ",
                 "remark": "调整后报价",
                 "inquiry_adjustments": json.dumps(
-                    {"1": {"target_bld_no": "KWQ02", "tax_price": "123.45"}}
+                    {
+                        "sheet:1:row:2": {
+                            "expected_bld_no": "KWQ01",
+                            "target_bld_no": "KWQ02",
+                            "tax_price": "123.45",
+                        }
+                    }
                 ),
             },
             headers={"X-Requested-With": "fetch", "Accept": "application/json"},
         )
         self.assertEqual(adjusted_write.status_code, 200)
-        adjusted_quote_no = adjusted_write.get_json()["quote_no"]
+        adjusted_payload = adjusted_write.get_json()
+        adjusted_quote_no = adjusted_payload["quote_no"]
         with self.web.connect(self.web.DB_PATH) as conn:
             adjusted = conn.execute(
-                "SELECT bld_no, tax_price FROM quote_records WHERE quote_no = ? AND customer_product_code = ?",
+                "SELECT bld_no, tax_price, attachment_path FROM quote_records WHERE quote_no = ? AND customer_product_code = ?",
                 (adjusted_quote_no, "CUST-A1"),
             ).fetchone()
         self.assertEqual(adjusted["bld_no"], "KWQ02")
         self.assertEqual(adjusted["tax_price"], 123.45)
+        self.assertNotEqual(adjusted["attachment_path"], batch[0]["attachment_path"])
+        self.assertTrue((self.root / "outputs" / batch[0]["attachment_path"]).is_file())
+        self.assertTrue((self.root / "outputs" / adjusted["attachment_path"]).is_file())
+
+        no_catalog_price_write = self.client.post(
+            "/match/write-quotes",
+            data={
+                "upload_path": upload_match.group(1),
+                "original_filename": "write-quotes.xlsx",
+                "match_columns": ["1"],
+                "customer_code_column": "0",
+                "price_mode": "tax",
+                "customer_name": "测试客户WQ",
+                "remark": "无目录价临时报价",
+                "inquiry_adjustments": json.dumps(
+                    {
+                        "sheet:1:row:6": {
+                            "expected_bld_no": "KWQ03",
+                            "tax_price": "66.60",
+                        }
+                    }
+                ),
+            },
+            headers={"X-Requested-With": "fetch", "Accept": "application/json"},
+        )
+        self.assertEqual(no_catalog_price_write.status_code, 200)
+        no_catalog_price_quote_no = no_catalog_price_write.get_json()["quote_no"]
+        with self.web.connect(self.web.DB_PATH) as conn:
+            no_catalog_price_quote = conn.execute(
+                "SELECT bld_no, tax_price FROM quote_records WHERE quote_no = ? AND customer_product_code = ?",
+                (no_catalog_price_quote_no, "CUST-D4"),
+            ).fetchone()
+        self.assertEqual(no_catalog_price_quote["bld_no"], "KWQ03")
+        self.assertEqual(no_catalog_price_quote["tax_price"], 66.6)
 
         detail = self.client.get(f"/quotes/number/{quote_no}")
         detail_html = detail.get_data(as_text=True)
