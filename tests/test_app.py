@@ -975,6 +975,10 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("MAP-RENDER-UNMATCHED", html)
         self.assertNotIn("data-map-oe-code", html)
         self.assertNotIn('id="map-oe-modal"', html)
+        self.assertIn("<strong data-current-bld>K-MAP-PLAIN-001</strong>", html)
+        self.assertNotIn("data-inquiry-bld-input", html)
+        self.assertNotIn("data-inquiry-tax-price", html)
+        self.assertNotIn('id="inquiry-bld-options"', html)
         self.client.post("/logout")
 
     def test_result_page_uses_shared_data_grid_protocol(self):
@@ -1003,12 +1007,12 @@ class WebAppTest(unittest.TestCase):
         self.assertIn('data-grid-key="inquiry-result"', html)
         self.assertIn("data-grid-scroll", html)
         self.assertIn("data-column-storage-scope", html)
-        self.assertEqual(html.count("<col data-col="), 8)
-        for column in ("row", "oe", "customer-code", "bld", "price", "status", "score", "reason"):
+        self.assertEqual(html.count("<col data-col="), 9)
+        for column in ("row", "oe", "customer-code", "bld", "image", "price", "status", "score", "reason"):
             self.assertIn(f'<col data-col="{column}">', html)
             self.assertIn(f'<th data-col="{column}">', html)
             self.assertIn(f'<td data-col="{column}"', html)
-        self.assertEqual(html.count("data-column-drag-handle"), 8)
+        self.assertEqual(html.count("data-column-drag-handle"), 9)
         self.assertIn("data-grid-footer", html)
         self.assertIn("data-grid-summary", html)
         self.assertIn("<strong>1–2</strong><span> / 2</span>", html)
@@ -6328,22 +6332,29 @@ with connect(database_path) as conn:
         )
         self.assertTrue(fragment_row)
         self.assertNotIn("data-adjustment-key", fragment_row)
-        self.assertNotIn("data-open-product-adjustment", fragment_row)
+        self.assertNotIn("data-inquiry-bld-input", fragment_row)
         self.assertNotIn("data-inquiry-tax-price", fragment_row)
 
         exact_row = next(
-            (row for row in result_rows if "<strong data-current-bld>K-EXACT-ADJUST-ROW</strong>" in row),
+            (row for row in result_rows if 'data-default-bld="K-EXACT-ADJUST-ROW"' in row),
             "",
         )
         self.assertTrue(exact_row)
         self.assertIn('data-adjustment-key="sheet:1:row:3"', exact_row)
-        self.assertIn("data-open-product-adjustment", exact_row)
+        self.assertIn('value="K-EXACT-ADJUST-ROW"', exact_row)
+        self.assertIn("data-inquiry-bld-input", exact_row)
+        self.assertNotIn("data-open-product-adjustment", exact_row)
         self.assertIn("data-inquiry-tax-price", exact_row)
 
     def test_uploaded_inquiry_can_export_tax_price(self):
+        from PIL import Image
         from app.modules.products.persistence import upsert_product
         from openpyxl import Workbook, load_workbook
 
+        image_dir = self.root / "data" / "product_images"
+        image_dir.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (320, 180), "white").save(image_dir / "KPRICE01.png")
+        Image.new("RGB", (320, 180), "blue").save(image_dir / "KPRICE02.png")
         with self.web.connect(self.web.DB_PATH) as conn:
             upsert_product(
                 conn,
@@ -6354,6 +6365,7 @@ with connect(database_path) as conn:
                     "oe_no_1": "PRICE-001",
                     "models": "Elantra",
                     "price_cny": "88.8",
+                    "image_path": "data_product_images/KPRICE01.png",
                     "active": "1",
                 },
                 actor="tester",
@@ -6368,6 +6380,7 @@ with connect(database_path) as conn:
                     "models": "Elantra",
                     "price_cny": "99.9",
                     "product_status": "1个球头",
+                    "image_path": "data_product_images/KPRICE02.png",
                     "active": "1",
                 },
                 actor="tester",
@@ -6382,6 +6395,15 @@ with connect(database_path) as conn:
         buffer.seek(0)
 
         self.login()
+        lookup = self.client.get("/products/lookup?q=KPRICE02&details=1&active_only=1&media=1")
+        lookup_payload = lookup.get_json()
+        self.assertEqual(lookup.status_code, 200)
+        self.assertEqual(lookup_payload[0]["bld_no"], "KPRICE02")
+        self.assertEqual(lookup_payload[0]["image_gallery"][0]["url"], "/product-images/KPRICE02.png")
+        self.assertEqual(
+            lookup_payload[0]["image_gallery"][0]["thumb"],
+            "/product-image-thumbs/KPRICE02.png",
+        )
         response = self.client.post(
             "/match",
             data={"inquiry": (buffer, "price-export.xlsx")},
@@ -6417,7 +6439,15 @@ with connect(database_path) as conn:
         self.assertEqual(result.status_code, 200)
         self.assertIn("KPRICE01", result_html)
         self.assertIn('value="88.80" data-inquiry-tax-price', result_html)
-        self.assertIn('data-open-product-adjustment', result_html)
+        self.assertIn('value="KPRICE01"', result_html)
+        self.assertIn('data-inquiry-bld-input', result_html)
+        self.assertIn('id="inquiry-bld-options"', result_html)
+        self.assertIn('data-product-lookup-url="/products/lookup"', result_html)
+        self.assertIn('data-col="image"', result_html)
+        self.assertIn('/product-image-thumbs/KPRICE01.png', result_html)
+        self.assertIn('/product-images/KPRICE01.png', result_html)
+        self.assertNotIn('data-open-product-adjustment', result_html)
+        self.assertNotIn('id="product-adjustment-modal"', result_html)
         self.assertIn('id="download-excel-modal"', result_html)
         self.assertIn('value="net">带不含税单价', result_html)
         self.assertIn("返回上一步", result_html)
@@ -6438,6 +6468,8 @@ with connect(database_path) as conn:
 
         generated = load_workbook(output_path)
         sheet = generated.active
+        self.assertEqual(len(sheet._images), 0)
+        self.assertNotIn("产品图片", [cell.value for cell in sheet[1]])
         self.assertEqual(sheet.cell(1, 2).value, "BLD NO.")
         self.assertEqual(sheet.cell(1, 3).value, "含税单价")
         self.assertEqual(sheet.cell(1, 4).value, "产品状态")
@@ -6490,6 +6522,7 @@ with connect(database_path) as conn:
 
         generated = load_workbook(output_path)
         sheet = generated.active
+        self.assertEqual(len(sheet._images), 0)
         self.assertEqual(sheet.cell(2, 2).value, "KPRICE02")
         self.assertEqual(sheet.cell(2, 3).value, 123.45)
         self.assertIn("KPRICE01 → KPRICE02", sheet.cell(2, 5).value)
@@ -6713,10 +6746,12 @@ with connect(database_path) as conn:
         self.assertIn("重新查询", result_html)
         result_rows = re.findall(r"<tr[^>]*>.*?</tr>", result_html, flags=re.DOTALL)
         no_catalog_price_row = next(
-            (row for row in result_rows if "<strong data-current-bld>KWQ03</strong>" in row),
+            (row for row in result_rows if 'data-default-bld="KWQ03"' in row),
             "",
         )
         self.assertTrue(no_catalog_price_row)
+        self.assertIn('value="KWQ03"', no_catalog_price_row)
+        self.assertIn("data-inquiry-bld-input", no_catalog_price_row)
         self.assertIn("data-inquiry-tax-price", no_catalog_price_row)
 
         write = self.client.post(

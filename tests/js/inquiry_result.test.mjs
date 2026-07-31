@@ -5,9 +5,11 @@ import {
   clearQuoteCustomerValidity,
   createInquiryRequestGate,
   inquiryAttachmentFilename,
+  inquiryBldSelectionState,
   inquiryPriceAdjustment,
   inquiryProductDisplay,
   inquiryTargetAdjustment,
+  rankInquiryProducts,
   validateInquiryPrice,
 } from "../../static/pages/inquiry_result.js";
 
@@ -66,6 +68,31 @@ test("selecting the original product does not create a false product adjustment"
   assert.equal(inquiryTargetAdjustment("K8053LB", "K8053LB"), null);
   assert.equal(inquiryTargetAdjustment(" k8053lb ", "K8053LB"), null);
   assert.equal(inquiryTargetAdjustment("K8053LA", "K8053LB"), "K8053LA");
+});
+
+test("BLD free text remains invalid until it matches the last selected catalog product", () => {
+  assert.deepEqual(inquiryBldSelectionState(" k8053lb ", "K8053LB"), {
+    valid: true,
+    error: "",
+  });
+  assert.deepEqual(inquiryBldSelectionState("K8053LA", "K8053LB"), {
+    valid: false,
+    error: "请从启用产品候选中选择 BLD NO.。",
+  });
+  assert.equal(inquiryBldSelectionState("", "K8053LB").valid, false);
+});
+
+test("BLD candidates rank exact then prefix then contains matches without losing stable order", () => {
+  const products = [
+    { bld_no: "X-K8053L" },
+    { bld_no: "K8053LA" },
+    { bld_no: "K8053L" },
+    { bld_no: "K8053LB" },
+  ];
+  assert.deepEqual(
+    rankInquiryProducts(products, " k8053l ").map((product) => product.bld_no),
+    ["K8053L", "K8053LA", "K8053LB", "X-K8053L"],
+  );
 });
 
 test("quote attachment download rejects redirects and non-Excel responses", () => {

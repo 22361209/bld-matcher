@@ -25,6 +25,9 @@ from .reader import (
 )
 
 
+PRODUCT_IMAGE_FIELDS = ("image_path", "image_path_2", "image_path_3", "image_path_4", "image_path_5")
+
+
 def annotate_row_summary_with_match_columns(
     row_summary: dict,
     match_values: list[tuple[str, object]],
@@ -62,9 +65,14 @@ def summary_row(
     match_note = ""
     price_cny = None
     product_status = ""
+    image_fields = {field: "" for field in PRODUCT_IMAGE_FIELDS}
     if match and " / " not in (match.bld_no or ""):
         price_cny = numeric_price(match.row.get("price_cny"))
         product_status = str(match.row.get("product_status") or "").strip()
+        image_fields = {
+            field: str(match.row.get(field) or "").strip()
+            for field in PRODUCT_IMAGE_FIELDS
+        }
 
     if len(parts) > 1:
         if match and match.matched_codes:
@@ -85,6 +93,7 @@ def summary_row(
         "bld_no": match.bld_no if match else "",
         "price_cny": price_cny,
         "product_status": product_status,
+        **image_fields,
         "reason": match.reason if match else "未找到",
         "score": match.score if match else 0,
         "match_note": match_note,

@@ -2,14 +2,6 @@ import { setupDataGridControls } from "../components/data_grid_controls.js?v=202
 import { setupQuoteFieldComboboxes } from "../components/quote_comboboxes.js?v=20260728-1";
 
 const MAX_INQUIRY_PRICE = 99999999.99;
-const MODAL_FOCUSABLE_SELECTOR = [
-  "button:not([disabled])",
-  "input:not([disabled])",
-  "select:not([disabled])",
-  "textarea:not([disabled])",
-  "a[href]",
-  "[tabindex]:not([tabindex='-1'])",
-].join(",");
 
 export const validateInquiryPrice = (rawValue, { allowBlank = false } = {}) => {
   const text = String(rawValue ?? "").trim();
@@ -71,6 +63,32 @@ export const inquiryTargetAdjustment = (targetBldNo, defaultBldNo) => {
   return target;
 };
 
+export const inquiryBldSelectionState = (rawValue, currentBldNo, { confirmed = true } = {}) => {
+  const value = String(rawValue || "").trim();
+  const current = String(currentBldNo || "").trim();
+  const valid = Boolean(confirmed && value && current && value.toUpperCase() === current.toUpperCase());
+  return {
+    valid,
+    error: valid ? "" : "请从启用产品候选中选择 BLD NO.。",
+  };
+};
+
+export const rankInquiryProducts = (products, rawQuery) => {
+  const query = String(rawQuery || "").trim().toUpperCase();
+  const score = (product) => {
+    const bldNo = String(product?.bld_no || "").trim().toUpperCase();
+    if (!query || !bldNo) return 3;
+    if (bldNo === query) return 0;
+    if (bldNo.startsWith(query)) return 1;
+    if (bldNo.includes(query)) return 2;
+    return 3;
+  };
+  return (Array.isArray(products) ? products : [])
+    .map((product, index) => ({ product, index, score: score(product) }))
+    .sort((left, right) => left.score - right.score || left.index - right.index)
+    .map(({ product }) => product);
+};
+
 export const inquiryAttachmentFilename = (response) => {
   if (!response?.ok || response.redirected || typeof response.headers?.get !== "function") return null;
   const disposition = response.headers.get("Content-Disposition") || "";
@@ -97,7 +115,7 @@ export function setupInquiryResultPage(root = document) {
 setupQuoteFieldComboboxes(root);
 
 setupDataGridControls(root.querySelector(".data-grid[data-grid-key='inquiry-result'] table.data-table"), {
-  columns: ["row", "oe", "customer-code", "bld", "price", "status", "score", "reason"],
+  columns: ["row", "oe", "customer-code", "bld", "image", "price", "status", "score", "reason"],
   storagePrefix: "bld.inquiry-result",
 });
 
@@ -140,18 +158,41 @@ const setInquiryPriceError = (input, validation, { reveal = true } = {}) => {
   }
 };
 
+const inquiryBldState = (row, input) => inquiryBldSelectionState(
+  input.value,
+  row.dataset.currentBld,
+  { confirmed: row.dataset.bldConfirmed === "1" },
+);
+
+const setInquiryBldError = (input, validation, { reveal = true } = {}) => {
+  const row = input.closest("[data-inquiry-result-row]");
+  const error = row?.querySelector("[data-inquiry-bld-error]");
+  const message = validation.valid ? "" : validation.error;
+  input.setCustomValidity(message);
+  input.setAttribute("aria-invalid", String(!validation.valid));
+  if (error instanceof HTMLElement) {
+    error.textContent = reveal ? message : "";
+    error.hidden = !reveal || !message;
+  }
+};
+
 const setInquiryRowState = (row) => {
   const adjustment = inquiryAdjustments.get(row.dataset.adjustmentKey) || {};
   const priceInput = row.querySelector("[data-inquiry-tax-price]");
+  const bldInput = row.querySelector("[data-inquiry-bld-input]");
   const priceReset = row.querySelector("[data-reset-inquiry-price]");
   const productReset = row.querySelector("[data-reset-inquiry-product]");
   const priceState = priceInput instanceof HTMLInputElement ? inquiryPriceState(row, priceInput) : null;
+  const bldState = bldInput instanceof HTMLInputElement ? inquiryBldState(row, bldInput) : null;
   if (priceReset instanceof HTMLButtonElement) {
     priceReset.hidden = adjustment.tax_price === undefined && !(priceState && !priceState.valid);
   }
   if (productReset instanceof HTMLButtonElement) productReset.hidden = !adjustment.target_bld_no;
   row.classList.toggle("inquiry-row-adjusted", Boolean(adjustment.target_bld_no || adjustment.tax_price !== undefined));
-  row.classList.toggle("inquiry-row-invalid", Boolean(priceState && !priceState.valid));
+  row.classList.toggle(
+    "inquiry-row-invalid",
+    Boolean((priceState && !priceState.valid) || (bldState && !bldState.valid)),
+  );
   syncInquiryAdjustments();
 };
 
@@ -172,10 +213,57 @@ const updateInquiryPrice = (row, { revealError = true } = {}) => {
   return priceState.valid;
 };
 
+const inquiryImageGallery = (value) => {
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(String(value || "[]"));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_error) {
+    return [];
+  }
+};
+
+const renderInquiryProductImage = (row, galleryValue) => {
+  const cell = row.querySelector("[data-inquiry-image-cell]");
+  if (!(cell instanceof HTMLElement)) return;
+  const gallery = inquiryImageGallery(galleryValue);
+  cell.replaceChildren();
+  const first = gallery[0];
+  if (!first?.url) {
+    const empty = document.createElement("span");
+    empty.className = "inquiry-image-empty";
+    empty.dataset.inquiryImageEmpty = "";
+    empty.textContent = "无图";
+    cell.append(empty);
+    return;
+  }
+  const link = document.createElement("a");
+  link.className = "inquiry-image-link";
+  link.href = first.url;
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.title = `打开 ${row.dataset.currentBld || row.dataset.defaultBld || ""} 产品图片`;
+  link.dataset.inquiryProductImage = "";
+  const image = document.createElement("img");
+  image.className = "inquiry-product-thumb";
+  image.src = first.thumb || first.url;
+  image.alt = `${row.dataset.currentBld || row.dataset.defaultBld || ""} 产品图片`;
+  image.loading = "lazy";
+  image.decoding = "async";
+  link.append(image);
+  cell.append(link);
+};
+
 root.querySelectorAll("[data-inquiry-result-row][data-adjustment-key]").forEach((row) => {
   const priceInput = row.querySelector("[data-inquiry-tax-price]");
+  const bldInput = row.querySelector("[data-inquiry-bld-input]");
   row.dataset.catalogPrice = row.dataset.defaultPrice || "";
+  row.dataset.currentBld = row.dataset.defaultBld || "";
+  row.dataset.bldConfirmed = "1";
   row.dataset.priceTouched = "0";
+  if (bldInput instanceof HTMLInputElement) {
+    setInquiryBldError(bldInput, inquiryBldState(row, bldInput), { reveal: false });
+  }
   if (priceInput instanceof HTMLInputElement) {
     priceInput.addEventListener("input", () => {
       row.dataset.priceTouched = "1";
@@ -202,11 +290,18 @@ root.querySelectorAll("[data-inquiry-result-row][data-adjustment-key]").forEach(
     priceInput.focus();
   });
   row.querySelector("[data-reset-inquiry-product]")?.addEventListener("click", () => {
+    if (activeInquiryBldInput === bldInput) closeInquiryBldOptions();
     inquiryAdjustments.delete(row.dataset.adjustmentKey);
-    const currentBld = row.querySelector("[data-current-bld]");
     const status = row.querySelector("[data-col='status']");
-    if (currentBld) currentBld.textContent = row.dataset.defaultBld || "";
+    row.dataset.currentBld = row.dataset.defaultBld || "";
+    row.dataset.bldConfirmed = "1";
+    if (bldInput instanceof HTMLInputElement) {
+      bldInput.value = row.dataset.currentBld;
+      setInquiryBldError(bldInput, inquiryBldState(row, bldInput), { reveal: false });
+    }
     if (status) status.textContent = row.dataset.defaultStatus ?? "";
+    const imageCell = row.querySelector("[data-inquiry-image-cell]");
+    renderInquiryProductImage(row, imageCell?.dataset.defaultImageGallery || "[]");
     row.dataset.catalogPrice = row.dataset.defaultPrice || "";
     row.dataset.priceTouched = "0";
     if (priceInput instanceof HTMLInputElement) {
@@ -214,19 +309,347 @@ root.querySelectorAll("[data-inquiry-result-row][data-adjustment-key]").forEach(
       setInquiryPriceError(priceInput, validateInquiryPrice(priceInput.value, { allowBlank: true }), { reveal: false });
     }
     setInquiryRowState(row);
-    if (priceInput instanceof HTMLInputElement) priceInput.focus();
-    else row.querySelector("[data-open-product-adjustment]")?.focus();
+    if (bldInput instanceof HTMLInputElement) {
+      bldInput.focus();
+      closeInquiryBldOptions();
+      if (inquiryBldStatus instanceof HTMLElement) {
+        inquiryBldStatus.textContent = `已恢复原匹配 ${row.dataset.currentBld}。`;
+      }
+    } else if (priceInput instanceof HTMLInputElement) priceInput.focus();
   });
   setInquiryRowState(row);
 });
 
-const validateAllInquiryPrices = () => {
+const inquiryBldOptions = root.querySelector("[data-inquiry-bld-options]");
+const inquiryBldStatus = root.querySelector("[data-inquiry-bld-status]");
+const inquiryBldRequestGate = createInquiryRequestGate();
+let activeInquiryBldInput = null;
+let activeInquiryBldRow = null;
+let inquiryBldProducts = [];
+let inquiryBldActiveIndex = -1;
+let inquiryBldSearchTimer = null;
+let inquiryBldPositionFrame = null;
+
+const positionInquiryBldOptions = () => {
+  if (!(inquiryBldOptions instanceof HTMLElement) || !(activeInquiryBldInput instanceof HTMLInputElement)) return;
+  if (inquiryBldOptions.hidden || !activeInquiryBldInput.isConnected) return;
+  const rect = activeInquiryBldInput.getBoundingClientRect();
+  const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+  const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
+  const margin = 8;
+  const scrollContainer = activeInquiryBldInput.closest("[data-grid-scroll]");
+  const scrollRect = scrollContainer instanceof HTMLElement
+    ? scrollContainer.getBoundingClientRect()
+    : { top: 0, right: viewportWidth, bottom: viewportHeight, left: 0 };
+  const stickyHeader = scrollContainer instanceof HTMLElement
+    ? scrollContainer.querySelector("thead th")
+    : null;
+  const stickyHeaderBottom = stickyHeader instanceof HTMLElement
+    ? stickyHeader.getBoundingClientRect().bottom
+    : scrollRect.top;
+  const visibleTop = Math.max(0, scrollRect.top, stickyHeaderBottom);
+  const visibleRight = Math.min(viewportWidth, scrollRect.right);
+  const visibleBottom = Math.min(viewportHeight, scrollRect.bottom);
+  const visibleLeft = Math.max(0, scrollRect.left);
+  if (
+    rect.bottom <= visibleTop
+    || rect.top >= visibleBottom
+    || rect.right <= visibleLeft
+    || rect.left >= visibleRight
+  ) {
+    closeInquiryBldOptions();
+    return;
+  }
+  const availableWidth = Math.max(160, viewportWidth - margin * 2);
+  const width = Math.min(360, Math.max(rect.width, Math.min(300, availableWidth)));
+  inquiryBldOptions.style.width = `${Math.round(width)}px`;
+  const height = inquiryBldOptions.offsetHeight;
+  const left = Math.max(margin, Math.min(viewportWidth - width - margin, rect.left));
+  const below = viewportHeight - rect.bottom - margin;
+  const above = rect.top - margin;
+  const preferredTop = below >= Math.min(height, 240) || below >= above
+    ? rect.bottom + 4
+    : rect.top - height - 4;
+  const top = Math.max(margin, Math.min(viewportHeight - height - margin, preferredTop));
+  inquiryBldOptions.style.left = `${Math.round(left)}px`;
+  inquiryBldOptions.style.top = `${Math.round(top)}px`;
+};
+
+const queueInquiryBldPosition = () => {
+  if (inquiryBldPositionFrame !== null) return;
+  inquiryBldPositionFrame = window.requestAnimationFrame(() => {
+    inquiryBldPositionFrame = null;
+    positionInquiryBldOptions();
+  });
+};
+
+const closeInquiryBldOptions = () => {
+  window.clearTimeout(inquiryBldSearchTimer);
+  inquiryBldRequestGate.invalidate();
+  if (inquiryBldPositionFrame !== null) {
+    window.cancelAnimationFrame(inquiryBldPositionFrame);
+    inquiryBldPositionFrame = null;
+  }
+  if (activeInquiryBldInput instanceof HTMLInputElement) {
+    activeInquiryBldInput.setAttribute("aria-expanded", "false");
+    activeInquiryBldInput.removeAttribute("aria-activedescendant");
+  }
+  if (inquiryBldOptions instanceof HTMLElement) {
+    inquiryBldOptions.hidden = true;
+    inquiryBldOptions.replaceChildren();
+    inquiryBldOptions.removeAttribute("aria-busy");
+  }
+  inquiryBldProducts = [];
+  inquiryBldActiveIndex = -1;
+  activeInquiryBldInput = null;
+  activeInquiryBldRow = null;
+};
+
+const openInquiryBldOptions = (input, row) => {
+  if (!(inquiryBldOptions instanceof HTMLElement)) return false;
+  if (activeInquiryBldInput !== input) closeInquiryBldOptions();
+  activeInquiryBldInput = input;
+  activeInquiryBldRow = row;
+  inquiryBldOptions.hidden = false;
+  input.setAttribute("aria-expanded", "true");
+  return true;
+};
+
+const renderInquiryBldMessage = (message, { busy = false, error = false } = {}) => {
+  if (!(inquiryBldOptions instanceof HTMLElement) || !(activeInquiryBldInput instanceof HTMLInputElement)) return;
+  inquiryBldOptions.replaceChildren();
+  inquiryBldProducts = [];
+  inquiryBldActiveIndex = -1;
+  activeInquiryBldInput.removeAttribute("aria-activedescendant");
+  const status = document.createElement("p");
+  status.className = `inquiry-bld-options-message${error ? " error" : ""}`;
+  status.setAttribute("role", "option");
+  status.setAttribute("aria-disabled", "true");
+  status.textContent = message;
+  inquiryBldOptions.append(status);
+  if (inquiryBldStatus instanceof HTMLElement) inquiryBldStatus.textContent = message;
+  inquiryBldOptions.setAttribute("aria-busy", String(busy));
+  inquiryBldOptions.hidden = false;
+  activeInquiryBldInput.setAttribute("aria-expanded", "true");
+  queueInquiryBldPosition();
+};
+
+const setInquiryBldActiveIndex = (index) => {
+  if (!(inquiryBldOptions instanceof HTMLElement) || !(activeInquiryBldInput instanceof HTMLInputElement)) return;
+  const options = Array.from(inquiryBldOptions.querySelectorAll("[data-inquiry-bld-option]"));
+  inquiryBldActiveIndex = options.length ? (index + options.length) % options.length : -1;
+  options.forEach((option, optionIndex) => {
+    const selected = optionIndex === inquiryBldActiveIndex;
+    option.classList.toggle("active", selected);
+    option.setAttribute("aria-selected", String(selected));
+  });
+  const active = options[inquiryBldActiveIndex];
+  if (active instanceof HTMLElement) {
+    activeInquiryBldInput.setAttribute("aria-activedescendant", active.id);
+    active.scrollIntoView({ block: "nearest" });
+  } else {
+    activeInquiryBldInput.removeAttribute("aria-activedescendant");
+  }
+};
+
+const applyInquiryBldProduct = (row, input, product) => {
+  const display = inquiryProductDisplay(product);
+  if (!display.bldNo) return;
+  const current = { ...(inquiryAdjustments.get(row.dataset.adjustmentKey) || {}) };
+  const targetBldNo = inquiryTargetAdjustment(display.bldNo, row.dataset.defaultBld);
+  if (targetBldNo) current.target_bld_no = targetBldNo;
+  else delete current.target_bld_no;
+  delete current.tax_price;
+  persistInquiryAdjustment(row, current);
+
+  row.dataset.currentBld = display.bldNo;
+  row.dataset.bldConfirmed = "1";
+  input.value = display.bldNo;
+  setInquiryBldError(input, inquiryBldState(row, input), { reveal: false });
+  const status = row.querySelector("[data-col='status']");
+  if (status) status.textContent = product.product_status || "";
+  renderInquiryProductImage(row, product.image_gallery);
+  const catalogPrice = product.price_cny ?? "";
+  row.dataset.catalogPrice = String(catalogPrice);
+  row.dataset.priceTouched = "0";
+  const price = row.querySelector("[data-inquiry-tax-price]");
+  if (price instanceof HTMLInputElement) {
+    price.value = catalogPrice === "" ? "" : Number(catalogPrice).toFixed(2);
+    setInquiryPriceError(price, validateInquiryPrice(price.value, { allowBlank: true }), { reveal: false });
+  }
+  setInquiryRowState(row);
+  if (inquiryBldStatus instanceof HTMLElement) {
+    const priceMessage = catalogPrice === "" ? "目录含税价未填写" : `含税单价更新为 ¥${Number(catalogPrice).toFixed(2)}`;
+    inquiryBldStatus.textContent = `已改为 ${display.bldNo}，${priceMessage}。`;
+  }
+  closeInquiryBldOptions();
+};
+
+const renderInquiryBldProducts = (products, query) => {
+  if (!(inquiryBldOptions instanceof HTMLElement) || !(activeInquiryBldInput instanceof HTMLInputElement)) return;
+  const input = activeInquiryBldInput;
+  const row = activeInquiryBldRow;
+  if (!(row instanceof HTMLTableRowElement)) return;
+  inquiryBldOptions.replaceChildren();
+  inquiryBldProducts = rankInquiryProducts(products, query);
+  if (!inquiryBldProducts.length) {
+    renderInquiryBldMessage("没有匹配的启用产品。");
+    return;
+  }
+  inquiryBldProducts.forEach((product, index) => {
+    const display = inquiryProductDisplay(product);
+    const option = document.createElement("button");
+    option.type = "button";
+    option.tabIndex = -1;
+    option.id = `inquiry-bld-option-${index}`;
+    option.className = "inquiry-bld-option";
+    option.dataset.inquiryBldOption = String(index);
+    option.setAttribute("role", "option");
+    option.setAttribute("aria-selected", "false");
+    const code = document.createElement("strong");
+    code.textContent = display.bldNo;
+    option.append(code);
+    if (display.item) {
+      const item = document.createElement("span");
+      item.textContent = display.item;
+      option.append(item);
+    }
+    const meta = document.createElement("span");
+    meta.className = "inquiry-bld-option-meta";
+    meta.textContent = `${display.status} · ${display.price}`;
+    option.append(meta);
+    option.addEventListener("mousedown", (event) => {
+      if (event.button === 0) event.preventDefault();
+    });
+    option.addEventListener("click", (event) => {
+      event.preventDefault();
+      applyInquiryBldProduct(row, input, product);
+    });
+    inquiryBldOptions.append(option);
+  });
+  inquiryBldOptions.setAttribute("aria-busy", "false");
+  inquiryBldOptions.hidden = false;
+  input.setAttribute("aria-expanded", "true");
+  if (inquiryBldStatus instanceof HTMLElement) {
+    inquiryBldStatus.textContent = `找到 ${inquiryBldProducts.length} 个启用产品候选。`;
+  }
+  setInquiryBldActiveIndex(0);
+  queueInquiryBldPosition();
+};
+
+const searchInquiryBldProducts = async (input, query) => {
+  if (!(inquiryBldOptions instanceof HTMLElement) || activeInquiryBldInput !== input) return;
+  const sequence = inquiryBldRequestGate.begin();
+  const url = new URL(inquiryBldOptions.dataset.productLookupUrl, window.location.origin);
+  url.searchParams.set("q", query);
+  url.searchParams.set("details", "1");
+  url.searchParams.set("active_only", "1");
+  url.searchParams.set("media", "1");
+  try {
+    const response = await fetch(url, {
+      credentials: "same-origin",
+      headers: { Accept: "application/json", "X-Requested-With": "fetch" },
+    });
+    const payload = await response.json().catch(() => null);
+    if (!inquiryBldRequestGate.isCurrent(sequence) || activeInquiryBldInput !== input) return;
+    if (!response.ok || !Array.isArray(payload)) {
+      throw new Error(payload?.error || "产品候选加载失败，请稍后重试。");
+    }
+    renderInquiryBldProducts(payload, query);
+  } catch (error) {
+    if (!inquiryBldRequestGate.isCurrent(sequence) || activeInquiryBldInput !== input) return;
+    renderInquiryBldMessage(
+      error instanceof Error ? error.message : "产品候选加载失败，请稍后重试。",
+      { error: true },
+    );
+  }
+};
+
+const scheduleInquiryBldSearch = (input, row, { markUnconfirmed = false } = {}) => {
+  if (!openInquiryBldOptions(input, row)) return;
+  window.clearTimeout(inquiryBldSearchTimer);
+  inquiryBldRequestGate.invalidate();
+  if (markUnconfirmed) {
+    const normalizedInput = input.value.trim().toUpperCase();
+    const normalizedCurrent = String(row.dataset.currentBld || "").trim().toUpperCase();
+    row.dataset.bldConfirmed = normalizedInput && normalizedInput === normalizedCurrent ? "1" : "0";
+  }
+  const query = input.value.trim();
+  const validation = inquiryBldState(row, input);
+  setInquiryBldError(input, validation, { reveal: !validation.valid });
+  setInquiryRowState(row);
+  if (query.length < 2) {
+    renderInquiryBldMessage(query ? "请再输入 1 个字符。" : "请输入至少 2 个字符。");
+    return;
+  }
+  renderInquiryBldMessage("正在搜索启用产品...", { busy: true });
+  inquiryBldSearchTimer = window.setTimeout(() => searchInquiryBldProducts(input, query), 180);
+};
+
+root.querySelectorAll("[data-inquiry-bld-input]").forEach((input) => {
+  if (!(input instanceof HTMLInputElement)) return;
+  const row = input.closest("[data-inquiry-result-row]");
+  if (!(row instanceof HTMLTableRowElement)) return;
+  input.addEventListener("focus", () => scheduleInquiryBldSearch(input, row));
+  input.addEventListener("input", () => scheduleInquiryBldSearch(input, row, { markUnconfirmed: true }));
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      input.value = row.dataset.currentBld || "";
+      row.dataset.bldConfirmed = "1";
+      setInquiryBldError(input, inquiryBldState(row, input), { reveal: false });
+      setInquiryRowState(row);
+      closeInquiryBldOptions();
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (activeInquiryBldInput !== input) {
+        scheduleInquiryBldSearch(input, row);
+        return;
+      }
+      if (inquiryBldProducts.length) {
+        setInquiryBldActiveIndex(inquiryBldActiveIndex + (event.key === "ArrowDown" ? 1 : -1));
+      }
+      return;
+    }
+    if (event.key === "Enter" && activeInquiryBldInput === input && inquiryBldActiveIndex >= 0) {
+      const product = inquiryBldProducts[inquiryBldActiveIndex];
+      if (!product) return;
+      event.preventDefault();
+      applyInquiryBldProduct(row, input, product);
+    }
+  });
+  input.addEventListener("blur", () => {
+    window.setTimeout(() => {
+      if (activeInquiryBldInput === input) closeInquiryBldOptions();
+    }, 0);
+  });
+});
+
+document.addEventListener("pointerdown", (event) => {
+  if (!(activeInquiryBldInput instanceof HTMLInputElement) || !(inquiryBldOptions instanceof HTMLElement)) return;
+  if (event.target === activeInquiryBldInput || inquiryBldOptions.contains(event.target)) return;
+  closeInquiryBldOptions();
+});
+document.addEventListener("scroll", queueInquiryBldPosition, true);
+window.addEventListener("resize", queueInquiryBldPosition, { passive: true });
+
+const validateAllInquiryAdjustments = () => {
   let firstInvalid = null;
   root.querySelectorAll("[data-inquiry-result-row][data-adjustment-key]").forEach((row) => {
     if (!(row instanceof HTMLTableRowElement)) return;
+    const bldInput = row.querySelector("[data-inquiry-bld-input]");
+    if (bldInput instanceof HTMLInputElement) {
+      const validation = inquiryBldState(row, bldInput);
+      setInquiryBldError(bldInput, validation, { reveal: !validation.valid });
+      if (!validation.valid && firstInvalid === null) firstInvalid = bldInput;
+    }
     if (!updateInquiryPrice(row) && firstInvalid === null) {
       firstInvalid = row.querySelector("[data-inquiry-tax-price]");
     }
+    setInquiryRowState(row);
   });
   if (firstInvalid instanceof HTMLInputElement) {
     if (downloadModal?.classList.contains("open")) closeDownloadModal();
@@ -237,246 +660,6 @@ const validateAllInquiryPrices = () => {
   }
   return true;
 };
-
-const productAdjustmentModal = root.querySelector("#product-adjustment-modal");
-const productAdjustmentForm = productAdjustmentModal?.querySelector("[data-product-adjustment-form]");
-const productAdjustmentGate = createInquiryRequestGate();
-let productAdjustmentRow = null;
-let productAdjustmentProduct = null;
-let productAdjustmentTimer = null;
-let productAdjustmentTrigger = null;
-
-const productAdjustmentField = (selector) => productAdjustmentForm?.querySelector(selector) || null;
-
-const setProductAdjustmentError = (message) => {
-  const error = productAdjustmentField("[data-product-adjustment-error]");
-  if (!(error instanceof HTMLElement)) return;
-  error.textContent = message || "";
-  error.hidden = !message;
-};
-
-const setProductAdjustmentResults = (message = "") => {
-  const results = productAdjustmentField("[data-product-adjustment-results]");
-  const search = productAdjustmentField("[data-product-adjustment-search]");
-  if (!(results instanceof HTMLElement)) return;
-  results.replaceChildren();
-  if (message) {
-    const state = document.createElement("p");
-    state.className = "map-oe-results-empty";
-    state.textContent = message;
-    results.append(state);
-    results.hidden = false;
-  } else {
-    results.hidden = true;
-  }
-  if (search instanceof HTMLInputElement) search.setAttribute("aria-expanded", String(!results.hidden));
-};
-
-const clearAdjustmentProductSelection = () => {
-  productAdjustmentProduct = null;
-  const field = productAdjustmentField("[data-product-adjustment-bld]");
-  const selected = productAdjustmentField("[data-product-adjustment-selected]");
-  const submit = productAdjustmentField("[data-product-adjustment-submit]");
-  if (field instanceof HTMLInputElement) field.value = "";
-  if (selected instanceof HTMLElement) {
-    selected.textContent = "";
-    selected.hidden = true;
-  }
-  if (submit instanceof HTMLButtonElement) submit.disabled = true;
-};
-
-const closeProductAdjustment = () => {
-  if (!productAdjustmentModal) return;
-  window.clearTimeout(productAdjustmentTimer);
-  productAdjustmentGate.invalidate();
-  productAdjustmentModal.classList.remove("open");
-  productAdjustmentModal.setAttribute("aria-hidden", "true");
-  document.body.classList.remove("modal-open");
-  if (productAdjustmentTrigger instanceof HTMLElement && productAdjustmentTrigger.isConnected) {
-    productAdjustmentTrigger.focus();
-  }
-  productAdjustmentTrigger = null;
-  productAdjustmentRow = null;
-  productAdjustmentProduct = null;
-};
-
-const trapProductAdjustmentFocus = (event) => {
-  const panel = productAdjustmentModal?.querySelector("[data-product-adjustment-panel]");
-  if (!(panel instanceof HTMLElement)) return;
-  const focusable = Array.from(panel.querySelectorAll(MODAL_FOCUSABLE_SELECTOR)).filter(
-    (element) => element instanceof HTMLElement && !element.closest("[hidden]") && !element.hasAttribute("disabled"),
-  );
-  if (!focusable.length) {
-    event.preventDefault();
-    panel.focus();
-    return;
-  }
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  if (!panel.contains(document.activeElement)) {
-    event.preventDefault();
-    first.focus();
-  } else if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
-  }
-};
-
-const chooseAdjustmentProduct = (product) => {
-  if (!productAdjustmentForm) return;
-  productAdjustmentProduct = product;
-  const field = productAdjustmentField("[data-product-adjustment-bld]");
-  const search = productAdjustmentField("[data-product-adjustment-search]");
-  const selected = productAdjustmentField("[data-product-adjustment-selected]");
-  const submit = productAdjustmentField("[data-product-adjustment-submit]");
-  const display = inquiryProductDisplay(product);
-  if (field instanceof HTMLInputElement) field.value = display.bldNo;
-  if (search instanceof HTMLInputElement) search.value = display.bldNo;
-  if (selected instanceof HTMLElement) {
-    const name = display.item ? ` · ${display.item}` : "";
-    selected.textContent = `已选择：${display.bldNo}${name} · ${display.status} · ${display.price}`;
-    selected.hidden = false;
-  }
-  setProductAdjustmentResults();
-  setProductAdjustmentError("");
-  if (submit instanceof HTMLButtonElement) {
-    submit.disabled = false;
-    submit.focus();
-  }
-};
-
-const renderAdjustmentProducts = (products) => {
-  const results = productAdjustmentField("[data-product-adjustment-results]");
-  const search = productAdjustmentField("[data-product-adjustment-search]");
-  if (!(results instanceof HTMLElement)) return;
-  results.replaceChildren();
-  if (!products.length) {
-    setProductAdjustmentResults("没有匹配的启用产品。");
-    return;
-  }
-  products.forEach((product) => {
-    const display = inquiryProductDisplay(product);
-    const option = document.createElement("button");
-    option.type = "button";
-    option.className = "map-oe-result inquiry-product-option";
-    const code = document.createElement("strong");
-    code.textContent = display.bldNo;
-    option.append(code);
-    if (display.item) {
-      const item = document.createElement("span");
-      item.textContent = display.item;
-      option.append(item);
-    }
-    const meta = document.createElement("span");
-    meta.className = "inquiry-product-option-meta";
-    meta.textContent = `${display.status} · ${display.price}`;
-    option.append(meta);
-    option.addEventListener("click", () => chooseAdjustmentProduct(product));
-    results.append(option);
-  });
-  results.hidden = false;
-  if (search instanceof HTMLInputElement) search.setAttribute("aria-expanded", "true");
-};
-
-const searchAdjustmentProducts = async (query) => {
-  if (!productAdjustmentForm) return;
-  const sequence = productAdjustmentGate.begin();
-  const url = new URL(productAdjustmentForm.dataset.productLookupUrl, window.location.origin);
-  url.searchParams.set("q", query);
-  url.searchParams.set("details", "1");
-  url.searchParams.set("active_only", "1");
-  try {
-    const response = await fetch(url, {
-      credentials: "same-origin",
-      headers: { Accept: "application/json", "X-Requested-With": "fetch" },
-    });
-    const payload = await response.json().catch(() => null);
-    if (!productAdjustmentGate.isCurrent(sequence)) return;
-    if (!response.ok || !Array.isArray(payload)) {
-      throw new Error(payload?.error || "产品候选加载失败，请稍后重试。");
-    }
-    renderAdjustmentProducts(payload);
-  } catch (error) {
-    if (!productAdjustmentGate.isCurrent(sequence)) return;
-    setProductAdjustmentResults();
-    setProductAdjustmentError(error instanceof Error ? error.message : "产品候选加载失败，请稍后重试。");
-  }
-};
-
-root.querySelectorAll("[data-open-product-adjustment]").forEach((button) => {
-  button.addEventListener("click", () => {
-    productAdjustmentRow = button.closest("[data-inquiry-result-row]");
-    if (!productAdjustmentModal || !productAdjustmentForm || !productAdjustmentRow) return;
-    productAdjustmentTrigger = button;
-    window.clearTimeout(productAdjustmentTimer);
-    productAdjustmentGate.invalidate();
-    productAdjustmentForm.reset();
-    clearAdjustmentProductSelection();
-    setProductAdjustmentResults();
-    setProductAdjustmentError("");
-    const current = productAdjustmentField("[data-product-adjustment-current]");
-    const currentBld = productAdjustmentRow.querySelector("[data-current-bld]")?.textContent?.trim() || "";
-    const search = productAdjustmentField("[data-product-adjustment-search]");
-    if (current) current.textContent = currentBld;
-    productAdjustmentModal.classList.add("open");
-    productAdjustmentModal.setAttribute("aria-hidden", "false");
-    document.body.classList.add("modal-open");
-    search?.focus();
-  });
-});
-
-productAdjustmentField("[data-product-adjustment-search]")?.addEventListener("input", (event) => {
-  const search = event.currentTarget;
-  if (!(search instanceof HTMLInputElement)) return;
-  window.clearTimeout(productAdjustmentTimer);
-  productAdjustmentGate.invalidate();
-  clearAdjustmentProductSelection();
-  setProductAdjustmentError("");
-  const query = search.value.trim();
-  if (!query) {
-    setProductAdjustmentResults();
-    return;
-  }
-  setProductAdjustmentResults("正在搜索启用产品...");
-  productAdjustmentTimer = window.setTimeout(() => searchAdjustmentProducts(query), 180);
-});
-
-productAdjustmentForm?.addEventListener("submit", (event) => {
-  event.preventDefault();
-  if (!productAdjustmentRow || !productAdjustmentProduct) {
-    setProductAdjustmentError("请先从候选结果中选择一个产品。");
-    productAdjustmentField("[data-product-adjustment-search]")?.focus();
-    return;
-  }
-  const current = { ...(inquiryAdjustments.get(productAdjustmentRow.dataset.adjustmentKey) || {}) };
-  const targetBldNo = inquiryTargetAdjustment(
-    productAdjustmentProduct.bld_no,
-    productAdjustmentRow.dataset.defaultBld,
-  );
-  if (targetBldNo) current.target_bld_no = targetBldNo;
-  else delete current.target_bld_no;
-  delete current.tax_price;
-  persistInquiryAdjustment(productAdjustmentRow, current);
-  const currentBld = productAdjustmentRow.querySelector("[data-current-bld]");
-  const status = productAdjustmentRow.querySelector("[data-col='status']");
-  const price = productAdjustmentRow.querySelector("[data-inquiry-tax-price]");
-  if (currentBld) currentBld.textContent = productAdjustmentProduct.bld_no;
-  if (status) status.textContent = productAdjustmentProduct.product_status || "";
-  const catalogPrice = productAdjustmentProduct.price_cny ?? "";
-  productAdjustmentRow.dataset.catalogPrice = String(catalogPrice);
-  productAdjustmentRow.dataset.priceTouched = "0";
-  if (price instanceof HTMLInputElement) {
-    price.value = catalogPrice === "" ? "" : Number(catalogPrice).toFixed(2);
-    setInquiryPriceError(price, validateInquiryPrice(price.value, { allowBlank: true }), { reveal: false });
-  }
-  setInquiryRowState(productAdjustmentRow);
-  closeProductAdjustment();
-});
-
-root.querySelectorAll("[data-close-product-adjustment]").forEach((element) => element.addEventListener("click", closeProductAdjustment));
 
 document.querySelectorAll("[data-price-mode]").forEach((select) => {
   const form = select.closest("form");
@@ -537,7 +720,7 @@ const triggerBlobDownload = (blob, filename) => {
 
 const inquiryDownloadForm = root.querySelector("[data-inquiry-download-form]");
 inquiryDownloadForm?.addEventListener("submit", (event) => {
-  if (validateAllInquiryPrices()) return;
+  if (validateAllInquiryAdjustments()) return;
   event.preventDefault();
   event.stopImmediatePropagation();
 }, { capture: true });
@@ -554,7 +737,7 @@ root.querySelectorAll("[data-write-quotes-submit]").forEach((button) => {
     event.preventDefault();
     const form = button.closest("form");
     if (!(form instanceof HTMLFormElement) || !(button instanceof HTMLButtonElement)) return;
-    if (!validateAllInquiryPrices()) return;
+    if (!validateAllInquiryAdjustments()) return;
     const customerInput = form.querySelector("input[name='customer_name']");
     if (!(customerInput instanceof HTMLInputElement)) return;
     clearQuoteCustomerValidity(customerInput);
@@ -634,18 +817,6 @@ root.querySelectorAll("[data-write-quotes-submit]").forEach((button) => {
 
 
 document.addEventListener("keydown", (event) => {
-  if (productAdjustmentModal?.classList.contains("open")) {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      closeProductAdjustment();
-      return;
-    }
-    if (event.key === "Tab") {
-      trapProductAdjustmentFocus(event);
-      return;
-    }
-  }
   if (event.key === "Escape" && downloadModal?.classList.contains("open")) {
     closeDownloadModal();
   }

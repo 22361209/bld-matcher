@@ -9,6 +9,7 @@
 {% block page_class %}shell wide app-surface{% endblock %}
 {% block page_head %}
   <link rel="stylesheet" href="{{ url_for('static', filename='pages/inquiry.css', v=static_version('pages/inquiry.css')) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='pages/inquiry_result.css', v=static_version('pages/inquiry_result.css')) }}">
 {% endblock %}
 
 {% block page_content %}
@@ -98,6 +99,7 @@
             <col data-col="oe">
             <col data-col="customer-code">
             <col data-col="bld">
+            <col data-col="image">
             <col data-col="price">
             <col data-col="status">
             <col data-col="score">
@@ -109,6 +111,7 @@
               <th data-col="oe"><button class="data-grid-column-label" type="button" data-column-drag-handle data-column-label="OE号" aria-label="移动OE号列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">OE号</button></th>
               <th data-col="customer-code"><button class="data-grid-column-label" type="button" data-column-drag-handle data-column-label="客户产品编码" aria-label="移动客户产品编码列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">客户产品编码</button></th>
               <th data-col="bld"><button class="data-grid-column-label" type="button" data-column-drag-handle data-column-label="BLD NO." aria-label="移动BLD NO.列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">BLD NO.</button></th>
+              <th data-col="image"><button class="data-grid-column-label" type="button" data-column-drag-handle data-column-label="产品图片" aria-label="移动产品图片列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">产品图片</button></th>
               <th data-col="price"><button class="data-grid-column-label" type="button" data-column-drag-handle data-column-label="含税单价" aria-label="移动含税单价列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">含税单价</button></th>
               <th data-col="status"><button class="data-grid-column-label" type="button" data-column-drag-handle data-column-label="产品状态" aria-label="移动产品状态列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">产品状态</button></th>
               <th data-col="score"><button class="data-grid-column-label" type="button" data-column-drag-handle data-column-label="分数" aria-label="移动分数列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">分数</button></th>
@@ -119,6 +122,7 @@
             {% for row in summary.rows %}
               {% set row_adjustment_allowed = row.adjustment_allowed if row.adjustment_allowed is defined else (row.bld_no and " / " not in row.bld_no) %}
               {% set row_status = format_product_status(row.product_status, "zh") %}
+              {% set row_image_gallery = product_image_urls(row) %}
               <tr data-inquiry-result-row{% if row_adjustment_allowed %} data-adjustment-key="{{ row.adjustment_key }}" data-adjustment-allowed="1"{% endif %} data-default-bld="{{ row.bld_no }}" data-default-price="{{ row.price_cny if row.price_cny is not none else '' }}" data-default-status="{{ row_status }}">
                 <td data-col="row">{{ row.row }}</td>
                 <td data-col="oe">
@@ -136,9 +140,23 @@
                 </td>
                 <td data-col="customer-code">{{ row.customer_product_code }}</td>
                 <td data-col="bld">
-                  <strong data-current-bld>{{ row.bld_no }}</strong>
                   {% if row_adjustment_allowed and can("manage_customer_prices") %}
-                    <button type="button" class="inquiry-adjust-button" data-open-product-adjustment>指定产品</button>
+                    <div class="inquiry-bld-control">
+                      <input type="search" value="{{ row.bld_no }}" autocomplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="inquiry-bld-options" aria-invalid="false" aria-label="第 {{ row.row }} 行本次报价 BLD NO." aria-describedby="inquiry-bld-error-{{ loop.index }}" data-inquiry-bld-input>
+                      <span class="inquiry-bld-error" id="inquiry-bld-error-{{ loop.index }}" data-inquiry-bld-error aria-live="polite" hidden></span>
+                      <button type="button" class="inquiry-adjust-reset" data-reset-inquiry-product hidden>恢复原匹配</button>
+                    </div>
+                  {% else %}
+                    <strong data-current-bld>{{ row.bld_no }}</strong>
+                  {% endif %}
+                </td>
+                <td data-col="image" class="inquiry-image-cell" data-inquiry-image-cell data-default-image-gallery='{{ row_image_gallery|tojson }}'>
+                  {% if row_image_gallery %}
+                    <a class="inquiry-image-link" href="{{ row_image_gallery[0].url }}" target="_blank" rel="noopener" title="打开 {{ row.bld_no }} 产品图片" data-inquiry-product-image>
+                      <img class="inquiry-product-thumb" src="{{ row_image_gallery[0].thumb or row_image_gallery[0].url }}" alt="{{ row.bld_no }} 产品图片" loading="lazy" decoding="async">
+                    </a>
+                  {% else %}
+                    <span class="inquiry-image-empty" data-inquiry-image-empty>无图</span>
                   {% endif %}
                 </td>
                 <td data-col="price" class="money-cell inquiry-price-cell">
@@ -151,7 +169,6 @@
                       <span class="inquiry-price-error" id="inquiry-price-error-{{ loop.index }}" data-inquiry-price-error aria-live="polite" hidden></span>
                       <span class="inquiry-adjust-actions">
                         <button type="button" class="inquiry-adjust-reset" data-reset-inquiry-price hidden>恢复当前产品目录价</button>
-                        <button type="button" class="inquiry-adjust-reset" data-reset-inquiry-product hidden>恢复原匹配</button>
                       </span>
                     </div>
                   {% elif row.price_cny is not none %}
@@ -288,25 +305,7 @@
       </div>
     {% endif %}
     {% if can("manage_customer_prices") %}
-      <div class="map-oe-modal" id="product-adjustment-modal" aria-hidden="true">
-        <div class="map-oe-modal-backdrop" data-close-product-adjustment></div>
-        <div class="map-oe-modal-panel" role="dialog" aria-modal="true" aria-labelledby="product-adjustment-title" tabindex="-1" data-product-adjustment-panel>
-          <div class="modal-heading">
-            <h2 id="product-adjustment-title">指定本次报价产品</h2>
-            <p>仅调整本次查询、导出和报价写入，不会修改产品目录或后续匹配。</p>
-          </div>
-          <form class="map-oe-form" data-product-adjustment-form data-product-lookup-url="{{ url_for('product_lookup') }}">
-            <label><span>当前匹配</span><output class="inquiry-current-match" data-product-adjustment-current></output></label>
-            <div class="map-oe-search-field">
-              <label><span>指定为</span><input type="search" autocomplete="off" placeholder="搜索 BLD、品牌或车型" aria-controls="product-adjustment-results" aria-expanded="false" data-product-adjustment-search></label>
-              <div class="map-oe-results" id="product-adjustment-results" hidden data-product-adjustment-results></div>
-            </div>
-            <input type="hidden" data-product-adjustment-bld>
-            <p class="map-oe-selected" role="status" aria-live="polite" hidden data-product-adjustment-selected></p>
-            <p class="map-oe-error" role="alert" aria-live="assertive" hidden data-product-adjustment-error></p>
-            <div class="map-oe-modal-actions"><button type="button" class="map-oe-cancel-button" data-close-product-adjustment>取消</button><button type="submit" class="map-oe-confirm-button" data-product-adjustment-submit disabled>确认指定</button></div>
-          </form>
-        </div>
-      </div>
+      <div class="inquiry-bld-options" id="inquiry-bld-options" role="listbox" aria-label="启用产品候选" data-inquiry-bld-options data-product-lookup-url="{{ url_for('product_lookup') }}" hidden></div>
+      <div class="data-grid-controls-visually-hidden" aria-live="polite" data-inquiry-bld-status></div>
     {% endif %}
 {% endblock %}

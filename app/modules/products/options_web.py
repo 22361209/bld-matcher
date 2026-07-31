@@ -4,6 +4,7 @@ import logging
 
 from flask import flash, jsonify, redirect, render_template, request, url_for
 
+from app.helpers import PRODUCT_IMAGE_SLOT_FIELDS, product_image_urls
 from app.modules.products.domain import (
     ProductFilterValidationError,
     build_product_filters,
@@ -50,6 +51,7 @@ def register(app) -> None:
             return jsonify({"ok": False, "error": f"筛选条件无效：{exc}"}), 400
         page = get_product_service().search(filters, limit=20, offset=0)
         include_details = request.args.get("details") == "1"
+        include_media = request.args.get("media") == "1"
         rows = []
         for record in page.records:
             row = {
@@ -66,6 +68,15 @@ def register(app) -> None:
                         "active": record.active,
                     }
                 )
+            if include_media:
+                image_payload = {"bld_no": record.bld_no}
+                image_payload.update(
+                    {
+                        field: getattr(record, field, "") or ""
+                        for field in PRODUCT_IMAGE_SLOT_FIELDS
+                    }
+                )
+                row["image_gallery"] = product_image_urls(image_payload)
             rows.append(row)
         response = jsonify(rows)
         response.headers["Cache-Control"] = "no-store"

@@ -281,14 +281,16 @@ class ProductLookupAdjustmentTest(unittest.TestCase):
         client = app.test_client()
         with patch.object(options_web, "get_product_service", return_value=FakeProductService()):
             legacy = client.get("/products/lookup?q=K-")
-            active = client.get("/products/lookup?q=K-&active_only=1&details=1")
+            details = client.get("/products/lookup?q=K-&active_only=1&details=1")
+            active = client.get("/products/lookup?q=K-&active_only=1&details=1&media=1")
 
-        self.assertEqual(observed_statuses, ["all", "active"])
+        self.assertEqual(observed_statuses, ["all", "active", "active"])
         self.assertEqual([row["bld_no"] for row in legacy.get_json()], ["K-ACTIVE", "K-INACTIVE"])
         self.assertEqual(
             sorted(legacy.get_json()[0]),
             ["bld_no", "id", "item", "series"],
         )
+        self.assertNotIn("image_gallery", details.get_json()[0])
         self.assertEqual(
             active.get_json(),
             [
@@ -300,6 +302,7 @@ class ProductLookupAdjustmentTest(unittest.TestCase):
                     "price_cny": 80.0,
                     "product_status": "带球头",
                     "active": True,
+                    "image_gallery": [],
                 }
             ],
         )

@@ -1,0 +1,240 @@
+/* Inquiry result row editing and product preview. */
+
+.match-note {
+  margin-top: 6px;
+  color: #53647a;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.inquiry-adjust-reset {
+  margin: 0;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--linear-accent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: left;
+  white-space: normal;
+  cursor: pointer;
+}
+
+.inquiry-adjust-reset:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid var(--linear-accent);
+  outline-offset: 2px;
+}
+
+.inquiry-bld-control {
+  display: grid;
+  min-width: 0;
+  justify-items: start;
+  gap: 4px;
+}
+
+.inquiry-bld-control input {
+  box-sizing: border-box;
+  width: 92px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 4px 5px;
+  border: 1px solid var(--linear-line-strong);
+  border-radius: 4px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+}
+
+.inquiry-bld-control input:focus-visible {
+  border-color: #8fb6dc;
+  outline: 0;
+  box-shadow: 0 0 0 2px rgba(34, 93, 145, 0.18);
+}
+
+.inquiry-bld-control input[aria-invalid="true"] {
+  border-color: #c45454;
+  box-shadow: 0 0 0 2px rgba(196, 84, 84, 0.14);
+}
+
+.inquiry-bld-error {
+  max-width: 150px;
+  color: #a33a3a;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.inquiry-image-cell {
+  text-align: center;
+}
+
+.inquiry-image-link {
+  position: relative;
+  display: inline-flex;
+  width: fit-content;
+  color: inherit;
+  text-decoration: none;
+}
+
+.inquiry-product-thumb {
+  display: block;
+  width: 52px;
+  height: 38px;
+  object-fit: contain;
+  border: 1px solid var(--linear-line);
+  border-radius: 5px;
+  background: #fff;
+}
+
+.inquiry-image-link:hover .inquiry-product-thumb,
+.inquiry-image-link:focus-visible .inquiry-product-thumb {
+  border-color: #8fb6dc;
+  box-shadow: 0 0 0 2px rgba(34, 93, 145, 0.14);
+}
+
+.inquiry-image-empty {
+  color: var(--linear-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.inquiry-price-cell {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.inquiry-price-control {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.inquiry-price-field {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.inquiry-price-field input {
+  box-sizing: border-box;
+  width: 72px;
+  min-width: 0;
+  max-width: calc(100% - 14px);
+  flex: 0 1 72px;
+  padding: 4px 5px;
+  border: 1px solid var(--linear-line-strong);
+  border-radius: 4px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  text-align: right;
+}
+
+.inquiry-price-field input[aria-invalid="true"] {
+  border-color: #c45454;
+  box-shadow: 0 0 0 2px rgba(196, 84, 84, 0.14);
+}
+
+.inquiry-price-error {
+  color: #a33a3a;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+}
+
+.inquiry-adjust-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 3px 8px;
+  white-space: normal;
+}
+
+.inquiry-row-adjusted td {
+  background: #fff9e9;
+}
+
+.inquiry-row-invalid td {
+  background: #fff4f4;
+}
+
+.inquiry-bld-options {
+  position: fixed;
+  z-index: 90;
+  display: grid;
+  max-height: min(280px, calc(100vh - 16px));
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid #b8c5d2;
+  border-radius: 7px;
+  background: #fff;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.22);
+}
+
+.inquiry-bld-options[hidden] {
+  display: none;
+}
+
+.inquiry-bld-option {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--linear-text);
+  font: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  cursor: pointer;
+}
+
+.inquiry-bld-option:hover,
+.inquiry-bld-option.active {
+  background: #eef5fb;
+}
+
+.inquiry-bld-option > span {
+  color: var(--linear-muted);
+  font-size: 12px;
+}
+
+.inquiry-bld-option .inquiry-bld-option-meta {
+  color: #365f7e;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.inquiry-bld-options-message {
+  margin: 0;
+  padding: 8px;
+  color: var(--linear-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.inquiry-bld-options-message.error {
+  color: #a33a3a;
+}
+
+.inquiry-download-modal-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 760px) {
+  .inquiry-download-modal-actions {
+    grid-template-columns: 1fr;
+  }
+}
