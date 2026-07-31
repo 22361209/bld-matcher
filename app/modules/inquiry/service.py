@@ -21,6 +21,7 @@ from .domain import (
     quick_search,
     should_render_pasted_result,
 )
+from .adjustments import InquiryAdjustment
 from .infrastructure import WorkbookInquiryEngine
 from .ports import CatalogProvider, InquiryUnitOfWorkFactory
 
@@ -322,6 +323,7 @@ class InquiryService:
         write_output: bool = False,
         options: PriceOptions | None = None,
         customer_code_column: int | None = None,
+        adjustments: dict[str, InquiryAdjustment] | None = None,
     ) -> dict:
         return self.engine.analyze_workbook(
             source_path,
@@ -331,6 +333,7 @@ class InquiryService:
             write_output=write_output,
             options=options or PriceOptions("none"),
             customer_code_column=customer_code_column,
+            adjustments=adjustments,
         )
 
     def preview_columns(self, source_path: Path) -> dict:

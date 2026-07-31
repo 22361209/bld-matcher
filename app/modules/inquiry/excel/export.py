@@ -10,6 +10,7 @@ from xlutils.copy import copy as copy_xls
 from app.matcher import ProductCatalog
 from app.product_status import product_status_header_for_price_mode
 
+from ..adjustments import InquiryAdjustment, apply_adjustment
 from .analysis import (
     analyze_xlsx_with_bld,
     annotate_row_summary_with_match_columns,
@@ -54,6 +55,7 @@ def generate_xls_with_bld(
     price_mode: str = "none",
     exchange_rate: float | None = None,
     customer_code_column: int | None = None,
+    adjustments: dict[str, InquiryAdjustment] | None = None,
 ) -> dict:
     book = xlrd.open_workbook(
         str(inquiry_path),
@@ -64,6 +66,7 @@ def generate_xls_with_bld(
     summary = {"total": 0, "matched": 0, "unmatched": 0, "rows": []}
     manual_match_columns = _manual_match_columns(match_column)
 
+    adjustment_index = 0
     for sheet_index in range(book.nsheets):
         source_sheet = book.sheet_by_index(sheet_index)
         target_sheet = writable.get_sheet(sheet_index) if writable else None
@@ -112,12 +115,18 @@ def generate_xls_with_bld(
                 continue
 
             match = catalog.match(inquiry_name, inquiry_oe, inquiry_desc)
+            adjustment_index += 1
+            match, tax_price_override, adjustment_note = apply_adjustment(
+                catalog,
+                match,
+                (adjustments or {}).get(str(adjustment_index)),
+            )
             summary["total"] += 1
             if match:
                 if target_sheet:
                     target_sheet.write(row_index, output_col, match.bld_no)
                     if price_header:
-                        price = match_export_price(match, price_mode, exchange_rate)
+                        price = match_export_price(match, price_mode, exchange_rate, tax_price_override)
                         target_sheet.write(
                             row_index,
                             output_col + 1,
@@ -135,6 +144,15 @@ def generate_xls_with_bld(
                     match_values,
                     match,
                 )
+                row_summary["adjustment_key"] = str(adjustment_index)
+                if tax_price_override is not None:
+                    row_summary["price_cny"] = float(tax_price_override)
+                if adjustment_note:
+                    row_summary["match_note"] = (
+                        f"{row_summary['match_note']}；{adjustment_note}"
+                        if row_summary.get("match_note")
+                        else adjustment_note
+                    )
                 if target_sheet:
                     target_sheet.write(row_index, note_col, row_summary["match_note"])
                 summary["rows"].append(row_summary)
@@ -147,6 +165,7 @@ def generate_xls_with_bld(
                         target_sheet.write(row_index, status_col, "")
                 summary["unmatched"] += 1
                 row_summary = summary_row(row_index + 1, inquiry_oe, inquiry_name, None, customer_product_code)
+                row_summary["adjustment_key"] = str(adjustment_index)
                 if target_sheet:
                     target_sheet.write(row_index, note_col, row_summary["match_note"])
                 summary["rows"].append(row_summary)
@@ -166,6 +185,7 @@ def generate_xlsx_with_bld(
     price_mode: str = "none",
     exchange_rate: float | None = None,
     customer_code_column: int | None = None,
+    adjustments: dict[str, InquiryAdjustment] | None = None,
 ) -> dict:
     if not write_output:
         return analyze_xlsx_with_bld(
@@ -175,12 +195,14 @@ def generate_xlsx_with_bld(
             price_mode=price_mode,
             exchange_rate=exchange_rate,
             customer_code_column=customer_code_column,
+            adjustments=adjustments,
         )
 
     workbook = load_workbook(inquiry_path)
     try:
         summary = {"total": 0, "matched": 0, "unmatched": 0, "rows": []}
 
+        adjustment_index = 0
         for sheet in workbook.worksheets:
             if sheet.max_row == 0:
                 continue
@@ -229,11 +251,17 @@ def generate_xlsx_with_bld(
                     continue
 
                 match = catalog.match(inquiry_name, inquiry_oe, inquiry_desc)
+                adjustment_index += 1
+                match, tax_price_override, adjustment_note = apply_adjustment(
+                    catalog,
+                    match,
+                    (adjustments or {}).get(str(adjustment_index)),
+                )
                 summary["total"] += 1
                 if match:
                     _write_cell(sheet, row_index, output_col, match.bld_no)
                     if price_header:
-                        price = match_export_price(match, price_mode, exchange_rate)
+                        price = match_export_price(match, price_mode, exchange_rate, tax_price_override)
                         _write_cell(
                             sheet,
                             row_index,
@@ -254,6 +282,15 @@ def generate_xlsx_with_bld(
                         match_values,
                         match,
                     )
+                    row_summary["adjustment_key"] = str(adjustment_index)
+                    if tax_price_override is not None:
+                        row_summary["price_cny"] = float(tax_price_override)
+                    if adjustment_note:
+                        row_summary["match_note"] = (
+                            f"{row_summary['match_note']}；{adjustment_note}"
+                            if row_summary.get("match_note")
+                            else adjustment_note
+                        )
                     _write_cell(sheet, row_index, note_col, row_summary["match_note"])
                     summary["rows"].append(row_summary)
                 else:
@@ -264,6 +301,7 @@ def generate_xlsx_with_bld(
                         _write_cell(sheet, row_index, status_col, "")
                     summary["unmatched"] += 1
                     row_summary = summary_row(row_index, inquiry_oe, inquiry_name, None, customer_product_code)
+                    row_summary["adjustment_key"] = str(adjustment_index)
                     _write_cell(sheet, row_index, note_col, row_summary["match_note"])
                     summary["rows"].append(row_summary)
             trim_unused_row_dimensions(sheet, data_end_row)
@@ -284,6 +322,7 @@ def generate_excel_with_bld(
     price_mode: str = "none",
     exchange_rate: float | None = None,
     customer_code_column: int | None = None,
+    adjustments: dict[str, InquiryAdjustment] | None = None,
 ) -> dict:
     suffix = inquiry_path.suffix.lower()
     if suffix == ".xls":
@@ -296,6 +335,7 @@ def generate_excel_with_bld(
             price_mode=price_mode,
             exchange_rate=exchange_rate,
             customer_code_column=customer_code_column,
+            adjustments=adjustments,
         )
     if suffix == ".xlsx":
         return generate_xlsx_with_bld(
@@ -307,5 +347,6 @@ def generate_excel_with_bld(
             price_mode=price_mode,
             exchange_rate=exchange_rate,
             customer_code_column=customer_code_column,
+            adjustments=adjustments,
         )
     raise ValueError("客户询价文件仅支持 .xls 或 .xlsx。")

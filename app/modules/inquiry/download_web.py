@@ -19,6 +19,7 @@ from app.modules.inquiry.domain import parse_price_options
 from app.modules.inquiry.factory import get_inquiry_service
 from app.modules.inquiry.web_helpers import (
     customer_code_column_from_request,
+    adjustments_from_request,
     match_column_payload,
     match_columns_display,
     optional_match_columns,
@@ -29,7 +30,7 @@ from app.modules.inquiry.web_helpers import (
 )
 from app.modules.customers.factory import get_customer_service
 from app.modules.quotes.factory import get_quote_service
-from app.security import actor_name, permission_required
+from app.security import actor_name, can, permission_required
 
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,14 @@ def register(app) -> None:
         if price_error:
             flash(price_error, "error")
             return redirect(url_for("index"))
+        try:
+            adjustments = adjustments_from_request()
+        except ValueError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("index"))
+        if adjustments and not can("manage_customer_prices"):
+            flash("没有权限调整本次报价产品或单价。", "error")
+            return redirect(url_for("index"))
 
         original_filename = request.form.get("original_filename") or upload_path.name
         output_name = Path(request.form.get("output_name") or "").name
@@ -94,6 +103,7 @@ def register(app) -> None:
                 match_column=match_column_payload(match_columns),
                 write_output=True,
                 options=parse_price_options(price_options, default="none"),
+                adjustments=adjustments,
             )
             detail_prefix = f"手动选择 {match_columns_display(match_columns)} 列；" if match_columns else ""
             service.record_export(
@@ -150,6 +160,10 @@ def register(app) -> None:
         price_options, price_error = price_options_from_request()
         if price_error:
             return fail(price_error)
+        try:
+            adjustments = adjustments_from_request()
+        except ValueError as exc:
+            return fail(str(exc))
         if price_options.get("price_mode") == "none":
             return fail("未选择单价方式，无法写入报价；请先在下载弹窗中选择含税或不含税单价。")
 
@@ -171,6 +185,7 @@ def register(app) -> None:
                 write_output=True,
                 options=parse_price_options(price_options, default="none"),
                 customer_code_column=customer_code_column,
+                adjustments=adjustments,
             )
         except ValueError as exc:
             return fail(f"生成失败：{exc}")

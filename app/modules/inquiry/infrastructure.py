@@ -24,6 +24,7 @@ from .domain import (
     export_price,
     looks_like_bld_shorthand,
 )
+from .adjustments import InquiryAdjustment
 
 
 ALLOWED_WORKBOOK_SUFFIXES = frozenset({".xls", ".xlsx"})
@@ -177,6 +178,7 @@ class WorkbookInquiryEngine:
         write_output: bool,
         options: PriceOptions,
         customer_code_column: int | None = None,
+        adjustments: dict[str, InquiryAdjustment] | None = None,
     ) -> dict:
         return generate_excel_with_bld(
             source_path,
@@ -185,6 +187,7 @@ class WorkbookInquiryEngine:
             match_column=match_column,
             write_output=write_output,
             customer_code_column=customer_code_column,
+            adjustments=adjustments,
             **options.as_kwargs(),
         )
 

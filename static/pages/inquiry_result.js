@@ -8,6 +8,153 @@ setupDataGridControls(document.querySelector(".data-grid[data-grid-key='inquiry-
   storagePrefix: "bld.inquiry-result",
 });
 
+const inquiryAdjustments = new Map();
+const adjustmentFields = document.querySelectorAll("[data-inquiry-adjustments-field]");
+
+const syncInquiryAdjustments = () => {
+  const payload = Object.fromEntries(inquiryAdjustments);
+  adjustmentFields.forEach((field) => {
+    if (field instanceof HTMLInputElement) field.value = JSON.stringify(payload);
+  });
+};
+
+const setInquiryRowAdjusted = (row) => {
+  row.classList.toggle("inquiry-row-adjusted", inquiryAdjustments.has(row.dataset.adjustmentKey));
+  const reset = row.querySelector("[data-reset-inquiry-adjustment]");
+  if (reset instanceof HTMLButtonElement) reset.hidden = !inquiryAdjustments.has(row.dataset.adjustmentKey);
+  syncInquiryAdjustments();
+};
+
+document.querySelectorAll("[data-inquiry-result-row]").forEach((row) => {
+  const priceInput = row.querySelector("[data-inquiry-tax-price]");
+  if (!(priceInput instanceof HTMLInputElement)) return;
+  row.dataset.catalogPrice = row.dataset.defaultPrice || "";
+  priceInput.addEventListener("input", () => {
+    const key = row.dataset.adjustmentKey;
+    const current = inquiryAdjustments.get(key) || {};
+    const value = priceInput.value.trim();
+    const catalogPrice = row.dataset.catalogPrice || "";
+    if (value && Number(value).toFixed(2) !== Number(catalogPrice).toFixed(2)) {
+      current.tax_price = value;
+    } else {
+      delete current.tax_price;
+    }
+    if (current.target_bld_no || current.tax_price !== undefined) inquiryAdjustments.set(key, current);
+    else inquiryAdjustments.delete(key);
+    setInquiryRowAdjusted(row);
+  });
+  row.querySelector("[data-reset-inquiry-adjustment]")?.addEventListener("click", () => {
+    const key = row.dataset.adjustmentKey;
+    inquiryAdjustments.delete(key);
+    const currentBld = row.querySelector("[data-current-bld]");
+    const status = row.querySelector("[data-col='status']");
+    if (currentBld) currentBld.textContent = row.dataset.defaultBld || "";
+    if (status) status.textContent = status.dataset.defaultStatus || status.textContent;
+    priceInput.value = row.dataset.defaultPrice ? Number(row.dataset.defaultPrice).toFixed(2) : "";
+    row.dataset.catalogPrice = row.dataset.defaultPrice || "";
+    setInquiryRowAdjusted(row);
+  });
+  const status = row.querySelector("[data-col='status']");
+  if (status instanceof HTMLElement) status.dataset.defaultStatus = status.textContent || "";
+});
+
+const productAdjustmentModal = document.querySelector("#product-adjustment-modal");
+const productAdjustmentForm = productAdjustmentModal?.querySelector("[data-product-adjustment-form]");
+let productAdjustmentRow = null;
+let productAdjustmentProduct = null;
+let productAdjustmentTimer = null;
+
+const closeProductAdjustment = () => {
+  if (!productAdjustmentModal) return;
+  productAdjustmentModal.classList.remove("open");
+  productAdjustmentModal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
+};
+
+const chooseAdjustmentProduct = (product) => {
+  if (!productAdjustmentForm) return;
+  productAdjustmentProduct = product;
+  const field = productAdjustmentForm.querySelector("[data-product-adjustment-bld]");
+  const selected = productAdjustmentForm.querySelector("[data-product-adjustment-selected]");
+  if (field instanceof HTMLInputElement) field.value = product.bld_no;
+  if (selected instanceof HTMLElement) {
+    selected.textContent = `已选择：${product.bld_no}${product.item ? `（${product.item}）` : ""}`;
+    selected.hidden = false;
+  }
+  const results = productAdjustmentForm.querySelector("[data-product-adjustment-results]");
+  if (results instanceof HTMLElement) {
+    results.replaceChildren();
+    results.hidden = true;
+  }
+};
+
+const searchAdjustmentProducts = async () => {
+  if (!productAdjustmentForm) return;
+  const search = productAdjustmentForm.querySelector("[data-product-adjustment-search]");
+  const results = productAdjustmentForm.querySelector("[data-product-adjustment-results]");
+  if (!(search instanceof HTMLInputElement) || !(results instanceof HTMLElement)) return;
+  const query = search.value.trim();
+  if (!query) {
+    results.replaceChildren();
+    results.hidden = true;
+    return;
+  }
+  const response = await fetch(`${productAdjustmentForm.dataset.productLookupUrl}?q=${encodeURIComponent(query)}&details=1`, { headers: { Accept: "application/json" } });
+  const products = response.ok ? await response.json() : [];
+  results.replaceChildren();
+  products.forEach((product) => {
+    const option = document.createElement("button");
+    option.type = "button";
+    option.className = "map-oe-result";
+    option.textContent = `${product.bld_no} ${product.item || ""}`.trim();
+    option.addEventListener("click", () => chooseAdjustmentProduct(product));
+    results.append(option);
+  });
+  results.hidden = !products.length;
+};
+
+document.querySelectorAll("[data-open-product-adjustment]").forEach((button) => {
+  button.addEventListener("click", () => {
+    productAdjustmentRow = button.closest("[data-inquiry-result-row]");
+    if (!productAdjustmentModal || !productAdjustmentForm || !productAdjustmentRow) return;
+    productAdjustmentProduct = null;
+    const current = productAdjustmentForm.querySelector("[data-product-adjustment-current]");
+    const search = productAdjustmentForm.querySelector("[data-product-adjustment-search]");
+    const selected = productAdjustmentForm.querySelector("[data-product-adjustment-selected]");
+    if (current) current.textContent = productAdjustmentRow.dataset.defaultBld || "";
+    if (search instanceof HTMLInputElement) search.value = "";
+    if (selected instanceof HTMLElement) selected.hidden = true;
+    productAdjustmentModal.classList.add("open");
+    productAdjustmentModal.setAttribute("aria-hidden", "false");
+    document.body.classList.add("modal-open");
+    search?.focus();
+  });
+});
+
+productAdjustmentForm?.querySelector("[data-product-adjustment-search]")?.addEventListener("input", () => {
+  window.clearTimeout(productAdjustmentTimer);
+  productAdjustmentTimer = window.setTimeout(() => { searchAdjustmentProducts().catch(() => {}); }, 180);
+});
+productAdjustmentForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (!productAdjustmentRow || !productAdjustmentProduct) return;
+  const key = productAdjustmentRow.dataset.adjustmentKey;
+  const current = inquiryAdjustments.get(key) || {};
+  current.target_bld_no = productAdjustmentProduct.bld_no;
+  delete current.tax_price;
+  inquiryAdjustments.set(key, current);
+  const currentBld = productAdjustmentRow.querySelector("[data-current-bld]");
+  const status = productAdjustmentRow.querySelector("[data-col='status']");
+  const price = productAdjustmentRow.querySelector("[data-inquiry-tax-price]");
+  if (currentBld) currentBld.textContent = productAdjustmentProduct.bld_no;
+  if (status) status.textContent = productAdjustmentProduct.product_status || "";
+  if (price instanceof HTMLInputElement) price.value = productAdjustmentProduct.price_cny === null ? "" : Number(productAdjustmentProduct.price_cny).toFixed(2);
+  productAdjustmentRow.dataset.catalogPrice = productAdjustmentProduct.price_cny ?? "";
+  setInquiryRowAdjusted(productAdjustmentRow);
+  closeProductAdjustment();
+});
+document.querySelectorAll("[data-close-product-adjustment]").forEach((element) => element.addEventListener("click", closeProductAdjustment));
+
 document.querySelectorAll("[data-price-mode]").forEach((select) => {
   const form = select.closest("form");
   const rateField = form ? form.querySelector("[data-exchange-rate-field]") : null;
@@ -172,6 +319,9 @@ document.addEventListener("keydown", (event) => {
   }
   if (event.key === "Escape" && mapOeModal?.classList.contains("open")) {
     closeMapOeModal();
+  }
+  if (event.key === "Escape" && productAdjustmentModal?.classList.contains("open")) {
+    closeProductAdjustment();
   }
 });
 

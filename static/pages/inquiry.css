@@ -7,6 +7,40 @@
   line-height: 1.45;
 }
 
+.inquiry-adjust-button,
+.inquiry-adjust-reset {
+  margin: 4px 0 0 6px;
+  border: 0;
+  background: transparent;
+  color: var(--linear-accent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.inquiry-price-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.inquiry-price-field input {
+  width: 86px;
+  min-width: 86px;
+  padding: 4px 5px;
+  border: 1px solid var(--linear-line-strong);
+  border-radius: 4px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  text-align: right;
+}
+
+.inquiry-row-adjusted td {
+  background: #fff9e9;
+}
+
 .match-column-command {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) minmax(420px, 620px);

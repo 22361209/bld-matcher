@@ -43,17 +43,24 @@ def register(app) -> None:
         except ProductFilterValidationError as exc:
             return jsonify({"ok": False, "error": f"筛选条件无效：{exc}"}), 400
         page = get_product_service().search(filters, limit=20, offset=0)
-        response = jsonify(
-            [
-                {
-                    "id": record.id,
-                    "bld_no": record.bld_no,
-                    "item": record.item,
-                    "series": record.series,
-                }
-                for record in page.records
-            ]
-        )
+        include_details = request.args.get("details") == "1"
+        rows = []
+        for record in page.records:
+            row = {
+                "id": record.id,
+                "bld_no": record.bld_no,
+                "item": record.item,
+                "series": record.series,
+            }
+            if include_details:
+                row.update(
+                    {
+                        "price_cny": record.price_cny,
+                        "product_status": format_product_status(record.product_status, "zh"),
+                    }
+                )
+            rows.append(row)
+        response = jsonify(rows)
         response.headers["Cache-Control"] = "no-store"
         return response
 

@@ -1,0 +1,15 @@
+{
+  "date": "2026-07-31",
+  "version": "unreleased",
+  "title": "查询结果支持本次报价产品与单价调整",
+  "entries": [
+    "询价页面浏览器标题调整为查询结果，查询明细默认展示含税单价。",
+    "具备客户价格管理权限的用户可为单条查询结果指定本次报价产品，或修改本次报价含税单价；调整不会修改产品目录默认单价或后续匹配。",
+    "下载 Excel 与下载并写入报价会使用同一份本次调整，并在匹配说明中记录产品指定与报价价调整。"
+  ],
+  "impact": {
+    "data": "quote records may use a per-inquiry adjusted product and price; catalog defaults are unchanged",
+    "api": "compatible",
+    "operations": "restart-required"
+  }
+}

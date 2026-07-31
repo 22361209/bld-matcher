@@ -6,6 +6,7 @@ from openpyxl import load_workbook
 
 from app.matcher import ProductCatalog, normalize_code, split_codes
 
+from ..adjustments import InquiryAdjustment, apply_adjustment
 from .pricing import numeric_price
 from .reader import (
     _cell_from_values,
@@ -100,11 +101,13 @@ def analyze_xlsx_with_bld(
     price_mode: str = "none",
     exchange_rate: float | None = None,
     customer_code_column: int | None = None,
+    adjustments: dict[str, InquiryAdjustment] | None = None,
 ) -> dict:
     workbook = load_workbook(inquiry_path, read_only=True, data_only=True)
     try:
         summary = {"total": 0, "matched": 0, "unmatched": 0, "rows": []}
 
+        adjustment_index = 0
         for sheet in workbook.worksheets:
             first_rows = list(sheet.iter_rows(min_row=1, max_row=20, values_only=True))
             if not first_rows:
@@ -139,21 +142,35 @@ def analyze_xlsx_with_bld(
                     continue
 
                 match = catalog.match(inquiry_name, inquiry_oe, inquiry_desc)
+                adjustment_index += 1
+                match, tax_price_override, adjustment_note = apply_adjustment(
+                    catalog,
+                    match,
+                    (adjustments or {}).get(str(adjustment_index)),
+                )
                 summary["total"] += 1
                 if match:
                     summary["matched"] += 1
-                    summary["rows"].append(
-                        annotate_row_summary_with_match_columns(
-                            summary_row(row_index, inquiry_oe, inquiry_name, match, customer_product_code),
-                            match_values,
-                            match,
-                        )
+                    row_summary = annotate_row_summary_with_match_columns(
+                        summary_row(row_index, inquiry_oe, inquiry_name, match, customer_product_code),
+                        match_values,
+                        match,
                     )
+                    row_summary["adjustment_key"] = str(adjustment_index)
+                    if tax_price_override is not None:
+                        row_summary["price_cny"] = float(tax_price_override)
+                    if adjustment_note:
+                        row_summary["match_note"] = (
+                            f"{row_summary['match_note']}；{adjustment_note}"
+                            if row_summary.get("match_note")
+                            else adjustment_note
+                        )
+                    summary["rows"].append(row_summary)
                 else:
                     summary["unmatched"] += 1
-                    summary["rows"].append(
-                        summary_row(row_index, inquiry_oe, inquiry_name, None, customer_product_code)
-                    )
+                    row_summary = summary_row(row_index, inquiry_oe, inquiry_name, None, customer_product_code)
+                    row_summary["adjustment_key"] = str(adjustment_index)
+                    summary["rows"].append(row_summary)
 
         return summary
     finally:

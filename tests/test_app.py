@@ -5870,14 +5870,14 @@ with connect(database_path) as conn:
         html = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("匹配结果", html)
+        self.assertIn("查询结果", html)
         self.assertIn("下载 Excel", html)
         self.assertIn("K54500L", html)
         self.assertIn("K54501L", html)
         self.assertIn("K54501A", html)
         self.assertIn("粘贴号码询价.xlsx", html)
         self.assertIn("含税单价", html)
-        self.assertIn("¥79.20", html)
+        self.assertIn('value="79.20" data-inquiry-tax-price', html)
         self.assertIn('<td data-col="row">1</td>', html)
         self.assertIn('<td data-col="row">2</td>', html)
         self.assertIn('<td data-col="row">3</td>', html)
@@ -5957,7 +5957,7 @@ with connect(database_path) as conn:
         html = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("匹配结果", html)
+        self.assertIn("查询结果", html)
         self.assertIn("K8282RA", html)
         self.assertIn("OE 组合前缀命中", html)
         self.assertNotIn("K8235RA", html)
@@ -6284,7 +6284,7 @@ with connect(database_path) as conn:
         html = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("匹配结果", html)
+        self.assertIn("查询结果", html)
         self.assertIn("K-BLD-BATCH-1", html)
         self.assertIn("K-BLD-BATCH-2", html)
         self.assertIn("BLD NO. 精准命中", html)
@@ -6303,6 +6303,20 @@ with connect(database_path) as conn:
                     "oe_no_1": "PRICE-001",
                     "models": "Elantra",
                     "price_cny": "88.8",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "KPRICE02",
+                    "series": "HYUNDAI",
+                    "item": "CONTROL ARM WITH BALL JOINT",
+                    "oe_no_1": "PRICE-002",
+                    "models": "Elantra",
+                    "price_cny": "99.9",
+                    "product_status": "1个球头",
                     "active": "1",
                 },
                 actor="tester",
@@ -6351,7 +6365,8 @@ with connect(database_path) as conn:
 
         self.assertEqual(result.status_code, 200)
         self.assertIn("KPRICE01", result_html)
-        self.assertIn("¥88.80", result_html)
+        self.assertIn('value="88.80" data-inquiry-tax-price', result_html)
+        self.assertIn('data-open-product-adjustment', result_html)
         self.assertIn('id="download-excel-modal"', result_html)
         self.assertIn('value="net">带不含税单价', result_html)
         self.assertIn("返回上一步", result_html)
@@ -6399,6 +6414,34 @@ with connect(database_path) as conn:
         self.assertEqual(sheet.cell(2, 3).value, 81)
         self.assertEqual(sheet.cell(2, 3).number_format, "0")
         generated.close()
+
+        adjusted_download = self.client.post(
+            "/match/download",
+            data={
+                "upload_path": upload_path,
+                "original_filename": "price-export.xlsx",
+                "output_name": output_name,
+                "match_column": "0",
+                "price_mode": "tax",
+                "inquiry_adjustments": json.dumps(
+                    {"1": {"target_bld_no": "KPRICE02", "tax_price": "123.45"}}
+                ),
+            },
+        )
+        self.assertEqual(adjusted_download.status_code, 200)
+        adjusted_download.close()
+
+        generated = load_workbook(output_path)
+        sheet = generated.active
+        self.assertEqual(sheet.cell(2, 2).value, "KPRICE02")
+        self.assertEqual(sheet.cell(2, 3).value, 123.45)
+        self.assertIn("KPRICE01 → KPRICE02", sheet.cell(2, 5).value)
+        generated.close()
+        with self.web.connect(self.web.DB_PATH) as conn:
+            original_price = conn.execute(
+                "SELECT price_cny FROM products WHERE bld_no = ?", ("KPRICE01",)
+            ).fetchone()["price_cny"]
+        self.assertEqual(original_price, 88.8)
 
     def test_uploaded_polluted_xlsx_uses_cleaned_copy_without_skipping_late_rows(self):
         from app.modules.products.persistence import upsert_product
@@ -6680,6 +6723,32 @@ with connect(database_path) as conn:
         self.assertTrue(all(row["quote_no"] == quote_no for row in batch))
         self.assertTrue(all(row["attachment_path"] for row in batch))
 
+        adjusted_write = self.client.post(
+            "/match/write-quotes",
+            data={
+                "upload_path": upload_match.group(1),
+                "original_filename": "write-quotes.xlsx",
+                "match_columns": ["1"],
+                "customer_code_column": "0",
+                "price_mode": "tax",
+                "customer_name": "测试客户WQ",
+                "remark": "调整后报价",
+                "inquiry_adjustments": json.dumps(
+                    {"1": {"target_bld_no": "KWQ02", "tax_price": "123.45"}}
+                ),
+            },
+            headers={"X-Requested-With": "fetch", "Accept": "application/json"},
+        )
+        self.assertEqual(adjusted_write.status_code, 200)
+        adjusted_quote_no = adjusted_write.get_json()["quote_no"]
+        with self.web.connect(self.web.DB_PATH) as conn:
+            adjusted = conn.execute(
+                "SELECT bld_no, tax_price FROM quote_records WHERE quote_no = ? AND customer_product_code = ?",
+                (adjusted_quote_no, "CUST-A1"),
+            ).fetchone()
+        self.assertEqual(adjusted["bld_no"], "KWQ02")
+        self.assertEqual(adjusted["tax_price"], 123.45)
+
         detail = self.client.get(f"/quotes/number/{quote_no}")
         detail_html = detail.get_data(as_text=True)
         self.assertEqual(detail.status_code, 200)
@@ -6837,7 +6906,7 @@ with connect(database_path) as conn:
         self.assertEqual(result.status_code, 200)
         self.assertIn("共 1 行，命中 1 行，未找到 0 行", result_html)
         self.assertIn("KPIKA01", result_html)
-        self.assertIn("¥66.00", result_html)
+        self.assertIn('value="66.00" data-inquiry-tax-price', result_html)
         self.assertIn('<td data-col="row">4</td>', result_html)
         self.assertNotIn('<td data-col="row">3</td>', result_html)
 
@@ -7056,7 +7125,7 @@ with connect(database_path) as conn:
         self.assertIn("返回上一步", result_html)
         self.assertNotIn("返回首页", result_html)
         self.assertIn("K6004LC", result_html)
-        self.assertIn("¥55.00", result_html)
+        self.assertIn('value="55.00" data-inquiry-tax-price', result_html)
         self.assertIn('id="download-excel-modal"', result_html)
         self.assertIn('name="price_mode"', result_html)
         self.assertFalse(output_path.exists())

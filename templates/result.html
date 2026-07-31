@@ -3,7 +3,7 @@
 {% set can_regenerate_download = upload_path is defined and upload_path %}
 {% set selected_match_columns = match_columns if match_columns is defined else ([match_column] if match_column is defined and match_column|string != "" else []) %}
 {% set has_manual_match_column = selected_match_columns|length > 0 %}
-{% block page_title %}匹配结果{% endblock %}
+{% block page_title %}查询结果{% endblock %}
 {% block page_id %}inquiry.result{% endblock %}
 {% block page_type %}workbench{% endblock %}
 {% block page_class %}shell wide app-surface{% endblock %}
@@ -117,7 +117,7 @@
           </thead>
           <tbody>
             {% for row in summary.rows %}
-              <tr>
+              <tr data-inquiry-result-row data-adjustment-key="{{ row.adjustment_key|default(loop.index|string) }}" data-default-bld="{{ row.bld_no }}" data-default-price="{{ row.price_cny if row.price_cny is not none else '' }}">
                 <td data-col="row">{{ row.row }}</td>
                 <td data-col="oe">
                   {% if not row.bld_no and can("manage_aliases") %}
@@ -133,8 +133,22 @@
                   {% endif %}
                 </td>
                 <td data-col="customer-code">{{ row.customer_product_code }}</td>
-                <td data-col="bld"><strong>{{ row.bld_no }}</strong></td>
-                <td data-col="price" class="money-cell">{% if row.price_cny is not none %}¥{{ "%.2f"|format(row.price_cny) }}{% endif %}</td>
+                <td data-col="bld">
+                  <strong data-current-bld>{{ row.bld_no }}</strong>
+                  {% if row.bld_no and " / " not in row.bld_no and can("manage_customer_prices") %}
+                    <button type="button" class="inquiry-adjust-button" data-open-product-adjustment>指定产品</button>
+                  {% endif %}
+                </td>
+                <td data-col="price" class="money-cell">
+                  {% if row.price_cny is not none %}
+                    {% if can("manage_customer_prices") %}
+                      <label class="inquiry-price-field"><span class="visually-hidden">本次报价含税单价</span><span>¥</span><input type="number" min="0" max="99999999.99" step="0.01" inputmode="decimal" value="{{ "%.2f"|format(row.price_cny) }}" data-inquiry-tax-price aria-label="本次报价含税单价"></label>
+                      <button type="button" class="inquiry-adjust-reset" data-reset-inquiry-adjustment hidden>恢复目录价</button>
+                    {% else %}
+                      ¥{{ "%.2f"|format(row.price_cny) }}
+                    {% endif %}
+                  {% endif %}
+                </td>
                 <td data-col="status" class="product-status-cell">{{ format_product_status(row.product_status, "zh") }}</td>
                 <td data-col="score">{{ row.score }}</td>
                 <td data-col="reason">
@@ -174,6 +188,7 @@
             <input type="hidden" name="upload_path" value="{{ upload_path }}">
             <input type="hidden" name="original_filename" value="{{ original_filename }}">
             <input type="hidden" name="output_name" value="{{ output_name }}">
+            <input type="hidden" name="inquiry_adjustments" value="{}" data-inquiry-adjustments-field>
             {% for column in selected_match_columns %}
               <input type="hidden" name="match_columns" value="{{ column }}">
             {% endfor %}
@@ -221,7 +236,7 @@
         </div>
       </div>
     {% endif %}
-    {% if can("manage_aliases") %}
+{% if can("manage_aliases") %}
       <div class="map-oe-modal" id="map-oe-modal" aria-hidden="true">
         <div class="map-oe-modal-backdrop" data-close-map-oe-modal></div>
         <div class="map-oe-modal-panel" role="dialog" aria-modal="true" aria-labelledby="map-oe-modal-title">
@@ -258,6 +273,28 @@
               <button class="map-oe-cancel-button" type="button" data-close-map-oe-modal>取消</button>
               <button class="map-oe-confirm-button" type="submit" data-map-oe-submit>确认加入</button>
             </div>
+          </form>
+        </div>
+      </div>
+    {% endif %}
+    {% if can("manage_customer_prices") %}
+      <div class="map-oe-modal" id="product-adjustment-modal" aria-hidden="true">
+        <div class="map-oe-modal-backdrop" data-close-product-adjustment></div>
+        <div class="map-oe-modal-panel" role="dialog" aria-modal="true" aria-labelledby="product-adjustment-title">
+          <div class="modal-heading">
+            <h2 id="product-adjustment-title">指定本次报价产品</h2>
+            <p>仅调整本次查询、导出和报价写入，不会修改产品目录或后续匹配。</p>
+          </div>
+          <form class="map-oe-form" data-product-adjustment-form data-product-lookup-url="{{ url_for('product_lookup') }}">
+            <label><span>当前匹配</span><output data-product-adjustment-current></output></label>
+            <div class="map-oe-search-field">
+              <label><span>指定为</span><input type="search" autocomplete="off" placeholder="搜索 BLD、品牌或产品名称" data-product-adjustment-search></label>
+              <div class="map-oe-results" hidden data-product-adjustment-results></div>
+            </div>
+            <input type="hidden" data-product-adjustment-bld>
+            <p class="map-oe-selected" hidden data-product-adjustment-selected></p>
+            <p class="map-oe-error" hidden data-product-adjustment-error></p>
+            <div class="map-oe-modal-actions"><button type="button" class="map-oe-cancel-button" data-close-product-adjustment>取消</button><button type="submit" class="map-oe-confirm-button">确认指定</button></div>
           </form>
         </div>
       </div>

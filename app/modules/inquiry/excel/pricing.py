@@ -34,14 +34,18 @@ def numeric_price(value: object) -> float | None:
     return float(price)
 
 
-def match_export_price(match, price_mode: str, exchange_rate: float | None) -> float | int | None:
+def match_export_price(
+    match,
+    price_mode: str,
+    exchange_rate: float | None,
+    tax_price_override: Decimal | None = None,
+) -> float | int | None:
     if price_mode not in {"tax", "net", "usd"} or not match:
         return None
     if " / " in (match.bld_no or ""):
         return None
 
-    raw_price = match.row.get("price_cny")
-    price = decimal_price(raw_price)
+    price = tax_price_override or decimal_price(match.row.get("price_cny"))
     if price is None:
         return None
     if price_mode == "tax":

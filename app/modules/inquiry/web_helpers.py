@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from flask import request
 
 from app.excel_io import PRICE_EXPORT_MODES
 from app.helpers import column_display, user_upload_dir
+from app.modules.inquiry.adjustments import InquiryAdjustment, parse_adjustments
 
 
 def validated_user_upload_path() -> Path | None:
@@ -99,3 +101,14 @@ def price_log_text(price_options: dict[str, object]) -> str:
     if mode == "net":
         return "；导出不含税单价"
     return ""
+
+
+def adjustments_from_request() -> dict[str, InquiryAdjustment]:
+    raw = request.form.get("inquiry_adjustments", "").strip()
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError("本次报价调整数据无效，请重新查询后再试。") from exc
+    return parse_adjustments(payload)
