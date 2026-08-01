@@ -144,6 +144,7 @@ def export_products_xlsx(
     export_format: str = "bld",
     *,
     product_rows: Iterable[sqlite3.Row] | None = None,
+    include_price: bool = True,
 ) -> Path:
     workbook = Workbook()
     sheet = workbook.active
@@ -160,9 +161,12 @@ def export_products_xlsx(
         product_rows = conn.execute(sql)
 
     if export_format == "brand":
-        _setup_sheet(sheet, BRAND_HEADERS)
+        headers = BRAND_HEADERS
     else:
-        _setup_sheet(sheet, BLD_HEADERS)
+        headers = BLD_HEADERS
+    if not include_price:
+        headers = [header for header in headers if header != "Unit Price"]
+    _setup_sheet(sheet, headers)
 
     image_col = 8 if export_format == "brand" else 7
     image_refs: list[tuple[int, int, Path]] = []
@@ -170,6 +174,7 @@ def export_products_xlsx(
 
     for number, row in enumerate(product_rows, start=1):
         image_path = _image_path(row)
+        price_values = [row["price_cny"]] if include_price else []
         if export_format == "brand":
             sheet.append(
                 [
@@ -181,7 +186,7 @@ def export_products_xlsx(
                     row["oe_no_2"],
                     row["models"],
                     "",
-                    row["price_cny"],
+                    *price_values,
                     format_product_status(
                         row["product_status"] if "product_status" in row.keys() else "",
                         "zh",
@@ -200,7 +205,7 @@ def export_products_xlsx(
                     row["oe_no_2"],
                     row["models"],
                     "",
-                    row["price_cny"],
+                    *price_values,
                     format_product_status(
                         row["product_status"] if "product_status" in row.keys() else "",
                         "zh",
@@ -214,12 +219,15 @@ def export_products_xlsx(
             image_rows.add(sheet.max_row)
 
     widths = [10, 18, 16, 28, 34, 28, 34, 22, 12, 14, 10, 20] if export_format == "brand" else [14, 18, 28, 34, 28, 34, 22, 12, 14, 10, 20]
+    if not include_price:
+        del widths[(9 if export_format == "brand" else 8) - 1]
     _finish_sheet(sheet, widths, image_rows)
     _add_sheet_images(sheet, image_refs)
-    price_col = 9 if export_format == "brand" else 8
-    for cell in sheet.iter_cols(min_col=price_col, max_col=price_col, min_row=2):
-        for item in cell:
-            item.number_format = '¥#,##0.00'
+    if include_price:
+        price_col = 9 if export_format == "brand" else 8
+        for cell in sheet.iter_cols(min_col=price_col, max_col=price_col, min_row=2):
+            for item in cell:
+                item.number_format = '¥#,##0.00'
 
     temporary_path = output_path.with_name(f".{output_path.name}.{uuid4().hex}.tmp")
     try:

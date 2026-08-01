@@ -194,7 +194,13 @@ class WebAppTest(unittest.TestCase):
 
         self.addCleanup(cleanup_access_records)
         self.login()
-        account_page = self.client.get("/users")
+        default_page = self.client.get("/users")
+        default_html = default_page.get_data(as_text=True)
+        self.assertEqual(default_page.status_code, 200)
+        self.assertIn("账号列表", default_html)
+        self.assertNotIn("账号个人权限", default_html)
+
+        account_page = self.client.get("/users", query_string={"view": "accounts"})
         account_html = account_page.get_data(as_text=True)
         self.assertEqual(account_page.status_code, 200)
         self.assertIn("账号个人权限", account_html)
@@ -311,6 +317,323 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("新增角色", actions)
         self.assertIn("新增账号", actions)
 
+    def test_user_changes_own_password_with_old_password_verified(self):
+        self.login()
+        with self.web.connect(self.web.DB_PATH) as connection:
+            role = connection.execute(
+                "SELECT role_key FROM roles WHERE is_system = 0 ORDER BY role_key LIMIT 1"
+            ).fetchone()
+        self.assertIsNotNone(role)
+        username = "self-password-user"
+
+        def cleanup_user():
+            self.client.post("/logout")
+            with self.web.connect(self.web.DB_PATH) as connection:
+                row = connection.execute(
+                    "SELECT id FROM users WHERE username = ?", (username,)
+                ).fetchone()
+                if row:
+                    connection.execute(
+                        "DELETE FROM user_permission_overrides WHERE user_id = ?", (row["id"],)
+                    )
+                    connection.execute("DELETE FROM users WHERE id = ?", (row["id"],))
+                    connection.commit()
+
+        self.addCleanup(cleanup_user)
+        created = self.client.post(
+            "/users/save",
+            data={
+                "username": username,
+                "password": "initial-pw-1",
+                "role": role["role_key"],
+                "active": "1",
+                "permission_selection_present": "1",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(created.status_code, 302)
+        self.client.post("/logout")
+
+        login = self.client.post(
+            "/login",
+            data={"username": username, "password": "initial-pw-1", "next": "/"},
+            follow_redirects=False,
+        )
+        self.assertEqual(login.status_code, 302)
+
+        homepage = self.client.get("/").get_data(as_text=True)
+        self.assertIn('href="/account/password"', homepage)
+        self.assertIn("修改密码", homepage)
+
+        form_page = self.client.get("/account/password")
+        form_html = form_page.get_data(as_text=True)
+        self.assertEqual(form_page.status_code, 200)
+        self.assertIn('data-page="account.password"', form_html)
+        self.assertIn('name="old_password"', form_html)
+        self.assertIn('name="new_password"', form_html)
+        self.assertIn('name="confirm_password"', form_html)
+
+        mismatch = self.client.post(
+            "/account/password",
+            data={
+                "old_password": "initial-pw-1",
+                "new_password": "updated-pw-1",
+                "confirm_password": "updated-pw-2",
+            },
+        )
+        self.assertEqual(mismatch.status_code, 400)
+        self.assertIn("两次输入的新密码不一致", mismatch.get_data(as_text=True))
+
+        wrong_old = self.client.post(
+            "/account/password",
+            data={
+                "old_password": "not-the-password",
+                "new_password": "updated-pw-1",
+                "confirm_password": "updated-pw-1",
+            },
+        )
+        self.assertEqual(wrong_old.status_code, 400)
+        self.assertIn("原密码不正确", wrong_old.get_data(as_text=True))
+
+        changed = self.client.post(
+            "/account/password",
+            data={
+                "old_password": "initial-pw-1",
+                "new_password": "updated-pw-1",
+                "confirm_password": "updated-pw-1",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(changed.status_code, 302)
+
+        self.client.post("/logout")
+        old_login = self.client.post(
+            "/login",
+            data={"username": username, "password": "initial-pw-1", "next": "/"},
+            follow_redirects=False,
+        )
+        self.assertEqual(old_login.status_code, 302)
+        self.assertIn("/login", old_login.headers["Location"])
+        new_login = self.client.post(
+            "/login",
+            data={"username": username, "password": "updated-pw-1", "next": "/"},
+            follow_redirects=False,
+        )
+        self.assertEqual(new_login.status_code, 302)
+
+        with self.web.connect(self.web.DB_PATH) as connection:
+            actions = {
+                row["action"]
+                for row in connection.execute(
+                    "SELECT action FROM audit_logs WHERE target_key = ?", (username,)
+                ).fetchall()
+            }
+        self.assertIn("修改密码", actions)
+
+    def test_product_price_visibility_follows_manage_customer_prices_permission(self):
+        from app.modules.admin.persistence import save_role, save_user
+        from app.modules.products.persistence import upsert_product
+        from openpyxl import load_workbook
+
+        self.addCleanup(self.cleanup_products, "K-PRICE-VIS-%")
+        username = "price-hide-user"
+        role_name = "PRICE HIDE 角色"
+
+        def cleanup_access_records():
+            self.client.post("/logout")
+            with self.web.connect(self.web.DB_PATH) as connection:
+                user = connection.execute(
+                    "SELECT id FROM users WHERE username = ?", (username,)
+                ).fetchone()
+                if user:
+                    connection.execute(
+                        "DELETE FROM user_permission_overrides WHERE user_id = ?", (user["id"],)
+                    )
+                    connection.execute("DELETE FROM users WHERE id = ?", (user["id"],))
+                role = connection.execute(
+                    "SELECT role_key FROM roles WHERE name = ?", (role_name,)
+                ).fetchone()
+                if role:
+                    connection.execute(
+                        "DELETE FROM role_permissions WHERE role_key = ?", (role["role_key"],)
+                    )
+                    connection.execute("DELETE FROM roles WHERE role_key = ?", (role["role_key"],))
+                connection.commit()
+
+        self.addCleanup(cleanup_access_records)
+        self.login()
+        with self.web.connect(self.web.DB_PATH) as conn:
+            role_key = save_role(
+                conn,
+                {"name": role_name, "description": "看不到产品单价但可以维护产品的角色"},
+                ["generate_match", "export_catalog", "generate_purchase_contract", "edit_products"],
+                actor="tester",
+            )
+            save_user(
+                conn,
+                {"username": username, "password": "price-hide-pw", "role": role_key, "active": "1"},
+                actor="tester",
+            )
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-PRICE-VIS-001",
+                    "series": "TEST",
+                    "item": "Price Vis Arm",
+                    "oe_no_1": "PRICE-VIS-OE",
+                    "price_cny": "80.00",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            conn.commit()
+        self.client.post("/logout")
+        login = self.client.post(
+            "/login",
+            data={"username": username, "password": "price-hide-pw", "next": "/"},
+            follow_redirects=False,
+        )
+        self.assertEqual(login.status_code, 302)
+
+        products_page = self.client.get("/products")
+        products_html = products_page.get_data(as_text=True)
+        self.assertEqual(products_page.status_code, 200)
+        self.assertNotIn('data-col="price"', products_html)
+        self.assertNotIn("price_cny", products_html)
+
+        lookup = self.client.get("/products/lookup?q=K-PRICE-VIS&details=1")
+        self.assertEqual(lookup.status_code, 200)
+        self.assertTrue(lookup.get_json())
+        self.assertTrue(all("price_cny" not in row for row in lookup.get_json()))
+
+        contract_lookup = self.client.get("/purchase-contracts/product-lookup?bld=K-PRICE-VIS-001")
+        self.assertEqual(contract_lookup.status_code, 200)
+        self.assertNotIn("price_cny", contract_lookup.get_json())
+
+        result_page = self.client.post("/match", data={"quick_oe": "PRICE-VIS-OE\nPRICE-VIS-UNMATCHED"})
+        result_html = result_page.get_data(as_text=True)
+        self.assertEqual(result_page.status_code, 200)
+        self.assertNotIn('data-col="price"', result_html)
+
+        quick = self.client.get(
+            "/inquiry/quick-search",
+            query_string={"quick_oe": "PRICE-VIS-OE"},
+            headers={"Accept": "text/html", "X-Requested-With": "fetch"},
+        )
+        self.assertEqual(quick.status_code, 200)
+        self.assertNotIn("¥", quick.get_data(as_text=True))
+
+        export_response = self.client.post(
+            "/products/export",
+            data={"export_format": "bld", "status": "all"},
+        )
+        self.assertEqual(export_response.status_code, 200)
+        workbook = load_workbook(io.BytesIO(export_response.data))
+        try:
+            headers = [cell.value for cell in workbook.active[1]]
+        finally:
+            workbook.close()
+        self.assertNotIn("Unit Price", headers)
+
+        saved = self.client.post(
+            "/products/save",
+            data={
+                "bld_no": "K-PRICE-VIS-001",
+                "series": "TEST",
+                "item": "Price Vis Arm Renamed",
+                "active": "1",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(saved.status_code, 302)
+        with self.web.connect(self.web.DB_PATH) as conn:
+            row = conn.execute(
+                "SELECT price_cny, item FROM products WHERE bld_no = ?", ("K-PRICE-VIS-001",)
+            ).fetchone()
+        self.assertEqual(float(row["price_cny"]), 80.0)
+        self.assertEqual(row["item"], "Price Vis Arm Renamed")
+        self.client.post("/logout")
+
+    def test_match_download_with_prices_requires_manage_customer_prices(self):
+        from app.modules.admin.persistence import save_user
+        from app.modules.products.persistence import upsert_product
+        from openpyxl import Workbook
+
+        self.addCleanup(self.cleanup_products, "K-PRICE-GATE-%")
+        username = "price-gate-user"
+
+        def cleanup_user():
+            self.client.post("/logout")
+            with self.web.connect(self.web.DB_PATH) as connection:
+                row = connection.execute(
+                    "SELECT id FROM users WHERE username = ?", (username,)
+                ).fetchone()
+                if row:
+                    connection.execute(
+                        "DELETE FROM user_permission_overrides WHERE user_id = ?", (row["id"],)
+                    )
+                    connection.execute("DELETE FROM users WHERE id = ?", (row["id"],))
+                    connection.commit()
+
+        self.addCleanup(cleanup_user)
+        self.login()
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "K-PRICE-GATE-001",
+                    "series": "TEST",
+                    "item": "Price Gate Arm",
+                    "oe_no_1": "PRICE-GATE-OE",
+                    "price_cny": "66.00",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            save_user(
+                conn,
+                {"username": username, "password": "price-gate-pw", "role": "user", "active": "1"},
+                actor="tester",
+            )
+            conn.commit()
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["OE号"])
+        sheet.append(["PRICE-GATE-OE"])
+        buffer = io.BytesIO()
+        workbook.save(buffer)
+        buffer.seek(0)
+
+        self.client.post("/logout")
+        login = self.client.post(
+            "/login",
+            data={"username": username, "password": "price-gate-pw", "next": "/"},
+            follow_redirects=False,
+        )
+        self.assertEqual(login.status_code, 302)
+        response = self.client.post(
+            "/match",
+            data={"inquiry": (buffer, "price-gate.xlsx")},
+            content_type="multipart/form-data",
+        )
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        upload_match = re.search(r'name="upload_path" value="([^"]+)"', html)
+        self.assertIsNotNone(upload_match)
+
+        download = self.client.post(
+            "/match/download",
+            data={
+                "upload_path": upload_match.group(1),
+                "original_filename": "price-gate.xlsx",
+                "price_mode": "tax",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(download.status_code, 302)
+        self.assertTrue(download.headers["Location"].endswith("/"))
+
     def test_admin_account_page_never_defaults_to_admin_when_roles_are_missing(self):
         self.login()
         with self.web.connect(self.web.DB_PATH) as connection:
@@ -333,7 +656,7 @@ class WebAppTest(unittest.TestCase):
             connection.commit()
 
         try:
-            response = self.client.get("/users")
+            response = self.client.get("/users", query_string={"view": "accounts"})
             html = response.get_data(as_text=True)
             self.assertEqual(response.status_code, 200)
             self.assertIn("请先创建非管理员角色", html)
@@ -5221,6 +5544,8 @@ class WebAppTest(unittest.TestCase):
                 "029_customer_workspace_integrity",
                 "030_repair_customer_workspace_integrity",
                 "031_editable_roles_and_user_permission_overrides",
+                "032_grant_view_product_prices",
+                "033_revoke_view_product_prices",
             ],
         )
 

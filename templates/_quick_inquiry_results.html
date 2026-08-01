@@ -40,7 +40,7 @@
               <div class="quick-oe-meta">
                 {% if result.product.series %}<span>{{ result.product.series }}</span>{% endif %}
                 {% if result.product.item %}<span>{{ result.product.item }}</span>{% endif %}
-                {% if result.product.price_cny is not none %}<span>¥{{ "%.2f"|format(result.product.price_cny) }}</span>{% endif %}
+                {% if can("manage_customer_prices") and result.product.price_cny is not none %}<span>¥{{ "%.2f"|format(result.product.price_cny) }}</span>{% endif %}
               </div>
               {% if result.product.models %}
                 <p class="quick-oe-models">{{ result.product.models }}</p>

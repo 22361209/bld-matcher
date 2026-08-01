@@ -107,6 +107,13 @@ def _product_pagination(filters: ProductFilters, page: int, total: int) -> dict[
     }
 
 
+def _product_list_payload(record, *, include_price: bool) -> dict[str, Any]:
+    payload = product_web_payload(record)
+    if not include_price:
+        payload.pop("price_cny", None)
+    return payload
+
+
 def _product_list_context(*, include_admin_preview: bool) -> dict[str, Any]:
     filters = _product_query_args()
     service = get_product_service()
@@ -125,7 +132,10 @@ def _product_list_context(*, include_admin_preview: bool) -> dict[str, Any]:
             offset=(current_page - 1) * PRODUCT_PAGE_SIZE,
         )
     context: dict[str, Any] = {
-        "products": [product_web_payload(record) for record in page.records],
+        "products": [
+            _product_list_payload(record, include_price=can("manage_customer_prices"))
+            for record in page.records
+        ],
         "total_products": page.total,
         "product_page_size": PRODUCT_PAGE_SIZE,
         "pagination": pagination,
@@ -287,6 +297,7 @@ def register(app) -> None:
             filters=filters,
             export_format=export_format,
             actor=actor_name(),
+            include_price=can("manage_customer_prices"),
         )
         if not exported:
             flash("当前筛选条件下没有可导出的产品。", "error")

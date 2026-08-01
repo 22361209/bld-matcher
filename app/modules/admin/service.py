@@ -142,6 +142,24 @@ class AdminService:
             unit_of_work.repository.delete_role(role_key, actor=actor)
             unit_of_work.commit()
 
+    def change_password(
+        self,
+        user_id: int,
+        *,
+        old_password: str,
+        new_password: str,
+        actor: str,
+    ) -> None:
+        with self.unit_of_work_factory() as unit_of_work:
+            unit_of_work.repository.begin_write()
+            user = unit_of_work.repository.user(user_id)
+            if not user:
+                raise ValueError("账号不存在。")
+            if not self.password_verifier(str(user.get("password_hash") or ""), old_password):
+                raise ValueError("原密码不正确。")
+            unit_of_work.repository.change_password(user_id, new_password, actor=actor)
+            unit_of_work.commit()
+
     def api_keys(self) -> ApiKeyPage:
         with self.unit_of_work_factory() as unit_of_work:
             status, keys = unit_of_work.repository.api_key_page()

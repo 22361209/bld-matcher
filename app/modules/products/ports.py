@@ -29,7 +29,13 @@ class ProductRepository(Protocol):
 
     def catalog_snapshot(self) -> tuple[tuple[object, ...], list[dict], dict[str, str]]: ...
 
-    def upsert(self, data: Mapping[str, object], *, actor: str) -> ProductRecord: ...
+    def upsert(
+        self,
+        data: Mapping[str, object],
+        *,
+        actor: str,
+        preserve_blank_price: bool = False,
+    ) -> ProductRecord: ...
 
     def copy_media_from(
         self,
@@ -75,6 +81,7 @@ class ProductRepository(Protocol):
         filters: ProductFilters,
         export_format: str,
         actor: str,
+        include_price: bool = True,
     ) -> int: ...
 
     def preview_brand_normalization(self) -> list[BrandNormalizationChange]: ...

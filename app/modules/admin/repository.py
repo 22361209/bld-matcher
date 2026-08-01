@@ -7,6 +7,7 @@ from types import TracebackType
 
 from app.database import connect
 from app.modules.admin.persistence import (
+    change_password,
     delete_role,
     get_role,
     get_user,
@@ -80,6 +81,9 @@ class SQLiteAdminRepository:
 
     def delete_role(self, role_key: str, *, actor: str) -> None:
         delete_role(self.connection, role_key, actor=actor, commit=False)
+
+    def change_password(self, user_id: int, new_password: str, *, actor: str) -> None:
+        change_password(self.connection, user_id, new_password, actor=actor, commit=False)
 
     def logs(self, *, query: str, actor: str) -> list[dict[str, object]]:
         return [dict(row) for row in list_audit_logs(self.connection, query=query, actor=actor)]

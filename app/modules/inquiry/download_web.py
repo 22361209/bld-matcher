@@ -83,6 +83,9 @@ def register(app) -> None:
         if price_error:
             flash(price_error, "error")
             return redirect(url_for("index"))
+        if price_options.get("price_mode") != "none" and not can("manage_customer_prices"):
+            flash("没有权限导出带单价的查询结果。", "error")
+            return redirect(url_for("index"))
         try:
             adjustments = adjustments_from_request()
         except ValueError as exc:

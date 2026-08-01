@@ -7,7 +7,12 @@ import unittest
 from pathlib import Path
 
 from app.database import connect
-from app.migrations import MIGRATIONS, _add_editable_roles_and_user_permission_overrides
+from app.migrations import (
+    MIGRATIONS,
+    _add_editable_roles_and_user_permission_overrides,
+    _grant_view_product_prices_to_existing_roles,
+    _revoke_view_product_prices_permission,
+)
 from app.modules.admin.persistence import ensure_default_admin, get_user
 from app.modules.admin.repository import SQLiteAdminUnitOfWork
 from app.modules.admin.service import AdminService
@@ -113,7 +118,7 @@ class AdminPermissionTest(unittest.TestCase):
         self.assertEqual(roles[ADMIN_ROLE_KEY]["is_system"], 1)
         self.assertEqual(roles["editor"]["is_system"], 0)
         self.assertIsNotNone(migration)
-        self.assertEqual(MIGRATIONS[-1][0], "031_editable_roles_and_user_permission_overrides")
+        self.assertEqual(MIGRATIONS[-1][0], "033_revoke_view_product_prices")
 
     def test_migration_seeds_unknown_historical_roles_idempotently(self) -> None:
         historical_path = Path(self.temporary.name) / "historical.sqlite3"
@@ -158,6 +163,61 @@ class AdminPermissionTest(unittest.TestCase):
         connection.close()
         self.assertIsNotNone(admin)
         self.assertEqual(admin["is_system"], 1)
+
+    def test_migration_032_grants_view_product_prices_to_existing_roles(self) -> None:
+        historical_path = Path(self.temporary.name) / "historical-032.sqlite3"
+        connection = sqlite3.connect(historical_path)
+        connection.row_factory = sqlite3.Row
+        _add_editable_roles_and_user_permission_overrides(connection)
+        connection.execute("DELETE FROM role_permissions WHERE permission = 'view_product_prices'")
+        connection.execute(
+            """
+            INSERT INTO roles (role_key, name, description, is_system, created_at, updated_at)
+            VALUES ('custom-role', '自建角色', '', 0, '2026-01-01', '2026-01-01')
+            """
+        )
+
+        _grant_view_product_prices_to_existing_roles(connection)
+        _grant_view_product_prices_to_existing_roles(connection)
+
+        granted = {
+            row["role_key"]
+            for row in connection.execute(
+                "SELECT role_key FROM role_permissions WHERE permission = 'view_product_prices'"
+            ).fetchall()
+        }
+        counts = connection.execute(
+            "SELECT COUNT(*) FROM role_permissions WHERE role_key = 'custom-role'"
+        ).fetchone()[0]
+        connection.close()
+        self.assertEqual(granted, {"editor", "user", "viewer", "custom-role"})
+        self.assertEqual(counts, 1)
+
+    def test_migration_033_revokes_view_product_prices_everywhere(self) -> None:
+        historical_path = Path(self.temporary.name) / "historical-033.sqlite3"
+        connection = sqlite3.connect(historical_path)
+        connection.row_factory = sqlite3.Row
+        _add_editable_roles_and_user_permission_overrides(connection)
+        _grant_view_product_prices_to_existing_roles(connection)
+        connection.execute(
+            """
+            INSERT INTO user_permission_overrides (user_id, permission, effect, updated_at)
+            VALUES (1, 'view_product_prices', 'allow', '2026-01-01')
+            """
+        )
+
+        _revoke_view_product_prices_permission(connection)
+        _revoke_view_product_prices_permission(connection)
+
+        remaining = connection.execute(
+            "SELECT COUNT(*) FROM role_permissions WHERE permission = 'view_product_prices'"
+        ).fetchone()[0]
+        remaining_overrides = connection.execute(
+            "SELECT COUNT(*) FROM user_permission_overrides WHERE permission = 'view_product_prices'"
+        ).fetchone()[0]
+        connection.close()
+        self.assertEqual(remaining, 0)
+        self.assertEqual(remaining_overrides, 0)
 
     def test_role_changes_and_user_overrides_recalculate_immediately(self) -> None:
         role_key = self.service.save_role(

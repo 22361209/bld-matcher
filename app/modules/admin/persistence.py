@@ -317,6 +317,36 @@ def save_user(
         raise ValueError("登录名已存在。") from exc
 
 
+def change_password(
+    connection: sqlite3.Connection,
+    user_id: int,
+    new_password: str,
+    actor: str = "",
+    *,
+    commit: bool = True,
+) -> None:
+    password = str(new_password or "")
+    if not password:
+        raise ValueError("新密码不能为空。")
+    user = get_user(connection, user_id)
+    if not user:
+        raise ValueError("用户不存在。")
+    connection.execute(
+        "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
+        (hash_password(password), now_text(), user_id),
+    )
+    log_event(
+        connection,
+        "修改密码",
+        "user",
+        str(user["username"]),
+        "本人通过修改密码页面更新密码",
+        actor=actor,
+    )
+    if commit:
+        connection.commit()
+
+
 def save_role(
     connection: sqlite3.Connection,
     data: Mapping[str, object],

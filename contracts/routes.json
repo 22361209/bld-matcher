@@ -8,6 +8,20 @@
       "rule": "/"
     },
     {
+      "endpoint": "change_password",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/account/password"
+    },
+    {
+      "endpoint": "change_password_route",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/account/password"
+    },
+    {
       "endpoint": "inquiry_legacy_api.internal_inquiry_analyze",
       "methods": [
         "POST"

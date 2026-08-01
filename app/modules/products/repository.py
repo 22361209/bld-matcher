@@ -562,14 +562,20 @@ class SQLiteProductRepository:
         products, aliases = rows_for_catalog(self.connection)
         return self.catalog_version(), products, aliases
 
-    def upsert(self, data: Mapping[str, object], *, actor: str) -> ProductRecord:
+    def upsert(
+        self,
+        data: Mapping[str, object],
+        *,
+        actor: str,
+        preserve_blank_price: bool = False,
+    ) -> ProductRecord:
         upsert_product(
             self.connection,
             dict(data),
             source="web",
             actor=actor,
             commit=False,
-            preserve_blank_price=False,
+            preserve_blank_price=preserve_blank_price,
         )
         product = self.get_by_bld(str(data.get("bld_no") or ""))
         if product is None:
@@ -881,6 +887,7 @@ class SQLiteProductRepository:
         filters: ProductFilters,
         export_format: str,
         actor: str,
+        include_price: bool = True,
     ) -> int:
         rows = self._rows(
             filters,
@@ -894,6 +901,7 @@ class SQLiteProductRepository:
             path,
             export_format=export_format,
             product_rows=rows,
+            include_price=include_price,
         )
         status_label = {
             "active": "仅启用产品",

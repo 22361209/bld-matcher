@@ -156,9 +156,14 @@ class ProductService:
         actor: str,
         image_files: list[tuple[int, object]] | None = None,
         drawing_file: object | None = None,
+        preserve_blank_price: bool = False,
     ) -> ProductRecord:
         with self.unit_of_work_factory() as unit_of_work:
-            product = unit_of_work.repository.upsert(data, actor=actor)
+            product = unit_of_work.repository.upsert(
+                data,
+                actor=actor,
+                preserve_blank_price=preserve_blank_price,
+            )
             for slot, file in image_files or []:
                 product = unit_of_work.repository.save_image(product.id, file, slot=slot, actor=actor)
             if drawing_file is not None:
@@ -393,6 +398,7 @@ class ProductService:
         filters: Mapping[str, object] | ProductFilters,
         export_format: str,
         actor: str,
+        include_price: bool = True,
     ) -> int:
         self.bootstrap_port()
         normalized = build_product_filters(filters)
@@ -403,6 +409,7 @@ class ProductService:
                     filters=normalized,
                     export_format=export_format,
                     actor=actor,
+                    include_price=include_price,
                 )
                 if exported:
                     unit_of_work.commit()

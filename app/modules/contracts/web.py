@@ -73,18 +73,18 @@ def register(app) -> None:
             return jsonify({"found": False})
         image_url = product_image_url(product)
         thumb_url = product_image_thumb_url(product)
-        return jsonify(
-            {
-                "found": True,
-                "bld_no": product["bld_no"],
-                "oe_no": product.get("oe_no_1") or "",
-                "product_name": product.get("item") or "",
-                "models": product.get("models") or "",
-                "price_cny": product.get("price_cny"),
-                "image_url": image_url,
-                "thumb_url": thumb_url or image_url,
-            }
-        )
+        payload = {
+            "found": True,
+            "bld_no": product["bld_no"],
+            "oe_no": product.get("oe_no_1") or "",
+            "product_name": product.get("item") or "",
+            "models": product.get("models") or "",
+            "image_url": image_url,
+            "thumb_url": thumb_url or image_url,
+        }
+        if can("manage_customer_prices"):
+            payload["price_cny"] = product.get("price_cny")
+        return jsonify(payload)
 
     @app.post("/purchase-contracts/generate")
     @permission_required("generate_purchase_contract")

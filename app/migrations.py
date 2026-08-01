@@ -908,6 +908,26 @@ def _add_editable_roles_and_user_permission_overrides(conn: sqlite3.Connection) 
         )
 
 
+def _grant_view_product_prices_to_existing_roles(conn: sqlite3.Connection) -> None:
+    # 新权限上线前所有角色都能看到产品单价。为保持现状，给所有现有非系统
+    # 角色补齐该权限，是否收回由管理员在角色管理中决定。
+    timestamp = conn.execute("SELECT datetime('now','localtime')").fetchone()[0]
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO role_permissions (role_key, permission, created_at)
+        SELECT role_key, 'view_product_prices', ? FROM roles WHERE is_system = 0
+        """,
+        (timestamp,),
+    )
+
+
+def _revoke_view_product_prices_permission(conn: sqlite3.Connection) -> None:
+    # view_product_prices 独立权限已撤回：目录价可见性改由 manage_customer_prices
+    # 统一控制。清理 032 及手工勾选留下的授权行，避免孤儿数据。
+    conn.execute("DELETE FROM role_permissions WHERE permission = 'view_product_prices'")
+    conn.execute("DELETE FROM user_permission_overrides WHERE permission = 'view_product_prices'")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -940,6 +960,8 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("029_customer_workspace_integrity", _finalize_customer_workspace_integrity),
     ("030_repair_customer_workspace_integrity", _repair_customer_workspace_integrity),
     ("031_editable_roles_and_user_permission_overrides", _add_editable_roles_and_user_permission_overrides),
+    ("032_grant_view_product_prices", _grant_view_product_prices_to_existing_roles),
+    ("033_revoke_view_product_prices", _revoke_view_product_prices_permission),
 )
 
 

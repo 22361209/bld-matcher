@@ -1,0 +1,14 @@
+{
+  "date": "2026-08-01",
+  "version": "unreleased",
+  "title": "产品目录单价可见性与报价权限统一",
+  "entries": [
+    "产品目录单价（含税单价）的可见性统一由“维护报价记录”（manage_customer_prices）权限控制：能报价才能看目录价，不再存在“能报价却看不到目录价”的配置。",
+    "无报价权限的用户在以下位置不再看到产品单价：产品目录列表（整列隐藏）、新增/编辑产品表单的单价输入框、首页快速查询结果（其他信息照常显示）、询价结果页（整列隐藏）；批量粘贴查询保持开放，仅隐藏价格。",
+    "无报价权限用户的 /products/lookup 与 /purchase-contracts/product-lookup 接口不再返回 price_cny；导出的产品目录 Excel 不再包含 Unit Price 列；编辑保存产品时保留原单价不被清空。",
+    "/match/download 导出带单价的查询结果现在必须持有 manage_customer_prices，修复了此前仅靠页面隐藏、构造请求即可绕过的缺口。",
+    "迁移 033 清理过渡权限 view_product_prices 的全部授权行；上线后无报价权限的现有角色默认不再看到目录单价，需要的管理员在账号管理中开放。",
+    "API v1（API Key scope 体系）不在本次控制范围内。"
+  ],
+  "impact": {"data": "migration", "api": "compatible", "operations": "restart-required"}
+}

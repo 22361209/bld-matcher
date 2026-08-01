@@ -13,12 +13,18 @@ class NavigationIdentityTest(unittest.TestCase):
             "{{ g.user.display_name or g.user.username }}</strong>"
             "<small>{{ g.user.username }} · {{ g.user.role_name or ROLE_LABELS.get(g.user.role, g.user.role) }}</small>"
         )
-        self.assertEqual(template.count(expected), 2)
+        self.assertEqual(template.count(expected), 1)
 
-    def test_data_sync_permission_exposes_admin_menu_container(self):
+    def test_user_menu_exposes_change_password_and_gates_admin_links(self):
         template = (ROOT / "templates/_nav.html").read_text()
 
-        self.assertIn(
+        self.assertIn('<details class="admin-menu" data-admin-menu>', template)
+        self.assertNotIn(
             '{% if can("manage_users") or can("view_logs") or can("sync_product_data") %}',
             template,
         )
+        self.assertIn("url_for('change_password')", template)
+        self.assertIn("修改密码", template)
+        self.assertIn('{% if can("manage_users") %}', template)
+        self.assertIn('{% if can("view_logs") %}', template)
+        self.assertIn('{% if can("sync_product_data") %}', template)

@@ -34,7 +34,7 @@ PERMISSION_DEFINITIONS: tuple[PermissionDefinition, ...] = (
     PermissionDefinition("generate_match", "处理询价", "运行号码或 Excel 匹配并下载匹配结果。", "询价、客户与报价"),
     PermissionDefinition("manage_customers", "维护客户信息", "维护客户档案、联系人和客户资料文件。", "询价、客户与报价"),
     PermissionDefinition("view_customer_prices", "查看报价记录", "查看客户报价和价格历史。", "询价、客户与报价"),
-    PermissionDefinition("manage_customer_prices", "维护报价记录", "新增、修正、删除报价并写入询价报价。", "询价、客户与报价"),
+    PermissionDefinition("manage_customer_prices", "维护报价记录", "新增、修正、删除报价并写入询价报价；同时控制产品目录单价的可见性。", "询价、客户与报价"),
     PermissionDefinition(
         "generate_purchase_contract",
         "合同管理",
