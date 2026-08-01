@@ -28,12 +28,8 @@ TYPECHECK_PATHS = (
     "app/modules/products/records_web.py",
     "app/modules/products/repository.py",
     "app/modules/products/service.py",
-    "app/modules/shipping/recognition_service.py",
-    "app/modules/shipping/recognition_worker.py",
     "scripts/cleanup_runtime.py",
-    "scripts/run_worker.py",
     "scripts/runtime_probe.py",
-    "scripts/worker_health.py",
 )
 
 

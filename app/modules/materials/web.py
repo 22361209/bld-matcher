@@ -142,7 +142,7 @@ def register(app) -> None:
         return send_file(output_path, as_attachment=True)
 
     @app.post("/materials/data")
-    @permission_required("manage_materials")
+    @permission_required("manage_material_items")
     def upload_material_data():
         file = request.files.get("material_data")
         if not file or not file.filename:
@@ -173,12 +173,12 @@ def register(app) -> None:
         return redirect(url_for("material_items"))
 
     @app.get("/materials/items/new")
-    @permission_required("manage_materials")
+    @permission_required("manage_material_items")
     def new_material_item():
         return render_template("material_item_form.html", item=None)
 
     @app.get("/materials/items/<int:item_id>/edit")
-    @permission_required("manage_materials")
+    @permission_required("manage_material_items")
     def edit_material_item(item_id: int):
         item = get_material_service().get_item(item_id)
         if not item:
@@ -187,7 +187,7 @@ def register(app) -> None:
         return render_template("material_item_form.html", item=item)
 
     @app.post("/materials/items/save")
-    @permission_required("manage_materials")
+    @permission_required("manage_material_items")
     def save_material_item():
         data = {
             "id": request.form.get("id", ""),
@@ -216,7 +216,7 @@ def register(app) -> None:
         return redirect(url_for("material_items", q=data["model"]))
 
     @app.post("/materials/items/<int:item_id>/deactivate")
-    @permission_required("manage_materials")
+    @permission_required("manage_material_items")
     def stop_material_item(item_id: int):
         get_material_service().deactivate_item(item_id, actor=actor_name())
         flash("材料明细已停用。", "success")
@@ -233,7 +233,7 @@ def register(app) -> None:
         return render_template("material_drawings.html", **context)
 
     @app.post("/material-drawings/upload")
-    @permission_required("manage_materials")
+    @permission_required("manage_material_items")
     def upload_material_drawing():
         file = request.files.get("drawing")
         if not file or not file.filename:

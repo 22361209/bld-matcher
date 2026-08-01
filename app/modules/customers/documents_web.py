@@ -30,7 +30,7 @@ def _failed(action: str, customer_id: int, exc: Exception) -> None:
 
 def register(app) -> None:
     @app.post("/customers/<int:customer_id>/documents")
-    @permission_required("manage_customers")
+    @permission_required("edit_customers")
     def create_customer_document(customer_id: int):
         try:
             get_customer_document_service().create(
@@ -46,7 +46,7 @@ def register(app) -> None:
         return redirect(_documents_url(customer_id))
 
     @app.post("/customers/<int:customer_id>/documents/<int:group_id>/update")
-    @permission_required("manage_customers")
+    @permission_required("edit_customers")
     def update_customer_document(customer_id: int, group_id: int):
         try:
             get_customer_document_service().update(
@@ -62,7 +62,7 @@ def register(app) -> None:
         return redirect(_documents_url(customer_id))
 
     @app.post("/customers/<int:customer_id>/documents/<int:group_id>/versions")
-    @permission_required("manage_customers")
+    @permission_required("edit_customers")
     def add_customer_document_version(customer_id: int, group_id: int):
         try:
             get_customer_document_service().add_version(
@@ -78,7 +78,7 @@ def register(app) -> None:
         return redirect(_documents_url(customer_id))
 
     @app.post("/customers/<int:customer_id>/documents/<int:group_id>/archive")
-    @permission_required("manage_customers")
+    @permission_required("delete_customers")
     def archive_customer_document(customer_id: int, group_id: int):
         try:
             get_customer_document_service().archive(customer_id, group_id, actor=actor_name())
@@ -89,7 +89,7 @@ def register(app) -> None:
         return redirect(_documents_url(customer_id))
 
     @app.get("/customers/<int:customer_id>/documents/files/<int:file_id>/download")
-    @permission_required("manage_customers")
+    @permission_required("view_customers")
     def download_customer_document_file(customer_id: int, file_id: int):
         try:
             payload = get_customer_document_service().file_payload(
@@ -112,7 +112,7 @@ def register(app) -> None:
         return response
 
     @app.get("/customers/<int:customer_id>/documents/files/<int:file_id>/preview")
-    @permission_required("manage_customers")
+    @permission_required("view_customers")
     def preview_customer_document_file(customer_id: int, file_id: int):
         try:
             payload = get_customer_document_service().file_payload(

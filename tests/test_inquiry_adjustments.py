@@ -247,7 +247,7 @@ class ProductLookupAdjustmentTest(unittest.TestCase):
 
         @app.before_request
         def load_test_user() -> None:
-            g.user = {"username": "tester", "role": "viewer", "permissions": {"manage_customer_prices"}}
+            g.user = {"username": "tester", "role": "viewer", "permissions": {"add_customer_prices"}}
 
         options_web.register(app)
         records = [
@@ -391,7 +391,7 @@ class InquiryAdjustmentRouteTest(unittest.TestCase):
 
             inquiry_service = FakeInquiryService()
             quote_service = FakeQuoteService(write=True)
-            app = self._route_app({"manage_customer_prices"})
+            app = self._route_app({"add_customer_prices"})
             client = app.test_client()
             patches = (
                 patch.object(download_web, "OUTPUT_DIR", output_root),

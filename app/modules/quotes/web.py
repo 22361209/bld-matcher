@@ -172,7 +172,7 @@ def download_quote_attachment(quote_no: str, quote_id: int):
 
 
 @quote_web.post("/quotes/save", endpoint="save_quote")
-@permission_required("manage_customer_prices")
+@permission_required("add_customer_prices")
 def save_quote():
     actor = actor_name()
     values = _web_quote_data()
@@ -198,7 +198,7 @@ def save_quote():
 
 
 @quote_web.post("/quotes/<int:quote_id>/edit", endpoint="edit_quote")
-@permission_required("manage_customer_prices")
+@permission_required("edit_customer_prices")
 def edit_quote(quote_id: int):
     version_text = request.form.get("version", "").strip()
     expected_version = int(version_text) if version_text.isdigit() else None
@@ -227,7 +227,7 @@ def edit_quote(quote_id: int):
 
 
 @quote_web.post("/quotes/<int:quote_id>/delete", endpoint="delete_quote")
-@permission_required("manage_customer_prices")
+@permission_required("delete_customer_prices")
 def delete_quote(quote_id: int):
     try:
         get_quote_service().delete(quote_id, actor=actor_name())
@@ -243,7 +243,7 @@ def delete_quote(quote_id: int):
 
 
 @quote_web.post("/quotes/import/preview", endpoint="quote_import_preview")
-@permission_required("manage_customer_prices")
+@permission_required("add_customer_prices")
 def quote_import_preview():
     file = request.files.get("quote_file")
     customer_name = request.form.get("customer_name", "").strip()
@@ -278,7 +278,7 @@ def quote_import_preview():
 
 
 @quote_web.post("/quotes/import/apply", endpoint="quote_import_apply")
-@permission_required("manage_customer_prices")
+@permission_required("add_customer_prices")
 def quote_import_apply():
     try:
         imported, skipped = get_quote_service().apply_import_payload(

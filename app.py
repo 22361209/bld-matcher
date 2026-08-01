@@ -16,7 +16,7 @@ from app.platform.logging_config import configure_logging
 from app.platform.request_context import is_machine_api_path, register_request_context
 from app.product_status import format_product_status
 from app.routes import register_routes
-from app.security import ROLE_LABELS, can, csrf_field, safe_referrer, validate_csrf_token, wants_json_response
+from app.security import ROLE_LABELS, can, can_any, csrf_field, safe_referrer, validate_csrf_token, wants_json_response
 
 
 def create_app() -> Flask:
@@ -27,6 +27,7 @@ def create_app() -> Flask:
     web_app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
     register_request_context(web_app)
     web_app.jinja_env.globals["can"] = can
+    web_app.jinja_env.globals["can_any"] = can_any
     web_app.jinja_env.globals["ROLE_LABELS"] = ROLE_LABELS
     web_app.jinja_env.globals["product_image_url"] = product_image_url
     web_app.jinja_env.globals["product_image_thumb_url"] = product_image_thumb_url

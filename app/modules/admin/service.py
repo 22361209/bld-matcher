@@ -126,7 +126,7 @@ class AdminService:
     def save_role(
         self,
         data: Mapping[str, object],
-        permissions: Iterable[str],
+        permissions: Iterable[str] | None,
         *,
         actor: str,
     ) -> str:
@@ -158,6 +158,18 @@ class AdminService:
             if not self.password_verifier(str(user.get("password_hash") or ""), old_password):
                 raise ValueError("原密码不正确。")
             unit_of_work.repository.change_password(user_id, new_password, actor=actor)
+            unit_of_work.commit()
+
+    def update_user_overrides(self, user_id: int, overrides: object, *, actor: str) -> None:
+        with self.unit_of_work_factory() as unit_of_work:
+            unit_of_work.repository.begin_write()
+            unit_of_work.repository.update_user_overrides(user_id, overrides, actor=actor)
+            unit_of_work.commit()
+
+    def update_role_permissions(self, role_key: str, permissions: Iterable[str], *, actor: str) -> None:
+        with self.unit_of_work_factory() as unit_of_work:
+            unit_of_work.repository.begin_write()
+            unit_of_work.repository.update_role_permissions(role_key, permissions, actor=actor)
             unit_of_work.commit()
 
     def api_keys(self) -> ApiKeyPage:

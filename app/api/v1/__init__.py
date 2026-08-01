@@ -30,7 +30,6 @@ def api_index():
                 "inquiries",
                 "artifacts",
                 "quotes",
-                "jobs",
             ],
         }
     )
@@ -67,9 +66,7 @@ register_openapi_operation(
 def register(app) -> None:
     from .artifacts import register as register_artifacts
     from .docs import register as register_docs
-    from app.platform.jobs.api import register as register_jobs
 
     app.register_blueprint(api_v1)
     register_artifacts(app)
     register_docs(app)
-    register_jobs(app)

@@ -347,10 +347,80 @@ def change_password(
         connection.commit()
 
 
+def update_user_overrides(
+    connection: sqlite3.Connection,
+    user_id: int,
+    overrides: object,
+    actor: str = "",
+    *,
+    commit: bool = True,
+) -> None:
+    user = get_user(connection, user_id)
+    if not user:
+        raise ValueError("用户不存在。")
+    normalized = {} if user["role"] == ADMIN_ROLE_KEY else _permission_overrides(overrides)
+    timestamp = now_text()
+    connection.execute("DELETE FROM user_permission_overrides WHERE user_id = ?", (user_id,))
+    connection.executemany(
+        """
+        INSERT INTO user_permission_overrides (user_id, permission, effect, updated_at)
+        VALUES (?, ?, ?, ?)
+        """,
+        (
+            (user_id, permission, effect, timestamp)
+            for permission, effect in sorted(normalized.items())
+        ),
+    )
+    connection.execute("UPDATE users SET updated_at = ? WHERE id = ?", (timestamp, user_id))
+    detail = "个人权限覆盖: " + (
+        ", ".join(f"{key}={value}" for key, value in sorted(normalized.items())) or "无"
+    )
+    log_event(connection, "编辑账号权限", "user", str(user["username"]), detail, actor=actor)
+    if commit:
+        connection.commit()
+
+
+def update_role_permissions(
+    connection: sqlite3.Connection,
+    role_key: str,
+    permissions: Iterable[str],
+    actor: str = "",
+    *,
+    commit: bool = True,
+) -> None:
+    role = get_role(connection, role_key)
+    if not role:
+        raise ValueError("角色不存在。")
+    if bool(role["is_system"]):
+        raise ValueError("管理员角色是系统固定角色，不能修改。")
+    permission_set = {str(permission) for permission in permissions}
+    if permission_set - ALL_PERMISSION_KEYS:
+        raise ValueError("角色包含未知权限。")
+    if permission_set - ASSIGNABLE_PERMISSION_KEYS:
+        raise ValueError("账号与角色管理权限只能由管理员角色持有。")
+    timestamp = now_text()
+    connection.execute("DELETE FROM role_permissions WHERE role_key = ?", (role_key,))
+    connection.executemany(
+        "INSERT INTO role_permissions (role_key, permission, created_at) VALUES (?, ?, ?)",
+        ((role_key, permission, timestamp) for permission in sorted(permission_set)),
+    )
+    connection.execute("UPDATE roles SET updated_at = ? WHERE role_key = ?", (timestamp, role_key))
+    log_event(
+        connection,
+        "编辑角色权限",
+        "role",
+        role_key,
+        f"权限: {', '.join(sorted(permission_set)) or '无'}",
+        actor=actor,
+    )
+    if commit:
+        connection.commit()
+
+
 def save_role(
     connection: sqlite3.Connection,
     data: Mapping[str, object],
-    permissions: Iterable[str],
+    permissions: Iterable[str] | None,
     *,
     actor: str,
     commit: bool = True,
@@ -364,11 +434,13 @@ def save_role(
         raise ValueError("角色名称不能超过 40 个字符。")
     if len(description) > 200:
         raise ValueError("角色说明不能超过 200 个字符。")
-    permission_set = {str(permission) for permission in permissions}
-    if permission_set - ALL_PERMISSION_KEYS:
-        raise ValueError("角色包含未知权限。")
-    if permission_set - ASSIGNABLE_PERMISSION_KEYS:
-        raise ValueError("账号与角色管理权限只能由管理员角色持有。")
+    # permissions 为 None 表示仅维护名称，保留角色现有权限（仅编辑场景）。
+    permission_set = None if permissions is None and role_key else {str(permission) for permission in permissions or ()}
+    if permission_set is not None:
+        if permission_set - ALL_PERMISSION_KEYS:
+            raise ValueError("角色包含未知权限。")
+        if permission_set - ASSIGNABLE_PERMISSION_KEYS:
+            raise ValueError("账号与角色管理权限只能由管理员角色持有。")
     timestamp = now_text()
     try:
         before = get_role(connection, role_key) if role_key else None
@@ -392,12 +464,13 @@ def save_role(
                 (role_key, name, description, timestamp, timestamp),
             )
             action = "新增角色"
-        connection.execute("DELETE FROM role_permissions WHERE role_key = ?", (role_key,))
-        connection.executemany(
-            "INSERT INTO role_permissions (role_key, permission, created_at) VALUES (?, ?, ?)",
-            ((role_key, permission, timestamp) for permission in sorted(permission_set)),
-        )
-        detail = f"权限: {', '.join(sorted(permission_set)) or '无'}"
+        if permission_set is not None:
+            connection.execute("DELETE FROM role_permissions WHERE role_key = ?", (role_key,))
+            connection.executemany(
+                "INSERT INTO role_permissions (role_key, permission, created_at) VALUES (?, ?, ?)",
+                ((role_key, permission, timestamp) for permission in sorted(permission_set)),
+            )
+        detail = f"权限: {', '.join(sorted(permission_set)) or '无'}" if permission_set is not None else ""
         if before and str(before.get("name")) != name:
             detail = f"名称: {before.get('name')} -> {name}\n{detail}"
         log_event(connection, action, "role", role_key, detail, actor=actor)

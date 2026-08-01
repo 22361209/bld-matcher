@@ -35,6 +35,10 @@ def can(permission: str) -> bool:
     return permission in ROLE_PERMISSIONS.get(user["role"], set())
 
 
+def can_any(*permissions: str) -> bool:
+    return any(can(permission) for permission in permissions)
+
+
 def wants_json_response() -> bool:
     return (
         request.headers.get("X-Requested-With") == "fetch"

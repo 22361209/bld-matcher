@@ -20,7 +20,8 @@
       <p>{{ customer.code or "未设置客户编号" }} · 负责人 {{ customer.owner_username or "未指定" }}</p>
     </div>
     <div class="command-actions">
-      <a class="linear-button primary" href="{{ url_for('quote_web.quotes', customer_name=customer.name) }}">查看报价</a>
+      {% if can("view_customer_prices") %}<a class="linear-button primary" href="{{ url_for('quote_web.quotes', customer_name=customer.name) }}">查看报价</a>{% endif %}
+      {% if can("edit_customers") %}
       <form method="post" action="{{ url_for('set_customer_status', customer_id=customer.id) }}">
         {{ csrf_field() }}
         <input type="hidden" name="status" value="{{ 'inactive' if customer.status == 'active' else 'active' }}">
@@ -30,6 +31,7 @@
           <button class="linear-button subtle" type="submit">重新启用</button>
         {% endif %}
       </form>
+      {% endif %}
     </div>
   </section>
 
@@ -50,6 +52,7 @@
     <div class="customer-overview-grid">
       <section class="data-section customer-profile-panel">
         <div class="data-section-header"><div><h2>基础资料</h2><p>名称修改后会继续关联原有报价，客户编号可按公司内部规则维护。</p></div></div>
+        {% if can("edit_customers") %}
         <form class="customer-profile-form" action="{{ url_for('save_customer') }}" method="post">
           {{ csrf_field() }}
           <input type="hidden" name="id" value="{{ customer.id }}">
@@ -66,6 +69,13 @@
           </label>
           <div class="form-actions"><button class="linear-button primary" type="submit">保存基础资料</button></div>
         </form>
+        {% else %}
+          <dl class="customer-contact-summary">
+            <div><dt>客户名称</dt><dd>{{ customer.name }}</dd></div>
+            <div><dt>客户编号</dt><dd>{{ customer.code or "未设置" }}</dd></div>
+            <div><dt>负责人</dt><dd>{{ customer.owner_username or "未指定" }}</dd></div>
+          </dl>
+        {% endif %}
       </section>
 
       <section class="data-section customer-primary-contact-panel">
@@ -86,6 +96,7 @@
   {% elif active_view == "contacts" %}
     <section class="data-section customer-contact-section">
       <div class="data-section-header"><div><h2>联系人</h2><p>记录采购、技术、财务和决策人；一位联系人可设为主要联系人。</p></div><span>{{ contacts|length }} 人</span></div>
+      {% if can("edit_customers") %}
       <form class="customer-contact-create" action="{{ url_for('save_customer_contact', customer_id=customer.id) }}" method="post">
         {{ csrf_field() }}
         <label><span>姓名</span><input name="name" required maxlength="120"></label>
@@ -97,6 +108,7 @@
         <label class="customer-primary-check"><input name="is_primary" value="1" type="checkbox"><span>设为主要联系人</span></label>
         <div class="form-actions"><button class="linear-button primary" type="submit">添加联系人</button></div>
       </form>
+      {% endif %}
       {% if contacts %}
         <div class="customer-contact-list">
           {% for contact in contacts %}
@@ -112,8 +124,8 @@
               <label><span>微信</span><input name="wechat" value="{{ contact.wechat }}" maxlength="120"></label>
               <label class="customer-primary-check"><input name="is_primary" value="1" type="checkbox" {% if contact.is_primary %}checked{% endif %}><span>主要联系人</span></label>
               <div class="form-actions">
-                <button class="linear-button primary" type="submit">保存</button>
-                <button class="linear-button danger" type="submit" formaction="{{ url_for('delete_customer_contact', customer_id=customer.id, contact_id=contact.id) }}" data-confirm="确认删除联系人“{{ contact.name }}”？删除联系人不会影响客户、报价、合同和文件记录。">删除</button>
+                {% if can("edit_customers") %}<button class="linear-button primary" type="submit">保存</button>{% endif %}
+                {% if can("delete_customers") %}<button class="linear-button danger" type="submit" formaction="{{ url_for('delete_customer_contact', customer_id=customer.id, contact_id=contact.id) }}" data-confirm="确认删除联系人“{{ contact.name }}”？删除联系人不会影响客户、报价、合同和文件记录。">删除</button>{% endif %}
               </div>
             </form>
           {% endfor %}
@@ -124,6 +136,7 @@
     </section>
   {% elif active_view == "business" %}
     <div class="customer-business-stack">
+      {% if can("view_price_history") %}
       <section class="data-section">
         <div class="data-section-header"><div><h2>历史报价</h2><p>按报价单号汇总，不把同一报价的多条产品明细重复计数。</p></div><a href="{{ url_for('quote_web.quotes', customer_name=customer.name) }}">查看全部报价</a></div>
         <div class="data-table-scroll"><table class="data-table"><thead><tr><th>报价单号</th><th>日期</th><th>明细</th><th>产品</th><th>币种</th><th>报价人</th></tr></thead><tbody>
@@ -132,6 +145,8 @@
           {% else %}<tr><td colspan="6">该客户暂无报价记录。</td></tr>{% endfor %}
         </tbody></table></div>
       </section>
+      {% endif %}
+      {% if can("view_contracts") %}
       <section class="data-section">
         <div class="data-section-header"><div><h2>销售合同</h2><p>由报价明细生成的销售合同会在这里保留来源关系。</p></div></div>
         <div class="data-table-scroll"><table class="data-table"><thead><tr><th>合同编号</th><th>来源报价</th><th>语言</th><th>币种</th><th>生成人</th><th>生成时间</th><th></th></tr></thead><tbody>
@@ -140,10 +155,12 @@
           {% else %}<tr><td colspan="7">该客户暂无已关联的销售合同。</td></tr>{% endfor %}
         </tbody></table></div>
       </section>
+      {% endif %}
     </div>
   {% else %}
     <section class="data-section customer-document-section">
       <div class="data-section-header"><div><h2>模板与文件</h2><p>保存客户特定标签、包装要求、单据模板和示例；更新时保留旧版本。</p></div><span>{{ document_groups|length }} 项</span></div>
+      {% if can("edit_customers") %}
       <details class="customer-document-create-panel">
         <summary>新增客户资料</summary>
         <form class="customer-document-form" action="{{ url_for('create_customer_document', customer_id=customer.id) }}" method="post" enctype="multipart/form-data">
@@ -156,13 +173,14 @@
           <div class="form-actions"><button class="linear-button primary" type="submit">保存客户资料</button></div>
         </form>
       </details>
+      {% endif %}
       {% if document_groups %}
         <div class="customer-document-grid">
           {% for group in document_groups %}
             <article class="customer-document-card {% if group.archived %}archived{% endif %}">
               <div class="customer-document-card-heading"><div><span class="customer-document-category">{{ group.category_label }}</span><h3>{{ group.title }}</h3></div>{% if group.archived %}<span class="linear-status inactive">已归档</span>{% endif %}</div>
               <p>{{ group.description or "无补充说明" }}</p>
-              {% if not group.archived %}
+              {% if can("edit_customers") and not group.archived %}
                 <details class="customer-document-edit-panel">
                   <summary>编辑说明</summary>
                   <form class="customer-document-form compact" action="{{ url_for('update_customer_document', customer_id=customer.id, group_id=group.id) }}" method="post">
@@ -176,7 +194,7 @@
                 </details>
               {% endif %}
               <dl><div><dt>语言</dt><dd>{{ group.language or "通用" }}</dd></div><div><dt>当前版本</dt><dd>{{ "V" ~ group.current_version if group.current_version else "仅文字" }}</dd></div><div><dt>更新时间</dt><dd>{{ group.updated_at }}</dd></div></dl>
-              {% if not group.archived %}
+              {% if can("edit_customers") and not group.archived %}
                 <form class="customer-document-version-form" action="{{ url_for('add_customer_document_version', customer_id=customer.id, group_id=group.id) }}" method="post" enctype="multipart/form-data">
                   {{ csrf_field() }}
                   <label><span>上传新版本（旧版本保留）</span><input name="files" type="file" required multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.xlsm,.ppt,.pptx,.txt,.csv"></label>
@@ -197,7 +215,7 @@
                   <span>仅文字要求，无附件</span>
                 {% endfor %}
               </div>
-              {% if not group.archived %}
+              {% if can("delete_customers") and not group.archived %}
                 <form class="customer-document-archive-form" action="{{ url_for('archive_customer_document', customer_id=customer.id, group_id=group.id) }}" method="post">
                   {{ csrf_field() }}
                   <button class="linear-button danger compact" type="submit" data-confirm="确认归档客户资料“{{ group.title }}”？归档后资料退出当前使用，但全部历史版本和文件继续保留并可下载。">归档</button>

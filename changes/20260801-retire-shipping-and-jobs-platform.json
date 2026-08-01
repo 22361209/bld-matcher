@@ -1,0 +1,13 @@
+{
+  "date": "2026-08-01",
+  "version": "unreleased",
+  "title": "下线货物识别、发货通知与后台任务平台",
+  "entries": [
+    "货物识别与发货通知两个功能整体移除（此前已无网页入口），同时删除 recognize_shipments、generate_shipping_notice 两个权限；迁移 034 清理其在角色与个人覆盖中的授权行。",
+    "只服务于货物识别的后台任务平台一并删除：后台 worker 进程、任务队列、AI 供应商调用层、docker-compose 的 bld-worker 服务。",
+    "公开 API /api/v1/jobs/* 三个端点及 jobs:read、jobs:cancel 两个 scope 移除（破坏性变更，见 ADR 0023）；持有这些 scope 的既有 API Key 其他能力不受影响。",
+    "运行健康检查简化为 database / migrations / business_probe 三项；运行数据清理保留文件、artifact、幂等记录与备份的保留期策略。",
+    "部署后 NAS 的 bld-matcher-worker 容器随 compose 更新移除；.env 中 SHIPMENT_VISION_*、BLD_WORKER_*、BLD_JOB_* 变量成为死配置，可手工清理。历史数据与运行数据目录全部保留。"
+  ],
+  "impact": {"data": "migration", "api": "breaking", "operations": "restart-required"}
+}

@@ -12,7 +12,7 @@ from app.helpers import (
     user_output_dir,
     user_recent_outputs,
 )
-from app.security import actor_name, can, permission_required
+from app.security import actor_name, can, can_any, permission_required
 
 from .factory import get_contract_service
 
@@ -37,17 +37,17 @@ def _render_contract_management(mode: str):
 
 def register(app) -> None:
     @app.get("/contracts")
-    @permission_required("generate_purchase_contract")
+    @permission_required("view_contracts")
     def contracts():
         return _render_contract_management("purchase")
 
     @app.get("/purchase-contracts")
-    @permission_required("generate_purchase_contract")
+    @permission_required("view_contracts")
     def purchase_contracts():
         return _render_contract_management("purchase")
 
     @app.get("/contracts/sales")
-    @permission_required("generate_purchase_contract")
+    @permission_required("view_contracts")
     def sales_contracts():
         try:
             return _render_contract_management("sales")
@@ -56,7 +56,7 @@ def register(app) -> None:
             return redirect(url_for("quote_web.quotes") + "#quote-results")
 
     @app.get("/contracts/documents/<int:document_id>/download")
-    @permission_required("generate_purchase_contract")
+    @permission_required("view_contracts")
     def download_contract_document(document_id: int):
         resolved = get_contract_service().document_path(document_id)
         if resolved is None:
@@ -66,7 +66,7 @@ def register(app) -> None:
         return send_file(path, as_attachment=True, download_name=str(document["name"]))
 
     @app.get("/purchase-contracts/product-lookup")
-    @permission_required("generate_purchase_contract")
+    @permission_required("generate_contract")
     def purchase_contract_product_lookup():
         product = get_contract_service().lookup_product(request.args.get("bld", ""))
         if not product:
@@ -82,12 +82,12 @@ def register(app) -> None:
             "image_url": image_url,
             "thumb_url": thumb_url or image_url,
         }
-        if can("manage_customer_prices"):
+        if can_any("add_customer_prices", "edit_customer_prices", "delete_customer_prices"):
             payload["price_cny"] = product.get("price_cny")
         return jsonify(payload)
 
     @app.post("/purchase-contracts/generate")
-    @permission_required("generate_purchase_contract")
+    @permission_required("generate_contract")
     def generate_purchase_contract():
         try:
             output_path = get_contract_service().generate(
@@ -106,7 +106,7 @@ def register(app) -> None:
         return send_file(output_path, as_attachment=True, download_name=output_path.name)
 
     @app.post("/sales-contracts/generate")
-    @permission_required("generate_purchase_contract")
+    @permission_required("generate_contract")
     def generate_sales_contract():
         try:
             output_path = get_contract_service().generate(

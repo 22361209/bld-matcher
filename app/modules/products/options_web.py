@@ -11,7 +11,7 @@ from app.modules.products.domain import (
 )
 from app.modules.products.factory import get_product_service
 from app.product_status import format_product_status
-from app.security import actor_name, can, login_required, permission_required
+from app.security import actor_name, can_any, login_required, permission_required
 
 
 logger = logging.getLogger(__name__)
@@ -67,7 +67,7 @@ def register(app) -> None:
                         "active": record.active,
                     }
                 )
-                if can("manage_customer_prices"):
+                if can_any("add_customer_prices", "edit_customer_prices", "delete_customer_prices"):
                     row["price_cny"] = record.price_cny
             if include_media:
                 image_payload = {"bld_no": record.bld_no}

@@ -85,27 +85,6 @@
       "rule": "/api/v1/inquiries/export"
     },
     {
-      "endpoint": "job_v1_api.get_job_v1",
-      "methods": [
-        "GET"
-      ],
-      "rule": "/api/v1/jobs/<string:job_id>"
-    },
-    {
-      "endpoint": "job_v1_api.cancel_job_v1",
-      "methods": [
-        "POST"
-      ],
-      "rule": "/api/v1/jobs/<string:job_id>/cancel"
-    },
-    {
-      "endpoint": "job_v1_api.get_job_result_v1",
-      "methods": [
-        "GET"
-      ],
-      "rule": "/api/v1/jobs/<string:job_id>/result"
-    },
-    {
       "endpoint": "api_v1.openapi_document",
       "methods": [
         "GET"
@@ -848,6 +827,13 @@
       "rule": "/roles/<role_key>/edit"
     },
     {
+      "endpoint": "save_role_permissions_route",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/roles/<role_key>/permissions"
+    },
+    {
       "endpoint": "save_role_route",
       "methods": [
         "POST"
@@ -916,6 +902,13 @@
         "GET"
       ],
       "rule": "/users/<int:user_id>/edit"
+    },
+    {
+      "endpoint": "save_user_permissions_route",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/users/<int:user_id>/permissions"
     },
     {
       "endpoint": "save_user_route",

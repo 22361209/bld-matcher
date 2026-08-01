@@ -928,6 +928,80 @@ def _revoke_view_product_prices_permission(conn: sqlite3.Connection) -> None:
     conn.execute("DELETE FROM user_permission_overrides WHERE permission = 'view_product_prices'")
 
 
+# 034 权限拆分映射：旧键 -> 继承其含义的新键。
+_SPLIT_PERMISSION_MAPPING = {
+    "manage_customers": (
+        "view_customers",
+        "add_customers",
+        "edit_customers",
+        "delete_customers",
+    ),
+    "manage_customer_prices": (
+        "add_customer_prices",
+        "edit_customer_prices",
+        "delete_customer_prices",
+    ),
+    "generate_purchase_contract": ("view_contracts", "generate_contract"),
+    "manage_materials": ("manage_material_items", "manage_tube_items"),
+}
+
+_RETIRED_PERMISSION_KEYS = (
+    "manage_customers",
+    "manage_customer_prices",
+    "generate_purchase_contract",
+    "manage_materials",
+    "recognize_shipments",
+    "generate_shipping_notice",
+)
+
+
+def _split_granular_permissions(conn: sqlite3.Connection) -> None:
+    # 先按映射给持有者补齐新权限（含个人覆盖的 allow/deny），再清除旧键。
+    timestamp = conn.execute("SELECT datetime('now','localtime')").fetchone()[0]
+    for old_key, new_keys in _SPLIT_PERMISSION_MAPPING.items():
+        for new_key in new_keys:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO role_permissions (role_key, permission, created_at)
+                SELECT role_key, ?, ? FROM role_permissions WHERE permission = ?
+                """,
+                (new_key, timestamp, old_key),
+            )
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO user_permission_overrides (user_id, permission, effect, updated_at)
+                SELECT user_id, ?, effect, ? FROM user_permission_overrides WHERE permission = ?
+                """,
+                (new_key, timestamp, old_key),
+            )
+    # 查看报价记录的持有者此前即可看到历史价格提示，保持现状。
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO role_permissions (role_key, permission, created_at)
+        SELECT role_key, 'view_price_history', ? FROM role_permissions
+        WHERE permission = 'view_customer_prices'
+        """,
+        (timestamp,),
+    )
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO user_permission_overrides (user_id, permission, effect, updated_at)
+        SELECT user_id, 'view_price_history', effect, ? FROM user_permission_overrides
+        WHERE permission = 'view_customer_prices'
+        """,
+        (timestamp,),
+    )
+    placeholders = ", ".join("?" for _ in _RETIRED_PERMISSION_KEYS)
+    conn.execute(
+        f"DELETE FROM role_permissions WHERE permission IN ({placeholders})",
+        _RETIRED_PERMISSION_KEYS,
+    )
+    conn.execute(
+        f"DELETE FROM user_permission_overrides WHERE permission IN ({placeholders})",
+        _RETIRED_PERMISSION_KEYS,
+    )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -962,6 +1036,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("031_editable_roles_and_user_permission_overrides", _add_editable_roles_and_user_permission_overrides),
     ("032_grant_view_product_prices", _grant_view_product_prices_to_existing_roles),
     ("033_revoke_view_product_prices", _revoke_view_product_prices_permission),
+    ("034_split_granular_permissions", _split_granular_permissions),
 )
 
 

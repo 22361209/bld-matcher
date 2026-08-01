@@ -4,8 +4,8 @@
 
 ## 1. Architecture
 
-- `ARCH-001 MUST`：项目保持模块化单体。Web、API 和 Worker 只能调用 Application Service，不能承载业务规则。
-- `ARCH-002 MUST`：业务按产品、询价、报价、合同、材料、发货等领域组织；跨领域调用通过公开服务接口完成。
+- `ARCH-001 MUST`：项目保持模块化单体。Web 和 API 只能调用 Application Service，不能承载业务规则。
+- `ARCH-002 MUST`：业务按产品、询价、报价、合同、材料等领域组织；跨领域调用通过公开服务接口完成。
 - `ARCH-003 MUST NOT`：新路由模块不得直接导入 `app.database`、`sqlite3` 或执行 SQL。
 - `ARCH-004 MUST NOT`：路由模块不得互相导入。鉴权、错误、Schema 等共享能力必须位于平台层。
 - `ARCH-005 MUST NOT`：未经 ADR，不得引入新 Web 框架、ORM、数据库、任务队列或前端框架。
@@ -14,8 +14,8 @@
 依赖方向固定为：
 
 ```text
-Web / API / Worker -> Application Service -> Domain
-Application Service -> Repository / File / Job / AI Ports
+Web / API -> Application Service -> Domain
+Application Service -> Repository / File Ports
 Infrastructure -> Ports
 ```
 
@@ -52,17 +52,15 @@ Domain 不得导入 Flask、SQLite、文件路径配置或模型供应商 SDK。
 
 完整定义见 `docs/ui/page-protocol.md`。
 
-## 5. API And AI
+## 5. API
 
 - `API-001 MUST`：新增机器接口位于 `/api/v1`，请求和响应由 Schema 定义并生成 OpenAPI。
 - `API-002 MUST`：API Key 映射到不可伪造的 Principal、集成名称和最小权限 Scopes。
 - `API-003 MUST`：写接口支持 `Idempotency-Key`；并发修订使用版本号或 `If-Match`。
-- `API-004 MUST`：长任务返回 `202 + job_id`，通过统一任务接口查询、取消和获取结果。
+- `API-004 MUST`：重新引入长任务前必须先落地统一任务机制（队列、查询、取消、结果）并经 ADR；不得在请求线程内伪造进度或阻塞。
 - `API-005 MUST NOT`：API 不返回绝对文件路径；文件通过有权限和保留期的 artifact ID 访问。
 - `API-006 MUST NOT`：OpenClaw、Hermes、WorkBuddy、MCP 或其他 AI 工具不得直接访问 SQLite。
 - `API-007 MUST`：旧接口作为兼容适配器保留明确周期，破坏性变化需要 ADR 和消费者合同测试。
-
-完整定义见 `docs/api/ai-contract.md`。
 
 ## 6. Operations And Observability
 
@@ -70,7 +68,7 @@ Domain 不得导入 Flask、SQLite、文件路径配置或模型供应商 SDK。
 - `OPS-002 MUST`：外部调用设置超时、有限重试、并发限制，并记录耗时、供应商、模型和费用信息。
 - `OPS-003 MUST`：捕获宽泛异常时必须写结构化日志，并转换为稳定错误码。
 - `OPS-004 MUST`：部署必须经过迁移、健康检查和最小业务探针；容器启动不等于服务可用。
-- `OPS-005 MUST`：上传、输出、任务和备份必须有保留期与清理策略。
+- `OPS-005 MUST`：上传、输出和备份必须有保留期与清理策略。
 
 ## 7. Change Governance
 

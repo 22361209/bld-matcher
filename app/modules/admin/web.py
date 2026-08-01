@@ -6,7 +6,7 @@ from flask import flash, g, make_response, redirect, render_template, request, u
 
 from app.platform.api_principal import API_SCOPE_LABELS, DEFAULT_API_SCOPES
 from app.platform.permissions import PERMISSION_DEFINITIONS, permission_groups
-from app.security import actor_name, login_required, permission_required
+from app.security import actor_name, permission_required
 
 from .factory import get_admin_service
 
@@ -66,19 +66,43 @@ def register(app) -> None:
     @app.get("/users")
     @permission_required("manage_users")
     def users():
+        view = request.args.get("view", "account-list")
+        user_id_text = request.args.get("user_id", "").strip()
         return render_template(
             "users.html",
-            **_access_page_context(view=request.args.get("view", "account-list")),
+            **_access_page_context(
+                view=view,
+                editing_user_id=int(user_id_text) if view == "accounts" and user_id_text.isdigit() else None,
+                editing_role_key=request.args.get("role_key", "") if view == "roles" else "",
+            ),
         )
 
     @app.get("/users/<int:user_id>/edit")
     @permission_required("manage_users")
     def edit_user(user_id: int):
-        context = _access_page_context(view="accounts", editing_user_id=user_id)
+        context = _access_page_context(view="account-list", editing_user_id=user_id)
         if not context["editing_user"]:
             flash("账号不存在。", "error")
             return redirect(url_for("users"))
         return render_template("users.html", **context)
+
+    @app.post("/users/<int:user_id>/permissions")
+    @permission_required("manage_users")
+    def save_user_permissions_route(user_id: int):
+        try:
+            get_admin_service().update_user_overrides(
+                user_id,
+                _user_permission_overrides(),
+                actor=actor_name(),
+            )
+        except ValueError as exc:
+            flash(f"账号权限保存失败：{exc}", "error")
+        except Exception:
+            logger.exception("User permission save failed")
+            flash("账号权限保存失败，请稍后重试。", "error")
+        else:
+            flash("账号权限已保存。", "success")
+        return redirect(url_for("users", view="accounts", user_id=user_id))
 
     @app.post("/users/save")
     @permission_required("manage_users")
@@ -91,7 +115,11 @@ def register(app) -> None:
                 "role": request.form.get("role", "viewer"),
                 "active": request.form.get("active", "0"),
                 "password": request.form.get("password", ""),
-                "permission_overrides": _user_permission_overrides(),
+                "permission_overrides": (
+                    _user_permission_overrides()
+                    if request.form.get("permission_selection_present") == "1"
+                    else None
+                ),
             }
             get_admin_service().save_user(
                 data,
@@ -106,15 +134,11 @@ def register(app) -> None:
                 "display_name": request.form.get("display_name", ""),
                 "role": request.form.get("role", "viewer"),
                 "active": request.form.get("active", "0") == "1",
-                "permission_overrides": {
-                    definition.key: request.form.get(f"permission_{definition.key}", "inherit")
-                    for definition in PERMISSION_DEFINITIONS
-                    if definition.assignable
-                },
+                "permission_overrides": {},
             }
             return render_template(
                 "users.html",
-                **_access_page_context(view="accounts", form_user=form_user),
+                **_access_page_context(view="account-list", form_user=form_user),
             ), 400
         except Exception:
             logger.exception("User save failed")
@@ -126,14 +150,14 @@ def register(app) -> None:
     @app.get("/roles/<role_key>/edit")
     @permission_required("manage_users")
     def edit_role(role_key: str):
-        context = _access_page_context(view="roles", editing_role_key=role_key)
+        context = _access_page_context(view="role-list", editing_role_key=role_key)
         role = context["editing_role"]
         if not isinstance(role, dict):
             flash("角色不存在。", "error")
-            return redirect(url_for("users", view="roles"))
+            return redirect(url_for("users", view="role-list"))
         if bool(role["is_system"]):
             flash("管理员角色是系统固定角色，不能修改。", "error")
-            return redirect(url_for("users", view="roles"))
+            return redirect(url_for("users", view="role-list"))
         return render_template("users.html", **context)
 
     @app.post("/roles/save")
@@ -142,13 +166,16 @@ def register(app) -> None:
         data = {
             "role_key": request.form.get("role_key", ""),
             "name": request.form.get("name", ""),
-            "description": request.form.get("description", ""),
+            "description": "",
         }
-        permissions = request.form.getlist("permissions")
+        is_create = not data["role_key"]
+        permissions = (
+            request.form.getlist("permissions")
+            if request.form.get("permission_selection_present") == "1"
+            else None
+        )
         try:
-            if request.form.get("permission_selection_present") != "1":
-                raise ValueError("权限表单不完整，请刷新后重试。")
-            get_admin_service().save_role(data, permissions, actor=actor_name())
+            saved_role_key = get_admin_service().save_role(data, permissions, actor=actor_name())
         except ValueError as exc:
             flash(f"角色保存失败：{exc}", "error")
             current = get_admin_service().access_page(
@@ -156,20 +183,43 @@ def register(app) -> None:
             ).editing_role
             form_role = {
                 **data,
-                "permissions": permissions,
+                "permissions": [],
                 "is_system": False,
                 "user_count": int(str(current["user_count"])) if current else 0,
             }
             return render_template(
                 "users.html",
-                **_access_page_context(view="roles", form_role=form_role),
+                **_access_page_context(view="role-list", form_role=form_role),
             ), 400
         except Exception:
             logger.exception("Role save failed")
             flash("角色保存失败，请稍后重试。", "error")
-            return redirect(url_for("users", view="roles"))
-        flash("角色已保存，继承该角色的账号已即时生效。", "success")
-        return redirect(url_for("users", view="roles"))
+            return redirect(url_for("users", view="role-list"))
+        if is_create:
+            flash("角色已创建，请为其勾选权限。", "success")
+            return redirect(url_for("users", view="roles", role_key=saved_role_key))
+        flash("角色已保存。", "success")
+        return redirect(url_for("users", view="role-list"))
+
+    @app.post("/roles/<role_key>/permissions")
+    @permission_required("manage_users")
+    def save_role_permissions_route(role_key: str):
+        try:
+            if request.form.get("permission_selection_present") != "1":
+                raise ValueError("权限表单不完整，请刷新后重试。")
+            get_admin_service().update_role_permissions(
+                role_key,
+                request.form.getlist("permissions"),
+                actor=actor_name(),
+            )
+        except ValueError as exc:
+            flash(f"角色权限保存失败：{exc}", "error")
+        except Exception:
+            logger.exception("Role permission save failed")
+            flash("角色权限保存失败，请稍后重试。", "error")
+        else:
+            flash("角色权限已保存，继承该角色的账号已即时生效。", "success")
+        return redirect(url_for("users", view="roles", role_key=role_key))
 
     @app.post("/roles/<role_key>/delete")
     @permission_required("manage_users")
@@ -183,38 +233,7 @@ def register(app) -> None:
             flash("角色删除失败，请稍后重试。", "error")
         else:
             flash("角色已删除。", "success")
-        return redirect(url_for("users", view="roles"))
-
-    @app.get("/account/password")
-    @login_required
-    def change_password():
-        return render_template("account_password.html")
-
-    @app.post("/account/password")
-    @login_required
-    def change_password_route():
-        new_password = request.form.get("new_password", "")
-        confirm_password = request.form.get("confirm_password", "")
-        try:
-            if not new_password:
-                raise ValueError("新密码不能为空。")
-            if new_password != confirm_password:
-                raise ValueError("两次输入的新密码不一致。")
-            get_admin_service().change_password(
-                int(g.user["id"]),
-                old_password=request.form.get("old_password", ""),
-                new_password=new_password,
-                actor=actor_name(),
-            )
-        except ValueError as exc:
-            flash(str(exc), "error")
-            return render_template("account_password.html"), 400
-        except Exception:
-            logger.exception("Password change failed")
-            flash("密码修改失败，请稍后重试。", "error")
-            return render_template("account_password.html"), 500
-        flash("密码已修改，下次登录请使用新密码。", "success")
-        return redirect(url_for("change_password"))
+        return redirect(url_for("users", view="role-list"))
 
     @app.get("/internal-api-key")
     @permission_required("manage_users")

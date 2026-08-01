@@ -42,7 +42,7 @@
         <span class="note">无图</span>
       {% endif %}
     </td>
-    {% if can("manage_customer_prices") %}<td class="money-cell" data-col="price">{% if product.price_cny is not none %}¥{{ "%.2f"|format(product.price_cny) }}{% endif %}</td>{% endif %}
+    {% if can_any("add_customer_prices", "edit_customer_prices", "delete_customer_prices") %}<td class="money-cell" data-col="price">{% if product.price_cny is not none %}¥{{ "%.2f"|format(product.price_cny) }}{% endif %}</td>{% endif %}
     <td class="product-status-cell" data-col="product-status">{{ format_product_status(product.product_status if "product_status" in product.keys() else "", "en") }}</td>
     <td class="row-actions sticky-actions" data-col="actions">
       {% if can("edit_products") %}

@@ -1,6 +1,6 @@
 # BLD Project Brief
 
-更新时间：2026-07-30
+更新时间：2026-08-01
 
 这是给新接手 Codex 或开发者的短版项目说明。先读 `AGENTS.md`，再读本文件。详细历史在 `项目交接说明.md`，需要查旧决策时用 `rg` 搜索，不要默认整篇读取。
 
@@ -15,7 +15,6 @@ BLD 是一个局域网内部使用的 Flask 业务系统，主要用于：
 - 询价结果 Excel 和图纸压缩包下载
 - 生产料单生成和冲压材料明细维护
 - 管件资料查看、分类检索和手工新建
-- 保留的发货通知领域服务与货物照片识别命令行/Worker 能力（不再提供 Web 页面）
 - 合同管理和采购/销售合同 PDF 生成
 - 多用户账号、权限和操作日志
 
@@ -54,12 +53,6 @@ NAS 信息：
 cd "/Users/linzhenyue/Projects/bld-matcher"
 uv run python -m scripts.init_database
 bash tools/restart_local_5055.sh
-```
-
-另开一个终端运行持久任务 Worker：
-
-```bash
-uv run python -m scripts.run_worker
 ```
 
 本机 5055 只通过 `bash tools/restart_local_5055.sh` 或 `/Applications/BLD.app` 启动；两者复用同一个启动器，会仅停止本工作区的旧服务并精确关闭它创建的旧 Terminal 窗口。首次安装或拉取启动器更新后，运行 `bash tools/install_bld_launcher.sh` 重建 BLD.app；它不用于 NAS。启动日志在 `logs/bld-local-5055.log`。
@@ -101,7 +94,7 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 - 查询结果页先展示网页结果，点击“下载 Excel”时才生成 Excel。
 - 查询明细在网页中展示匹配产品的缩略图；生成的询价 Excel 和报价附件保持纯数据，不嵌入产品图片。
 - 下载 Excel 时弹窗选择不带单价、含税单价、不含税单价或美金价；不含税单价为 `含税单价 / 1.1` 后四舍五入到整数，美金价为 `含税单价 / 1.1 / 汇率`。
-- 具备 `manage_customer_prices` 权限的用户可在查询结果中直接编辑唯一命中行的 BLD NO.，按输入字符从启用产品目录中选择型号，也可填写本次含税报价；没有目录价的产品也可报价，临时调整按工作表和源行稳定绑定，并同时用于 Excel 与报价写入，不修改产品目录默认值。一个源行展开出的多个 BLD 片段候选保持只读，避免把调整误写到其他源行。
+- 具备 `edit_customer_prices` 权限的用户可在查询结果中直接编辑唯一命中行的 BLD NO.，按输入字符从启用产品目录中选择型号，也可填写本次含税报价；没有目录价的产品也可报价，临时调整按工作表和源行稳定绑定，并同时用于 Excel 与报价写入，不修改产品目录默认值。一个源行展开出的多个 BLD 片段候选保持只读，避免把调整误写到其他源行。
 - 查询结果可下载图纸包，按 BLD NO. 查找 PDF。
 - 查询结果页未命中号码可点击打开人工映射弹窗（需 manage_aliases 权限）：确认前可编辑号码，搜索目标 BLD 产品后将其加入该产品的 OE 号或品牌号列表；保存复用 `/manual-map` 流程同步写入产品目录并即时生效。
 - 匹配明细表格遵循共享 data-grid 协议：说明区固定、仅表体滚动、表头吸附、列宽拖拽并按用户记住、列可拖拽换序，底栏显示记录范围。
@@ -111,7 +104,6 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 - 新应用使用 `/api/v1`；`GET /api/v1` 返回平台能力，`GET /api/v1/openapi.json` 返回 OpenAPI 3.1 合同。
 - API v1 使用强类型 Principal、最小权限 Scope、Pydantic Schema、稳定错误码、请求 ID 和持久幂等记录；写操作由服务端 Key 身份审计。
 - `/api/v1/products/search` 提供稳定产品查询；`POST /api/v1/products/{product_id}/price` 以产品版本时间戳和幂等键安全更新含税单价，供 AI Agent 等机器调用；`/api/v1/inquiries/analyze` 与 `/export` 和网页、旧内部接口共用 InquiryService。
-- `/api/v1/jobs/{id}`、`/result` 与 `/cancel` 提供持久任务状态、结果和幂等取消；任务绑定 API Principal，不返回内部请求路径。
 - v1 导出返回限时 artifact ID；下载绑定创建它的 API Principal，响应不包含服务器绝对路径。OpenAPI 提交快照由统一验收阻断漂移。
 - API Key 可设置 Scopes 和到期日期；历史 Key 保留兼容权限，新 Key 默认只有读取和询价权限，写权限需要管理员明确选择；管理页按默认 90 天周期提示轮换，但不自动删除。
 - `/api/internal/*` 是兼容接口，继续可用但不再扩展新能力；旧 `/api/quotes` 已移除，报价 API 只保留 `/api/v1/quotes`（ADR 0013）。
@@ -164,16 +156,8 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 管件资料：
 
 - 导航栏“管件资料”提供独立于产品目录和生产料单的管件明细页；可按编号、规格、类型和借用来源检索。
-- 页面列出编号、产品名称、成品规格、毛坯管长度、内径公差、采购基数、材质占位、重量、公差（mm）、消耗（mm）和借用编号；支持产品名称、公差、消耗、重量区间及外径/内径组合筛选，业务列支持拖拽换序，具有 `manage_materials` 权限的账号可手工新增或编辑。
+- 页面列出编号、产品名称、成品规格、毛坯管长度、内径公差、采购基数、材质占位、重量、公差（mm）、消耗（mm）和借用编号；支持产品名称、公差、消耗、重量区间及外径/内径组合筛选，业务列支持拖拽换序，具有 `manage_tube_items` 权限的账号可手工新增或编辑。
 - 初始数据使用 `scripts/import_tubes_from_workbook.py` 从管件尺寸工作簿导入；导入记录保留来源工作表和行号，借用关系单独保存。
-
-退役能力和保留边界：
-
-- 发货通知与货物识别的导航入口、Web 页面及页面提交路由已经退役；访问 `/shipping-notices`、`/shipment-recognition` 及其旧子路由返回 404。
-- 不删除既有运行数据、迁移记录、输出文件、发货通知领域服务、识别领域服务、持久任务 Worker 或命令行工具；页面退役不授权清理历史数据。
-- `tools/shipment_photo_recognition.py` 可读取 NAS 挂载目录或本机照片文件夹，识别货物白色标签并生成 Excel 和 JSON。
-- 支持 jpg、png、webp、bmp、tif、heic/heif 图片；HEIC 解码依赖 `pillow-heif`。
-- 默认支持 OpenAI-compatible 视觉 Chat Completions 接口；Provider、地址、模型、密钥、代理和 allowlist 只从运行环境读取，命令行仍可用 `--provider tesseract` 做本机 OCR 草稿。
 
 客户信息：
 
@@ -201,7 +185,7 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 报价记录：
 
 - `/quotes` 提供报价记录页面，可新增报价、按客户/型号/日期/币种/报价人筛选、查看同一客户和型号的历史报价，并显示最近一次报价；点击报价单号会显示该单号明细及其已生成的报价文件下载入口。
-- 报价的客户和 BLD 号必须已登记（客户信息是报价左侧的独立导航入口，改名级联历史记录；BLD 号见产品目录，含已停用产品），手动、Excel 导入、询价写入和 API v1 统一硬校验；录入时客户和 BLD 号用字符匹配下拉选择（方向键+回车），有 `manage_customers` 权限可在下拉中快捷新增客户（ADR 0016）。
+- 报价的客户和 BLD 号必须已登记（客户信息是报价左侧的独立导航入口，改名级联历史记录；BLD 号见产品目录，含已停用产品），手动、Excel 导入、询价写入和 API v1 统一硬校验；录入时客户和 BLD 号用字符匹配下拉选择（方向键+回车），有 `add_customers` 权限可在下拉中快捷新增客户（ADR 0016）。
 - 新集成通过 `/api/v1/quotes` 调用报价；读取使用 `quotes:read`，写入使用 `quotes:write`，创建必须带 `Idempotency-Key`，修订还必须带当前 ETag 对应的 `If-Match`。
 - 旧 `/api/quotes` 系列接口已移除（ADR 0013），报价对外 API 只有 `/api/v1/quotes`；历史 `price` 镜像列同步删除，价格只保留含税单价 `tax_price` 和不含税单价 `net_price`。
 - 新增和修正报价弹窗只录入业务字段，不显示报价人、来源、原文或附件路径；网页、Excel 导入和 API 新增分别由服务端自动记录可信账号及 `manual`、`excel`、`api` 来源，客户端提交的报价人和来源不会覆盖系统识别结果，也不能在修订中修改。
@@ -210,6 +194,7 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 权限：
 
 - “管理员”是系统固定角色，始终拥有全部网页权限；其他角色可由管理员新增、改名、调整权限和删除，但被任一账号使用时不能删除。
+- 账号管理页分四个视图：“账号”管理单个账号的个人权限（下拉选择账号）；“账号列表”承载列表与账号身份的新增/编辑；“角色”维护角色权限矩阵（下拉选择角色）；“角色列表”承载角色新增/重命名/删除，不再提供角色说明输入框。
 - 角色是快速建号模板。非管理员账号的有效权限按“角色权限 + 个人额外授权 - 个人明确禁止”即时计算，明确禁止优先；切换角色不会清除个人设置。
 - `manage_users` 固定为管理员专属，防止自定义角色提升自身权限；系统阻止停用当前账号、移除自身管理员角色或消除最后一个启用管理员。
 - 所有菜单、页面和写操作继续由对应原子权限控制，后端装饰器是最终授权边界；角色、账号和个人权限变更全部写入操作日志。单价维护仍仅通过受控 API 提供给机器调用。
@@ -220,14 +205,14 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 - 当前页面使用“精密工业工作台”视觉系统：深石墨导航、冷灰画布、白色数据表面、BLD 蓝主操作与信号橙提示；登录、工作台、列表、编辑、导入预览和系统管理页共享同一视觉层级。
 - 产品目录、材料明细、管件资料、报价记录和询价结果使用统一数据表框体与列头控件：搜索命令区和表格同属一张数据卡片，表头左对齐垂直居中，内容支持双向滚动，列间使用浅色细分隔线，底栏整合当前范围、筛选总数、相邻页码和指定页跳转；列拖拽、筛选和候选浮层复用共享组件，所有列宽可拖动调整并按当前登录用户保存在浏览器中。分页进入新页时定位到明细表顶部，拖动中断时会自动恢复页面交互状态。
 - CSS 按 `static/styles.css` 基础层、`static/components/` 共享组件层和 `static/pages/` 页面层归属；页面资产由所属模板加载，共享层禁止业务选择器，项目门禁执行文件容量、零 ID 选择器与禁止新增 `!important`。
-- 全部现有业务、登录、产品同步与保留的货物识别能力由领域 Service/Repository 负责事务、审计和文件补偿；Web、API 与 Worker 适配器不直接访问 SQLite。
+- 全部现有业务、登录与产品同步由领域 Service/Repository 负责事务、审计和文件补偿；Web 与 API 适配器不直接访问 SQLite。
 - 产品与询价 Web 路由已按职责拆分；单个路由适配器最多 320 行、15 个 endpoint，统一验收禁止动态路由注册绕过检查。
 - 询价 Excel 按读取、清理、分析、价格和导出职责位于 `app/modules/inquiry/excel/`；`app/excel_io.py` 仅保留旧导入兼容门面，门禁分别限制处理模块 360 行和兼容门面 80 行。
 - 合同文档按默认条款、表单解析、金额规则、PDF 样式及采购/销售渲染职责位于 `app/modules/contracts/`；`app/purchase_contract.py` 仅保留旧导入兼容门面，采购与销售 PDF 输出受结构和像素基准保护。
 - 材料持久化按规格解析、明细 SQL 与 Excel 导入/启动引导职责位于 `app/modules/materials/`；`persistence.py` 仅保留旧导入兼容门面，数据库 Schema 与迁移不因拆分而变化。
-- 材料 Excel 更新采用原子替换；数据库导入失败会恢复旧文件。合同、保留的发货服务和物料图纸若审计失败，会删除本次未完成输出。
+- 材料 Excel 更新采用原子替换；数据库导入失败会恢复旧文件。合同和物料图纸若审计失败，会删除本次未完成输出。
 - `app/database.py` 只保留 Schema、连接与迁移；路由数据库直连、daemon 后台线程和异常文本外泄债务已清零。
-- `/health/ready` 通过只读连接检查数据库、迁移、最小业务条件与 Worker 心跳，不负责初始化；运行数据清理由默认 dry-run 的 `scripts/cleanup_runtime.py` 统一规划，详见 `docs/operations/runtime.md`。
+- `/health/ready` 通过只读连接检查数据库、迁移和最小业务条件，不负责初始化；运行数据清理由默认 dry-run 的 `scripts/cleanup_runtime.py` 统一规划，详见 `docs/operations/runtime.md`。
 
 ## NAS 更新流程
 
@@ -261,7 +246,7 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 ## 重要代码入口
 
 - `app.py`：应用入口、全局 before_request、模板全局函数
-- `app/platform/`：API Principal、Key、Scope、错误、请求 ID、审计、Schema、OpenAPI、持久任务、AI Provider、健康检查和保留期基础设施
+- `app/platform/`：API Principal、Key、Scope、错误、请求 ID、审计、Schema、OpenAPI、健康检查和保留期基础设施
 - `app/api/v1/`：稳定机器接口的版本入口与 OpenAPI 组装
 - `app/routes/inquiry.py`：询价 Web 适配器注册入口
 - `app/modules/inquiry/api.py`：OpenClaw 询价兼容 API 与 v1 询价适配器
@@ -274,14 +259,12 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 - `app/routes/products.py`：产品 Web 适配器注册入口
 - `app/modules/materials/`：生产料单、材料明细、物料图纸、原子文件更新和事务补偿
 - `app/modules/contracts/`：采购/销售合同产品补全、PDF 生成、历史和审计
-- `app/modules/shipping/`：保留的发货通知领域服务、持久货物识别任务、Excel 生成和审计补偿；不注册 Web 页面
 - `app/modules/admin/`：登录、账号、API Key、操作日志和系统更新
 - `app/database.py`：SQLite Schema、连接和迁移入口，不保存业务查询
 - `app/matcher.py`：产品匹配逻辑
 - `app/product_media.py`：产品图片上传、缩略图生成和读取
 - `app/catalog_export.py`：产品目录 Excel 导出和图片嵌入
 - `app/purchase_contract.py`：采购/销售合同表单校验和 PDF 生成
-- `tools/shipment_photo_recognition.py`：发货照片标签识别批处理，输出汇总 Excel 和原始 JSON，支持 HEIC/HEIF
 - `templates/products.html`：产品目录页面
 - `templates/purchase_contracts.html`：合同管理和采购/销售合同页面
 - `templates/_product_rows.html`：产品目录行模板
@@ -292,7 +275,6 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 - `tests/test_app.py`：主要回归测试
 - `PROJECT_CONSTITUTION.md`：长期架构、安全、页面、API 和变更治理硬规则
 - `scripts/init_database.py`：容器启动 Gunicorn 前执行迁移和首启管理员初始化
-- `scripts/run_worker.py`：独立持久任务 Worker 入口
 - `scripts/runtime_probe.py`、`scripts/cleanup_runtime.py`：部署业务探针和默认 dry-run 的保留期执行器
 - `scripts/verify.py`：本机、AI 和 CI 共用的统一验收入口，包含项目合同、锁文件、Ruff、平台/运行边界 Pyright、语法、OpenAPI 快照和回归测试
 - `contracts/openapi-v1.json`：API v1 提交快照，由 `scripts/openapi_snapshot.py --check` 精确比较

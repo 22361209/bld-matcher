@@ -121,7 +121,10 @@ if (accountForm) {
   const refreshPermissionPreview = () => {
     const option = selectedRole();
     const rolePermissions = new Set((option?.dataset.permissions || "").split(" ").filter(Boolean));
-    const isSystemRole = option?.dataset.systemRole === "1";
+    // 无角色下拉时（账号权限管理页），角色基线以服务端渲染的 data-role-result 为准。
+    const isSystemRole = roleSelect
+      ? option?.dataset.systemRole === "1"
+      : accountForm.dataset.systemRole === "1";
     let allowedCount = 0;
     let overrideCount = 0;
 
@@ -132,7 +135,9 @@ if (accountForm) {
         radio.disabled = isSystemRole;
       });
 
-      const roleAllows = isSystemRole || rolePermissions.has(permission);
+      const roleAllows = roleSelect
+        ? isSystemRole || rolePermissions.has(permission)
+        : isSystemRole || row.querySelector("[data-role-result]")?.dataset.state === "allow";
       const override = radios.length
         ? row.querySelector('input[type="radio"]:checked')?.value || "inherit"
         : "inherit";
@@ -159,7 +164,7 @@ if (accountForm) {
       const overrideSummary = summary.querySelector("[data-override-count]");
       const allowSummary = summary.querySelector("[data-allow-count]");
       const denySummary = summary.querySelector("[data-deny-count]");
-      if (roleSummary) roleSummary.textContent = option?.textContent?.trim() || "未选择";
+      if (roleSummary && roleSelect) roleSummary.textContent = option?.textContent?.trim() || "未选择";
       if (overrideSummary) overrideSummary.textContent = String(overrideCount);
       if (allowSummary) allowSummary.textContent = String(allowedCount);
       if (denySummary) denySummary.textContent = String(rows.length - allowedCount);

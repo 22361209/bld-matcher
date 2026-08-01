@@ -36,9 +36,10 @@
         <button class="linear-button primary" type="submit">搜索</button>
         {% if filters.q or filters.status %}<a class="linear-button subtle" href="{{ url_for('customers') }}">清除</a>{% endif %}
       </form>
-      <button class="linear-button primary customer-create-trigger" type="button" data-open-customer-create-modal>新增客户</button>
+      {% if can("add_customers") %}<button class="linear-button primary customer-create-trigger" type="button" data-open-customer-create-modal>新增客户</button>{% endif %}
     </div>
 
+    {% if can("add_customers") %}
     <dialog class="dialog-panel customer-create-dialog" id="customer-create-dialog" aria-labelledby="customer-create-dialog-title">
       <div class="dialog-header customer-create-dialog-header">
         <div>
@@ -59,6 +60,7 @@
         </div>
       </form>
     </dialog>
+    {% endif %}
 
     <div class="data-table-scroll">
       <table class="data-table customer-directory-table">

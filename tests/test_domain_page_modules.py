@@ -7,8 +7,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
-from openpyxl import Workbook, load_workbook
-from werkzeug.datastructures import FileStorage, MultiDict
+from openpyxl import Workbook
+from werkzeug.datastructures import MultiDict
 
 from app.database import connect
 from app.modules.products.persistence import upsert_product
@@ -21,9 +21,6 @@ from app.modules.materials.repository import SQLiteMaterialRepository, SQLiteMat
 from app.modules.materials.service import MaterialService
 from app.modules.products.repository import SQLiteProductUnitOfWork
 from app.modules.products.service import ProductService
-from app.modules.shipping.infrastructure import ShippingTemplateStore, ShippingWorkbookAdapter
-from app.modules.shipping.repository import SQLiteShippingUnitOfWork
-from app.modules.shipping.service import ShippingNoticeService
 
 
 class _UpdateReader:
@@ -198,46 +195,3 @@ class DomainPageModuleTest(unittest.TestCase):
                 service.generate("purchase", failed_form, output_root=self.root / "outputs", actor="module-test")
         self.assertEqual(list((self.root / "outputs").rglob("*CT-SERVICE-FAIL*.pdf")), [])
 
-    def test_shipping_service_upload_preview_generate_and_audit(self) -> None:
-        store = ShippingTemplateStore(self.root / "shipping-templates")
-        service = ShippingNoticeService(
-            lambda: SQLiteShippingUnitOfWork(self.database_path),
-            store,
-            ShippingWorkbookAdapter(),
-        )
-        template_file = FileStorage(
-            stream=io.BytesIO(_workbook_bytes([["客户", "商品编码", "数量"], ["ABC", "", ""]])),
-            filename="service-template.xlsx",
-        )
-        template = service.upload_template(
-            template_file,
-            customer="Service Customer",
-            name="Default",
-            actor="module-test",
-        )
-        self.assertIsNotNone(store.find(str(template["id"])))
-
-        shipment_path = self.root / "shipment.xlsx"
-        shipment_path.write_bytes(_workbook_bytes([["商品编码", "数量"], ["K-SHIP-001", 12]]))
-        preview = service.preview_shipment(template_id=str(template["id"]), upload_path=shipment_path)
-        self.assertEqual(preview["row_count"], 1)
-        output = service.generate(
-            template_id=str(template["id"]),
-            upload_path=shipment_path,
-            output_dir=self.root / "outputs",
-            actor="module-test",
-        )
-        workbook = load_workbook(output, data_only=True)
-        try:
-            self.assertEqual(workbook.active.cell(2, 2).value, "K-SHIP-001")
-            self.assertEqual(workbook.active.cell(2, 3).value, 12)
-        finally:
-            workbook.close()
-        with connect(self.database_path) as connection:
-            actions = {row["action"] for row in connection.execute("SELECT action FROM audit_logs")}
-        self.assertIn("上传发货通知模板", actions)
-        self.assertIn("生成发货通知", actions)
-
-
-if __name__ == "__main__":
-    unittest.main()

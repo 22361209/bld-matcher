@@ -28,8 +28,6 @@ class RetentionPlan:
     artifact_ids: tuple[str, ...]
     job_ids: tuple[str, ...]
     idempotency_ids: tuple[int, ...]
-    ai_call_ids: tuple[int, ...]
-    heartbeat_keys: tuple[tuple[str, str], ...]
 
     def summary(self) -> dict[str, object]:
         file_counts = {category: len(paths) for category, paths in self.files.items()}
@@ -39,8 +37,6 @@ class RetentionPlan:
             "artifacts": len(self.artifact_ids),
             "jobs": len(self.job_ids),
             "idempotency_records": len(self.idempotency_ids),
-            "ai_call_records": len(self.ai_call_ids),
-            "heartbeat_records": len(self.heartbeat_keys),
             "total_files": sum(file_counts.values()),
         }
 
@@ -101,23 +97,6 @@ class RuntimeRetentionService:
                     (stamp,),
                 ).fetchall()
             )
-            ai_cutoff = datetime_text(current - timedelta(days=self.settings.ai_call_retention_days))
-            ai_call_ids = tuple(
-                int(row["id"])
-                for row in connection.execute(
-                    "SELECT id FROM ai_provider_calls WHERE created_at <= ?",
-                    (ai_cutoff,),
-                ).fetchall()
-            )
-            heartbeat_cutoff = datetime_text(current - timedelta(days=self.settings.heartbeat_retention_days))
-            heartbeat_keys = tuple(
-                (str(row["component"]), str(row["instance_id"]))
-                for row in connection.execute(
-                    "SELECT component, instance_id FROM runtime_heartbeats WHERE updated_at <= ?",
-                    (heartbeat_cutoff,),
-                ).fetchall()
-            )
-            protected_job_paths = self._protected_job_paths(connection)
 
         upload_files = tuple(
             path
@@ -126,7 +105,6 @@ class RuntimeRetentionService:
                 current=current,
                 retention_days_for=self._upload_retention_days,
             )
-            if not self._is_protected(path, protected_job_paths)
         )
         output_files = tuple(
             path
@@ -135,7 +113,7 @@ class RuntimeRetentionService:
                 current=current,
                 retention_days_for=self._output_retention_days,
             )
-            if path.resolve() not in active_artifact_paths and not self._is_protected(path, protected_job_paths)
+            if path.resolve() not in active_artifact_paths
         )
         backup_files = tuple(
             path
@@ -156,8 +134,6 @@ class RuntimeRetentionService:
             artifact_ids=artifact_ids,
             job_ids=job_ids,
             idempotency_ids=idempotency_ids,
-            ai_call_ids=ai_call_ids,
-            heartbeat_keys=heartbeat_keys,
         )
 
     def apply(self, plan: RetentionPlan, *, actor: str = "runtime-cleanup") -> dict[str, object]:
@@ -181,12 +157,6 @@ class RuntimeRetentionService:
                 self._delete_ids(connection, "background_job_events", "job_id", plan.job_ids)
                 self._delete_ids(connection, "background_jobs", "id", plan.job_ids)
             self._delete_ids(connection, "api_idempotency_keys", "id", plan.idempotency_ids)
-            self._delete_ids(connection, "ai_provider_calls", "id", plan.ai_call_ids)
-            for component, instance_id in plan.heartbeat_keys:
-                connection.execute(
-                    "DELETE FROM runtime_heartbeats WHERE component = ? AND instance_id = ?",
-                    (component, instance_id),
-                )
             summary = plan.summary()
             summary["removed_files"] = removed_files
             log_event(
@@ -272,41 +242,6 @@ class RuntimeRetentionService:
         if {"采购合同", "销售合同"}.intersection(path.relative_to(self.output_root).parts):
             return self.settings.contract_output_retention_days
         return self.settings.output_retention_days
-
-    def _protected_job_paths(self, connection: sqlite3.Connection) -> tuple[Path, ...]:
-        protected: set[Path] = set()
-        rows = connection.execute(
-            "SELECT request_payload FROM background_jobs WHERE status IN ('queued', 'running')"
-        ).fetchall()
-        for row in rows:
-            try:
-                payload = json.loads(str(row["request_payload"] or "{}"))
-            except (TypeError, json.JSONDecodeError):
-                continue
-            values = payload.get("protected_paths") if isinstance(payload, dict) else None
-            if not isinstance(values, list):
-                continue
-            for value in values:
-                if not isinstance(value, str) or not value.strip():
-                    continue
-                path = self._allowed_path(Path(value), (self.upload_root, self.output_root))
-                if path is not None:
-                    protected.add(path)
-        return tuple(sorted(protected, key=lambda path: path.as_posix()))
-
-    @staticmethod
-    def _is_protected(path: Path, protected_paths: tuple[Path, ...]) -> bool:
-        absolute = path.resolve(strict=False)
-        return any(protected == absolute or protected in absolute.parents for protected in protected_paths)
-
-    @staticmethod
-    def _allowed_path(path: Path, roots: tuple[Path, ...]) -> Path | None:
-        absolute = path.expanduser().resolve(strict=False)
-        for root in roots:
-            root_absolute = root.resolve(strict=False)
-            if root_absolute == absolute or root_absolute in absolute.parents:
-                return absolute
-        return None
 
     @staticmethod
     def _allowed_file(path: Path, roots: tuple[Path, ...]) -> Path | None:

@@ -14,8 +14,6 @@ API_SCOPE_LABELS = {
     "quotes:read": "读取报价",
     "quotes:write": "写入报价",
     "contracts:generate": "生成合同",
-    "jobs:read": "读取任务",
-    "jobs:cancel": "取消任务",
 }
 ALL_API_SCOPES = frozenset(API_SCOPE_LABELS)
 DEFAULT_API_SCOPES = frozenset(
@@ -25,7 +23,6 @@ DEFAULT_API_SCOPES = frozenset(
         "inquiries:run",
         "artifacts:read",
         "quotes:read",
-        "jobs:read",
     }
 )
 # Keys created before scopes existed retain their historical capabilities.

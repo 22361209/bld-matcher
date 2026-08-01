@@ -36,7 +36,7 @@
             车型 / Models
             <textarea name="models" rows="5" placeholder="可写多个车型">{{ product.models if product else '' }}</textarea>
           </label>
-          {% if can("manage_customer_prices") %}
+          {% if can_any("add_customer_prices", "edit_customer_prices", "delete_customer_prices") %}
           <label>
             含税单价（人民币）
             <input name="price_cny" type="number" step="0.01" min="0" value="{{ '%.2f'|format(product.price_cny) if product and product.price_cny is not none else '' }}" placeholder="例如 68.50">

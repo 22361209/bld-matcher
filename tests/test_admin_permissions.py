@@ -12,6 +12,7 @@ from app.migrations import (
     _add_editable_roles_and_user_permission_overrides,
     _grant_view_product_prices_to_existing_roles,
     _revoke_view_product_prices_permission,
+    _split_granular_permissions,
 )
 from app.modules.admin.persistence import ensure_default_admin, get_user
 from app.modules.admin.repository import SQLiteAdminUnitOfWork
@@ -118,7 +119,7 @@ class AdminPermissionTest(unittest.TestCase):
         self.assertEqual(roles[ADMIN_ROLE_KEY]["is_system"], 1)
         self.assertEqual(roles["editor"]["is_system"], 0)
         self.assertIsNotNone(migration)
-        self.assertEqual(MIGRATIONS[-1][0], "033_revoke_view_product_prices")
+        self.assertEqual(MIGRATIONS[-1][0], "034_split_granular_permissions")
 
     def test_migration_seeds_unknown_historical_roles_idempotently(self) -> None:
         historical_path = Path(self.temporary.name) / "historical.sqlite3"
@@ -219,6 +220,74 @@ class AdminPermissionTest(unittest.TestCase):
         self.assertEqual(remaining, 0)
         self.assertEqual(remaining_overrides, 0)
 
+    def test_migration_034_maps_and_retires_old_permissions(self) -> None:
+        historical_path = Path(self.temporary.name) / "historical-034.sqlite3"
+        connection = sqlite3.connect(historical_path)
+        connection.row_factory = sqlite3.Row
+        _add_editable_roles_and_user_permission_overrides(connection)
+        timestamp = "2026-01-01"
+        old_role_permissions = (
+            "manage_customers",
+            "manage_customer_prices",
+            "view_customer_prices",
+            "generate_purchase_contract",
+            "manage_materials",
+            "recognize_shipments",
+        )
+        connection.executemany(
+            "INSERT OR IGNORE INTO role_permissions (role_key, permission, created_at) VALUES ('editor', ?, ?)",
+            ((permission, timestamp) for permission in old_role_permissions),
+        )
+        connection.executemany(
+            "INSERT OR IGNORE INTO user_permission_overrides (user_id, permission, effect, updated_at) VALUES (1, ?, 'deny', ?)",
+            (("manage_customers", timestamp), ("manage_customer_prices", timestamp)),
+        )
+
+        _split_granular_permissions(connection)
+        _split_granular_permissions(connection)
+
+        editor_permissions = {
+            row["permission"]
+            for row in connection.execute(
+                "SELECT permission FROM role_permissions WHERE role_key = 'editor'"
+            ).fetchall()
+        }
+        overrides = {
+            row["permission"]: row["effect"]
+            for row in connection.execute("SELECT * FROM user_permission_overrides").fetchall()
+        }
+        retired = (
+            "manage_customers",
+            "manage_customer_prices",
+            "generate_purchase_contract",
+            "manage_materials",
+            "recognize_shipments",
+            "generate_shipping_notice",
+        )
+        connection.close()
+
+        expected_new = {
+            "view_customers",
+            "add_customers",
+            "edit_customers",
+            "delete_customers",
+            "add_customer_prices",
+            "edit_customer_prices",
+            "delete_customer_prices",
+            "view_price_history",
+            "view_contracts",
+            "generate_contract",
+            "manage_material_items",
+            "manage_tube_items",
+        }
+        self.assertTrue(expected_new.issubset(editor_permissions))
+        self.assertFalse(set(retired) & editor_permissions)
+        self.assertFalse(set(retired) & set(overrides))
+        for key in ("view_customers", "add_customers", "edit_customers", "delete_customers"):
+            self.assertEqual(overrides.get(key), "deny")
+        for key in ("add_customer_prices", "edit_customer_prices", "delete_customer_prices"):
+            self.assertEqual(overrides.get(key), "deny")
+
     def test_role_changes_and_user_overrides_recalculate_immediately(self) -> None:
         role_key = self.service.save_role(
             {"name": "询价专员", "description": "处理询价"},
@@ -240,7 +309,7 @@ class AdminPermissionTest(unittest.TestCase):
 
         self.service.save_role(
             {"role_key": role_key, "name": "询价专员", "description": "询价与合同"},
-            ["manage_aliases", "generate_purchase_contract"],
+            ["manage_aliases", "generate_contract"],
             actor="root-admin",
         )
         with connect(self.database_path) as connection:
@@ -248,7 +317,7 @@ class AdminPermissionTest(unittest.TestCase):
         assert user is not None
         self.assertEqual(
             set(user["permissions"]),
-            {"generate_purchase_contract", "view_customer_prices"},
+            {"generate_contract", "view_customer_prices"},
         )
         with self.assertRaisesRegex(ValueError, "仍有账号"):
             self.service.delete_role(role_key, actor="root-admin")
@@ -377,8 +446,8 @@ class AdminPermissionTest(unittest.TestCase):
         template = (root / "templates" / "users.html").read_text()
 
         self.assertIn('body[data-page="admin.users"]', script)
-        self.assertEqual(template.count("data-submit-wait data-submit-wait-text="), 2)
-        self.assertEqual(template.count("data-submit-wait-message"), 2)
+        self.assertEqual(template.count("data-submit-wait data-submit-wait-text="), 4)
+        self.assertEqual(template.count("data-submit-wait-message"), 4)
 
     def test_account_permission_matrix_has_stable_headers_groups_and_accessible_controls(self) -> None:
         root = Path(__file__).resolve().parents[1]
@@ -406,7 +475,7 @@ class AdminPermissionTest(unittest.TestCase):
         positions = [header.group(1).index(heading) for heading in headings]
         self.assertEqual(positions, sorted(positions))
 
-        self.assertEqual(len(permission_groups()), 6)
+        self.assertEqual(len(permission_groups()), 5)
         self.assertIn("{% set group_index = loop.index %}", account_table.group(1))
         self.assertIn('id="account-permission-group-{{ group_index }}"', template)
         self.assertIn('href="#account-permission-group-{{ loop.index }}"', template)

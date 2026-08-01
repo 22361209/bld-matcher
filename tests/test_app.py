@@ -203,28 +203,28 @@ class WebAppTest(unittest.TestCase):
         account_page = self.client.get("/users", query_string={"view": "accounts"})
         account_html = account_page.get_data(as_text=True)
         self.assertEqual(account_page.status_code, 200)
-        self.assertIn("账号个人权限", account_html)
-        self.assertIn('name="permission_generate_match" value="inherit"', account_html)
+        self.assertIn("账号权限管理", account_html)
+        self.assertIn('name="user_id"', account_html)
         self.assertIn('href="/users?view=roles"', account_html)
 
-        role_page = self.client.get("/users", query_string={"view": "roles"})
+        role_page = self.client.get("/users", query_string={"view": "role-list"})
         role_html = role_page.get_data(as_text=True)
         self.assertEqual(role_page.status_code, 200)
         self.assertIn("新增角色", role_html)
         self.assertIn("系统固定", role_html)
-        self.assertIn("保留能力（当前无网页入口）", role_html)
+        self.assertNotIn('name="description"', role_html)
 
         created_role = self.client.post(
             "/roles/save",
             data={
                 "name": role_name,
-                "description": "用于验证角色和个人权限",
                 "permission_selection_present": "1",
                 "permissions": ["generate_match", "manage_aliases", "sync_product_data"],
             },
             follow_redirects=False,
         )
         self.assertEqual(created_role.status_code, 302)
+        self.assertIn("view=roles", created_role.headers["Location"])
         with self.web.connect(self.web.DB_PATH) as connection:
             role = connection.execute(
                 "SELECT role_key FROM roles WHERE name = ?",
@@ -268,8 +268,16 @@ class WebAppTest(unittest.TestCase):
         editing = self.client.get(f"/users/{user['id']}/edit")
         editing_html = editing.get_data(as_text=True)
         self.assertEqual(editing.status_code, 200)
-        self.assertIn('name="permission_generate_match" value="deny" checked', editing_html)
-        self.assertIn(f'<option\n                    value="{role_key}"', editing_html)
+        self.assertIn(f'value="{role_key}" selected', editing_html)
+        self.assertNotIn('name="permission_generate_match"', editing_html)
+
+        permissions_page = self.client.get(
+            "/users", query_string={"view": "accounts", "user_id": user["id"]}
+        )
+        permissions_html = permissions_page.get_data(as_text=True)
+        self.assertEqual(permissions_page.status_code, 200)
+        self.assertIn("账号个人权限", permissions_html)
+        self.assertIn('name="permission_generate_match" value="deny" checked', permissions_html)
 
         blocked_delete = self.client.post(
             f"/roles/{role_key}/delete",
@@ -430,7 +438,7 @@ class WebAppTest(unittest.TestCase):
             }
         self.assertIn("修改密码", actions)
 
-    def test_product_price_visibility_follows_manage_customer_prices_permission(self):
+    def test_product_price_visibility_follows_quote_write_permission(self):
         from app.modules.admin.persistence import save_role, save_user
         from app.modules.products.persistence import upsert_product
         from openpyxl import load_workbook
@@ -466,7 +474,7 @@ class WebAppTest(unittest.TestCase):
             role_key = save_role(
                 conn,
                 {"name": role_name, "description": "看不到产品单价但可以维护产品的角色"},
-                ["generate_match", "export_catalog", "generate_purchase_contract", "edit_products"],
+                ["generate_match", "export_catalog", "generate_contract", "edit_products"],
                 actor="tester",
             )
             save_user(
@@ -656,12 +664,12 @@ class WebAppTest(unittest.TestCase):
             connection.commit()
 
         try:
-            response = self.client.get("/users", query_string={"view": "accounts"})
+            response = self.client.get("/users")
             html = response.get_data(as_text=True)
             self.assertEqual(response.status_code, 200)
             self.assertIn("请先创建非管理员角色", html)
             self.assertNotIn('action="/users/save"', html)
-            self.assertIn('href="/users?view=roles"', html)
+            self.assertIn('href="/users?view=role-list"', html)
         finally:
             with self.web.connect(self.web.DB_PATH) as connection:
                 connection.executemany(
@@ -2131,22 +2139,6 @@ class WebAppTest(unittest.TestCase):
                 response = getattr(self.client, method)(path)
                 self.assertEqual(response.status_code, 404)
 
-    def test_shipment_recognition_prepares_heic_images(self):
-        from PIL import Image
-        from tools.shipment_photo_recognition import _prepare_image, find_photos
-
-        image_dir = self.root / "uploads" / "heic-test"
-        image_dir.mkdir(parents=True, exist_ok=True)
-        image_path = image_dir / "label.heic"
-        Image.new("RGB", (12, 8), "white").save(image_path, format="HEIF")
-
-        jobs = find_photos(image_dir)
-        raw, mime = _prepare_image(image_path, max_side=2200)
-
-        self.assertEqual([job.relative_name for job in jobs], ["label.heic"])
-        self.assertEqual(mime, "image/jpeg")
-        self.assertTrue(raw.startswith(b"\xff\xd8\xff"))
-
     def test_internal_api_numbers_generate_openclaw_workbook(self):
         from app.modules.products.persistence import upsert_product
         from openpyxl import load_workbook
@@ -2602,68 +2594,8 @@ class WebAppTest(unittest.TestCase):
             ["api:read"],
         )
         self.assertIn("PlatformInfoEnvelope", document["components"]["schemas"])
-        self.assertIn("JobPublicData", document["components"]["schemas"])
-        self.assertEqual(
-            document["components"]["schemas"]["JobPublicData"]["properties"]["status"]["enum"],
-            ["queued", "running", "completed", "failed", "cancelled"],
-        )
-        self.assertIn("/api/v1/jobs/{job_id}/result", document["paths"])
-
-    def test_job_v1_enforces_owner_cancel_scope_and_idempotency(self):
-        from app.platform.api_keys import verify_internal_api_token
-        from app.platform.jobs.factory import get_job_service
-
-        token = self.create_internal_api_token(
-            scopes={"jobs:read", "jobs:cancel"},
-            name="Job Owner",
-        )
-        other_token = self.create_internal_api_token(
-            scopes={"jobs:read"},
-            name="Other Job Reader",
-        )
-        with self.web.connect(self.web.DB_PATH) as connection:
-            principal = verify_internal_api_token(connection, token)
-        self.assertIsNotNone(principal)
-        job = get_job_service().submit(
-            kind="test.api-job",
-            owner_id=principal.subject,
-            request_payload={"internal_path": "/tmp/never-public"},
-        )
-        headers = {"Authorization": f"Bearer {token}"}
-        response = self.client.get(f"/api/v1/jobs/{job.id}", headers=headers)
-        payload = response.get_json()
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(payload["data"]["job"]["status"], "queued")
-        self.assertNotIn("never-public", json.dumps(payload))
-
-        hidden = self.client.get(
-            f"/api/v1/jobs/{job.id}",
-            headers={"Authorization": f"Bearer {other_token}"},
-        )
-        self.assertEqual(hidden.status_code, 404)
-        self.assertEqual(hidden.get_json()["error"]["code"], "job.not_found")
-
-        cancel_headers = {
-            **headers,
-            "Idempotency-Key": "cancel-job-api-001",
-        }
-        cancelled = self.client.post(
-            f"/api/v1/jobs/{job.id}/cancel",
-            json={"reason": "consumer requested"},
-            headers=cancel_headers,
-        )
-        self.assertEqual(cancelled.status_code, 202)
-        self.assertEqual(cancelled.get_json()["data"]["job"]["status"], "cancelled")
-        replay = self.client.post(
-            f"/api/v1/jobs/{job.id}/cancel",
-            json={"reason": "consumer requested"},
-            headers=cancel_headers,
-        )
-        self.assertEqual(replay.status_code, 202)
-        self.assertEqual(replay.headers["Idempotency-Replayed"], "true")
-        result = self.client.get(f"/api/v1/jobs/{job.id}/result", headers=headers)
-        self.assertEqual(result.status_code, 409)
-        self.assertEqual(result.get_json()["error"]["code"], "job.not_ready")
+        self.assertNotIn("JobPublicData", document["components"]["schemas"])
+        self.assertNotIn("/api/v1/jobs/{job_id}/result", document["paths"])
 
     def test_admin_can_generate_and_delete_internal_api_key(self):
         self.login()
@@ -5546,6 +5478,7 @@ class WebAppTest(unittest.TestCase):
                 "031_editable_roles_and_user_permission_overrides",
                 "032_grant_view_product_prices",
                 "033_revoke_view_product_prices",
+                "034_split_granular_permissions",
             ],
         )
 

@@ -20,7 +20,7 @@ from app.modules.products.domain import (
 )
 from app.modules.products.factory import get_product_service
 from app.modules.products.presentation import product_web_payload
-from app.security import actor_name, can, login_required, permission_required
+from app.security import actor_name, can, can_any, login_required, permission_required
 
 
 PRODUCT_PAGE_SIZE = 50
@@ -133,7 +133,7 @@ def _product_list_context(*, include_admin_preview: bool) -> dict[str, Any]:
         )
     context: dict[str, Any] = {
         "products": [
-            _product_list_payload(record, include_price=can("manage_customer_prices"))
+            _product_list_payload(record, include_price=can_any("add_customer_prices", "edit_customer_prices", "delete_customer_prices"))
             for record in page.records
         ],
         "total_products": page.total,
@@ -297,7 +297,7 @@ def register(app) -> None:
             filters=filters,
             export_format=export_format,
             actor=actor_name(),
-            include_price=can("manage_customer_prices"),
+            include_price=can_any("add_customer_prices", "edit_customer_prices", "delete_customer_prices"),
         )
         if not exported:
             flash("当前筛选条件下没有可导出的产品。", "error")

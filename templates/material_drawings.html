@@ -31,7 +31,7 @@
             <a class="linear-button subtle" href="{{ url_for('material_drawings') }}">清除</a>
           {% endif %}
         </form>
-        {% if can("manage_materials") %}
+        {% if can("manage_material_items") %}
           <form class="search-form material-drawing-upload-form" action="{{ url_for('upload_material_drawing') }}" method="post" enctype="multipart/form-data">
             {{ csrf_field() }}
             <label class="file-picker">

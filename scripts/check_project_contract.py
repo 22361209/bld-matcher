@@ -30,8 +30,6 @@ APPROVED_API_SCOPES = {
     "quotes:read",
     "quotes:write",
     "contracts:generate",
-    "jobs:read",
-    "jobs:cancel",
 }
 UI_WRITE_GUARDS = {"login_required", "permission_required"}
 LEGACY_API_GUARDS = {"internal_api_required", "api_scope_required"}
@@ -45,7 +43,6 @@ REQUIRED_DOCS = {
     "docs/adr/0005-domain-and-page-protocol-migration.md",
     "docs/adr/0006-persistent-jobs-ai-and-runtime-governance.md",
     "docs/adr/0007-processing-module-decomposition.md",
-    "docs/api/ai-contract.md",
     "docs/api/product-inquiry-v1.md",
     "docs/api/quote-v1.md",
     "docs/architecture/overview.md",
@@ -74,7 +71,6 @@ ADR_REQUIRED_PATHS = {
     "Dockerfile",
     "PROJECT_CONSTITUTION.md",
     "docker-compose.yml",
-    "docs/api/ai-contract.md",
     "docs/ui/page-protocol.md",
     "pyproject.toml",
 }
@@ -928,8 +924,6 @@ def check(base_ref: str | None = None) -> list[str]:
     compose_text = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     dockerfile_text = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     runtime_markers = {
-        "docker-compose.yml:bld-worker": "bld-worker:" in compose_text,
-        "docker-compose.yml:run_worker": "scripts.run_worker" in compose_text,
         "docker-compose.yml:retention": "scripts.cleanup_runtime --apply" in compose_text,
         "Dockerfile:readiness": "/health/ready" in dockerfile_text,
     }

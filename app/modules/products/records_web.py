@@ -19,7 +19,7 @@ from app.modules.products.factory import get_product_service
 from app.modules.products.presentation import product_web_payload
 from app.modules.products.service import ProductNotFoundError
 from app.product_media import validate_product_image_file
-from app.security import actor_name, can, permission_required, wants_json_response
+from app.security import actor_name, can_any, permission_required, wants_json_response
 
 
 logger = logging.getLogger(__name__)
@@ -173,7 +173,7 @@ def register(app) -> None:
                     actor=actor_name(),
                     image_files=image_files,
                     drawing_file=drawing_file if drawing_file and drawing_file.filename else None,
-                    preserve_blank_price=not can("manage_customer_prices"),
+                    preserve_blank_price=not can_any("add_customer_prices", "edit_customer_prices", "delete_customer_prices"),
                 )
         except ProductNotFoundError:
             message = "复制来源已不存在，请刷新目录后重试。"

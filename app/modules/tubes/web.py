@@ -144,12 +144,12 @@ def register(app) -> None:
         return response
 
     @app.get("/tubes/new")
-    @permission_required("manage_materials")
+    @permission_required("manage_tube_items")
     def new_tube_item():
         return render_template("tube_form.html", item=None, tube_types=TUBE_TYPES)
 
     @app.get("/tubes/<int:item_id>/edit")
-    @permission_required("manage_materials")
+    @permission_required("manage_tube_items")
     def edit_tube_item(item_id: int):
         item = get_tube_service().get_item(item_id)
         if item is None:
@@ -158,7 +158,7 @@ def register(app) -> None:
         return render_template("tube_form.html", item=item, tube_types=TUBE_TYPES)
 
     @app.post("/tubes/save")
-    @permission_required("manage_materials")
+    @permission_required("manage_tube_items")
     def save_tube_item():
         data: dict[str, object] = {
             "id": request.form.get("id", ""),

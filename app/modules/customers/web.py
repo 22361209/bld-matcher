@@ -5,7 +5,7 @@ from dataclasses import replace
 
 from flask import flash, jsonify, redirect, render_template, request, url_for
 
-from app.security import actor_name, login_required, permission_required, wants_json_response
+from app.security import actor_name, can, login_required, permission_required, wants_json_response
 
 from .domain import CustomerValidationError
 from .factory import get_customer_service
@@ -56,7 +56,7 @@ def _form_customer_id() -> int | None:
 
 def register(app) -> None:
     @app.get("/customers")
-    @permission_required("manage_customers")
+    @permission_required("view_customers")
     def customers():
         query = " ".join(request.args.get("q", "").split())[:200]
         status = " ".join(request.args.get("status", "").split())[:20].lower()
@@ -100,7 +100,7 @@ def register(app) -> None:
         )
 
     @app.get("/customers/<int:customer_id>")
-    @permission_required("manage_customers")
+    @permission_required("view_customers")
     def customer_detail(customer_id: int):
         view = request.args.get("view", "overview").strip().lower()
         if view not in CUSTOMER_VIEWS:
@@ -144,9 +144,15 @@ def register(app) -> None:
         return response
 
     @app.post("/customers/save")
-    @permission_required("manage_customers")
+    @login_required
     def save_customer():
         customer_id = _form_customer_id()
+        required_permission = "edit_customers" if customer_id is not None else "add_customers"
+        if not can(required_permission):
+            if wants_json_response():
+                return jsonify({"ok": False, "error": "当前账号没有权限执行这个操作。"}), 403
+            flash("当前账号没有权限执行这个操作。", "error")
+            return redirect(url_for("customers"))
         try:
             service = get_customer_service()
             if customer_id is None:
@@ -171,7 +177,7 @@ def register(app) -> None:
         return redirect(_detail_url(customer.id) if customer_id else url_for("customers"))
 
     @app.post("/customers/<int:customer_id>/status")
-    @permission_required("manage_customers")
+    @permission_required("edit_customers")
     def set_customer_status(customer_id: int):
         try:
             customer = get_customer_service().set_status(
@@ -190,7 +196,7 @@ def register(app) -> None:
         return redirect(_detail_url(customer_id))
 
     @app.post("/customers/<int:customer_id>/contacts/save")
-    @permission_required("manage_customers")
+    @permission_required("edit_customers")
     def save_customer_contact(customer_id: int):
         contact_text = request.form.get("contact_id", "").strip()
         contact_id = int(contact_text) if contact_text.isdigit() else None
@@ -211,7 +217,7 @@ def register(app) -> None:
         return redirect(_detail_url(customer_id, "contacts"))
 
     @app.post("/customers/<int:customer_id>/contacts/<int:contact_id>/delete")
-    @permission_required("manage_customers")
+    @permission_required("delete_customers")
     def delete_customer_contact(customer_id: int, contact_id: int):
         try:
             contact = get_customer_service().delete_contact(customer_id, contact_id, actor=actor_name())
@@ -228,7 +234,7 @@ def register(app) -> None:
         return redirect(_detail_url(customer_id, "contacts"))
 
     @app.post("/customers/delete")
-    @permission_required("manage_customers")
+    @permission_required("delete_customers")
     def delete_customer():
         customer_id = _form_customer_id()
         try:

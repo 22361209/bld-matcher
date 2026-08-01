@@ -77,7 +77,6 @@ bash tools/install_bld_launcher.sh
 - `app/database.py`：数据库访问和业务数据写入
 - `app/migrations.py`：数据库结构迁移
 - `app/excel_io.py`：询价 Excel 读写
-- `app/routes/shipment_notice.py`：发货通知模板管理和客户模板 Excel 生成
 - `app/drawings.py`：PDF 图纸上传、替换归档和询价图纸包
 - `app/material_sheet.py`：生产料单生成
 - `templates/`：页面模板
@@ -129,35 +128,6 @@ OpenClaw 内部 API 的询价导出固定写入 `outputs/openclaw/`，文件名�
 - 产品数据包导入
 
 询价匹配和生产计划生成只处理当前用户的上传与输出，不使用全局导入锁。询价结果页生成的图纸压缩包保存在当前用户的 `outputs/u用户ID-用户名/` 下，原始 PDF 图纸保存在 `data/drawings/pdf/` 下，网页编辑上传的产品图片保存在 `data/product_images/` 下。
-
-## 发货照片标签识别
-
-导航栏“货物识别”提供试验入口，员工可直接选择多张照片，或把照片文件夹拖入页面，系统会上传到当前账号的 `uploads/u*/shipment_photos/` 下并生成 Excel。当前网页入口不直接读取 NAS 文件夹路径；如需处理 NAS 上的大批量照片，可先把 NAS 目录挂载到本机/容器后使用命令行工具。
-
-底层工具 `tools/shipment_photo_recognition.py` 可以读取一个本机或 NAS 挂载后的照片文件夹，识别每张发货照片里的货物标签，并生成 Excel。第一版不写入产品库、不匹配现有目录，只按标签内容汇总：
-
-- 汇总列：日期、标签上的号码、BLD号、产品名称、数量、车型、箱数、来源照片、低置信标签数、备注
-- 箱数按识别到的标签张数计算
-- 数量只取标签上明确写出的数量；看不清会写 0 并进入低置信复核
-- 支持 jpg、png、webp、bmp、tif、heic/heif 图片；HEIC 依赖 `pillow-heif`
-- 输出包含“汇总”“标签明细”“照片清单”“原始结果”工作表，同时保存 JSON 方便追溯
-
-使用 GPT 或其他 OpenAI-compatible 视觉模型：
-
-```bash
-export SHIPMENT_VISION_API_KEY="你的视觉模型 API Key"
-export SHIPMENT_VISION_BASE_URL="https://api.openai.com/v1"
-export SHIPMENT_VISION_MODEL="你的视觉模型名"
-.venv/bin/python tools/shipment_photo_recognition.py "/path/to/nas/shipment_photos/2026-05-19"
-```
-
-如果只是本机 OCR 草稿，可用 Tesseract：
-
-```bash
-.venv/bin/python tools/shipment_photo_recognition.py "/path/to/photos" --provider tesseract --limit 5
-```
-
-建议先用 `--limit 5` 试跑真实照片，确认标签格式和识别质量后再处理整批。
 
 ## 系统更新
 

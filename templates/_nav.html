@@ -6,13 +6,13 @@
   <div class="nav-primary">
     <div class="nav-links">
     <a class="{% if active_page == 'match' %}active{% endif %}" href="{{ url_for('index') }}">询价处理</a>
-    {% if can("manage_customers") %}
+    {% if can("view_customers") %}
       <a class="{% if active_page == 'customers' %}active{% endif %}" href="{{ url_for('customers') }}">客户信息</a>
     {% endif %}
     {% if can("view_customer_prices") %}
       <a class="{% if active_page == 'quotes' %}active{% endif %}" href="{{ url_for('quote_web.quotes') }}">报价记录</a>
     {% endif %}
-    {% if can("generate_purchase_contract") %}
+    {% if can("view_contracts") %}
       <div class="nav-menu contract-nav-menu" data-nav-menu>
         <button class="{% if active_page == 'contracts' %}active{% endif %}" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="选择合同类型" data-nav-menu-trigger>合同管理</button>
         <div class="nav-menu-panel" role="menu" aria-label="合同类型">

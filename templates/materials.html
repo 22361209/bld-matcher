@@ -76,7 +76,7 @@
             </form>
           <div class="data-section-actions material-table-actions">
             <button class="linear-button subtle" type="button" data-reset-list-for="materials">重置列表</button>
-            {% if can("manage_materials") %}
+            {% if can("manage_material_items") %}
               <button class="linear-button primary" type="button" data-open-material-modal>新增材料明细</button>
               <details class="toolbar-popover linear-popover">
                 <summary>导入材料数据</summary>
@@ -140,7 +140,7 @@
                   <td data-col="unit-weight">{{ "%.2f"|format(item.unit_weight) }}</td>
                   <td data-col="status">{% if item.active %}<span class="linear-status active">启用</span>{% else %}<span class="linear-status inactive">停用</span>{% endif %}</td>
                   <td class="row-actions" data-col="actions">
-                    {% if can("manage_materials") %}
+                    {% if can("manage_material_items") %}
                       <a href="{{ url_for('edit_material_item', item_id=item.id) }}">编辑</a>
                       {% if item.active %}
                         <form action="{{ url_for('stop_material_item', item_id=item.id) }}" method="post" class="inline-delete-form">
@@ -231,7 +231,7 @@
 {% endblock %}
 
 {% block page_modals %}
-{% if show_material_items and can("manage_materials") %}
+{% if show_material_items and can("manage_material_items") %}
       <div class="editor-modal" id="material-modal" aria-hidden="true">
         <div class="editor-modal-backdrop" data-close-material-modal></div>
         <div class="editor-modal-panel material-modal-panel" role="dialog" aria-modal="true" aria-label="新增材料明细">

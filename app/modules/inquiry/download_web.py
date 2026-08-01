@@ -33,7 +33,7 @@ from app.modules.inquiry.web_helpers import (
 )
 from app.modules.customers.factory import get_customer_service
 from app.modules.quotes.factory import get_quote_service
-from app.security import actor_name, can, permission_required
+from app.security import actor_name, can, can_any, permission_required
 
 
 logger = logging.getLogger(__name__)
@@ -83,7 +83,9 @@ def register(app) -> None:
         if price_error:
             flash(price_error, "error")
             return redirect(url_for("index"))
-        if price_options.get("price_mode") != "none" and not can("manage_customer_prices"):
+        if price_options.get("price_mode") != "none" and not can_any(
+            "add_customer_prices", "edit_customer_prices", "delete_customer_prices"
+        ):
             flash("没有权限导出带单价的查询结果。", "error")
             return redirect(url_for("index"))
         try:
@@ -91,7 +93,7 @@ def register(app) -> None:
         except ValueError as exc:
             flash(str(exc), "error")
             return redirect(url_for("index"))
-        if adjustments and not can("manage_customer_prices"):
+        if adjustments and not can("edit_customer_prices"):
             flash("没有权限调整本次报价产品或单价。", "error")
             return redirect(url_for("index"))
 
@@ -141,7 +143,7 @@ def register(app) -> None:
         return _send_match_result_download(require_match_column=True)
 
     @app.post("/match/write-quotes")
-    @permission_required("manage_customer_prices")
+    @permission_required("add_customer_prices")
     def write_match_quotes():
         service = get_inquiry_service()
 

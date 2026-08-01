@@ -93,7 +93,7 @@
           <col data-col="oe2" class="col-width-136">
           <col data-col="models" class="col-width-170">
           <col data-col="image" class="col-width-70">
-          {% if can("manage_customer_prices") %}<col data-col="price" class="col-width-72">{% endif %}
+          {% if can_any("add_customer_prices", "edit_customer_prices", "delete_customer_prices") %}<col data-col="price" class="col-width-72">{% endif %}
           <col data-col="product-status" class="col-width-104">
           <col data-col="actions" class="col-width-56">
         </colgroup>
@@ -106,7 +106,7 @@
             <th data-col="oe2">{{ product_column_heading("oe2", "品牌号码") }}</th>
             <th data-col="models">{{ product_column_heading("models", "车型") }}</th>
             <th data-col="image">{{ product_column_heading("image", "产品图片") }}</th>
-            {% if can("manage_customer_prices") %}<th data-col="price">{{ product_column_heading("price", "含税单价") }}</th>{% endif %}
+            {% if can_any("add_customer_prices", "edit_customer_prices", "delete_customer_prices") %}<th data-col="price">{{ product_column_heading("price", "含税单价") }}</th>{% endif %}
             <th data-col="product-status">{{ product_column_heading("product-status", "产品状态", "product_status", product_filter_options.get("product_status", []), selected_product_status_filters) }}</th>
             <th class="sticky-actions" data-col="actions"><span class="data-grid-static-column-label">操作</span></th>
           </tr>

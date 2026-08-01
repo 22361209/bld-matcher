@@ -3,7 +3,7 @@
 {% set can_regenerate_download = upload_path is defined and upload_path %}
 {% set selected_match_columns = match_columns if match_columns is defined else ([match_column] if match_column is defined and match_column|string != "" else []) %}
 {% set has_manual_match_column = selected_match_columns|length > 0 %}
-{% set can_view_product_price = can("manage_customer_prices") %}
+{% set can_view_product_price = can_any("add_customer_prices", "edit_customer_prices", "delete_customer_prices") %}
 {% set show_price_column = can_view_product_price %}
 {% block page_title %}查询结果{% endblock %}
 {% block page_id %}inquiry.result{% endblock %}
@@ -142,7 +142,7 @@
                 </td>
                 <td data-col="customer-code">{{ row.customer_product_code }}</td>
                 <td data-col="bld">
-                  {% if row_adjustment_allowed and can("manage_customer_prices") %}
+                  {% if row_adjustment_allowed and can("edit_customer_prices") %}
                     <div class="inquiry-bld-control">
                       <input type="search" value="{{ row.bld_no }}" autocomplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="inquiry-bld-options" aria-invalid="false" aria-label="第 {{ row.row }} 行本次报价 BLD NO." aria-describedby="inquiry-bld-error-{{ loop.index }}" data-inquiry-bld-input>
                       <span class="inquiry-bld-error" id="inquiry-bld-error-{{ loop.index }}" data-inquiry-bld-error aria-live="polite" hidden></span>
@@ -163,7 +163,7 @@
                 </td>
                 {% if show_price_column %}
                 <td data-col="price" class="money-cell inquiry-price-cell">
-                  {% if row_adjustment_allowed %}
+                  {% if row_adjustment_allowed and can("edit_customer_prices") %}
                     <div class="inquiry-price-control">
                       <label class="inquiry-price-field">
                         <input type="number" min="0" max="99999999.99" step="0.01" inputmode="decimal" value="{% if row.price_cny is not none %}{{ "%.2f"|format(row.price_cny) }}{% endif %}" data-inquiry-tax-price aria-label="第 {{ row.row }} 行本次报价含税单价" aria-describedby="inquiry-price-error-{{ loop.index }}">
@@ -227,7 +227,7 @@
             <label>
               <span>单价</span>
               <select name="price_mode" data-price-mode>
-                {% if not can("manage_customer_prices") %}
+                {% if not can_view_product_price %}
                   <option value="none" selected>不带单价</option>
                 {% endif %}
                 <option value="tax">带含税单价</option>
@@ -239,10 +239,10 @@
               <span>汇率</span>
               <input name="exchange_rate" type="number" step="0.0001" min="0.0001" placeholder="例如 7.20" data-exchange-rate>
             </label>
-            {% if can("manage_customer_prices") %}
+            {% if can("add_customer_prices") %}
               <label>
                 <span>客户名称（必填）</span>
-                <span class="combobox" data-combobox="customer" data-lookup-url="{{ url_for('customer_lookup') }}" {% if can("manage_customers") %}data-can-create="1" data-create-url="{{ url_for('save_customer') }}"{% endif %}>
+                <span class="combobox" data-combobox="customer" data-lookup-url="{{ url_for('customer_lookup') }}" {% if can("add_customers") %}data-can-create="1" data-create-url="{{ url_for('save_customer') }}"{% endif %}>
                   <input name="customer_name" placeholder="例如 宁波多迦" autocomplete="off">
                 </span>
               </label>
@@ -253,9 +253,9 @@
               <p class="note">点「下载并写入报价」会一次生成 Excel 并按上方单价方式写入报价记录，随后下载这次写入对应的同一附件并跳转到报价记录页；重复提交会重复写入。</p>
             {% endif %}
             <p class="submit-wait-message" data-submit-wait-message aria-live="polite"></p>
-            <div class="download-modal-actions{% if can("manage_customer_prices") %} inquiry-download-modal-actions{% endif %}">
+            <div class="download-modal-actions{% if can("add_customer_prices") %} inquiry-download-modal-actions{% endif %}">
               <button class="download-cancel-button" type="button" data-close-download-modal>取消</button>
-              {% if can("manage_customer_prices") %}
+              {% if can("add_customer_prices") %}
                 <button class="download-cancel-button" type="submit" data-download-only-submit>仅下载 Excel</button>
                 <button class="download-confirm-button" type="submit" formaction="{{ url_for('write_match_quotes') }}" data-write-quotes-submit>下载并写入报价</button>
               {% else %}
@@ -307,7 +307,7 @@
         </div>
       </div>
     {% endif %}
-    {% if can("manage_customer_prices") %}
+    {% if can("edit_customer_prices") %}
       <div class="inquiry-bld-options" id="inquiry-bld-options" role="listbox" aria-label="启用产品候选" data-inquiry-bld-options data-product-lookup-url="{{ url_for('product_lookup') }}" hidden></div>
       <div class="data-grid-controls-visually-hidden" aria-live="polite" data-inquiry-bld-status></div>
     {% endif %}

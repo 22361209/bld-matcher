@@ -18,6 +18,8 @@ from app.modules.admin.persistence import (
     list_users,
     save_role,
     save_user,
+    update_role_permissions,
+    update_user_overrides,
 )
 from app.platform.api_keys import (
     create_internal_api_key,
@@ -73,7 +75,7 @@ class SQLiteAdminRepository:
     def save_role(
         self,
         data: Mapping[str, object],
-        permissions: Iterable[str],
+        permissions: Iterable[str] | None,
         *,
         actor: str,
     ) -> str:
@@ -84,6 +86,12 @@ class SQLiteAdminRepository:
 
     def change_password(self, user_id: int, new_password: str, *, actor: str) -> None:
         change_password(self.connection, user_id, new_password, actor=actor, commit=False)
+
+    def update_user_overrides(self, user_id: int, overrides: object, *, actor: str) -> None:
+        update_user_overrides(self.connection, user_id, overrides, actor=actor, commit=False)
+
+    def update_role_permissions(self, role_key: str, permissions: Iterable[str], *, actor: str) -> None:
+        update_role_permissions(self.connection, role_key, permissions, actor=actor, commit=False)
 
     def logs(self, *, query: str, actor: str) -> list[dict[str, object]]:
         return [dict(row) for row in list_audit_logs(self.connection, query=query, actor=actor)]
