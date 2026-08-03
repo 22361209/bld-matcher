@@ -150,6 +150,18 @@
 }
 
 .product-create-modal-panel {
+  /* 弹窗渲染在 .app-surface 之外，需要就地补齐 --linear-* 变量，与编辑弹窗 iframe 内表现一致 */
+  --linear-bg: var(--precision-canvas);
+  --linear-surface: var(--precision-paper);
+  --linear-line: var(--precision-line);
+  --linear-line-strong: var(--precision-line-strong);
+  --linear-text: var(--precision-ink);
+  --linear-muted: var(--precision-muted);
+  --linear-subtle: #f2f4f3;
+  --linear-accent: var(--precision-cobalt);
+  --linear-accent-hover: var(--precision-cobalt-deep);
+  --linear-accent-soft: var(--precision-cobalt-soft);
+  --linear-focus: rgba(32, 93, 132, 0.2);
   width: min(1080px, calc(100vw - 48px));
 }
 
