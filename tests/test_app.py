@@ -5336,6 +5336,20 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(self.web.PRODUCT_SYNC_MAX_UPLOAD_MB, 512)
         self.assertEqual(self.web.app.config["MAX_CONTENT_LENGTH"], 512 * 1024 * 1024)
 
+    def test_business_sync_preview_allows_large_package(self):
+        self.login()
+        big_file = io.BytesIO(b"x" * (21 * 1024 * 1024))
+        response = self.client.post(
+            "/business-data-sync/preview",
+            data={"package": (big_file, "big.tar.gz")},
+            content_type="multipart/form-data",
+            follow_redirects=False,
+        )
+        # 大于 20MB 的普通上传限额时不应再被 413 拦截，而是进入预览流程后因内容无效重定向。
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith("/business-data-sync"))
+        response.close()
+
     def test_oversized_upload_redirects(self):
         self.login()
         original_limit = self.web.app.config["MAX_CONTENT_LENGTH"]

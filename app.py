@@ -19,6 +19,14 @@ from app.routes import register_routes
 from app.security import ROLE_LABELS, can, can_any, csrf_field, safe_referrer, validate_csrf_token, wants_json_response
 
 
+# 同步类数据包（产品数据同步、业务数据同步）上传走更大的限额。
+LARGE_UPLOAD_ENDPOINTS = {"preview_product_data_package", "preview_business_data_sync"}
+
+
+def _upload_limit_mb(endpoint: str | None) -> int:
+    return PRODUCT_SYNC_MAX_UPLOAD_MB if endpoint in LARGE_UPLOAD_ENDPOINTS else MAX_UPLOAD_MB
+
+
 def create_app() -> Flask:
     configure_logging()
     assert_production_secrets()
@@ -53,7 +61,7 @@ def create_app() -> Flask:
     @web_app.before_request
     def load_current_user():
         if request.method == "POST" and request.content_length:
-            limit_mb = PRODUCT_SYNC_MAX_UPLOAD_MB if request.endpoint == "preview_product_data_package" else MAX_UPLOAD_MB
+            limit_mb = _upload_limit_mb(request.endpoint)
             if request.content_length > limit_mb * 1024 * 1024:
                 abort(413)
         if is_machine_api_path():
@@ -89,7 +97,7 @@ def create_app() -> Flask:
 
     @web_app.errorhandler(RequestEntityTooLarge)
     def upload_too_large(_error):
-        limit_mb = PRODUCT_SYNC_MAX_UPLOAD_MB if request.endpoint == "preview_product_data_package" else MAX_UPLOAD_MB
+        limit_mb = _upload_limit_mb(request.endpoint)
         if request.path.startswith("/api/v1"):
             return error_response(
                 ApiError("request.too_large", f"上传文件不能超过 {limit_mb}MB。", 413)
@@ -99,6 +107,8 @@ def create_app() -> Flask:
         flash(f"上传文件不能超过 {limit_mb}MB。", "error")
         if request.path.startswith("/product-data-sync"):
             return redirect(url_for("product_data_sync"))
+        if request.path.startswith("/business-data-sync"):
+            return redirect(url_for("business_data_sync"))
         if request.path.startswith("/materials"):
             return redirect(url_for("materials"))
         if request.path.startswith("/quotes"):

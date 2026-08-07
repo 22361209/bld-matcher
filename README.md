@@ -62,7 +62,7 @@ bash tools/install_bld_launcher.sh
 - `SECRET_KEY`：Flask 会话密钥,**必须**改成随机长字符串,否则在 `APP_DEBUG=0`(生产)模式下会拒绝启动。可用 `python -c "import secrets; print(secrets.token_urlsafe(48))"` 生成
 - `DEFAULT_ADMIN_USERNAME` / `DEFAULT_ADMIN_PASSWORD`:首次启动创建管理员时使用,部署前覆盖
 - `MAX_UPLOAD_MB`：普通上传文件大小限制，默认 `20`
-- `PRODUCT_SYNC_MAX_UPLOAD_MB`：产品数据包上传大小限制，默认 `512`
+- `PRODUCT_SYNC_MAX_UPLOAD_MB`：同步类数据包（产品数据同步、业务数据同步）上传大小限制，默认 `512`
 - `APP_HOST`：本机启动监听地址，默认 `127.0.0.1`
 - `APP_PORT`：本机启动端口，默认 `5055`
 - `BLD_DATA_DIR`：数据目录，默认 `data`

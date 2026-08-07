@@ -1,0 +1,10 @@
+{
+  "date": "2026-08-07",
+  "version": "unreleased",
+  "title": "业务数据同步导入上传上限提升至 512MB",
+  "entries": [
+    "业务数据同步页面的数据包导入此前受普通上传 20MB 限制，包含图纸和图片的数据包很容易超限被拒绝；现在与产品数据同步一样走同步类数据包限额，默认 512MB，可用环境变量 PRODUCT_SYNC_MAX_UPLOAD_MB 调整。",
+    "超过 512MB 时错误提示会正确定向回业务数据同步页面，而不是回到首页。"
+  ],
+  "impact": {"data": "none", "api": "compatible", "operations": "restart-required"}
+}
