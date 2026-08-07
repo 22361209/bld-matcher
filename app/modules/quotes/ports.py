@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from typing import ContextManager, Protocol, Self
 
-from .domain import QuoteDraft, QuoteFilters, QuoteRecord, QuoteStats
+from .domain import DrawingFileReference, QuoteDraft, QuoteDrawingLink, QuoteFilters, QuoteRecord, QuoteStats
 
 
 class QuoteRepository(Protocol):
@@ -35,6 +35,12 @@ class QuoteRepository(Protocol):
     def customer_history(self, customer_id: int, customer_name: str, *, limit: int) -> list[dict[str, object]]: ...
 
     def rename_customer_references(self, customer_id: int, old_name: str, new_name: str) -> int: ...
+
+    def link_drawing(self, quote_record_id: int, drawing_file_id: int, *, actor: str) -> None: ...
+
+    def unlink_drawing(self, quote_record_id: int, link_id: int) -> bool: ...
+
+    def drawing_links(self, quote_record_ids: Sequence[int]) -> dict[int, list[QuoteDrawingLink]]: ...
 
 
 class QuoteUnitOfWork(Protocol):
@@ -80,6 +86,12 @@ class CustomerDirectoryPort(Protocol):
 
 class ContractDocumentDirectoryPort(Protocol):
     def list_by_quote_no(self, quote_no: str) -> list[dict[str, object]]: ...
+
+
+class CustomerDrawingDirectoryPort(Protocol):
+    def file_references(self, file_ids: Iterable[int]) -> dict[int, DrawingFileReference]: ...
+
+    def linkable_versions(self, customer_id: int) -> list[dict[str, object]]: ...
 
 
 QuoteRows = Iterable[dict[str, object]]

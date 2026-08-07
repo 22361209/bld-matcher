@@ -36,7 +36,7 @@
   </section>
 
   <nav class="customer-detail-tabs" aria-label="客户档案栏目">
-    {% for key, label in (("overview", "概览"), ("contacts", "联系人"), ("business", "报价与合同"), ("documents", "模板与文件")) %}
+    {% for key, label in (("overview", "概览"), ("contacts", "联系人"), ("business", "报价与合同"), ("documents", "模板与文件"), ("drawings", "图纸")) %}
       <a class="{% if active_view == key %}active{% endif %}" href="{{ url_for('customer_detail', customer_id=customer.id, view=key) }}" {% if active_view == key %}aria-current="page"{% endif %}>{{ label }}</a>
     {% endfor %}
   </nav>
@@ -157,7 +157,97 @@
       </section>
       {% endif %}
     </div>
-  {% else %}
+  {% elif active_view == "drawings" %}
+    <section class="data-section customer-document-section">
+      <div class="data-section-header"><div><h2>图纸</h2><p>按客户来图与我方出图分组保存多版本图纸；更新时保留旧版本，图纸只归档不删除。</p></div><span>{{ drawing_groups_by_direction["customer"]|length + drawing_groups_by_direction["issued"]|length }} 项</span></div>
+      {% if can("edit_customers") %}
+      <details class="customer-document-create-panel">
+        <summary>新增图纸档案</summary>
+        <form class="customer-document-form" action="{{ url_for('create_customer_drawing', customer_id=customer.id) }}" method="post" enctype="multipart/form-data">
+          {{ csrf_field() }}
+          <label><span>方向</span><select name="direction" required>{% for option in drawing_directions %}<option value="{{ option.value }}">{{ option.label }}</option>{% endfor %}</select></label>
+          <label><span>标题</span><input name="title" required maxlength="120" placeholder="例如 支架总成图纸"></label>
+          <label><span>关联 BLD 号</span><input name="bld_no" maxlength="80" placeholder="选填，可稍后关联"></label>
+          <label><span>图号</span><input name="drawing_no" maxlength="120" placeholder="选填"></label>
+          <label><span>版本代号</span><input name="revision_label" maxlength="60" placeholder="例如 Rev A（选填）"></label>
+          <label class="customer-document-upload"><span>图纸文件（选填）</span><input name="files" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp"></label>
+          <div class="form-actions"><button class="linear-button primary" type="submit">保存图纸档案</button></div>
+        </form>
+      </details>
+      {% endif %}
+      <div class="customer-drawing-directions">
+        {% for direction in drawing_directions %}
+          {% set groups = drawing_groups_by_direction[direction.value] %}
+          <section class="customer-drawing-direction">
+            <h3>{{ direction.label }}<span>{{ groups|length }} 项</span></h3>
+            {% if groups %}
+              <div class="customer-document-grid">
+                {% for group in groups %}
+                  <article class="customer-document-card {% if group.archived %}archived{% endif %}">
+                    <div class="customer-document-card-heading"><div><span class="customer-document-category">{{ group.direction_label }}</span><h3>{{ group.title }}</h3></div>{% if group.archived %}<span class="linear-status inactive">已归档</span>{% endif %}</div>
+                    <dl><div><dt>BLD 号</dt><dd>{{ group.bld_no or "未关联" }}</dd></div><div><dt>图号</dt><dd>{{ group.drawing_no or "未填写" }}</dd></div><div><dt>当前版本</dt><dd>{{ "V" ~ group.current_version if group.current_version else "暂无文件" }}</dd></div></dl>
+                    {% if can("edit_customers") and not group.archived %}
+                      <details class="customer-document-edit-panel">
+                        <summary>编辑图纸信息</summary>
+                        <form class="customer-document-form compact" action="{{ url_for('update_customer_drawing', customer_id=customer.id, group_id=group.id) }}" method="post">
+                          {{ csrf_field() }}
+                          <label><span>方向</span><select name="direction" required>{% for option in drawing_directions %}<option value="{{ option.value }}" {% if group.direction == option.value %}selected{% endif %}>{{ option.label }}</option>{% endfor %}</select></label>
+                          <label><span>标题</span><input name="title" value="{{ group.title }}" required maxlength="120"></label>
+                          <label><span>关联 BLD 号</span><input name="bld_no" value="{{ group.bld_no }}" maxlength="80" placeholder="选填"></label>
+                          <label><span>图号</span><input name="drawing_no" value="{{ group.drawing_no }}" maxlength="120" placeholder="选填"></label>
+                          <div class="form-actions"><button class="linear-button primary compact" type="submit">保存信息</button></div>
+                        </form>
+                      </details>
+                      <details class="customer-document-edit-panel">
+                        <summary>上传新版本（旧版本保留）</summary>
+                        <form class="customer-document-form compact" action="{{ url_for('add_customer_drawing_version', customer_id=customer.id, group_id=group.id) }}" method="post" enctype="multipart/form-data">
+                          {{ csrf_field() }}
+                          <label><span>图纸文件</span><input name="files" type="file" required accept=".pdf,.png,.jpg,.jpeg,.webp"></label>
+                          <label><span>版本代号</span><input name="revision_label" maxlength="60" placeholder="例如 Rev B（选填）"></label>
+                          <label class="customer-document-description"><span>版本备注</span><textarea name="note" rows="2" maxlength="2000" placeholder="选填，例如 按客户 8 月意见修改"></textarea></label>
+                          <div class="form-actions"><button class="linear-button subtle compact" type="submit">上传新版本</button></div>
+                        </form>
+                      </details>
+                    {% endif %}
+                    <div class="customer-document-files">
+                      {% for version in group.versions %}
+                        <details {% if version.version_no == group.current_version %}open{% endif %}>
+                          <summary>V{{ version.version_no }}{% if version.revision_label %} · {{ version.revision_label }}{% endif %}{% if version.version_no == group.current_version %}（当前）{% endif %}</summary>
+                          <ul>
+                            <li>
+                              <span>{{ version.file.original_name }} · {{ version.file.size_bytes }} B<br>{{ version.file.uploaded_by or "—" }} · {{ version.file.created_at }}{% if version.note %}<br>{{ version.note }}{% endif %}</span>
+                              <span>{% if version.file.previewable %}<a target="_blank" rel="noopener" href="{{ url_for('preview_customer_drawing_file', customer_id=customer.id, file_id=version.file.id) }}">预览</a>{% endif %}<a href="{{ url_for('download_customer_drawing_file', customer_id=customer.id, file_id=version.file.id) }}">下载</a></span>
+                            </li>
+                          </ul>
+                        </details>
+                      {% else %}
+                        <span>暂无图纸文件，可上传第一个版本</span>
+                      {% endfor %}
+                    </div>
+                    {% if can("delete_customers") %}
+                      {% if group.archived %}
+                        <form class="customer-document-archive-form" action="{{ url_for('unarchive_customer_drawing', customer_id=customer.id, group_id=group.id) }}" method="post">
+                          {{ csrf_field() }}
+                          <button class="linear-button subtle compact" type="submit">恢复使用</button>
+                        </form>
+                      {% else %}
+                        <form class="customer-document-archive-form" action="{{ url_for('archive_customer_drawing', customer_id=customer.id, group_id=group.id) }}" method="post">
+                          {{ csrf_field() }}
+                          <button class="linear-button danger compact" type="submit" data-confirm="确认归档图纸“{{ group.title }}”？归档后退出当前使用，但全部历史版本和文件继续保留并可下载。">归档</button>
+                        </form>
+                      {% endif %}
+                    {% endif %}
+                  </article>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="empty-state"><p>暂无{{ direction.label }}。</p></div>
+            {% endif %}
+          </section>
+        {% endfor %}
+      </div>
+    </section>
+  {% elif active_view == "documents" %}
     <section class="data-section customer-document-section">
       <div class="data-section-header"><div><h2>模板与文件</h2><p>保存客户特定标签、包装要求、单据模板和示例；更新时保留旧版本。</p></div><span>{{ document_groups|length }} 项</span></div>
       {% if can("edit_customers") %}

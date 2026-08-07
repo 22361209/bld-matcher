@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import logging
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
+from typing import cast
 
 from .domain import (
     QUOTE_CURRENCIES,
     QUOTE_MAX_PRICE,
+    DrawingFileReference,
+    QuoteDrawingLinkView,
     QuoteFilters,
     QuoteRecord,
     QuoteStats,
@@ -21,6 +24,7 @@ from .domain import (
 )
 from .ports import (
     CustomerDirectoryPort,
+    CustomerDrawingDirectoryPort,
     ContractDocumentDirectoryPort,
     ImportLockBusyError,
     ImportLockPort,
@@ -73,6 +77,7 @@ class QuoteService:
         product_catalog: ProductCatalogPort,
         customer_directory: CustomerDirectoryPort,
         contract_document_directory: ContractDocumentDirectoryPort | None = None,
+        customer_drawing_directory: CustomerDrawingDirectoryPort | None = None,
     ) -> None:
         self.unit_of_work_factory = unit_of_work_factory
         self.import_port = import_port
@@ -80,6 +85,7 @@ class QuoteService:
         self.product_catalog = product_catalog
         self.customer_directory = customer_directory
         self.contract_document_directory = contract_document_directory
+        self.customer_drawing_directory = customer_drawing_directory
 
     def _validate_product(self, bld_no: str) -> None:
         if not self.product_catalog.exists(bld_no):
@@ -342,6 +348,106 @@ class QuoteService:
         if not number or self.contract_document_directory is None:
             return []
         return self.contract_document_directory.list_by_quote_no(number)
+
+    def _drawing_directory(self) -> CustomerDrawingDirectoryPort:
+        if self.customer_drawing_directory is None:
+            raise QuoteValidationError(
+                "quote.drawing_directory_unavailable",
+                "客户图纸功能暂不可用，请稍后重试。",
+            )
+        return self.customer_drawing_directory
+
+    def _resolve_record_customer_id(self, record: QuoteRecord) -> int | None:
+        if record.customer_id is not None:
+            return record.customer_id
+        resolver = cast("Callable[[str], int | None] | None", getattr(self.customer_directory, "find_id", None))
+        return resolver(record.customer_name) if callable(resolver) else None
+
+    def _drawing_reference(self, drawing_file_id: object) -> DrawingFileReference:
+        file_id_text = compact_text(drawing_file_id)
+        file_id = int(file_id_text) if file_id_text.isdigit() else 0
+        reference = self._drawing_directory().file_references([file_id]).get(file_id) if file_id else None
+        if reference is None:
+            raise QuoteValidationError(
+                "quote.drawing_file_unknown",
+                "图纸文件不存在，请刷新后重试。",
+                field="drawing_file_id",
+            )
+        return reference
+
+    def link_drawing(self, quote_id: int, drawing_file_id: object, *, actor: str) -> QuoteRecord:
+        reference = self._drawing_reference(drawing_file_id)
+        with self.unit_of_work_factory() as unit_of_work:
+            record = unit_of_work.repository.get(quote_id)
+            if record is None:
+                raise QuoteNotFoundError(quote_id)
+            customer_id = self._resolve_record_customer_id(record)
+            if customer_id is None or reference.customer_id != customer_id:
+                raise QuoteValidationError(
+                    "quote.drawing_customer_mismatch",
+                    "所选图纸不属于该报价行的客户，不能关联。",
+                    field="drawing_file_id",
+                )
+            if reference.group_archived:
+                raise QuoteValidationError(
+                    "quote.drawing_archived",
+                    "该图纸档案已归档，不能关联。",
+                    field="drawing_file_id",
+                )
+            unit_of_work.repository.link_drawing(quote_id, reference.file_id, actor=actor)
+            unit_of_work.repository.audit("关联报价图纸", record, actor=actor)
+            unit_of_work.commit()
+        return record
+
+    def unlink_drawing(self, quote_id: int, link_id: int, *, actor: str) -> QuoteRecord:
+        with self.unit_of_work_factory() as unit_of_work:
+            record = unit_of_work.repository.get(quote_id)
+            if record is None:
+                raise QuoteNotFoundError(quote_id)
+            if not unit_of_work.repository.unlink_drawing(quote_id, int(link_id)):
+                raise QuoteValidationError(
+                    "quote.drawing_link_unknown",
+                    "图纸关联不存在或已解除，请刷新后重试。",
+                )
+            unit_of_work.repository.audit("解除报价图纸关联", record, actor=actor)
+            unit_of_work.commit()
+        return record
+
+    def drawing_links_by_quote_no(self, quote_no: object) -> dict[int, list[QuoteDrawingLinkView]]:
+        number = compact_text(quote_no)
+        if not number or self.customer_drawing_directory is None:
+            return {}
+        with self.unit_of_work_factory() as unit_of_work:
+            records = unit_of_work.repository.list_by_quote_no(number)
+            links = unit_of_work.repository.drawing_links([record.id for record in records])
+        file_ids = [link.drawing_file_id for record_links in links.values() for link in record_links]
+        references = self.customer_drawing_directory.file_references(file_ids)
+        return {
+            record_id: [
+                QuoteDrawingLinkView(link=link, file=references[link.drawing_file_id])
+                for link in record_links
+                if link.drawing_file_id in references
+            ]
+            for record_id, record_links in links.items()
+        }
+
+    def drawing_link_options_by_quote_no(self, quote_no: object) -> dict[int, list[dict[str, object]]]:
+        number = compact_text(quote_no)
+        if not number or self.customer_drawing_directory is None:
+            return {}
+        with self.unit_of_work_factory() as unit_of_work:
+            records = unit_of_work.repository.list_by_quote_no(number)
+        options_by_customer: dict[int, list[dict[str, object]]] = {}
+        options: dict[int, list[dict[str, object]]] = {}
+        for record in records:
+            customer_id = self._resolve_record_customer_id(record)
+            if customer_id is None:
+                options[record.id] = []
+                continue
+            if customer_id not in options_by_customer:
+                options_by_customer[customer_id] = self.customer_drawing_directory.linkable_versions(customer_id)
+            options[record.id] = options_by_customer[customer_id]
+        return options
 
     def customer_summaries(self, customers: Sequence[tuple[int, str]]) -> dict[int, dict[str, object]]:
         if not customers:

@@ -1,0 +1,10 @@
+{
+  "date": "2026-08-07",
+  "version": "unreleased",
+  "title": "报价关联图纸服务端拒绝已归档档案并补齐异常分支测试",
+  "entries": [
+    "报价行关联客户图纸时，服务端现在会拒绝已归档的图纸档案（quote.drawing_archived），与前端只列未归档档案的选择器保持一致。",
+    "客户图纸补齐两个核心异常分支测试：版本并发占位冲突时清理暂存文件，以及文件完整性（sha256）校验失败时拒绝读取。"
+  ],
+  "impact": {"data": "none", "api": "compatible", "operations": "restart-required"}
+}

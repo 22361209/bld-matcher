@@ -278,6 +278,55 @@ CREATE TABLE IF NOT EXISTS customer_document_files (
 
 CREATE INDEX IF NOT EXISTS idx_customer_document_files_version ON customer_document_files(group_id, version_no, id);
 
+CREATE TABLE IF NOT EXISTS customer_drawing_groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id INTEGER NOT NULL REFERENCES customers(id),
+  sync_id TEXT NOT NULL UNIQUE,
+  bld_no TEXT NOT NULL DEFAULT '',
+  direction TEXT NOT NULL CHECK(direction IN ('customer','issued')),
+  title TEXT NOT NULL DEFAULT '',
+  drawing_no TEXT NOT NULL DEFAULT '',
+  current_version INTEGER NOT NULL DEFAULT 0,
+  archived INTEGER NOT NULL DEFAULT 0,
+  created_by TEXT NOT NULL DEFAULT '',
+  updated_by TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_customer_drawing_groups_customer ON customer_drawing_groups(customer_id, archived, updated_at);
+
+CREATE TABLE IF NOT EXISTS customer_drawing_files (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  group_id INTEGER NOT NULL REFERENCES customer_drawing_groups(id),
+  sync_id TEXT NOT NULL UNIQUE,
+  version_no INTEGER NOT NULL,
+  revision_label TEXT NOT NULL DEFAULT '',
+  original_name TEXT NOT NULL,
+  storage_path TEXT NOT NULL UNIQUE,
+  content_type TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL DEFAULT 0,
+  sha256 TEXT NOT NULL DEFAULT '',
+  uploaded_by TEXT NOT NULL DEFAULT '',
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  UNIQUE(group_id, version_no)
+);
+
+CREATE INDEX IF NOT EXISTS idx_customer_drawing_files_group ON customer_drawing_files(group_id, version_no);
+
+CREATE TABLE IF NOT EXISTS quote_record_drawings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  quote_record_id INTEGER NOT NULL REFERENCES quote_records(id),
+  drawing_file_id INTEGER NOT NULL REFERENCES customer_drawing_files(id),
+  created_by TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  UNIQUE(quote_record_id, drawing_file_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_quote_record_drawings_quote ON quote_record_drawings(quote_record_id);
+CREATE INDEX IF NOT EXISTS idx_quote_record_drawings_file ON quote_record_drawings(drawing_file_id);
+
 CREATE TABLE IF NOT EXISTS contract_documents (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   contract_type TEXT NOT NULL DEFAULT 'sales',

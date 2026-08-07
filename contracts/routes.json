@@ -295,6 +295,55 @@
       "rule": "/customers/<int:customer_id>/documents/files/<int:file_id>/preview"
     },
     {
+      "endpoint": "create_customer_drawing",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/customers/<int:customer_id>/drawings"
+    },
+    {
+      "endpoint": "archive_customer_drawing",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/customers/<int:customer_id>/drawings/<int:group_id>/archive"
+    },
+    {
+      "endpoint": "unarchive_customer_drawing",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/customers/<int:customer_id>/drawings/<int:group_id>/unarchive"
+    },
+    {
+      "endpoint": "update_customer_drawing",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/customers/<int:customer_id>/drawings/<int:group_id>/update"
+    },
+    {
+      "endpoint": "add_customer_drawing_version",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/customers/<int:customer_id>/drawings/<int:group_id>/versions"
+    },
+    {
+      "endpoint": "download_customer_drawing_file",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/customers/<int:customer_id>/drawings/files/<int:file_id>/download"
+    },
+    {
+      "endpoint": "preview_customer_drawing_file",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/customers/<int:customer_id>/drawings/files/<int:file_id>/preview"
+    },
+    {
       "endpoint": "set_customer_status",
       "methods": [
         "POST"
@@ -762,6 +811,20 @@
         "POST"
       ],
       "rule": "/quotes/<int:quote_id>/delete"
+    },
+    {
+      "endpoint": "quote_web.unlink_quote_drawing",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/quotes/<int:quote_id>/drawings/<int:link_id>/unlink"
+    },
+    {
+      "endpoint": "quote_web.link_quote_drawing",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/quotes/<int:quote_id>/drawings/link"
     },
     {
       "endpoint": "quote_web.edit_quote",

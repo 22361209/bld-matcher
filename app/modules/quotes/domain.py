@@ -169,6 +169,41 @@ class QuoteStats:
         return {"total": self.total, "customers": self.customers, "models": self.models}
 
 
+@dataclass(frozen=True, slots=True)
+class DrawingFileReference:
+    file_id: int
+    customer_id: int
+    group_id: int
+    direction: str
+    direction_label: str
+    title: str
+    version_no: int
+    revision_label: str
+    original_name: str
+    current_version: int
+    group_archived: bool
+    previewable: bool
+
+    @property
+    def has_newer_version(self) -> bool:
+        return self.current_version > self.version_no
+
+
+@dataclass(frozen=True, slots=True)
+class QuoteDrawingLink:
+    id: int
+    quote_record_id: int
+    drawing_file_id: int
+    created_by: str
+    created_at: str
+
+
+@dataclass(frozen=True, slots=True)
+class QuoteDrawingLinkView:
+    link: QuoteDrawingLink
+    file: DrawingFileReference
+
+
 def compact_text(value: object) -> str:
     if isinstance(value, float) and math.isfinite(value) and value.is_integer():
         value = int(value)

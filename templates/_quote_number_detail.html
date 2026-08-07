@@ -64,6 +64,57 @@
           <td>{{ record.quoted_by }}</td>
           <td>{{ record.remark }}</td>
         </tr>
+        {% set record_links = drawing_links.get(record.id, []) %}
+        {% if record_links or can("edit_customer_prices") %}
+          <tr class="quote-drawing-row">
+            <td colspan="{{ 10 if can("generate_contract") else 9 }}">
+              <div class="quote-drawing-panel">
+                {% if record_links %}
+                  <ul class="quote-drawing-links">
+                    {% for item in record_links %}
+                      <li>
+                        <span class="quote-drawing-direction">{{ item.file.direction_label }}</span>
+                        <span class="quote-drawing-title">{{ item.file.title }}</span>
+                        <span class="quote-drawing-version">V{{ item.file.version_no }}{% if item.file.revision_label %} · {{ item.file.revision_label }}{% endif %}</span>
+                        <span class="quote-drawing-filename">{{ item.file.original_name }}</span>
+                        {% if item.file.has_newer_version %}<span class="quote-drawing-badge">已有 V{{ item.file.current_version }} 新版</span>{% endif %}
+                        {% if can("view_customers") %}
+                          {% if item.file.previewable %}<a target="_blank" rel="noopener" href="{{ url_for('preview_customer_drawing_file', customer_id=item.file.customer_id, file_id=item.file.file_id) }}">预览</a>{% endif %}
+                          <a href="{{ url_for('download_customer_drawing_file', customer_id=item.file.customer_id, file_id=item.file.file_id) }}">下载</a>
+                        {% endif %}
+                        {% if can("edit_customer_prices") %}
+                          <button class="linear-button subtle compact" type="submit" form="quote-drawing-unlink-{{ item.link.id }}">解除</button>
+                        {% endif %}
+                      </li>
+                    {% endfor %}
+                  </ul>
+                {% endif %}
+                {% if can("edit_customer_prices") %}
+                  {% set record_options = drawing_options.get(record.id, []) %}
+                  <details class="quote-drawing-link-panel">
+                    <summary>关联图纸版本</summary>
+                    {% if record_options %}
+                      <div class="quote-drawing-link-form">
+                        <select name="drawing_file_id" required aria-label="选择图纸版本" form="quote-drawing-link-{{ record.id }}">
+                          {% for group in record_options %}
+                            <optgroup label="{{ group.direction_label }} · {{ group.title }}">
+                              {% for version in group.versions %}
+                                <option value="{{ version.file_id }}">{{ group.direction_label }} · {{ group.title }} · V{{ version.version_no }}{% if version.revision_label %} · {{ version.revision_label }}{% endif %}{% if version.version_no == group.current_version %}（当前）{% endif %}</option>
+                              {% endfor %}
+                            </optgroup>
+                          {% endfor %}
+                        </select>
+                        <button class="linear-button primary compact" type="submit" form="quote-drawing-link-{{ record.id }}">关联</button>
+                      </div>
+                    {% else %}
+                      <p class="quote-drawing-empty">该客户名下暂无可关联的未归档图纸版本。</p>
+                    {% endif %}
+                  </details>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+        {% endif %}
       {% endfor %}
       {% if not records %}
         <tr><td colspan="9">没有找到报价单号 {{ quote_no }} 的记录。</td></tr>
@@ -77,4 +128,18 @@
       <button class="linear-button primary" type="submit">生成销售合同</button>
     </div>
   </form>
+{% endif %}
+{% if records and can("edit_customer_prices") %}
+  <div class="quote-drawing-forms" hidden>
+    {% for record in records %}
+      <form id="quote-drawing-link-{{ record.id }}" method="post" action="{{ url_for('quote_web.link_quote_drawing', quote_id=record.id) }}">
+        {{ csrf_field() }}
+      </form>
+      {% for item in drawing_links.get(record.id, []) %}
+        <form id="quote-drawing-unlink-{{ item.link.id }}" method="post" action="{{ url_for('quote_web.unlink_quote_drawing', quote_id=record.id, link_id=item.link.id) }}">
+          {{ csrf_field() }}
+        </form>
+      {% endfor %}
+    {% endfor %}
+  </div>
 {% endif %}

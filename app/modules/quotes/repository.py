@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from types import TracebackType
 
@@ -11,7 +11,7 @@ from app.database import connect
 from app.platform.audit_store import log_event
 from app.platform.clock import now_text
 
-from .domain import QuoteDraft, QuoteFilters, QuoteRecord, QuoteStats
+from .domain import QuoteDraft, QuoteDrawingLink, QuoteFilters, QuoteRecord, QuoteStats
 
 
 QUOTE_COLUMN_EXPRESSIONS = {
@@ -209,8 +209,52 @@ class SQLiteQuoteRepository:
         if record is None:
             return None
         self.connection.execute("DELETE FROM quote_record_revisions WHERE quote_id = ?", (quote_id,))
+        self.connection.execute("DELETE FROM quote_record_drawings WHERE quote_record_id = ?", (quote_id,))
         self.connection.execute("DELETE FROM quote_records WHERE id = ?", (quote_id,))
         return record
+
+    def link_drawing(self, quote_record_id: int, drawing_file_id: int, *, actor: str) -> None:
+        self.connection.execute(
+            """
+            INSERT OR IGNORE INTO quote_record_drawings (quote_record_id, drawing_file_id, created_by, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (quote_record_id, drawing_file_id, actor, now_text()),
+        )
+
+    def unlink_drawing(self, quote_record_id: int, link_id: int) -> bool:
+        cursor = self.connection.execute(
+            "DELETE FROM quote_record_drawings WHERE id = ? AND quote_record_id = ?",
+            (link_id, quote_record_id),
+        )
+        return cursor.rowcount == 1
+
+    def drawing_links(self, quote_record_ids: Sequence[int]) -> dict[int, list[QuoteDrawingLink]]:
+        normalized_ids = tuple(dict.fromkeys(int(quote_id) for quote_id in quote_record_ids))
+        if not normalized_ids:
+            return {}
+        placeholders = ",".join("?" for _ in normalized_ids)
+        rows = self.connection.execute(
+            f"""
+            SELECT id, quote_record_id, drawing_file_id, created_by, created_at
+            FROM quote_record_drawings
+            WHERE quote_record_id IN ({placeholders})
+            ORDER BY id ASC
+            """,
+            normalized_ids,
+        ).fetchall()
+        links: dict[int, list[QuoteDrawingLink]] = {quote_id: [] for quote_id in normalized_ids}
+        for row in rows:
+            links[int(row["quote_record_id"])].append(
+                QuoteDrawingLink(
+                    id=int(row["id"]),
+                    quote_record_id=int(row["quote_record_id"]),
+                    drawing_file_id=int(row["drawing_file_id"]),
+                    created_by=str(row["created_by"] or ""),
+                    created_at=str(row["created_at"]),
+                )
+            )
+        return links
 
     def add_revision(self, before: QuoteRecord, after: QuoteRecord, *, actor: str) -> None:
         self.connection.execute(

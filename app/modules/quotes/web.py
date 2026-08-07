@@ -7,7 +7,7 @@ from flask import Blueprint, flash, make_response, redirect, render_template, re
 
 from app.config import OUTPUT_DIR
 from app.helpers import user_upload_path
-from app.security import actor_name, permission_required, safe_referrer
+from app.security import actor_name, can, permission_required, safe_referrer
 
 from .domain import QuoteValidationError
 from .factory import get_quote_service
@@ -132,6 +132,8 @@ def quote_number_detail(quote_no: str):
     service = get_quote_service()
     records = service.records_by_quote_no(quote_no)
     contract_documents = service.contract_documents_by_quote_no(quote_no)
+    drawing_links = service.drawing_links_by_quote_no(quote_no)
+    drawing_options = service.drawing_link_options_by_quote_no(quote_no) if can("edit_customer_prices") else {}
     attachments = []
     seen_paths: set[str] = set()
     for record in records:
@@ -151,6 +153,8 @@ def quote_number_detail(quote_no: str):
             records=records,
             attachments=attachments,
             contract_documents=contract_documents,
+            drawing_links=drawing_links,
+            drawing_options=drawing_options,
         )
     )
     response.headers["Cache-Control"] = "no-store"

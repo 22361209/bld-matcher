@@ -119,7 +119,7 @@ class AdminPermissionTest(unittest.TestCase):
         self.assertEqual(roles[ADMIN_ROLE_KEY]["is_system"], 1)
         self.assertEqual(roles["editor"]["is_system"], 0)
         self.assertIsNotNone(migration)
-        self.assertEqual(MIGRATIONS[-1][0], "034_split_granular_permissions")
+        self.assertEqual(MIGRATIONS[-1][0], "035_customer_drawings")
 
     def test_migration_seeds_unknown_historical_roles_idempotently(self) -> None:
         historical_path = Path(self.temporary.name) / "historical.sqlite3"

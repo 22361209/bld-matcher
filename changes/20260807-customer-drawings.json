@@ -1,0 +1,16 @@
+{
+  "date": "2026-08-07",
+  "version": "unreleased",
+  "title": "客户图纸：客户详情“图纸”页签（一期）与报价行关联图纸版本（二期）",
+  "entries": [
+    "客户详情页新增“图纸”页签，按“客户来图 / 我方出图”两个方向分组管理图纸档案，档案包含标题、可选关联 BLD 号和图号。",
+    "每个图纸档案可多次上传新版本（pdf/png/jpg/jpeg/webp，单版本一个文件），可填写版本代号（如 Rev B）和备注；旧版本始终保留，可在线预览或下载。",
+    "图纸档案可归档与恢复；归档后不可修改或传新版本，历史版本仍可下载。新增/编辑/传版本需要 edit_customers 权限，归档/恢复需要 delete_customers 权限，查看/预览/下载需要 view_customers 权限。",
+    "图纸文件保存在 data/customer_files/ 下的 drawings 目录，随运行数据一起备份，不进入通用上传/输出清理。",
+    "数据库新增 customer_drawing_groups、customer_drawing_files 与 quote_record_drawings 三张表；quote_record_drawings 供二期报价行关联图纸使用，本期只建表。",
+    "（二期）报价单号详情的每条报价行可关联该报价行客户名下的图纸版本（方向不限、未归档档案的全部版本可选）；关联精确到版本，重复关联自动忽略。历史报价行缺少 customer_id 时按客户名称大小写不敏感匹配回填校验，跨客户图纸会被拒绝。",
+    "（二期）报价行内展示已关联图纸的方向、标题、版本号与版本代号、原始文件名；图纸档案已有更新版本时显示“已有 vN 新版”提示。有 view_customers 权限时可在线预览/下载图纸文件，无该权限时仅显示文字信息。",
+    "（二期）关联与解除关联需要 edit_customer_prices 权限，在报价单号详情页操作；删除报价行时其图纸关联一并清除，图纸文件与版本本身始终保留。"
+  ],
+  "impact": {"data": "migration-035-adds-three-tables", "api": "compatible", "operations": "restart-required"}
+}

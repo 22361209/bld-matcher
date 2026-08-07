@@ -1002,6 +1002,75 @@ def _split_granular_permissions(conn: sqlite3.Connection) -> None:
     )
 
 
+def _add_customer_drawings(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS customer_drawing_groups (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          customer_id INTEGER NOT NULL REFERENCES customers(id),
+          sync_id TEXT NOT NULL UNIQUE,
+          bld_no TEXT NOT NULL DEFAULT '',
+          direction TEXT NOT NULL CHECK(direction IN ('customer','issued')),
+          title TEXT NOT NULL DEFAULT '',
+          drawing_no TEXT NOT NULL DEFAULT '',
+          current_version INTEGER NOT NULL DEFAULT 0,
+          archived INTEGER NOT NULL DEFAULT 0,
+          created_by TEXT NOT NULL DEFAULT '',
+          updated_by TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_customer_drawing_groups_customer "
+        "ON customer_drawing_groups(customer_id, archived, updated_at)"
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS customer_drawing_files (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          group_id INTEGER NOT NULL REFERENCES customer_drawing_groups(id),
+          sync_id TEXT NOT NULL UNIQUE,
+          version_no INTEGER NOT NULL,
+          revision_label TEXT NOT NULL DEFAULT '',
+          original_name TEXT NOT NULL,
+          storage_path TEXT NOT NULL UNIQUE,
+          content_type TEXT NOT NULL,
+          size_bytes INTEGER NOT NULL DEFAULT 0,
+          sha256 TEXT NOT NULL DEFAULT '',
+          uploaded_by TEXT NOT NULL DEFAULT '',
+          note TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL,
+          UNIQUE(group_id, version_no)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_customer_drawing_files_group "
+        "ON customer_drawing_files(group_id, version_no)"
+    )
+    # 报价行与图纸版本的关联表先行建设，供报价关联（二期）使用。
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS quote_record_drawings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          quote_record_id INTEGER NOT NULL REFERENCES quote_records(id),
+          drawing_file_id INTEGER NOT NULL REFERENCES customer_drawing_files(id),
+          created_by TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL,
+          UNIQUE(quote_record_id, drawing_file_id)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_quote_record_drawings_quote ON quote_record_drawings(quote_record_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_quote_record_drawings_file ON quote_record_drawings(drawing_file_id)"
+    )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -1037,6 +1106,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("032_grant_view_product_prices", _grant_view_product_prices_to_existing_roles),
     ("033_revoke_view_product_prices", _revoke_view_product_prices_permission),
     ("034_split_granular_permissions", _split_granular_permissions),
+    ("035_customer_drawings", _add_customer_drawings),
 )
 
 

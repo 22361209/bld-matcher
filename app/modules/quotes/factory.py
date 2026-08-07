@@ -5,6 +5,7 @@ from app.config import DB_PATH
 from .infrastructure import (
     ContractDocumentDirectoryAdapter,
     CustomerDirectoryAdapter,
+    CustomerDrawingDirectoryAdapter,
     ExcelQuoteImportAdapter,
     FileImportLockAdapter,
     ProductCatalogAdapter,
@@ -21,4 +22,5 @@ def get_quote_service() -> QuoteService:
         ProductCatalogAdapter(),
         CustomerDirectoryAdapter(),
         ContractDocumentDirectoryAdapter(),
+        CustomerDrawingDirectoryAdapter(),
     )

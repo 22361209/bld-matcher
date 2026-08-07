@@ -385,6 +385,103 @@
   text-align: center;
 }
 
+.quote-drawing-row > td {
+  padding-top: 0;
+  border-top: 0;
+  background: #fbfcfe;
+}
+
+.quote-drawing-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.quote-drawing-links {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.quote-drawing-links li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.quote-drawing-direction {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border: 1px solid var(--linear-line);
+  border-radius: 3px;
+  color: var(--linear-muted);
+  font-size: 11px;
+}
+
+.quote-drawing-title {
+  color: var(--linear-text);
+  font-weight: 700;
+}
+
+.quote-drawing-version {
+  flex: 0 0 auto;
+  color: var(--linear-text);
+}
+
+.quote-drawing-filename {
+  min-width: 0;
+  color: var(--linear-muted);
+  overflow-wrap: anywhere;
+}
+
+.quote-drawing-badge {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border: 1px solid #c78a1b;
+  border-radius: 3px;
+  color: #9a6a0f;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.quote-drawing-link-panel {
+  min-width: 0;
+  font-size: 12px;
+}
+
+.quote-drawing-link-panel > summary {
+  display: inline-flex;
+  cursor: pointer;
+  color: var(--linear-muted);
+  font-weight: 700;
+}
+
+.quote-drawing-link-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.quote-drawing-link-form select {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.quote-drawing-empty {
+  margin: 6px 0 0;
+  color: var(--linear-muted);
+}
+
 .quote-contract-actions {
   display: flex;
   flex: 0 0 auto;
