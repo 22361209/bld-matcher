@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import re
 import tempfile
@@ -18,12 +19,16 @@ from .domain import (
 from .file_validation import upload_parts, validate_file_signature, validate_upload_metadata
 from .ports import (
     CatalogDrawingSource,
+    CustomerFileRemovalFailure,
     CustomerFileRemovalTarget,
     PreparedCustomerFile,
     PreparedCustomerFileBatch,
     StagedCustomerFileRemoval,
     StagedCustomerFileRemovalBatch,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 _SAFE_STORAGE_SEGMENT = re.compile(r"[A-Za-z0-9_-]{8,128}\Z")
@@ -302,28 +307,70 @@ class CustomerDrawingFileStore:
                 staged.append(StagedCustomerFileRemoval(original_path=original, staged_path=staged_path))
                 self._prune_empty(original.parent, stop=self.root)
             return StagedCustomerFileRemovalBatch(tuple(staged))
-        except Exception:
-            self.restore_removal(StagedCustomerFileRemovalBatch(tuple(staged)))
+        except Exception as exc:
+            failures = self.restore_removal(StagedCustomerFileRemovalBatch(tuple(staged)))
+            if failures:
+                self._log_removal_failures(
+                    "Customer drawing staging failed and staged file restore was incomplete",
+                    failures,
+                )
+                raise CustomerProductValidationError(
+                    "customer_drawing.restore_incomplete",
+                    f"图纸文件暂存失败，且有 {len(failures)} 个文件恢复不完整，请联系管理员处理。",
+                ) from exc
             raise
 
-    def restore_removal(self, batch: StagedCustomerFileRemovalBatch) -> None:
+    def restore_removal(
+        self, batch: StagedCustomerFileRemovalBatch
+    ) -> tuple[CustomerFileRemovalFailure, ...]:
+        failures: list[CustomerFileRemovalFailure] = []
         for item in reversed(batch.files):
             if not item.staged_path.exists():
                 continue
             if item.original_path.exists():
-                raise CustomerProductValidationError(
-                    "customer_drawing.restore_conflict", "图纸文件恢复冲突，请联系管理员。"
+                failures.append(
+                    CustomerFileRemovalFailure(
+                        original_path=item.original_path,
+                        staged_path=item.staged_path,
+                        error=CustomerProductValidationError(
+                            "customer_drawing.restore_conflict", "图纸文件恢复冲突，请联系管理员。"
+                        ),
+                    )
                 )
-            item.original_path.parent.mkdir(parents=True, exist_ok=True)
-            os.replace(item.staged_path, item.original_path)
-            self._prune_empty(item.staged_path.parent, stop=self.root)
+                continue
+            try:
+                item.original_path.parent.mkdir(parents=True, exist_ok=True)
+                os.replace(item.staged_path, item.original_path)
+                self._prune_empty(item.staged_path.parent, stop=self.root)
+            except OSError as exc:
+                failures.append(
+                    CustomerFileRemovalFailure(
+                        original_path=item.original_path,
+                        staged_path=item.staged_path,
+                        error=exc,
+                    )
+                )
         self._prune_empty(self.root / ".deleting", stop=self.root)
+        return tuple(failures)
 
-    def finalize_removal(self, batch: StagedCustomerFileRemovalBatch) -> None:
+    def finalize_removal(
+        self, batch: StagedCustomerFileRemovalBatch
+    ) -> tuple[CustomerFileRemovalFailure, ...]:
+        failures: list[CustomerFileRemovalFailure] = []
         for item in batch.files:
-            item.staged_path.unlink(missing_ok=True)
-            self._prune_empty(item.staged_path.parent, stop=self.root)
+            try:
+                item.staged_path.unlink(missing_ok=True)
+                self._prune_empty(item.staged_path.parent, stop=self.root)
+            except OSError as exc:
+                failures.append(
+                    CustomerFileRemovalFailure(
+                        original_path=item.original_path,
+                        staged_path=item.staged_path,
+                        error=exc,
+                    )
+                )
         self._prune_empty(self.root / ".deleting", stop=self.root)
+        return tuple(failures)
 
     def resolve(self, storage_path: str, *, customer_sync_id: str, group_sync_id: str = "") -> Path:
         self._validate_storage_segment(customer_sync_id, "customer sync id")
@@ -379,6 +426,22 @@ class CustomerDrawingFileStore:
             except ValueError as exc:
                 raise CustomerProductValidationError("customer_drawing.unsafe_path", "图纸文件路径无效。") from exc
         return candidate
+
+    @staticmethod
+    def _log_removal_failures(
+        message: str,
+        failures: Sequence[CustomerFileRemovalFailure],
+    ) -> None:
+        for failure in failures:
+            error = failure.error
+            logger.error(
+                message,
+                exc_info=(type(error), error, error.__traceback__),
+                extra={
+                    "original_path": str(failure.original_path),
+                    "staged_path": str(failure.staged_path),
+                },
+            )
 
     @staticmethod
     def _validate_storage_segment(value: str, label: str) -> None:

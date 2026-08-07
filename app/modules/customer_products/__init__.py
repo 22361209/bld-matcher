@@ -7,6 +7,7 @@ from .domain import (
     CustomerDrawingSummary,
     CustomerDrawingVersion,
     CustomerProduct,
+    CustomerProductDeletionResult,
     CustomerProductValidationError,
     QuotedProductOption,
 )
@@ -23,6 +24,7 @@ __all__ = [
     "CustomerDrawingVersion",
     "CustomerFilePayload",
     "CustomerProduct",
+    "CustomerProductDeletionResult",
     "CustomerProductService",
     "CustomerProductValidationError",
     "QuotedProductOption",

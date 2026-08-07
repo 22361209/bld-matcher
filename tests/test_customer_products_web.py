@@ -15,6 +15,7 @@ from app.modules.customer_products.domain import (
     CustomerDrawingFile,
     CustomerDrawingSlot,
     CustomerProduct,
+    CustomerProductDeletionResult,
     CustomerProductValidationError,
 )
 from app.modules.customer_products.ports import CustomerFilePayload
@@ -194,13 +195,38 @@ class CustomerProductRouteTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.headers["Location"].endswith("/"))
 
+    def test_delete_restore_incomplete_error_is_visible_to_json_client(self) -> None:
+        app = self._route_app({"delete_customers"})
+
+        def delete(*args, **kwargs):
+            raise CustomerProductValidationError(
+                "customer_drawing.restore_incomplete",
+                "图纸文件暂存失败，且有 1 个文件恢复不完整，请联系管理员处理。",
+            )
+
+        service = SimpleNamespace(delete=delete)
+        with patch.object(products_web, "get_customer_product_service", return_value=service):
+            response = app.test_client().post(
+                "/customers/1/products/7/delete",
+                headers={"X-Requested-With": "fetch", "Accept": "application/json"},
+            )
+
+        self.assertEqual(response.status_code, 500)
+        payload = response.get_json()
+        self.assertFalse(payload["ok"])
+        self.assertIn("恢复不完整", payload["error"])
+        self.assertIn("联系管理员", payload["error"])
+
     def test_delete_calls_service_and_reports_removed_files(self) -> None:
         app = self._route_app({"delete_customers"})
         calls = []
 
         def delete(*args, **kwargs):
             calls.append((args, kwargs))
-            return _product(drawings=(_slot("customer"),))
+            return CustomerProductDeletionResult(
+                product=_product(drawings=(_slot("customer"),)),
+                drawing_file_count=2,
+            )
 
         service = SimpleNamespace(delete=delete)
         with patch.object(products_web, "get_customer_product_service", return_value=service):
@@ -209,9 +235,83 @@ class CustomerProductRouteTest(unittest.TestCase):
                 headers={"X-Requested-With": "fetch", "Accept": "application/json"},
             )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json(), {"ok": True, "deleted_drawing_count": 2})
+        self.assertEqual(
+            response.get_json(),
+            {
+                "ok": True,
+                "deleted_drawing_count": 2,
+                "file_cleanup_complete": True,
+                "file_cleanup_failed_count": 0,
+                "post_commit_warning": False,
+            },
+        )
         self.assertEqual(calls[0][0], (1, 7))
         self.assertEqual(calls[0][1]["actor"], "tester")
+
+    def test_delete_json_warns_when_physical_file_cleanup_is_incomplete(self) -> None:
+        app = self._route_app({"delete_customers"})
+        result = CustomerProductDeletionResult(
+            product=_product(drawings=(_slot("customer"),)),
+            drawing_file_count=2,
+            cleanup_failure_count=1,
+        )
+        service = SimpleNamespace(delete=lambda *args, **kwargs: result)
+
+        with patch.object(products_web, "get_customer_product_service", return_value=service):
+            response = app.test_client().post(
+                "/customers/1/products/7/delete",
+                headers={"X-Requested-With": "fetch", "Accept": "application/json"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload["ok"])
+        self.assertFalse(payload["file_cleanup_complete"])
+        self.assertEqual(payload["file_cleanup_failed_count"], 1)
+        self.assertFalse(payload["post_commit_warning"])
+        self.assertIn("未完成物理清理", payload["warning"])
+
+    def test_delete_json_treats_post_commit_exit_error_as_success_with_warning(self) -> None:
+        app = self._route_app({"delete_customers"})
+        result = CustomerProductDeletionResult(
+            product=_product(drawings=(_slot("customer"),)),
+            drawing_file_count=2,
+            post_commit_warning=True,
+        )
+        service = SimpleNamespace(delete=lambda *args, **kwargs: result)
+
+        with patch.object(products_web, "get_customer_product_service", return_value=service):
+            response = app.test_client().post(
+                "/customers/1/products/7/delete",
+                headers={"X-Requested-With": "fetch", "Accept": "application/json"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload["ok"])
+        self.assertTrue(payload["file_cleanup_complete"])
+        self.assertTrue(payload["post_commit_warning"])
+        self.assertIn("删除已经提交", payload["warning"])
+
+    def test_delete_form_flashes_cleanup_warning_when_physical_cleanup_is_incomplete(self) -> None:
+        app = self._route_app({"delete_customers"})
+        result = CustomerProductDeletionResult(
+            product=_product(drawings=(_slot("customer"),)),
+            drawing_file_count=2,
+            cleanup_failure_count=1,
+        )
+        service = SimpleNamespace(delete=lambda *args, **kwargs: result)
+        client = app.test_client()
+
+        with patch.object(products_web, "get_customer_product_service", return_value=service):
+            response = client.post("/customers/1/products/7/delete")
+
+        self.assertEqual(response.status_code, 302)
+        with client.session_transaction() as session:
+            flashes = session.get("_flashes", [])
+        self.assertEqual(len(flashes), 1)
+        self.assertEqual(flashes[0][0], "error")
+        self.assertIn("未完成物理清理", flashes[0][1])
 
     def test_upload_version_requires_edit_permission(self) -> None:
         app = self._route_app({"view_customers"})

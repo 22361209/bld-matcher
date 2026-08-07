@@ -21,7 +21,7 @@ def _detail_url(customer_id: int) -> str:
 def _failed(action: str, customer_id: int, exc: Exception):
     if isinstance(exc, CustomerProductValidationError):
         message = f"{action}失败：{exc.message}"
-        status = 400
+        status = 500 if exc.code == "customer_drawing.restore_incomplete" else 400
     else:
         logger.exception(
             "Customer product operation failed",
@@ -83,16 +83,38 @@ def register(app) -> None:
     @permission_required("delete_customers")
     def delete_customer_product(customer_id: int, product_id: int):
         try:
-            product = get_customer_product_service().delete(
+            result = get_customer_product_service().delete(
                 customer_id,
                 product_id,
                 actor=actor_name(),
             )
         except Exception as exc:
             return _failed("删除客户商品", customer_id, exc)
-        drawing_count = sum(len(slot.files) for slot in product.drawings)
+        product = result.product
+        drawing_count = result.drawing_file_count
+        warnings: list[str] = []
+        if not result.cleanup_complete:
+            warnings.append(
+                f"客户产品已删除，图纸记录也已清除；但仍有 {result.cleanup_failure_count} 个实体文件"
+                "未完成物理清理，请联系管理员处理。"
+            )
+        if result.post_commit_warning:
+            warnings.append("客户产品删除已经提交；数据库连接收尾出现异常，已按成功处理，请联系管理员查看日志。")
+        cleanup_warning = " ".join(warnings)
         if wants_json_response():
-            return jsonify({"ok": True, "deleted_drawing_count": drawing_count})
+            payload = {
+                "ok": True,
+                "deleted_drawing_count": drawing_count,
+                "file_cleanup_complete": result.cleanup_complete,
+                "file_cleanup_failed_count": result.cleanup_failure_count,
+                "post_commit_warning": result.post_commit_warning,
+            }
+            if cleanup_warning:
+                payload["warning"] = cleanup_warning
+            return jsonify(payload)
+        if cleanup_warning:
+            flash(cleanup_warning, "error")
+            return redirect(_detail_url(customer_id))
         suffix = f"，并永久删除 {drawing_count} 个图纸版本文件" if drawing_count else ""
         flash(f"客户商品 {product.bld_no} 已删除{suffix}。", "success")
         return redirect(_detail_url(customer_id))

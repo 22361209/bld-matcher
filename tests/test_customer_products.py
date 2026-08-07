@@ -14,7 +14,11 @@ from app.modules.customer_products.domain import (
     QuotedProductOption,
 )
 from app.modules.customer_products.infrastructure import CustomerDrawingFileStore
-from app.modules.customer_products.ports import CatalogDrawingSource
+from app.modules.customer_products.ports import (
+    CatalogDrawingSource,
+    CustomerFileRemovalFailure,
+    StagedCustomerFileRemovalBatch,
+)
 from app.modules.customer_products.repository import SQLiteCustomerProductUnitOfWork
 from app.modules.customer_products.service import CustomerProductService
 
@@ -520,6 +524,73 @@ def test_create_commit_failure_compensates_product_and_initial_drawing(tmp_path:
     assert not storage_root.exists() or not any(path.is_file() for path in storage_root.rglob("*"))
 
 
+def test_create_successful_commit_keeps_initial_drawing_when_uow_exit_fails(tmp_path: Path) -> None:
+    database_path = tmp_path / "customer-products.sqlite3"
+    storage_root = tmp_path / "data" / "customer_files"
+    _seed(database_path)
+
+    class FailingExitAfterCommitUnitOfWork(SQLiteCustomerProductUnitOfWork):
+        def __exit__(self, exc_type, exc, traceback) -> None:
+            super().__exit__(exc_type, exc, traceback)
+            if exc_type is None:
+                raise RuntimeError("forced close failure after create commit")
+
+    service = CustomerProductService(
+        lambda: FailingExitAfterCommitUnitOfWork(database_path),
+        CustomerDrawingFileStore(storage_root),
+        FakeQuoteHistory([QuotedProductOption(bld_no="K8053")]),
+        FakeCatalog(),
+    )
+
+    with pytest.raises(RuntimeError, match="forced close failure after create commit"):
+        service.create(
+            1,
+            "K8053",
+            actor="007",
+            customer_drawing_files=(_upload("客户来图.png", PNG_PAYLOAD, "image/png"),),
+        )
+
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM customer_products").fetchone()[0] == 1
+        file_row = connection.execute("SELECT storage_path FROM customer_drawing_files").fetchone()
+        assert file_row is not None
+    assert (storage_root / file_row["storage_path"]).read_bytes() == PNG_PAYLOAD
+
+
+def test_upload_successful_commit_keeps_file_when_uow_exit_fails(tmp_path: Path) -> None:
+    database_path = tmp_path / "customer-products.sqlite3"
+    storage_root = tmp_path / "data" / "customer_files"
+    _seed(database_path)
+    product = _make_service(database_path, storage_root).create(1, "K8053", actor="007")
+
+    class FailingExitAfterCommitUnitOfWork(SQLiteCustomerProductUnitOfWork):
+        def __exit__(self, exc_type, exc, traceback) -> None:
+            super().__exit__(exc_type, exc, traceback)
+            if exc_type is None:
+                raise RuntimeError("forced close failure after upload commit")
+
+    service = CustomerProductService(
+        lambda: FailingExitAfterCommitUnitOfWork(database_path),
+        CustomerDrawingFileStore(storage_root),
+        FakeQuoteHistory([QuotedProductOption(bld_no="K8053")]),
+        FakeCatalog(),
+    )
+
+    with pytest.raises(RuntimeError, match="forced close failure after upload commit"):
+        service.upload_version(
+            1,
+            product.id,
+            "bld",
+            (_upload("BLD-v1.pdf", PDF_PAYLOAD, "application/pdf"),),
+            actor="007",
+        )
+
+    with connect(database_path) as connection:
+        file_row = connection.execute("SELECT storage_path FROM customer_drawing_files").fetchone()
+        assert file_row is not None
+    assert (storage_root / file_row["storage_path"]).read_bytes() == PDF_PAYLOAD
+
+
 def test_version_claim_conflict_discards_staged_upload(tmp_path: Path) -> None:
     database_path = tmp_path / "customer-products.sqlite3"
     storage_root = tmp_path / "data" / "customer_files"
@@ -637,9 +708,12 @@ def test_delete_product_removes_all_drawings_and_quote_links(product_env) -> Non
         )
         connection.commit()
 
-    deleted = service.delete(1, product.id, actor="007")
+    deletion = service.delete(1, product.id, actor="007")
+    deleted = deletion.product
     assert deleted.bld_no == "K8053"
     assert sum(len(slot.files) for slot in deleted.drawings) == 3
+    assert deletion.drawing_file_count == 3
+    assert deletion.cleanup_complete
 
     with connect(database_path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM customer_products").fetchone()[0] == 0
@@ -659,10 +733,13 @@ def test_delete_product_without_drawings_removes_product(product_env) -> None:
     service, database_path, storage_root, _quote_history = product_env
     product = service.create(1, "K8053", actor="007")
 
-    deleted = service.delete(1, product.id, actor="007")
+    deletion = service.delete(1, product.id, actor="007")
+    deleted = deletion.product
 
     assert deleted.id == product.id
     assert deleted.drawings == ()
+    assert deletion.drawing_file_count == 0
+    assert deletion.cleanup_complete
     with connect(database_path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM customer_products").fetchone()[0] == 0
         assert connection.execute("SELECT COUNT(*) FROM audit_logs WHERE action = '删除客户商品'").fetchone()[0] == 1
@@ -833,6 +910,92 @@ def test_delete_rejects_symlink_that_escapes_drawing_slot(product_env) -> None:
     assert not (storage_root / ".deleting").exists()
 
 
+def test_delete_staging_failure_with_incomplete_restore_is_explicit_and_logged(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    database_path = tmp_path / "customer-products.sqlite3"
+    storage_root = tmp_path / "data" / "customer_files"
+    _seed(database_path)
+    base_service = _make_service(database_path, storage_root)
+    product = base_service.create(
+        1,
+        "K8053",
+        actor="007",
+        customer_drawing_files=(_upload("客户-v1.png", PNG_PAYLOAD, "image/png"),),
+    )
+    product = base_service.upload_version(
+        1,
+        product.id,
+        "bld",
+        (_upload("BLD-v1.pdf", PDF_PAYLOAD, "application/pdf"),),
+        actor="007",
+    )
+
+    class StagingAndRestoreFailureStore(CustomerDrawingFileStore):
+        destination_calls = 0
+        conflict_path: Path | None = None
+        failures: tuple[CustomerFileRemovalFailure, ...] = ()
+
+        def _destination(
+            self,
+            storage_path: str,
+            *,
+            customer_sync_id: str,
+            group_sync_id: str = "",
+        ) -> Path:
+            self.destination_calls += 1
+            if self.destination_calls == 2:
+                raise CustomerProductValidationError(
+                    "customer_drawing.forced_stage_failure", "forced second-file staging failure"
+                )
+            return super()._destination(
+                storage_path,
+                customer_sync_id=customer_sync_id,
+                group_sync_id=group_sync_id,
+            )
+
+        def restore_removal(
+            self, batch: StagedCustomerFileRemovalBatch
+        ) -> tuple[CustomerFileRemovalFailure, ...]:
+            if batch.files and self.conflict_path is None:
+                self.conflict_path = batch.files[-1].original_path
+                self.conflict_path.parent.mkdir(parents=True, exist_ok=True)
+                self.conflict_path.write_bytes(b"conflicting replacement")
+            self.failures = super().restore_removal(batch)
+            return self.failures
+
+    storage = StagingAndRestoreFailureStore(storage_root)
+    service = CustomerProductService(
+        lambda: SQLiteCustomerProductUnitOfWork(database_path),
+        storage,
+        FakeQuoteHistory([QuotedProductOption(bld_no="K8053")]),
+        FakeCatalog(),
+    )
+
+    with pytest.raises(CustomerProductValidationError) as caught:
+        service.delete(1, product.id, actor="007")
+
+    assert caught.value.code == "customer_drawing.restore_incomplete"
+    assert "恢复不完整" in caught.value.message
+    assert "联系管理员" in caught.value.message
+    assert isinstance(caught.value.__cause__, CustomerProductValidationError)
+    assert caught.value.__cause__.code == "customer_drawing.forced_stage_failure"
+    assert len(storage.failures) == 1
+    failure = storage.failures[0]
+    assert failure.staged_path.exists()
+    log_record = next(
+        record
+        for record in caplog.records
+        if record.message == "Customer drawing staging failed and staged file restore was incomplete"
+    )
+    assert log_record.original_path == str(failure.original_path)
+    assert log_record.staged_path == str(failure.staged_path)
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM customer_products WHERE id = ?", (product.id,)).fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM customer_drawing_files").fetchone()[0] == 2
+        assert connection.execute("SELECT COUNT(*) FROM audit_logs WHERE action = '删除客户商品'").fetchone()[0] == 0
+
+
 def test_delete_commit_failure_restores_rows_and_files(tmp_path: Path) -> None:
     database_path = tmp_path / "customer-products.sqlite3"
     storage_root = tmp_path / "data" / "customer_files"
@@ -866,6 +1029,176 @@ def test_delete_commit_failure_restores_rows_and_files(tmp_path: Path) -> None:
         assert connection.execute("SELECT COUNT(*) FROM audit_logs WHERE action = '删除客户商品'").fetchone()[0] == 0
     assert original_file.read_bytes() == PNG_PAYLOAD
     assert not (storage_root / ".deleting").exists()
+
+
+def test_delete_successful_commit_still_finalizes_files_when_uow_exit_fails(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    database_path = tmp_path / "customer-products.sqlite3"
+    storage_root = tmp_path / "data" / "customer_files"
+    _seed(database_path)
+    base_service = _make_service(database_path, storage_root)
+    product = base_service.create(
+        1,
+        "K8053",
+        actor="007",
+        customer_drawing_files=(_upload("客户-v1.png", PNG_PAYLOAD, "image/png"),),
+    )
+    original_file = next(path for path in storage_root.rglob("*.png") if path.is_file())
+
+    class FailingExitAfterDeleteCommitUnitOfWork(SQLiteCustomerProductUnitOfWork):
+        def __exit__(self, exc_type, exc, traceback) -> None:
+            super().__exit__(exc_type, exc, traceback)
+            if exc_type is None:
+                raise RuntimeError("forced close failure after delete commit")
+
+    service = CustomerProductService(
+        lambda: FailingExitAfterDeleteCommitUnitOfWork(database_path),
+        CustomerDrawingFileStore(storage_root),
+        FakeQuoteHistory([QuotedProductOption(bld_no="K8053")]),
+        FakeCatalog(),
+    )
+
+    deletion = service.delete(1, product.id, actor="007")
+
+    assert deletion.product.id == product.id
+    assert deletion.post_commit_warning
+    assert deletion.cleanup_complete
+    assert not original_file.exists()
+    assert not (storage_root / ".deleting").exists()
+    assert "unit-of-work exit failed; continuing cleanup" in caplog.text
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM customer_products").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM customer_drawing_files").fetchone()[0] == 0
+
+
+def test_delete_rollback_restores_remaining_files_after_first_restore_conflict(tmp_path: Path) -> None:
+    database_path = tmp_path / "customer-products.sqlite3"
+    storage_root = tmp_path / "data" / "customer_files"
+    _seed(database_path)
+    base_service = _make_service(database_path, storage_root)
+    product = base_service.create(
+        1,
+        "K8053",
+        actor="007",
+        customer_drawing_files=(_upload("客户-v1.png", PNG_PAYLOAD, "image/png"),),
+    )
+    product = base_service.upload_version(
+        1,
+        product.id,
+        "customer",
+        (_upload("客户-v2.png", PNG_PAYLOAD + b"v2", "image/png"),),
+        actor="007",
+    )
+    product = base_service.upload_version(
+        1,
+        product.id,
+        "bld",
+        (_upload("BLD-v1.pdf", PDF_PAYLOAD, "application/pdf"),),
+        actor="007",
+    )
+    original_payloads = {
+        storage_root / file.storage_path: (storage_root / file.storage_path).read_bytes()
+        for slot in product.drawings
+        for file in slot.files
+    }
+
+    class FailingDeleteCommitUnitOfWork(SQLiteCustomerProductUnitOfWork):
+        def commit(self) -> None:
+            raise sqlite3.OperationalError("forced delete commit failure with restore conflict")
+
+    class RestoreConflictStore(CustomerDrawingFileStore):
+        conflict_path: Path | None = None
+        failures: tuple[CustomerFileRemovalFailure, ...] = ()
+
+        def restore_removal(
+            self, batch: StagedCustomerFileRemovalBatch
+        ) -> tuple[CustomerFileRemovalFailure, ...]:
+            if batch.files and self.conflict_path is None:
+                # restore_removal iterates in reverse, so this conflict is encountered first.
+                self.conflict_path = batch.files[-1].original_path
+                self.conflict_path.parent.mkdir(parents=True, exist_ok=True)
+                self.conflict_path.write_bytes(b"conflicting replacement")
+            self.failures = super().restore_removal(batch)
+            return self.failures
+
+    storage = RestoreConflictStore(storage_root)
+    service = CustomerProductService(
+        lambda: FailingDeleteCommitUnitOfWork(database_path),
+        storage,
+        FakeQuoteHistory([QuotedProductOption(bld_no="K8053")]),
+        FakeCatalog(),
+    )
+
+    with pytest.raises(sqlite3.OperationalError, match="forced delete commit failure") as caught:
+        service.delete(1, product.id, actor="007")
+
+    assert storage.conflict_path is not None
+    assert len(storage.failures) == 1
+    assert any("图纸文件恢复不完整" in note for note in getattr(caught.value, "__notes__", ()))
+    for original_path, payload in original_payloads.items():
+        if original_path == storage.conflict_path:
+            assert original_path.read_bytes() == b"conflicting replacement"
+        else:
+            assert original_path.read_bytes() == payload
+    assert storage.failures[0].staged_path.exists()
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM customer_products WHERE id = ?", (product.id,)).fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM customer_drawing_files").fetchone()[0] == 3
+
+
+def test_delete_purge_continues_after_one_file_fails_and_reports_partial_cleanup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database_path = tmp_path / "customer-products.sqlite3"
+    storage_root = tmp_path / "data" / "customer_files"
+    _seed(database_path)
+    service = _make_service(database_path, storage_root)
+    product = service.create(
+        1,
+        "K8053",
+        actor="007",
+        customer_drawing_files=(_upload("客户-v1.png", PNG_PAYLOAD, "image/png"),),
+    )
+    product = service.upload_version(
+        1,
+        product.id,
+        "customer",
+        (_upload("客户-v2.png", PNG_PAYLOAD + b"v2", "image/png"),),
+        actor="007",
+    )
+    product = service.upload_version(
+        1,
+        product.id,
+        "bld",
+        (_upload("BLD-v1.pdf", PDF_PAYLOAD, "application/pdf"),),
+        actor="007",
+    )
+    original_paths = [storage_root / file.storage_path for slot in product.drawings for file in slot.files]
+    failed_staged_paths: list[Path] = []
+    real_unlink = Path.unlink
+
+    def fail_first_staged_unlink(path: Path, *args, **kwargs) -> None:
+        if ".deleting" in path.parts and not failed_staged_paths:
+            failed_staged_paths.append(path)
+            raise PermissionError("forced staged purge failure")
+        real_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", fail_first_staged_unlink)
+
+    deletion = service.delete(1, product.id, actor="007")
+
+    assert deletion.drawing_file_count == 3
+    assert not deletion.cleanup_complete
+    assert deletion.cleanup_failure_count == 1
+    assert len(failed_staged_paths) == 1
+    assert failed_staged_paths[0].exists()
+    assert all(not path.exists() for path in original_paths)
+    remaining_files = [path for path in (storage_root / ".deleting").rglob("*") if path.is_file()]
+    assert remaining_files == failed_staged_paths
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM customer_products").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM customer_drawing_files").fetchone()[0] == 0
 
 
 def _legacy_035_schema(connection: sqlite3.Connection) -> None:

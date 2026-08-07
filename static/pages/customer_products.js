@@ -6,6 +6,14 @@ const csrfToken = () => document.querySelector("input[name='csrf_token']")?.valu
 
 export const isCustomerDrawingFileName = (name) => /\.(pdf|png|jpe?g|webp)$/.test(String(name || "").toLowerCase());
 
+export const customerDrawingDropError = (files) => {
+  const count = Number(files?.length || 0);
+  if (count > 1) return "每次只能拖入一份图纸，请重新选择。";
+  const file = files?.[0];
+  if (!file || !isCustomerDrawingFileName(file.name)) return "仅支持 PDF、PNG、JPG、WEBP 图纸。";
+  return "";
+};
+
 export const assignCustomerDrawingFile = (
   input,
   file,
@@ -13,6 +21,14 @@ export const assignCustomerDrawingFile = (
   DataTransferConstructor = globalThis.DataTransfer,
 ) => {
   if (!input || !file) return false;
+  if (droppedFiles && droppedFiles.length !== 1) {
+    try {
+      input.value = "";
+    } catch (_error) {
+      // The drop handler also clears real file inputs; keep this helper safe for non-DOM callers.
+    }
+    return false;
+  }
   if (droppedFiles) {
     try {
       input.files = droppedFiles;
@@ -158,12 +174,19 @@ if (typeof document !== "undefined" && document.body?.dataset.page === "customer
       event.preventDefault();
       createDrawingDragDepth = 0;
       createDrawingIntake.classList.remove("drag-over");
-      const file = event.dataTransfer.files?.[0];
-      if (!isCustomerDrawingFileName(file?.name)) {
-        showCreateDrawingSelection(file);
+      const droppedFiles = event.dataTransfer.files;
+      const dropError = customerDrawingDropError(droppedFiles);
+      if (dropError) {
+        createDrawingInput.value = "";
+        resetCreateDrawingSelection();
+        if (createDrawingStatus instanceof HTMLElement) {
+          createDrawingStatus.textContent = dropError;
+          createDrawingStatus.classList.add("error");
+        }
         return;
       }
-      if (!assignCustomerDrawingFile(createDrawingInput, file, event.dataTransfer.files)) {
+      const file = droppedFiles[0];
+      if (!assignCustomerDrawingFile(createDrawingInput, file, droppedFiles)) {
         createDrawingInput.value = "";
         resetCreateDrawingSelection();
         if (createDrawingStatus instanceof HTMLElement) {
@@ -471,7 +494,13 @@ if (typeof document !== "undefined" && document.body?.dataset.page === "customer
       event.preventDefault();
       dragDepth = 0;
       intake.classList.remove("drag-over");
-      uploadDrawingFile(event.dataTransfer.files?.[0]);
+      const droppedFiles = event.dataTransfer.files;
+      const dropError = customerDrawingDropError(droppedFiles);
+      if (dropError) {
+        setUploadStatus(dropError, true);
+        return;
+      }
+      uploadDrawingFile(droppedFiles[0]);
     });
   }
 

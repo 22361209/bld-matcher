@@ -13,6 +13,7 @@ from .domain import (
     CustomerDrawingSummary,
     CustomerIdentity,
     CustomerProduct,
+    CustomerProductDeletionResult,
     CustomerProductValidationError,
     QuotedProductOption,
     clean_bld_no,
@@ -24,6 +25,7 @@ from .domain import (
 )
 from .ports import (
     CustomerDrawingStorage,
+    CustomerFileRemovalFailure,
     CustomerFileRemovalTarget,
     CustomerFilePayload,
     CustomerProductUnitOfWork,
@@ -119,6 +121,7 @@ class CustomerProductService:
         cleaned_name = clean_product_name(name)
         cleaned_revision = clean_revision_label(customer_drawing_revision_label)
         prepared: PreparedCustomerFileBatch | None = None
+        committed = False
         try:
             with self.unit_of_work_factory() as unit_of_work:
                 customer = unit_of_work.repository.customer_identity(customer_id)
@@ -174,9 +177,11 @@ class CustomerProductService:
                 result = unit_of_work.repository.get_product(customer.id, product_id)
                 assert result is not None
                 unit_of_work.commit()
+                committed = True
                 return result
         except Exception:
-            self._cleanup(prepared, promoted=prepared is not None)
+            if not committed:
+                self._cleanup(prepared, promoted=prepared is not None)
             raise
 
     def update(
@@ -216,10 +221,12 @@ class CustomerProductService:
             unit_of_work.commit()
             return result
 
-    def delete(self, customer_id: int, product_id: int, *, actor: str) -> CustomerProduct:
+    def delete(self, customer_id: int, product_id: int, *, actor: str) -> CustomerProductDeletionResult:
         staged: StagedCustomerFileRemovalBatch | None = None
         committed = False
         deleted: CustomerProduct | None = None
+        drawing_file_count = 0
+        post_commit_warning = False
         try:
             with self.unit_of_work_factory() as unit_of_work:
                 product = unit_of_work.repository.lock_product_for_delete(customer_id, product_id)
@@ -236,6 +243,7 @@ class CustomerProductService:
                     for slot in product.drawings
                     for file in slot.files
                 )
+                drawing_file_count = len(removal_targets)
                 if removal_targets and not customer.sync_id:
                     raise CustomerProductValidationError(
                         "customer_drawing.customer_identity_missing", "客户缺少同步标识，暂时无法删除图纸。"
@@ -257,27 +265,49 @@ class CustomerProductService:
                 unit_of_work.repository.audit(
                     "删除客户商品",
                     product.sync_id,
-                    f"{customer.name}；{product.bld_no}；永久删除 {len(removal_targets)} 个图纸版本文件",
+                    f"{customer.name}；{product.bld_no}；删除 {len(removal_targets)} 个图纸版本记录并清理实体文件",
                     actor=actor,
                 )
                 unit_of_work.commit()
                 committed = True
                 deleted = product
-        except Exception:
-            if staged is not None and not committed:
-                self.storage.restore_removal(staged)
-            raise
-
-        assert deleted is not None
-        if staged is not None:
-            try:
-                self.storage.finalize_removal(staged)
-            except OSError:
+        except Exception as exc:
+            if committed:
+                post_commit_warning = True
                 logger.exception(
-                    "Customer product database delete committed but staged file purge failed",
+                    "Customer product database delete committed but unit-of-work exit failed; continuing cleanup",
                     extra={"customer_id": customer_id, "product_id": product_id},
                 )
-        return deleted
+            else:
+                if staged is not None:
+                    failures = self.storage.restore_removal(staged)
+                    if failures:
+                        self._log_removal_failures(
+                            "Customer product delete rolled back but staged file restore was incomplete",
+                            failures,
+                            customer_id=customer_id,
+                            product_id=product_id,
+                        )
+                        exc.add_note(f"图纸文件恢复不完整：{len(failures)} 个文件仍保留在删除暂存区。")
+                raise
+
+        assert deleted is not None
+        cleanup_failures: tuple[CustomerFileRemovalFailure, ...] = ()
+        if staged is not None:
+            cleanup_failures = self.storage.finalize_removal(staged)
+            if cleanup_failures:
+                self._log_removal_failures(
+                    "Customer product database delete committed but staged file purge was incomplete",
+                    cleanup_failures,
+                    customer_id=customer_id,
+                    product_id=product_id,
+                )
+        return CustomerProductDeletionResult(
+            product=deleted,
+            drawing_file_count=drawing_file_count,
+            cleanup_failure_count=len(cleanup_failures),
+            post_commit_warning=post_commit_warning,
+        )
 
     def upload_version(
         self,
@@ -344,6 +374,7 @@ class CustomerProductService:
         actor: str,
     ) -> CustomerProduct:
         prepared: PreparedCustomerFileBatch | None = None
+        committed = False
         try:
             with self.unit_of_work_factory() as unit_of_work:
                 customer = unit_of_work.repository.customer_identity(customer_id)
@@ -369,9 +400,11 @@ class CustomerProductService:
                 result = unit_of_work.repository.get_product(customer_id, product.id)
                 assert result is not None
                 unit_of_work.commit()
+                committed = True
                 return result
         except Exception:
-            self._cleanup(prepared, promoted=prepared is not None)
+            if not committed:
+                self._cleanup(prepared, promoted=prepared is not None)
             raise
 
     def _store_version(
@@ -538,3 +571,19 @@ class CustomerProductService:
             self.storage.compensate(prepared)
         else:
             self.storage.discard(prepared)
+
+    @staticmethod
+    def _log_removal_failures(
+        message: str,
+        failures: Sequence[CustomerFileRemovalFailure],
+        *,
+        customer_id: int,
+        product_id: int,
+    ) -> None:
+        for failure in failures:
+            error = failure.error
+            logger.error(
+                message,
+                exc_info=(type(error), error, error.__traceback__),
+                extra={"customer_id": customer_id, "product_id": product_id},
+            )

@@ -46,6 +46,13 @@ class StagedCustomerFileRemovalBatch:
 
 
 @dataclass(frozen=True, slots=True)
+class CustomerFileRemovalFailure:
+    original_path: Path = field(repr=False)
+    staged_path: Path = field(repr=False)
+    error: Exception = field(repr=False, compare=False)
+
+
+@dataclass(frozen=True, slots=True)
 class CustomerFileRemovalTarget:
     storage_path: str = field(repr=False)
     group_sync_id: str
@@ -201,9 +208,13 @@ class CustomerDrawingStorage(Protocol):
         live_group_sync_ids: Collection[str],
     ) -> StagedCustomerFileRemovalBatch: ...
 
-    def restore_removal(self, batch: StagedCustomerFileRemovalBatch) -> None: ...
+    def restore_removal(
+        self, batch: StagedCustomerFileRemovalBatch
+    ) -> tuple[CustomerFileRemovalFailure, ...]: ...
 
-    def finalize_removal(self, batch: StagedCustomerFileRemovalBatch) -> None: ...
+    def finalize_removal(
+        self, batch: StagedCustomerFileRemovalBatch
+    ) -> tuple[CustomerFileRemovalFailure, ...]: ...
 
     def resolve(self, storage_path: str, *, customer_sync_id: str, group_sync_id: str = "") -> Path: ...
 

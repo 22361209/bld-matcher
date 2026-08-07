@@ -227,6 +227,22 @@ class CustomerProduct:
 
 
 @dataclass(frozen=True, slots=True)
+class CustomerProductDeletionResult:
+    product: CustomerProduct
+    drawing_file_count: int
+    cleanup_failure_count: int = 0
+    post_commit_warning: bool = False
+
+    @property
+    def cleanup_complete(self) -> bool:
+        return self.cleanup_failure_count == 0
+
+    @property
+    def has_warnings(self) -> bool:
+        return not self.cleanup_complete or self.post_commit_warning
+
+
+@dataclass(frozen=True, slots=True)
 class CustomerDrawingFileReference:
     file: CustomerDrawingFile
     group_id: int
