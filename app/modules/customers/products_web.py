@@ -39,12 +39,19 @@ def register(app) -> None:
     @app.post("/customers/<int:customer_id>/products")
     @permission_required("edit_customers")
     def create_customer_product(customer_id: int):
+        drawing_files = tuple(
+            upload
+            for upload in request.files.getlist("customer_drawing_file")
+            if str(getattr(upload, "filename", "") or "").strip()
+        )
         try:
             get_customer_product_service().create(
                 customer_id,
                 request.form.get("bld_no", ""),
                 request.form.get("customer_product_code", ""),
                 request.form.get("customer_product_name", ""),
+                customer_drawing_files=drawing_files,
+                customer_drawing_revision_label=request.form.get("customer_drawing_revision_label", ""),
                 actor=actor_name(),
             )
         except Exception as exc:
@@ -70,6 +77,24 @@ def register(app) -> None:
         if wants_json_response():
             return jsonify({"ok": True})
         flash("客户商品已保存。", "success")
+        return redirect(_detail_url(customer_id))
+
+    @app.post("/customers/<int:customer_id>/products/<int:product_id>/delete")
+    @permission_required("delete_customers")
+    def delete_customer_product(customer_id: int, product_id: int):
+        try:
+            product = get_customer_product_service().delete(
+                customer_id,
+                product_id,
+                actor=actor_name(),
+            )
+        except Exception as exc:
+            return _failed("删除客户商品", customer_id, exc)
+        drawing_count = sum(len(slot.files) for slot in product.drawings)
+        if wants_json_response():
+            return jsonify({"ok": True, "deleted_drawing_count": drawing_count})
+        suffix = f"，并永久删除 {drawing_count} 个图纸版本文件" if drawing_count else ""
+        flash(f"客户商品 {product.bld_no} 已删除{suffix}。", "success")
         return redirect(_detail_url(customer_id))
 
     @app.post("/customers/<int:customer_id>/products/<int:product_id>/drawings/<kind>/versions")

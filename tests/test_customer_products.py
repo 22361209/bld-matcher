@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import io
 import sqlite3
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 from werkzeug.datastructures import FileStorage
@@ -134,6 +134,52 @@ def test_create_defaults_name_from_catalog(tmp_path: Path) -> None:
     assert explicit.customer_product_name == "自定义名称"
     # bld_no 不可通过 update 修改。
     assert explicit.bld_no == "K8053"
+
+
+def test_create_with_customer_drawing_saves_v1_atomically(product_env) -> None:
+    service, database_path, storage_root, _quote_history = product_env
+
+    product = service.create(
+        1,
+        "K8053",
+        actor="007",
+        customer_drawing_files=(_upload("客户来图.png", PNG_PAYLOAD, "image/png"),),
+        customer_drawing_revision_label="Rev A",
+    )
+
+    slot = product.slot("customer")
+    assert slot is not None
+    assert slot.current_version == 1
+    assert slot.current_file is not None
+    assert slot.current_file.revision_label == "Rev A"
+    assert slot.current_file.note == "新增客户商品时上传"
+    payload = service.file_payload(1, slot.current_file.id, actor="007")
+    assert payload.path.read_bytes() == PNG_PAYLOAD
+    assert payload.path.is_relative_to(storage_root)
+
+    with connect(database_path) as connection:
+        actions = [row[0] for row in connection.execute("SELECT action FROM audit_logs ORDER BY id")]
+    assert actions == ["新增客户商品", "上传客户图纸版本"]
+
+
+def test_create_invalid_customer_drawing_rolls_back_product(product_env) -> None:
+    service, database_path, storage_root, _quote_history = product_env
+
+    with pytest.raises(CustomerProductValidationError) as rejected:
+        service.create(
+            1,
+            "K8053",
+            actor="007",
+            customer_drawing_files=(_upload("伪造.pdf", b"not a pdf", "application/pdf"),),
+        )
+    assert rejected.value.code == "customer_drawing.invalid_file_content"
+
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM customer_products").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM customer_drawing_groups").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM customer_drawing_files").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM audit_logs").fetchone()[0] == 0
+    assert not storage_root.exists() or not any(path.is_file() for path in storage_root.rglob("*"))
 
 
 def test_list_for_customer_includes_slots_and_catalog(product_env) -> None:
@@ -280,6 +326,7 @@ def test_cross_customer_access_is_rejected(product_env) -> None:
     for action in (
         lambda: service.get(2, product.id),
         lambda: service.update(2, product.id, code="C-X", name="越权改名", actor="007"),
+        lambda: service.delete(2, product.id, actor="007"),
         lambda: service.upload_version(
             2,
             product.id,
@@ -443,6 +490,36 @@ def test_database_commit_failure_compensates_promoted_files(tmp_path: Path) -> N
     assert not storage_root.exists() or not any(storage_root.rglob("*"))
 
 
+def test_create_commit_failure_compensates_product_and_initial_drawing(tmp_path: Path) -> None:
+    database_path = tmp_path / "customer-products.sqlite3"
+    storage_root = tmp_path / "data" / "customer_files"
+    _seed(database_path)
+
+    class FailingCommitUnitOfWork(SQLiteCustomerProductUnitOfWork):
+        def commit(self) -> None:
+            raise sqlite3.OperationalError("forced create commit failure")
+
+    service = CustomerProductService(
+        lambda: FailingCommitUnitOfWork(database_path),
+        CustomerDrawingFileStore(storage_root),
+        FakeQuoteHistory([QuotedProductOption(bld_no="K8053")]),
+        FakeCatalog(),
+    )
+    with pytest.raises(sqlite3.OperationalError, match="forced create commit failure"):
+        service.create(
+            1,
+            "K8053",
+            actor="007",
+            customer_drawing_files=(_upload("客户来图.png", PNG_PAYLOAD, "image/png"),),
+        )
+
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM customer_products").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM customer_drawing_groups").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM customer_drawing_files").fetchone()[0] == 0
+    assert not storage_root.exists() or not any(path.is_file() for path in storage_root.rglob("*"))
+
+
 def test_version_claim_conflict_discards_staged_upload(tmp_path: Path) -> None:
     database_path = tmp_path / "customer-products.sqlite3"
     storage_root = tmp_path / "data" / "customer_files"
@@ -517,6 +594,278 @@ def test_file_payload_rejects_tampered_storage_content(product_env) -> None:
     with pytest.raises(CustomerProductValidationError) as corrupt_error:
         service.file_payload(1, slot.current_file.id, actor="007")
     assert corrupt_error.value.code == "customer_drawing.file_corrupt"
+
+
+def test_delete_product_removes_all_drawings_and_quote_links(product_env) -> None:
+    service, database_path, storage_root, _quote_history = product_env
+    product = service.create(
+        1,
+        "K8053",
+        actor="007",
+        customer_drawing_files=(_upload("客户-v1.png", PNG_PAYLOAD, "image/png"),),
+    )
+    product = service.upload_version(
+        1,
+        product.id,
+        "customer",
+        (_upload("客户-v2.png", PNG_PAYLOAD + b"v2", "image/png"),),
+        actor="007",
+    )
+    product = service.upload_version(
+        1,
+        product.id,
+        "bld",
+        (_upload("BLD-v1.pdf", PDF_PAYLOAD, "application/pdf"),),
+        actor="007",
+    )
+    file_ids = [file.id for slot in product.drawings for file in slot.files]
+    stored_files = [path for path in storage_root.rglob("*") if path.is_file()]
+    assert len(stored_files) == 3
+
+    with connect(database_path) as connection:
+        cursor = connection.execute(
+            """
+            INSERT INTO quote_records
+              (customer_id, customer_name, product_model, currency, quote_date, created_at, updated_at)
+            VALUES (1, '测试客户', 'K8053', 'USD', '2026-08-07', '2026-08-07', '2026-08-07')
+            """
+        )
+        quote_id = int(cursor.lastrowid)
+        connection.executemany(
+            "INSERT INTO quote_record_drawings (quote_record_id, drawing_file_id, created_at) VALUES (?, ?, '2026-08-07')",
+            [(quote_id, file_id) for file_id in file_ids],
+        )
+        connection.commit()
+
+    deleted = service.delete(1, product.id, actor="007")
+    assert deleted.bld_no == "K8053"
+    assert sum(len(slot.files) for slot in deleted.drawings) == 3
+
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM customer_products").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM customer_drawing_groups").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM customer_drawing_files").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM quote_record_drawings").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM quote_records WHERE id = ?", (quote_id,)).fetchone()[0] == 1
+        actions = [row[0] for row in connection.execute("SELECT action FROM audit_logs ORDER BY id")]
+    assert actions[-1] == "删除客户商品"
+    assert not any(path.is_file() for path in storage_root.rglob("*"))
+
+    recreated = service.create(1, "K8053", actor="007")
+    assert recreated.id != product.id
+
+
+def test_delete_product_without_drawings_removes_product(product_env) -> None:
+    service, database_path, storage_root, _quote_history = product_env
+    product = service.create(1, "K8053", actor="007")
+
+    deleted = service.delete(1, product.id, actor="007")
+
+    assert deleted.id == product.id
+    assert deleted.drawings == ()
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM customer_products").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM audit_logs WHERE action = '删除客户商品'").fetchone()[0] == 1
+    assert not storage_root.exists()
+
+
+def test_delete_rejects_path_that_crosses_into_another_live_drawing_slot(tmp_path: Path) -> None:
+    database_path = tmp_path / "customer-products.sqlite3"
+    storage_root = tmp_path / "data" / "customer_files"
+    _seed(database_path)
+    service = _make_service(
+        database_path,
+        storage_root,
+        quote_history=FakeQuoteHistory(
+            [
+                QuotedProductOption(bld_no="K8053"),
+                QuotedProductOption(bld_no="K9000"),
+            ]
+        ),
+    )
+    first = service.create(
+        1,
+        "K8053",
+        actor="007",
+        customer_drawing_files=(_upload("first.png", PNG_PAYLOAD, "image/png"),),
+    )
+    second = service.create(
+        1,
+        "K9000",
+        actor="007",
+        customer_drawing_files=(_upload("second.png", PNG_PAYLOAD + b"second", "image/png"),),
+    )
+    first_slot = first.slot("customer")
+    second_slot = second.slot("customer")
+    assert first_slot is not None and first_slot.current_file is not None
+    assert second_slot is not None and second_slot.current_file is not None
+    first_original = storage_root / first_slot.current_file.storage_path
+    second_original = storage_root / second_slot.current_file.storage_path
+    unrelated_relative = PurePosixPath(
+        CUSTOMER_SYNC_ID,
+        "drawings",
+        second_slot.sync_id,
+        "v9999",
+        "unrelated.png",
+    ).as_posix()
+    unrelated_file = storage_root / unrelated_relative
+    unrelated_file.parent.mkdir(parents=True, exist_ok=True)
+    unrelated_file.write_bytes(b"unrelated-customer-file")
+    with connect(database_path) as connection:
+        connection.execute(
+            "UPDATE customer_drawing_files SET storage_path = ? WHERE id = ?",
+            (unrelated_relative, first_slot.current_file.id),
+        )
+        connection.commit()
+
+    with pytest.raises(CustomerProductValidationError) as unsafe:
+        service.delete(1, first.id, actor="007")
+
+    assert unsafe.value.code == "customer_drawing.unsafe_path"
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM customer_products").fetchone()[0] == 2
+        assert connection.execute("SELECT COUNT(*) FROM customer_drawing_files").fetchone()[0] == 2
+        assert connection.execute("SELECT COUNT(*) FROM audit_logs WHERE action = '删除客户商品'").fetchone()[0] == 0
+    assert first_original.read_bytes() == PNG_PAYLOAD
+    assert second_original.read_bytes() == PNG_PAYLOAD + b"second"
+    assert unrelated_file.read_bytes() == b"unrelated-customer-file"
+    assert not (storage_root / ".deleting").exists()
+
+
+def test_delete_rejects_drawing_slot_with_mismatched_customer(product_env) -> None:
+    service, database_path, storage_root, _quote_history = product_env
+    product = service.create(
+        1,
+        "K8053",
+        actor="007",
+        customer_drawing_files=(_upload("owned.png", PNG_PAYLOAD, "image/png"),),
+    )
+    slot = product.slot("customer")
+    assert slot is not None and slot.current_file is not None
+    stored_path = storage_root / slot.current_file.storage_path
+    with connect(database_path) as connection:
+        connection.execute(
+            "UPDATE customer_drawing_groups SET customer_id = 2 WHERE id = ?",
+            (slot.id,),
+        )
+        connection.commit()
+
+    with pytest.raises(CustomerProductValidationError) as mismatch:
+        service.delete(1, product.id, actor="007")
+
+    assert mismatch.value.code == "customer_drawing.ownership_mismatch"
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM customer_products WHERE id = ?", (product.id,)).fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM customer_drawing_groups WHERE id = ?", (slot.id,)).fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM customer_drawing_files").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM audit_logs WHERE action = '删除客户商品'").fetchone()[0] == 0
+    assert stored_path.read_bytes() == PNG_PAYLOAD
+    assert not (storage_root / ".deleting").exists()
+
+
+def test_delete_accepts_legacy_merged_group_directory(product_env) -> None:
+    service, database_path, storage_root, _quote_history = product_env
+    product = service.create(
+        1,
+        "K8053",
+        actor="007",
+        customer_drawing_files=(_upload("legacy.png", PNG_PAYLOAD, "image/png"),),
+    )
+    slot = product.slot("customer")
+    assert slot is not None and slot.current_file is not None
+    original_path = storage_root / slot.current_file.storage_path
+    original_parts = PurePosixPath(slot.current_file.storage_path).parts
+    legacy_relative = PurePosixPath(
+        CUSTOMER_SYNC_ID,
+        "drawings",
+        "legacy-group-01",
+        *original_parts[3:],
+    ).as_posix()
+    legacy_path = storage_root / legacy_relative
+    legacy_path.parent.mkdir(parents=True, exist_ok=True)
+    original_path.replace(legacy_path)
+    with connect(database_path) as connection:
+        connection.execute(
+            "UPDATE customer_drawing_files SET storage_path = ? WHERE id = ?",
+            (legacy_relative, slot.current_file.id),
+        )
+        connection.commit()
+
+    service.delete(1, product.id, actor="007")
+
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM customer_products").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM customer_drawing_files").fetchone()[0] == 0
+    assert not legacy_path.exists()
+    assert not (storage_root / ".deleting").exists()
+
+
+def test_delete_rejects_symlink_that_escapes_drawing_slot(product_env) -> None:
+    service, database_path, storage_root, _quote_history = product_env
+    product = service.create(
+        1,
+        "K8053",
+        actor="007",
+        customer_drawing_files=(_upload("linked.png", PNG_PAYLOAD, "image/png"),),
+    )
+    slot = product.slot("customer")
+    assert slot is not None and slot.current_file is not None
+    stored_path = storage_root / slot.current_file.storage_path
+    unrelated_file = storage_root / "other-customer" / "documents" / "keep.txt"
+    unrelated_file.parent.mkdir(parents=True, exist_ok=True)
+    unrelated_file.write_bytes(b"must-not-be-deleted")
+    stored_path.unlink()
+    try:
+        stored_path.symlink_to(unrelated_file)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is unavailable: {exc}")
+
+    with pytest.raises(CustomerProductValidationError) as unsafe:
+        service.delete(1, product.id, actor="007")
+
+    assert unsafe.value.code == "customer_drawing.unsafe_path"
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM customer_products WHERE id = ?", (product.id,)).fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM customer_drawing_files").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM audit_logs WHERE action = '删除客户商品'").fetchone()[0] == 0
+    assert unrelated_file.read_bytes() == b"must-not-be-deleted"
+    assert stored_path.is_symlink()
+    assert not (storage_root / ".deleting").exists()
+
+
+def test_delete_commit_failure_restores_rows_and_files(tmp_path: Path) -> None:
+    database_path = tmp_path / "customer-products.sqlite3"
+    storage_root = tmp_path / "data" / "customer_files"
+    _seed(database_path)
+    base_service = _make_service(database_path, storage_root)
+    product = base_service.create(
+        1,
+        "K8053",
+        actor="007",
+        customer_drawing_files=(_upload("客户-v1.png", PNG_PAYLOAD, "image/png"),),
+    )
+    original_file = next(path for path in storage_root.rglob("*.png") if path.is_file())
+
+    class FailingDeleteCommitUnitOfWork(SQLiteCustomerProductUnitOfWork):
+        def commit(self) -> None:
+            raise sqlite3.OperationalError("forced delete commit failure")
+
+    service = CustomerProductService(
+        lambda: FailingDeleteCommitUnitOfWork(database_path),
+        CustomerDrawingFileStore(storage_root),
+        FakeQuoteHistory([QuotedProductOption(bld_no="K8053")]),
+        FakeCatalog(),
+    )
+    with pytest.raises(sqlite3.OperationalError, match="forced delete commit failure"):
+        service.delete(1, product.id, actor="007")
+
+    with connect(database_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM customer_products WHERE id = ?", (product.id,)).fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM customer_drawing_groups").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM customer_drawing_files").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM audit_logs WHERE action = '删除客户商品'").fetchone()[0] == 0
+    assert original_file.read_bytes() == PNG_PAYLOAD
+    assert not (storage_root / ".deleting").exists()
 
 
 def _legacy_035_schema(connection: sqlite3.Connection) -> None:

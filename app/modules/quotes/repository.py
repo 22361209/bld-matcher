@@ -213,14 +213,28 @@ class SQLiteQuoteRepository:
         self.connection.execute("DELETE FROM quote_records WHERE id = ?", (quote_id,))
         return record
 
-    def link_drawing(self, quote_record_id: int, drawing_file_id: int, *, actor: str) -> None:
+    def link_drawing(self, quote_record_id: int, drawing_file_id: int, *, actor: str) -> bool:
         self.connection.execute(
             """
             INSERT OR IGNORE INTO quote_record_drawings (quote_record_id, drawing_file_id, created_by, created_at)
-            VALUES (?, ?, ?, ?)
+            SELECT q.id, f.id, ?, ?
+            FROM quote_records AS q
+            CROSS JOIN customer_drawing_files AS f
+            WHERE q.id = ? AND f.id = ?
             """,
-            (quote_record_id, drawing_file_id, actor, now_text()),
+            (actor, now_text(), quote_record_id, drawing_file_id),
         )
+        row = self.connection.execute(
+            """
+            SELECT 1
+            FROM quote_record_drawings AS link
+            JOIN quote_records AS q ON q.id = link.quote_record_id
+            JOIN customer_drawing_files AS f ON f.id = link.drawing_file_id
+            WHERE link.quote_record_id = ? AND link.drawing_file_id = ?
+            """,
+            (quote_record_id, drawing_file_id),
+        ).fetchone()
+        return row is not None
 
     def unlink_drawing(self, quote_record_id: int, link_id: int) -> bool:
         cursor = self.connection.execute(

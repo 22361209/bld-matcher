@@ -3,6 +3,7 @@
 - Status: accepted
 - Date: 2026-08-07
 - Owners: BLD
+- Partially superseded by: ADR 0026（新增时上传客户图纸、客户产品及其全部图纸删除生命周期）
 - Supersedes: ADR 0024 中「按方向分组的图纸档案」模型与页签设计（报价行关联图纸版本的关联表、权限点与级联语义继续有效并适配新模型）
 
 ## Context

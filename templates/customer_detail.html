@@ -38,7 +38,7 @@
   </section>
 
   <nav class="customer-detail-tabs" aria-label="客户档案栏目">
-    {% for key, label in (("overview", "概览"), ("contacts", "联系人"), ("business", "报价与合同"), ("products", "商品"), ("documents", "模板与文件")) %}
+    {% for key, label in (("overview", "概览"), ("contacts", "联系人"), ("business", "报价与合同"), ("products", "客户产品编码"), ("documents", "模板与文件")) %}
       <a class="{% if active_view == key %}active{% endif %}" href="{{ url_for('customer_detail', customer_id=customer.id, view=key) }}" {% if active_view == key %}aria-current="page"{% endif %}>{{ label }}</a>
     {% endfor %}
   </nav>
@@ -161,14 +161,14 @@
     </div>
   {% elif active_view == "products" %}
     <section class="data-section customer-products-section">
-      <div class="data-section-header"><div><h2>商品</h2><p>以客户商品（BLD 号）为中心管理 BLD 图纸与客户图纸；图纸按版本保留，可回拨任意历史版本为当前版本。BLD 号必须已在该客户的报价历史中出现。</p></div><span>{{ customer_products|length }} 项</span></div>
+      <div class="data-section-header"><div><h2>客户产品编码</h2><p>按客户产品编码管理对应 BLD 号、产品名称与双方图纸；图纸按版本保留，可回拨任意历史版本为当前版本。BLD 号必须已在该客户的报价历史中出现。</p></div><span>{{ customer_products|length }} 项</span></div>
       {% if can("edit_customers") %}
       <div class="command-actions customer-products-actions">
         <button class="linear-button primary" type="button" data-open-customer-product-modal {% if not quoted_options %}disabled title="该客户暂无报价记录，无法新增商品"{% endif %}>新增商品</button>
       </div>
       {% endif %}
       {% if customer_products %}
-        <div class="data-table-scroll"><table class="data-table customer-products-table"><thead><tr><th>BLD号</th><th>客户产品编码</th><th>客户产品名称</th><th>产品图片</th><th>BLD 图纸</th><th>客户图纸</th>{% if can("edit_customers") %}<th>操作</th>{% endif %}</tr></thead><tbody>
+        <div class="data-table-scroll"><table class="data-table customer-products-table"><thead><tr><th>BLD号</th><th>客户产品编码</th><th>客户产品名称</th><th>产品图片</th><th>BLD 图纸</th><th>客户图纸</th>{% if can_any("edit_customers", "delete_customers") %}<th>操作</th>{% endif %}</tr></thead><tbody>
           {% for product in customer_products %}
             <tr>
               <td>{{ product.bld_no }}</td>
@@ -197,8 +197,18 @@
                   </button>
                 </td>
               {% endfor %}
-              {% if can("edit_customers") %}
-                <td><button class="linear-button subtle compact" type="button" data-open-customer-product-edit data-update-url="{{ url_for('update_customer_product', customer_id=customer.id, product_id=product.id) }}" data-bld-no="{{ product.bld_no }}" data-code="{{ product.customer_product_code }}" data-name="{{ product.customer_product_name }}">编辑</button></td>
+              {% if can_any("edit_customers", "delete_customers") %}
+                <td>
+                  <div class="customer-product-row-actions">
+                    {% if can("edit_customers") %}<button class="linear-button subtle compact" type="button" data-open-customer-product-edit data-update-url="{{ url_for('update_customer_product', customer_id=customer.id, product_id=product.id) }}" data-bld-no="{{ product.bld_no }}" data-code="{{ product.customer_product_code }}" data-name="{{ product.customer_product_name }}">编辑</button>{% endif %}
+                    {% if can("delete_customers") %}
+                    <form method="post" action="{{ url_for('delete_customer_product', customer_id=customer.id, product_id=product.id) }}">
+                      {{ csrf_field() }}
+                      <button class="linear-button danger compact" type="submit" data-confirm="确认删除客户产品“{{ product.customer_product_code or product.bld_no }}”（BLD {{ product.bld_no }}）？该客户产品的 BLD 图纸、客户图纸和全部历史版本将永久删除，报价记录中的图纸关联也会一并清除；报价记录本身保留。此操作无法恢复。">删除</button>
+                    </form>
+                    {% endif %}
+                  </div>
+                </td>
               {% endif %}
             </tr>
           {% endfor %}
@@ -291,26 +301,39 @@
         <h2>新增客户商品</h2>
         <p class="note">BLD 号必须已出现在该客户的报价历史中；客户产品编码会自动带出报价中的编码，名称留空时使用产品目录品名。</p>
       </div>
-      <form action="{{ url_for('create_customer_product', customer_id=customer.id) }}" method="post" class="record-form modal-form customer-product-form" data-customer-product-form>
+      <form action="{{ url_for('create_customer_product', customer_id=customer.id) }}" method="post" enctype="multipart/form-data" class="record-form modal-form customer-product-form" data-customer-product-form>
         {{ csrf_field() }}
         <label>
-          BLD 号
+          <span>BLD 号</span>
           <input name="bld_no" list="customer-product-bld-options" required maxlength="80" autocomplete="off" data-customer-product-bld>
           <datalist id="customer-product-bld-options">
             {% for option in quoted_options %}<option value="{{ option.bld_no }}" data-code="{{ option.customer_product_code }}">{{ option.customer_product_code or option.bld_no }}</option>{% endfor %}
           </datalist>
         </label>
         <label>
-          客户产品编码
+          <span>客户产品编码</span>
           <input name="customer_product_code" maxlength="120" placeholder="选填" data-customer-product-code>
         </label>
-        <label>
-          客户产品名称
+        <label class="customer-product-wide-field">
+          <span>客户产品名称</span>
           <input name="customer_product_name" maxlength="200" placeholder="选填，留空使用产品目录品名">
         </label>
+        <div class="customer-product-create-drawing customer-product-wide-field">
+          <div class="customer-product-create-drawing-heading"><span>客户图纸（选填）</span><small>可在新增时一并保存为客户图纸 V1</small></div>
+          <div class="product-media-intake customer-product-create-drawing-intake" data-customer-product-create-drawing-intake>
+            <button class="product-media-intake-button" type="button" data-customer-product-create-drawing-browse>
+              <span>+</span>
+              <strong data-customer-product-create-drawing-title>拖入客户图纸或点击选择</strong>
+              <small data-customer-product-create-drawing-note>支持 PDF / PNG / JPG / WEBP，单个文件不超过 20 MB</small>
+            </button>
+            <input class="drawing-upload-input" name="customer_drawing_file" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" tabindex="-1" aria-hidden="true" hidden data-customer-product-create-drawing-input>
+          </div>
+          <label class="customer-product-create-revision"><span>版本代号（选填）</span><input name="customer_drawing_revision_label" maxlength="60" placeholder="例如 Rev A"></label>
+          <p class="product-media-upload-status customer-product-create-drawing-status" data-customer-product-create-drawing-status aria-live="polite"></p>
+        </div>
         <div class="form-actions modal-actions">
-          <button type="submit">保存商品</button>
-          <button class="ghost" type="button" data-close-customer-product-modal>取消</button>
+          <button class="linear-button primary" type="submit">保存商品</button>
+          <button class="linear-button subtle" type="button" data-close-customer-product-modal>取消</button>
         </div>
       </form>
     </div>
@@ -326,20 +349,20 @@
       <form method="post" class="record-form modal-form customer-product-form" data-customer-product-edit-form>
         {{ csrf_field() }}
         <label>
-          BLD 号
+          <span>BLD 号</span>
           <input data-customer-product-edit-bld readonly tabindex="-1">
         </label>
         <label>
-          客户产品编码
+          <span>客户产品编码</span>
           <input name="customer_product_code" maxlength="120" placeholder="选填" data-customer-product-edit-code>
         </label>
-        <label>
-          客户产品名称
+        <label class="customer-product-wide-field">
+          <span>客户产品名称</span>
           <input name="customer_product_name" maxlength="200" placeholder="选填" data-customer-product-edit-name>
         </label>
         <div class="form-actions modal-actions">
-          <button type="submit">保存商品</button>
-          <button class="ghost" type="button" data-close-customer-product-edit-modal>取消</button>
+          <button class="linear-button primary" type="submit">保存商品</button>
+          <button class="linear-button subtle" type="button" data-close-customer-product-edit-modal>取消</button>
         </div>
       </form>
     </div>

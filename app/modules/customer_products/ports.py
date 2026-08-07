@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
@@ -32,6 +32,23 @@ class PreparedCustomerFile:
 @dataclass(frozen=True, slots=True)
 class PreparedCustomerFileBatch:
     files: tuple[PreparedCustomerFile, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class StagedCustomerFileRemoval:
+    original_path: Path = field(repr=False)
+    staged_path: Path = field(repr=False)
+
+
+@dataclass(frozen=True, slots=True)
+class StagedCustomerFileRemovalBatch:
+    files: tuple[StagedCustomerFileRemoval, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class CustomerFileRemovalTarget:
+    storage_path: str = field(repr=False)
+    group_sync_id: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +102,12 @@ class CustomerProductRepository(Protocol):
         customer_product_name: str,
         actor: str,
     ) -> bool: ...
+
+    def lock_product_for_delete(self, customer_id: int, product_id: int) -> CustomerProduct | None: ...
+
+    def drawing_group_sync_ids(self, customer_id: int) -> set[str]: ...
+
+    def delete_product(self, customer_id: int, product_id: int) -> bool: ...
 
     def get_slot(self, customer_id: int, product_id: int, kind: str) -> CustomerDrawingSlot | None: ...
 
@@ -169,6 +192,18 @@ class CustomerDrawingStorage(Protocol):
     def discard(self, batch: PreparedCustomerFileBatch) -> None: ...
 
     def compensate(self, batch: PreparedCustomerFileBatch) -> None: ...
+
+    def stage_removal(
+        self,
+        targets: Sequence[CustomerFileRemovalTarget],
+        *,
+        customer_sync_id: str,
+        live_group_sync_ids: Collection[str],
+    ) -> StagedCustomerFileRemovalBatch: ...
+
+    def restore_removal(self, batch: StagedCustomerFileRemovalBatch) -> None: ...
+
+    def finalize_removal(self, batch: StagedCustomerFileRemovalBatch) -> None: ...
 
     def resolve(self, storage_path: str, *, customer_sync_id: str, group_sync_id: str = "") -> Path: ...
 

@@ -35,7 +35,12 @@ PERMISSION_DEFINITIONS: tuple[PermissionDefinition, ...] = (
     PermissionDefinition("view_customers", "查看客户信息", "查看客户档案、联系人和客户资料文件。", "询价、客户与报价"),
     PermissionDefinition("add_customers", "新增客户", "新增客户档案。", "询价、客户与报价"),
     PermissionDefinition("edit_customers", "修正客户", "修改客户档案、联系人和客户资料文件，启用或停用客户。", "询价、客户与报价"),
-    PermissionDefinition("delete_customers", "删除客户", "删除客户档案、联系人和归档客户资料文件。", "询价、客户与报价"),
+    PermissionDefinition(
+        "delete_customers",
+        "删除客户",
+        "删除客户档案、联系人、客户产品及其图纸，归档客户资料文件。",
+        "询价、客户与报价",
+    ),
     PermissionDefinition("view_customer_prices", "查看报价记录", "查看客户报价记录。", "询价、客户与报价"),
     PermissionDefinition("view_price_history", "查看历史价格", "查看客户与产品的历史报价价格。", "询价、客户与报价"),
     PermissionDefinition("add_customer_prices", "新增报价", "新增、导入报价并从询价结果写入报价；同时参与控制产品目录单价的可见性。", "询价、客户与报价"),

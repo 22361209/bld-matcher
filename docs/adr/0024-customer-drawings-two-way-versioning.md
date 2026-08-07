@@ -3,6 +3,7 @@
 - Status: accepted
 - Date: 2026-08-07
 - Owners: BLD
+- Partially superseded by: ADR 0025（商品行与双图纸位模型）及 ADR 0026（删除整个客户产品时清除图纸和报价图纸关联）
 
 ## Context
 

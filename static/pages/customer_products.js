@@ -1,8 +1,36 @@
-/* 客户详情页「商品」页签：新增/编辑弹窗、图纸预览与上传弹窗。 */
+/* 客户详情页「客户产品编码」页签：新增/编辑弹窗、图纸预览与上传弹窗。 */
 
 const JSON_HEADERS = { Accept: "application/json", "X-Requested-With": "fetch" };
 
 const csrfToken = () => document.querySelector("input[name='csrf_token']")?.value || "";
+
+export const isCustomerDrawingFileName = (name) => /\.(pdf|png|jpe?g|webp)$/.test(String(name || "").toLowerCase());
+
+export const assignCustomerDrawingFile = (
+  input,
+  file,
+  droppedFiles = null,
+  DataTransferConstructor = globalThis.DataTransfer,
+) => {
+  if (!input || !file) return false;
+  if (droppedFiles) {
+    try {
+      input.files = droppedFiles;
+      if (input.files?.[0] === file) return true;
+    } catch (_error) {
+      // Some engines only accept a FileList created by their own DataTransfer implementation.
+    }
+  }
+  if (typeof DataTransferConstructor !== "function") return false;
+  try {
+    const transfer = new DataTransferConstructor();
+    transfer.items.add(file);
+    input.files = transfer.files;
+    return input.files?.[0] === file;
+  } catch (_error) {
+    return false;
+  }
+};
 
 if (typeof document !== "undefined" && document.body?.dataset.page === "customers.detail") {
   const resetModalPosition = (modal) => {
@@ -60,8 +88,97 @@ if (typeof document !== "undefined" && document.body?.dataset.page === "customer
   const productForm = document.querySelector("[data-customer-product-form]");
   const bldInput = productForm?.querySelector("[data-customer-product-bld]");
   const codeInput = productForm?.querySelector("[data-customer-product-code]");
+  const createDrawingIntake = productForm?.querySelector("[data-customer-product-create-drawing-intake]");
+  const createDrawingBrowse = productForm?.querySelector("[data-customer-product-create-drawing-browse]");
+  const createDrawingInput = productForm?.querySelector("[data-customer-product-create-drawing-input]");
+  const createDrawingTitle = productForm?.querySelector("[data-customer-product-create-drawing-title]");
+  const createDrawingNote = productForm?.querySelector("[data-customer-product-create-drawing-note]");
+  const createDrawingStatus = productForm?.querySelector("[data-customer-product-create-drawing-status]");
+  let createDrawingDragDepth = 0;
+
+  const resetCreateDrawingSelection = () => {
+    createDrawingDragDepth = 0;
+    createDrawingIntake?.classList.remove("drag-over", "has-media");
+    if (createDrawingTitle instanceof HTMLElement) createDrawingTitle.textContent = "拖入客户图纸或点击选择";
+    if (createDrawingNote instanceof HTMLElement) {
+      createDrawingNote.textContent = "支持 PDF / PNG / JPG / WEBP，单个文件不超过 20 MB";
+    }
+    if (createDrawingStatus instanceof HTMLElement) {
+      createDrawingStatus.textContent = "";
+      createDrawingStatus.classList.remove("error");
+    }
+  };
+
+  const showCreateDrawingSelection = (file) => {
+    if (!(file instanceof File) || !isCustomerDrawingFileName(file.name)) {
+      if (createDrawingInput instanceof HTMLInputElement) createDrawingInput.value = "";
+      resetCreateDrawingSelection();
+      if (createDrawingStatus instanceof HTMLElement) {
+        createDrawingStatus.textContent = "仅支持 PDF、PNG、JPG、WEBP 客户图纸。";
+        createDrawingStatus.classList.add("error");
+      }
+      return false;
+    }
+    createDrawingIntake?.classList.add("has-media");
+    if (createDrawingTitle instanceof HTMLElement) createDrawingTitle.textContent = file.name;
+    if (createDrawingNote instanceof HTMLElement) createDrawingNote.textContent = "保存商品时将一并上传为客户图纸 V1";
+    if (createDrawingStatus instanceof HTMLElement) {
+      createDrawingStatus.textContent = `已选择 ${file.name}`;
+      createDrawingStatus.classList.remove("error");
+    }
+    return true;
+  };
+
+  if (createDrawingIntake instanceof HTMLElement && createDrawingInput instanceof HTMLInputElement) {
+    createDrawingBrowse?.addEventListener("click", () => createDrawingInput.click());
+    createDrawingInput.addEventListener("change", () => {
+      const file = createDrawingInput.files?.[0];
+      if (file) showCreateDrawingSelection(file);
+      else resetCreateDrawingSelection();
+    });
+    createDrawingIntake.addEventListener("dragenter", (event) => {
+      if (!event.dataTransfer?.types.includes("Files")) return;
+      event.preventDefault();
+      createDrawingDragDepth += 1;
+      createDrawingIntake.classList.add("drag-over");
+    });
+    createDrawingIntake.addEventListener("dragover", (event) => {
+      if (!event.dataTransfer?.types.includes("Files")) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+    });
+    createDrawingIntake.addEventListener("dragleave", (event) => {
+      if (!event.dataTransfer?.types.includes("Files")) return;
+      createDrawingDragDepth -= 1;
+      if (createDrawingDragDepth > 0) return;
+      createDrawingIntake.classList.remove("drag-over");
+    });
+    createDrawingIntake.addEventListener("drop", (event) => {
+      if (!event.dataTransfer?.types.includes("Files")) return;
+      event.preventDefault();
+      createDrawingDragDepth = 0;
+      createDrawingIntake.classList.remove("drag-over");
+      const file = event.dataTransfer.files?.[0];
+      if (!isCustomerDrawingFileName(file?.name)) {
+        showCreateDrawingSelection(file);
+        return;
+      }
+      if (!assignCustomerDrawingFile(createDrawingInput, file, event.dataTransfer.files)) {
+        createDrawingInput.value = "";
+        resetCreateDrawingSelection();
+        if (createDrawingStatus instanceof HTMLElement) {
+          createDrawingStatus.textContent = "当前浏览器无法接收拖入文件，请点击选择图纸。";
+          createDrawingStatus.classList.add("error");
+        }
+        return;
+      }
+      showCreateDrawingSelection(file);
+    });
+  }
+
   document.querySelector("[data-open-customer-product-modal]")?.addEventListener("click", () => {
     productForm?.reset();
+    resetCreateDrawingSelection();
     openModal(productModal);
     bldInput?.focus();
   });
@@ -299,7 +416,7 @@ if (typeof document !== "undefined" && document.body?.dataset.page === "customer
       setUploadStatus("未读取到图纸文件。", true);
       return;
     }
-    if (!/\.(pdf|png|jpe?g|webp)$/.test(String(file.name || "").toLowerCase())) {
+    if (!isCustomerDrawingFileName(file.name)) {
       setUploadStatus("仅支持 PDF、PNG、JPG、WEBP 图纸文件。", true);
       return;
     }

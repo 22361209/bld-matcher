@@ -1,11 +1,20 @@
-/* 客户详情页「商品」页签：商品表格、图纸版本徽标与图纸预览/上传弹窗。 */
+/* 客户详情页「客户产品编码」页签：商品表格、图纸版本徽标与图纸预览/上传弹窗。 */
 
 .customer-products-actions {
   margin: 0 0 12px;
+  padding: 12px 16px 0;
 }
 
 .customer-products-table td {
   vertical-align: middle;
+}
+
+.customer-product-row-actions,
+.customer-product-row-actions form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
 }
 
 .customer-product-thumb-link {
@@ -62,7 +71,8 @@
 }
 
 .customer-product-modal-panel {
-  width: min(560px, calc(100vw - 48px));
+  width: min(640px, calc(100vw - 48px));
+  padding: 0;
 }
 
 /* 弹窗渲染在 .app-surface 之外（page_modals），需要就地补齐 --linear-* 变量 */
@@ -78,7 +88,22 @@
 
 .customer-product-form {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+  padding: 20px;
+}
+
+.customer-product-form > label {
+  display: grid;
+  gap: 6px;
+}
+
+.customer-product-form > label > span,
+.customer-product-create-drawing-heading > span,
+.customer-product-create-revision > span {
+  color: var(--linear-muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .customer-product-form > label,
@@ -87,9 +112,92 @@
   max-width: 100%;
 }
 
+.customer-product-wide-field,
+.customer-product-form .modal-actions {
+  grid-column: 1 / -1;
+}
+
 .customer-product-form input[readonly] {
   background: #f2f6f9;
   color: var(--linear-muted);
+}
+
+.customer-product-modal-panel .modal-heading {
+  margin: 0;
+  padding: 18px 56px 16px 20px;
+  border-bottom: 1px solid var(--linear-line);
+  background: #f7f9fa;
+}
+
+.customer-product-modal-panel .modal-heading .note {
+  margin: 4px 0 0;
+  line-height: 1.55;
+}
+
+.customer-product-form .modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+  padding-top: 16px;
+  border-top: 1px solid var(--linear-line);
+}
+
+.customer-product-create-drawing {
+  display: grid;
+  gap: 9px;
+  padding: 14px;
+  border: 1px solid var(--linear-line);
+  border-radius: 6px;
+  background: #f7f9fa;
+}
+
+.customer-product-create-drawing-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.customer-product-create-drawing-heading small {
+  color: var(--linear-muted);
+  font-size: 12px;
+}
+
+.customer-product-create-drawing-intake {
+  inline-size: 100%;
+  block-size: auto;
+}
+
+.customer-product-create-drawing-intake .product-media-intake-button {
+  min-height: 112px;
+  padding: 12px;
+}
+
+.customer-product-create-drawing-intake strong,
+.customer-product-create-drawing-intake small,
+.customer-product-create-drawing-status {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.customer-product-create-drawing-intake.has-media {
+  border-style: solid;
+  border-color: var(--linear-line-strong);
+  background: #f6faff;
+}
+
+.customer-product-create-revision {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.customer-product-create-drawing-status {
+  margin: 0;
 }
 
 .customer-product-modal-panel [data-modal-drag-handle] {
@@ -200,6 +308,30 @@
 }
 
 @media (max-width: 720px) {
+  .customer-product-modal-panel {
+    width: min(100%, calc(100vw - 28px));
+  }
+
+  .customer-product-form {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 16px;
+  }
+
+  .customer-product-wide-field,
+  .customer-product-form .modal-actions {
+    grid-column: auto;
+  }
+
+  .customer-product-create-drawing-heading,
+  .customer-product-create-revision {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .customer-product-create-drawing-heading {
+    display: grid;
+  }
+
   .drawing-modal-stage {
     width: calc(100vw - 132px);
     height: 46vh;

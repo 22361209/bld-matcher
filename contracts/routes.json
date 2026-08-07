@@ -316,6 +316,13 @@
       "rule": "/customers/<int:customer_id>/products"
     },
     {
+      "endpoint": "delete_customer_product",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/customers/<int:customer_id>/products/<int:product_id>/delete"
+    },
+    {
       "endpoint": "set_customer_product_drawing_current",
       "methods": [
         "POST"

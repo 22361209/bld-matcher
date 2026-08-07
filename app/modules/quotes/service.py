@@ -388,7 +388,14 @@ class QuoteService:
                     "所选图纸不属于该报价行的客户，不能关联。",
                     field="drawing_file_id",
                 )
-            unit_of_work.repository.link_drawing(quote_id, reference.file_id, actor=actor)
+            if not unit_of_work.repository.link_drawing(quote_id, reference.file_id, actor=actor):
+                if unit_of_work.repository.get(quote_id) is None:
+                    raise QuoteNotFoundError(quote_id)
+                raise QuoteValidationError(
+                    "quote.drawing_file_unknown",
+                    "图纸文件不存在，请刷新后重试。",
+                    field="drawing_file_id",
+                )
             unit_of_work.repository.audit("关联报价图纸", record, actor=actor)
             unit_of_work.commit()
         return record

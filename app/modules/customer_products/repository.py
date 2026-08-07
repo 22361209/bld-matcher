@@ -201,6 +201,52 @@ class SQLiteCustomerProductRepository:
         )
         return cursor.rowcount == 1
 
+    def lock_product_for_delete(self, customer_id: int, product_id: int) -> CustomerProduct | None:
+        # SQLite 没有行级锁；删除需要先拿写锁，再读取将被移动/删除的全部文件路径，
+        # 避免并发上传在文件快照之后落库而留下孤儿文件。
+        self.connection.execute("BEGIN IMMEDIATE")
+        return self.get_product(customer_id, product_id)
+
+    def drawing_group_sync_ids(self, customer_id: int) -> set[str]:
+        rows = self.connection.execute(
+            "SELECT sync_id FROM customer_drawing_groups WHERE customer_id = ?",
+            (customer_id,),
+        ).fetchall()
+        return {str(row["sync_id"]) for row in rows}
+
+    def delete_product(self, customer_id: int, product_id: int) -> bool:
+        group_rows = self.connection.execute(
+            "SELECT id FROM customer_drawing_groups WHERE customer_product_id = ? AND customer_id = ?",
+            (product_id, customer_id),
+        ).fetchall()
+        group_ids = [int(row["id"]) for row in group_rows]
+        if group_ids:
+            placeholders = ",".join("?" for _ in group_ids)
+            file_rows = self.connection.execute(
+                f"SELECT id FROM customer_drawing_files WHERE group_id IN ({placeholders})",
+                group_ids,
+            ).fetchall()
+            file_ids = [int(row["id"]) for row in file_rows]
+            if file_ids:
+                file_placeholders = ",".join("?" for _ in file_ids)
+                self.connection.execute(
+                    f"DELETE FROM quote_record_drawings WHERE drawing_file_id IN ({file_placeholders})",
+                    file_ids,
+                )
+            self.connection.execute(
+                f"DELETE FROM customer_drawing_files WHERE group_id IN ({placeholders})",
+                group_ids,
+            )
+            self.connection.execute(
+                f"DELETE FROM customer_drawing_groups WHERE id IN ({placeholders})",
+                group_ids,
+            )
+        cursor = self.connection.execute(
+            "DELETE FROM customer_products WHERE id = ? AND customer_id = ?",
+            (product_id, customer_id),
+        )
+        return cursor.rowcount == 1
+
     def get_slot(self, customer_id: int, product_id: int, kind: str) -> CustomerDrawingSlot | None:
         row = self.connection.execute(
             """

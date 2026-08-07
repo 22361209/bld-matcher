@@ -122,13 +122,23 @@ class CustomerProductRouteTest(unittest.TestCase):
         with patch.object(products_web, "get_customer_product_service", return_value=service):
             response = app.test_client().post(
                 "/customers/1/products",
-                data={"bld_no": "k8053", "customer_product_code": "CUST-001", "customer_product_name": "支架总成"},
+                data={
+                    "bld_no": "k8053",
+                    "customer_product_code": "CUST-001",
+                    "customer_product_name": "支架总成",
+                    "customer_drawing_revision_label": "Rev A",
+                    "customer_drawing_file": (io.BytesIO(b"%PDF-1.4\nx"), "客户图纸.pdf"),
+                },
+                content_type="multipart/form-data",
             )
         self.assertEqual(response.status_code, 302)
         self.assertIn("/customers/1", response.headers["Location"])
         self.assertIn("view=products", response.headers["Location"])
         args, kwargs = calls[0]
         self.assertEqual(args, (1, "k8053", "CUST-001", "支架总成"))
+        self.assertEqual(len(kwargs["customer_drawing_files"]), 1)
+        self.assertEqual(kwargs["customer_drawing_files"][0].filename, "客户图纸.pdf")
+        self.assertEqual(kwargs["customer_drawing_revision_label"], "Rev A")
         self.assertEqual(kwargs["actor"], "tester")
 
     def test_create_validation_error_flashes_and_redirects(self) -> None:
@@ -175,6 +185,33 @@ class CustomerProductRouteTest(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.headers["Location"].endswith("/"))
+
+    def test_delete_requires_delete_permission(self) -> None:
+        app = self._route_app({"edit_customers"})
+        service = SimpleNamespace(delete=lambda *args, **kwargs: None)
+        with patch.object(products_web, "get_customer_product_service", return_value=service):
+            response = app.test_client().post("/customers/1/products/7/delete")
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith("/"))
+
+    def test_delete_calls_service_and_reports_removed_files(self) -> None:
+        app = self._route_app({"delete_customers"})
+        calls = []
+
+        def delete(*args, **kwargs):
+            calls.append((args, kwargs))
+            return _product(drawings=(_slot("customer"),))
+
+        service = SimpleNamespace(delete=delete)
+        with patch.object(products_web, "get_customer_product_service", return_value=service):
+            response = app.test_client().post(
+                "/customers/1/products/7/delete",
+                headers={"X-Requested-With": "fetch", "Accept": "application/json"},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), {"ok": True, "deleted_drawing_count": 2})
+        self.assertEqual(calls[0][0], (1, 7))
+        self.assertEqual(calls[0][1]["actor"], "tester")
 
     def test_upload_version_requires_edit_permission(self) -> None:
         app = self._route_app({"view_customers"})
@@ -448,7 +485,7 @@ class CustomerProductsTabRenderTest(unittest.TestCase):
             ),
         )
         html = self._render(
-            {"view_customers", "edit_customers"},
+            {"view_customers", "edit_customers", "delete_customers"},
             customer_products=[product],
             quoted_options=[SimpleNamespace(bld_no="K8053", customer_product_code="CUST-001")],
         )
@@ -463,6 +500,18 @@ class CustomerProductsTabRenderTest(unittest.TestCase):
         self.assertIn("data-open-drawing-modal", html)
         self.assertIn("data-open-customer-product-edit", html)
         self.assertIn("新增商品", html)
+        self.assertIn(
+            '<a class="active" href="/customers/1?view=products" aria-current="page">客户产品编码</a>',
+            html,
+        )
+        self.assertIn('enctype="multipart/form-data"', html)
+        self.assertIn('name="customer_drawing_file"', html)
+        self.assertIn('tabindex="-1" aria-hidden="true" hidden data-customer-product-create-drawing-input', html)
+        self.assertIn("data-customer-product-create-drawing-intake", html)
+        self.assertIn("保存为客户图纸 V1", html)
+        self.assertIn("/customers/1/products/7/delete", html)
+        self.assertIn("全部历史版本将永久删除", html)
+        self.assertIn("报价记录中的图纸关联也会一并清除", html)
         self.assertIn('value="K8053" data-code="CUST-001"', html)
         self.assertIn('data-catalog-has-drawing="true"', html)
 
@@ -474,11 +523,24 @@ class CustomerProductsTabRenderTest(unittest.TestCase):
         self.assertNotIn("<th>操作</th>", html)
         self.assertNotIn("新增商品", html)
         self.assertNotIn("data-open-customer-product-edit", html)
+        self.assertNotIn("/customers/1/products/7/delete", html)
         self.assertNotIn("data-customer-product-modal", html)
         self.assertNotIn("data-drawing-upload", html)
         self.assertNotIn("data-drawing-set-current", html)
         self.assertNotIn("data-drawing-import-catalog", html)
         self.assertIn("data-customer-drawing-modal", html)
+
+    def test_products_tab_delete_only_permission_shows_delete_without_edit(self) -> None:
+        product = _product(drawings=(_slot("customer"),))
+        html = self._render(
+            {"view_customers", "delete_customers"},
+            customer_products=[product],
+        )
+        self.assertIn("<th>操作</th>", html)
+        self.assertIn("/customers/1/products/7/delete", html)
+        self.assertIn("全部历史版本将永久删除", html)
+        self.assertNotIn("data-open-customer-product-edit", html)
+        self.assertNotIn("data-customer-product-edit-modal", html)
 
     def test_products_tab_empty_state(self) -> None:
         html = self._render({"view_customers", "edit_customers"})

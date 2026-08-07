@@ -12,7 +12,7 @@ from app.modules.customer_products.repository import SQLiteCustomerProductUnitOf
 from app.modules.customer_products.service import CustomerProductService
 from app.modules.quotes.domain import QuoteValidationError
 from app.modules.quotes.infrastructure import CustomerDrawingDirectoryAdapter
-from app.modules.quotes.repository import SQLiteQuoteUnitOfWork
+from app.modules.quotes.repository import SQLiteQuoteRepository, SQLiteQuoteUnitOfWork
 from app.modules.quotes.service import QuoteNotFoundError, QuoteService
 
 
@@ -192,6 +192,49 @@ class QuoteDrawingLinkTest(unittest.TestCase):
             self.service.link_drawing(record.id, 9999, actor="linker")
         with self.assertRaises(QuoteNotFoundError):
             self.service.link_drawing(9999, 11, actor="linker")
+
+    def test_link_drawing_rechecks_file_exists_at_insert(self):
+        record = self.service.create(self.quote_data(), actor="linker")
+        stale_reference = self.service._drawing_reference(11)
+
+        class StaleDirectory:
+            def file_references(self, _file_ids):
+                return {11: stale_reference}
+
+            def linkable_versions(self, _customer_id):
+                return []
+
+        self.service.customer_drawing_directory = StaleDirectory()
+        with connect(self.db_path) as connection:
+            connection.execute("DELETE FROM customer_drawing_files WHERE id = 11")
+            connection.commit()
+
+        with self.assertRaisesRegex(QuoteValidationError, "图纸文件不存在"):
+            self.service.link_drawing(record.id, 11, actor="linker")
+        self.assertEqual(self._link_count(record.id), 0)
+
+    def test_link_drawing_rechecks_quote_exists_at_insert(self):
+        record = self.service.create(self.quote_data(), actor="linker")
+        with connect(self.db_path) as reader:
+            repository = SQLiteQuoteRepository(reader)
+            self.assertIsNotNone(repository.get(record.id))
+            self.assertFalse(reader.in_transaction)
+            with connect(self.db_path) as writer:
+                writer.execute("DELETE FROM quote_records WHERE id = ?", (record.id,))
+                writer.commit()
+
+            self.assertFalse(repository.link_drawing(record.id, 11, actor="linker"))
+            reader.rollback()
+
+        with connect(self.db_path) as connection:
+            quote_count = connection.execute(
+                "SELECT COUNT(*) FROM quote_records WHERE id = ?", (record.id,)
+            ).fetchone()[0]
+            orphan_count = connection.execute(
+                "SELECT COUNT(*) FROM quote_record_drawings WHERE quote_record_id = ?", (record.id,)
+            ).fetchone()[0]
+        self.assertEqual(quote_count, 0)
+        self.assertEqual(orphan_count, 0)
 
     def test_link_drawing_falls_back_to_customer_name_for_legacy_rows(self):
         legacy_id = self._legacy_quote()

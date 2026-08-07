@@ -4,7 +4,7 @@ import hashlib
 import os
 import re
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from pathlib import Path, PurePosixPath
 from uuid import uuid4
 
@@ -16,7 +16,14 @@ from .domain import (
     QuotedProductOption,
 )
 from .file_validation import upload_parts, validate_file_signature, validate_upload_metadata
-from .ports import CatalogDrawingSource, PreparedCustomerFile, PreparedCustomerFileBatch
+from .ports import (
+    CatalogDrawingSource,
+    CustomerFileRemovalTarget,
+    PreparedCustomerFile,
+    PreparedCustomerFileBatch,
+    StagedCustomerFileRemoval,
+    StagedCustomerFileRemovalBatch,
+)
 
 
 _SAFE_STORAGE_SEGMENT = re.compile(r"[A-Za-z0-9_-]{8,128}\Z")
@@ -245,6 +252,79 @@ class CustomerDrawingFileStore:
             item.temporary_path.unlink(missing_ok=True)
         self._prune_empty(self.root / ".staging", stop=self.root)
 
+    def stage_removal(
+        self,
+        targets: Sequence[CustomerFileRemovalTarget],
+        *,
+        customer_sync_id: str,
+        live_group_sync_ids: Collection[str],
+    ) -> StagedCustomerFileRemovalBatch:
+        self._validate_storage_segment(customer_sync_id, "customer sync id")
+        normalized_live_groups = frozenset(str(value) for value in live_group_sync_ids)
+        for group_sync_id in normalized_live_groups:
+            self._validate_storage_segment(group_sync_id, "group sync id")
+        batch_root = self.root / ".deleting" / uuid4().hex
+        staged: list[StagedCustomerFileRemoval] = []
+        try:
+            for target in dict.fromkeys(targets):
+                self._validate_storage_segment(target.group_sync_id, "group sync id")
+                pure = PurePosixPath(str(target.storage_path or ""))
+                if (
+                    len(pure.parts) < 4
+                    or pure.parts[0] != customer_sync_id
+                    or pure.parts[1] != _DRAWINGS_SEGMENT
+                ):
+                    raise CustomerProductValidationError("customer_drawing.unsafe_path", "图纸文件路径无效。")
+                stored_group_sync_id = pure.parts[2]
+                self._validate_storage_segment(stored_group_sync_id, "stored group sync id")
+                # 036 迁移会把重复旧图纸组合并到保留组，但不移动既有磁盘文件。
+                # 因而允许不再存活的旧组目录；绝不允许越界到另一个仍存活的图纸位。
+                if (
+                    stored_group_sync_id != target.group_sync_id
+                    and stored_group_sync_id in normalized_live_groups
+                ):
+                    raise CustomerProductValidationError("customer_drawing.unsafe_path", "图纸文件路径无效。")
+                original = self._destination(
+                    target.storage_path,
+                    customer_sync_id=customer_sync_id,
+                    group_sync_id=stored_group_sync_id,
+                )
+                if not original.exists():
+                    continue
+                if not original.is_file():
+                    raise CustomerProductValidationError(
+                        "customer_drawing.invalid_file_path", "图纸文件路径无效。"
+                    )
+                relative = original.relative_to(self.root.resolve())
+                staged_path = batch_root / relative
+                staged_path.parent.mkdir(parents=True, exist_ok=True)
+                os.replace(original, staged_path)
+                staged.append(StagedCustomerFileRemoval(original_path=original, staged_path=staged_path))
+                self._prune_empty(original.parent, stop=self.root)
+            return StagedCustomerFileRemovalBatch(tuple(staged))
+        except Exception:
+            self.restore_removal(StagedCustomerFileRemovalBatch(tuple(staged)))
+            raise
+
+    def restore_removal(self, batch: StagedCustomerFileRemovalBatch) -> None:
+        for item in reversed(batch.files):
+            if not item.staged_path.exists():
+                continue
+            if item.original_path.exists():
+                raise CustomerProductValidationError(
+                    "customer_drawing.restore_conflict", "图纸文件恢复冲突，请联系管理员。"
+                )
+            item.original_path.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(item.staged_path, item.original_path)
+            self._prune_empty(item.staged_path.parent, stop=self.root)
+        self._prune_empty(self.root / ".deleting", stop=self.root)
+
+    def finalize_removal(self, batch: StagedCustomerFileRemovalBatch) -> None:
+        for item in batch.files:
+            item.staged_path.unlink(missing_ok=True)
+            self._prune_empty(item.staged_path.parent, stop=self.root)
+        self._prune_empty(self.root / ".deleting", stop=self.root)
+
     def resolve(self, storage_path: str, *, customer_sync_id: str, group_sync_id: str = "") -> Path:
         self._validate_storage_segment(customer_sync_id, "customer sync id")
         if group_sync_id:
@@ -281,11 +361,23 @@ class CustomerDrawingFileStore:
         if any(part in {"", ".", ".."} for part in pure.parts):
             raise CustomerProductValidationError("customer_drawing.unsafe_path", "图纸文件路径无效。")
         root = self.root.resolve()
-        candidate = (root / Path(*pure.parts)).resolve()
+        lexical_candidate = root / Path(*pure.parts)
+        current = root
+        for part in pure.parts:
+            current /= part
+            if current.is_symlink():
+                raise CustomerProductValidationError("customer_drawing.unsafe_path", "图纸文件路径无效。")
+        candidate = lexical_candidate.resolve()
         try:
             candidate.relative_to(root)
         except ValueError as exc:
             raise CustomerProductValidationError("customer_drawing.unsafe_path", "图纸文件路径无效。") from exc
+        if group_sync_id:
+            group_root = root / customer_sync_id / _DRAWINGS_SEGMENT / group_sync_id
+            try:
+                candidate.relative_to(group_root)
+            except ValueError as exc:
+                raise CustomerProductValidationError("customer_drawing.unsafe_path", "图纸文件路径无效。") from exc
         return candidate
 
     @staticmethod
