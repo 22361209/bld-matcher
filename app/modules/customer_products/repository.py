@@ -12,11 +12,13 @@ from app.platform.clock import now_text
 from .domain import (
     CustomerDrawingFile,
     CustomerDrawingFileReference,
-    CustomerDrawingGroup,
+    CustomerDrawingSlot,
     CustomerDrawingSummary,
     CustomerIdentity,
+    CustomerProduct,
+    CustomerProductValidationError,
 )
-from .ports import CustomerDrawingFileAccess, CustomerDrawingRepository, PreparedCustomerFile
+from .ports import CustomerDrawingFileAccess, CustomerProductRepository, PreparedCustomerFile
 
 
 def _file(row: sqlite3.Row) -> CustomerDrawingFile:
@@ -37,17 +39,14 @@ def _file(row: sqlite3.Row) -> CustomerDrawingFile:
     )
 
 
-def _group(row: sqlite3.Row, files: Iterable[CustomerDrawingFile] = ()) -> CustomerDrawingGroup:
-    return CustomerDrawingGroup(
+def _slot(row: sqlite3.Row, files: Iterable[CustomerDrawingFile] = ()) -> CustomerDrawingSlot:
+    return CustomerDrawingSlot(
         id=int(row["id"]),
+        customer_product_id=int(row["customer_product_id"]),
         customer_id=int(row["customer_id"]),
         sync_id=str(row["sync_id"]),
-        direction=str(row["direction"]),
-        bld_no=str(row["bld_no"] or ""),
-        title=str(row["title"]),
-        drawing_no=str(row["drawing_no"] or ""),
+        kind=str(row["kind"]),
         current_version=int(row["current_version"]),
-        archived=bool(row["archived"]),
         created_by=str(row["created_by"] or ""),
         updated_by=str(row["updated_by"] or ""),
         created_at=str(row["created_at"]),
@@ -56,7 +55,23 @@ def _group(row: sqlite3.Row, files: Iterable[CustomerDrawingFile] = ()) -> Custo
     )
 
 
-class SQLiteCustomerDrawingRepository:
+def _product(row: sqlite3.Row, drawings: Iterable[CustomerDrawingSlot] = ()) -> CustomerProduct:
+    return CustomerProduct(
+        id=int(row["id"]),
+        customer_id=int(row["customer_id"]),
+        sync_id=str(row["sync_id"]),
+        bld_no=str(row["bld_no"]),
+        customer_product_code=str(row["customer_product_code"] or ""),
+        customer_product_name=str(row["customer_product_name"] or ""),
+        created_by=str(row["created_by"] or ""),
+        updated_by=str(row["updated_by"] or ""),
+        created_at=str(row["created_at"]),
+        updated_at=str(row["updated_at"]),
+        drawings=tuple(drawings),
+    )
+
+
+class SQLiteCustomerProductRepository:
     def __init__(self, connection: sqlite3.Connection) -> None:
         self.connection = connection
 
@@ -69,29 +84,47 @@ class SQLiteCustomerDrawingRepository:
             return None
         return CustomerIdentity(id=int(row["id"]), name=str(row["name"]), sync_id=str(row["sync_id"] or ""))
 
-    def list_groups(self, customer_id: int, *, include_archived: bool = False) -> list[CustomerDrawingGroup]:
-        archived_clause = "" if include_archived else "AND archived = 0"
+    def list_products(self, customer_id: int) -> list[CustomerProduct]:
         rows = self.connection.execute(
-            f"""
-            SELECT * FROM customer_drawing_groups
-            WHERE customer_id = ? {archived_clause}
-            ORDER BY direction, archived, updated_at DESC, id DESC
+            """
+            SELECT * FROM customer_products
+            WHERE customer_id = ?
+            ORDER BY bld_no COLLATE NOCASE, id
             """,
             (customer_id,),
         ).fetchall()
-        return self._attach_files(rows)
+        return self._attach_drawings(rows)
 
-    def get_group(self, customer_id: int, group_id: int) -> CustomerDrawingGroup | None:
+    def get_product(self, customer_id: int, product_id: int) -> CustomerProduct | None:
         row = self.connection.execute(
-            "SELECT * FROM customer_drawing_groups WHERE id = ? AND customer_id = ?",
-            (group_id, customer_id),
+            "SELECT * FROM customer_products WHERE id = ? AND customer_id = ?",
+            (product_id, customer_id),
         ).fetchone()
         if row is None:
             return None
-        groups = self._attach_files([row])
-        return groups[0]
+        products = self._attach_drawings([row])
+        return products[0]
 
-    def _attach_files(self, rows: Sequence[sqlite3.Row]) -> list[CustomerDrawingGroup]:
+    def _attach_drawings(self, rows: Sequence[sqlite3.Row]) -> list[CustomerProduct]:
+        if not rows:
+            return []
+        product_ids = [int(row["id"]) for row in rows]
+        placeholders = ",".join("?" for _ in product_ids)
+        slot_rows = self.connection.execute(
+            f"""
+            SELECT * FROM customer_drawing_groups
+            WHERE customer_product_id IN ({placeholders})
+            ORDER BY kind, id
+            """,
+            product_ids,
+        ).fetchall()
+        slots = self._attach_files(slot_rows)
+        slots_by_product: dict[int, list[CustomerDrawingSlot]] = {product_id: [] for product_id in product_ids}
+        for slot in slots:
+            slots_by_product[slot.customer_product_id].append(slot)
+        return [_product(row, slots_by_product[int(row["id"])]) for row in rows]
+
+    def _attach_files(self, rows: Sequence[sqlite3.Row]) -> list[CustomerDrawingSlot]:
         if not rows:
             return []
         group_ids = [int(row["id"]) for row in rows]
@@ -108,66 +141,101 @@ class SQLiteCustomerDrawingRepository:
         for file_row in file_rows:
             item = _file(file_row)
             files_by_group[item.group_id].append(item)
-        return [_group(row, files_by_group[int(row["id"])]) for row in rows]
+        return [_slot(row, files_by_group[int(row["id"])]) for row in rows]
 
-    def insert_group(
+    def insert_product(
         self,
         *,
         customer_id: int,
         sync_id: str,
-        direction: str,
         bld_no: str,
-        title: str,
-        drawing_no: str,
-        current_version: int,
+        customer_product_code: str,
+        customer_product_name: str,
+        actor: str,
+    ) -> int:
+        timestamp = now_text()
+        try:
+            cursor = self.connection.execute(
+                """
+                INSERT INTO customer_products
+                  (customer_id, sync_id, bld_no, customer_product_code, customer_product_name,
+                   created_by, updated_by, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    customer_id,
+                    sync_id,
+                    bld_no,
+                    customer_product_code,
+                    customer_product_name,
+                    actor,
+                    actor,
+                    timestamp,
+                    timestamp,
+                ),
+            )
+        except sqlite3.IntegrityError as exc:
+            raise CustomerProductValidationError(
+                "customer_product.duplicate", "该客户已存在相同 BLD 号的商品。", field="bld_no"
+            ) from exc
+        if cursor.lastrowid is None:
+            raise RuntimeError("Customer product insert did not return an id.")
+        return int(cursor.lastrowid)
+
+    def update_product(
+        self,
+        customer_id: int,
+        product_id: int,
+        *,
+        customer_product_code: str,
+        customer_product_name: str,
+        actor: str,
+    ) -> bool:
+        cursor = self.connection.execute(
+            """
+            UPDATE customer_products
+            SET customer_product_code = ?, customer_product_name = ?, updated_by = ?, updated_at = ?
+            WHERE id = ? AND customer_id = ?
+            """,
+            (customer_product_code, customer_product_name, actor, now_text(), product_id, customer_id),
+        )
+        return cursor.rowcount == 1
+
+    def get_slot(self, customer_id: int, product_id: int, kind: str) -> CustomerDrawingSlot | None:
+        row = self.connection.execute(
+            """
+            SELECT * FROM customer_drawing_groups
+            WHERE customer_product_id = ? AND customer_id = ? AND kind = ?
+            """,
+            (product_id, customer_id, kind),
+        ).fetchone()
+        if row is None:
+            return None
+        slots = self._attach_files([row])
+        return slots[0]
+
+    def insert_slot(
+        self,
+        *,
+        customer_product_id: int,
+        customer_id: int,
+        sync_id: str,
+        kind: str,
         actor: str,
     ) -> int:
         timestamp = now_text()
         cursor = self.connection.execute(
             """
             INSERT INTO customer_drawing_groups
-              (customer_id, sync_id, direction, bld_no, title, drawing_no, current_version,
-               archived, created_by, updated_by, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
+              (customer_product_id, customer_id, sync_id, kind, current_version,
+               created_by, updated_by, created_at, updated_at)
+            VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)
             """,
-            (
-                customer_id,
-                sync_id,
-                direction,
-                bld_no,
-                title,
-                drawing_no,
-                current_version,
-                actor,
-                actor,
-                timestamp,
-                timestamp,
-            ),
+            (customer_product_id, customer_id, sync_id, kind, actor, actor, timestamp, timestamp),
         )
         if cursor.lastrowid is None:
-            raise RuntimeError("Customer drawing group insert did not return an id.")
+            raise RuntimeError("Customer drawing slot insert did not return an id.")
         return int(cursor.lastrowid)
-
-    def update_group(
-        self,
-        customer_id: int,
-        group_id: int,
-        *,
-        direction: str,
-        bld_no: str,
-        title: str,
-        drawing_no: str,
-        actor: str,
-    ) -> bool:
-        cursor = self.connection.execute(
-            """
-            UPDATE customer_drawing_groups
-            SET direction = ?, bld_no = ?, title = ?, drawing_no = ?, updated_by = ?, updated_at = ?
-            WHERE id = ? AND customer_id = ? AND archived = 0
-            """,
-            (direction, bld_no, title, drawing_no, actor, now_text(), group_id, customer_id),
-        )
-        return cursor.rowcount == 1
 
     def claim_next_version(
         self,
@@ -175,18 +243,29 @@ class SQLiteCustomerDrawingRepository:
         group_id: int,
         *,
         expected_version: int,
+        new_version: int,
         actor: str,
-    ) -> int | None:
-        next_version = expected_version + 1
+    ) -> bool:
         cursor = self.connection.execute(
             """
             UPDATE customer_drawing_groups
             SET current_version = ?, updated_by = ?, updated_at = ?
-            WHERE id = ? AND customer_id = ? AND current_version = ? AND archived = 0
+            WHERE id = ? AND customer_id = ? AND current_version = ?
             """,
-            (next_version, actor, now_text(), group_id, customer_id, expected_version),
+            (new_version, actor, now_text(), group_id, customer_id, expected_version),
         )
-        return next_version if cursor.rowcount == 1 else None
+        return cursor.rowcount == 1
+
+    def set_current_version(self, customer_id: int, group_id: int, version_no: int, *, actor: str) -> bool:
+        cursor = self.connection.execute(
+            """
+            UPDATE customer_drawing_groups
+            SET current_version = ?, updated_by = ?, updated_at = ?
+            WHERE id = ? AND customer_id = ?
+            """,
+            (version_no, actor, now_text(), group_id, customer_id),
+        )
+        return cursor.rowcount == 1
 
     def insert_file(
         self,
@@ -221,32 +300,10 @@ class SQLiteCustomerDrawingRepository:
             ),
         )
 
-    def archive_group(self, customer_id: int, group_id: int, *, actor: str) -> bool:
-        cursor = self.connection.execute(
-            """
-            UPDATE customer_drawing_groups
-            SET archived = 1, updated_by = ?, updated_at = ?
-            WHERE id = ? AND customer_id = ? AND archived = 0
-            """,
-            (actor, now_text(), group_id, customer_id),
-        )
-        return cursor.rowcount == 1
-
-    def unarchive_group(self, customer_id: int, group_id: int, *, actor: str) -> bool:
-        cursor = self.connection.execute(
-            """
-            UPDATE customer_drawing_groups
-            SET archived = 0, updated_by = ?, updated_at = ?
-            WHERE id = ? AND customer_id = ? AND archived = 1
-            """,
-            (actor, now_text(), group_id, customer_id),
-        )
-        return cursor.rowcount == 1
-
     def get_file_access(self, customer_id: int, file_id: int) -> CustomerDrawingFileAccess | None:
         row = self.connection.execute(
             """
-            SELECT f.*, g.customer_id, g.sync_id AS group_sync_id, g.archived AS group_archived,
+            SELECT f.*, g.customer_id, g.sync_id AS group_sync_id,
                    c.sync_id AS customer_sync_id
             FROM customer_drawing_files AS f
             JOIN customer_drawing_groups AS g ON g.id = f.group_id
@@ -262,7 +319,6 @@ class SQLiteCustomerDrawingRepository:
             customer_id=int(row["customer_id"]),
             customer_sync_id=str(row["customer_sync_id"] or ""),
             group_sync_id=str(row["group_sync_id"]),
-            group_archived=bool(row["group_archived"]),
         )
 
     def file_references(self, file_ids: Sequence[int]) -> dict[int, CustomerDrawingFileReference]:
@@ -272,9 +328,11 @@ class SQLiteCustomerDrawingRepository:
         placeholders = ",".join("?" for _ in normalized_ids)
         rows = self.connection.execute(
             f"""
-            SELECT f.*, g.customer_id, g.direction, g.title, g.current_version, g.archived AS group_archived
+            SELECT f.*, g.customer_id, g.customer_product_id, g.kind, g.current_version,
+                   p.bld_no, p.customer_product_name
             FROM customer_drawing_files AS f
             JOIN customer_drawing_groups AS g ON g.id = f.group_id
+            JOIN customer_products AS p ON p.id = g.customer_product_id
             WHERE f.id IN ({placeholders})
             """,
             normalized_ids,
@@ -284,10 +342,11 @@ class SQLiteCustomerDrawingRepository:
                 file=_file(row),
                 group_id=int(row["group_id"]),
                 customer_id=int(row["customer_id"]),
-                direction=str(row["direction"]),
-                title=str(row["title"]),
+                customer_product_id=int(row["customer_product_id"]),
+                kind=str(row["kind"]),
+                bld_no=str(row["bld_no"]),
+                customer_product_name=str(row["customer_product_name"] or ""),
                 current_version=int(row["current_version"]),
-                group_archived=bool(row["group_archived"]),
             )
             for row in rows
         }
@@ -304,7 +363,7 @@ class SQLiteCustomerDrawingRepository:
                    COUNT(f.id) AS file_count
             FROM customer_drawing_groups AS g
             LEFT JOIN customer_drawing_files AS f ON f.group_id = g.id
-            WHERE g.archived = 0 AND g.customer_id IN ({placeholders})
+            WHERE g.customer_id IN ({placeholders})
             GROUP BY g.customer_id
             """,
             normalized_ids,
@@ -318,29 +377,29 @@ class SQLiteCustomerDrawingRepository:
         return result
 
     def audit(self, action: str, target_key: str, detail: str, *, actor: str) -> None:
-        log_event(self.connection, action, "customer_drawing", target_key, detail, actor=actor)
+        log_event(self.connection, action, "customer_product", target_key, detail, actor=actor)
 
 
 ConnectionFactory = Callable[[Path], sqlite3.Connection]
 
 
-class SQLiteCustomerDrawingUnitOfWork:
+class SQLiteCustomerProductUnitOfWork:
     def __init__(self, database_path: Path, *, connection_factory: ConnectionFactory = connect) -> None:
         self.database_path = database_path
         self.connection_factory = connection_factory
         self.connection: sqlite3.Connection | None = None
-        self.repository: CustomerDrawingRepository
+        self.repository: CustomerProductRepository
         self._committed = False
 
-    def __enter__(self) -> SQLiteCustomerDrawingUnitOfWork:
+    def __enter__(self) -> SQLiteCustomerProductUnitOfWork:
         self.connection = self.connection_factory(self.database_path)
-        self.repository = SQLiteCustomerDrawingRepository(self.connection)
+        self.repository = SQLiteCustomerProductRepository(self.connection)
         self._committed = False
         return self
 
     def commit(self) -> None:
         if self.connection is None:
-            raise RuntimeError("Customer drawing unit of work is not active.")
+            raise RuntimeError("Customer product unit of work is not active.")
         self.connection.commit()
         self._committed = True
 

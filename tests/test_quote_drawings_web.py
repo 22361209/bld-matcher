@@ -77,13 +77,12 @@ def _link_view(*, version_no: int, current_version: int) -> QuoteDrawingLinkView
             customer_id=1,
             group_id=1,
             direction="customer",
-            direction_label="客户来图",
-            title="支架图纸",
+            direction_label="客户图纸",
+            title="MODULE-001 支架总成",
             version_no=version_no,
             revision_label="Rev A",
             original_name="bracket-v1.pdf",
             current_version=current_version,
-            group_archived=False,
             previewable=True,
         ),
     )
@@ -98,8 +97,8 @@ def _detail_service(**overrides) -> SimpleNamespace:
             7: [
                 {
                     "group_id": 1,
-                    "direction_label": "客户来图",
-                    "title": "支架图纸",
+                    "direction_label": "客户图纸",
+                    "title": "MODULE-001 支架总成",
                     "current_version": 2,
                     "versions": [_link_view(version_no=2, current_version=2).file],
                 }
@@ -172,8 +171,8 @@ class QuoteNumberDetailRenderTest(unittest.TestCase):
 
     def test_detail_renders_linked_drawing_and_newer_badge(self) -> None:
         html = self._render({"view_customer_prices", "view_customers"}, _detail_service())
-        self.assertIn("客户来图", html)
-        self.assertIn("支架图纸", html)
+        self.assertIn("客户图纸", html)
+        self.assertIn("MODULE-001 支架总成", html)
         self.assertIn("V1", html)
         self.assertIn("Rev A", html)
         self.assertIn("bracket-v1.pdf", html)
@@ -187,11 +186,11 @@ class QuoteNumberDetailRenderTest(unittest.TestCase):
         )
         html = self._render({"view_customer_prices"}, service)
         self.assertNotIn("已有 V2 新版", html)
-        self.assertIn("支架图纸", html)
+        self.assertIn("MODULE-001 支架总成", html)
 
     def test_detail_without_view_customers_shows_text_without_file_links(self) -> None:
         html = self._render({"view_customer_prices"}, _detail_service())
-        self.assertIn("支架图纸", html)
+        self.assertIn("MODULE-001 支架总成", html)
         self.assertNotIn("/customers/1/drawings/files/11/download", html)
         self.assertNotIn("/customers/1/drawings/files/11/preview", html)
 
@@ -204,7 +203,7 @@ class QuoteNumberDetailRenderTest(unittest.TestCase):
         self.assertIn("关联图纸版本", editor_html)
         self.assertIn('form="quote-drawing-link-7"', editor_html)
         self.assertIn('form="quote-drawing-unlink-21"', editor_html)
-        self.assertIn('<optgroup label="客户来图 · 支架图纸">', editor_html)
+        self.assertIn('<optgroup label="客户图纸 · MODULE-001 支架总成">', editor_html)
         self.assertIn('action="/quotes/7/drawings/link"', editor_html)
         self.assertIn('action="/quotes/7/drawings/21/unlink"', editor_html)
 

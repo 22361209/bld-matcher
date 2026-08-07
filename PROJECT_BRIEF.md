@@ -164,7 +164,7 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 - `/customers` 是轻量客户工作区：列表可按名称、编号、状态和负责人检索，详情维护可选客户编号、启用状态、负责人和多个联系人，并汇总该客户的报价数量、最近报价和已生成销售合同。
 - 客户停用后保留全部历史，不再物理删除；新的报价和报价来源销售合同只能引用启用客户，生成合同的 GET 与 POST 都会重新校验状态。历史报价由 migrations 028–030 规范化客户名并自动回填 `customer_id`，同时修复早期大小写重复客户编号和异常主要联系人，无需人工补关联。
 - 客户详情的资料库按标贴要求、外箱要求、内袋/包装要求、包装示例、出库单模板、PI、PL、CI 和其他分类保存文字说明与文件。每次批量上传形成一个不可变版本，旧版本可下载，资料组只能归档。
-- 客户详情的“图纸”页签按客户来图/我方出图两个方向管理多版本图纸档案（标题、可选关联 BLD 号、图号）；每个版本一个 pdf/png/jpg/jpeg/webp 文件，可填版本代号与备注，旧版本保留可预览下载；档案只归档不删除，可恢复（ADR 0024）。报价单号详情的每条报价行可关联该客户名下的图纸版本（`quote_record_drawings`，迁移 035 建表）：行内展示方向、标题、版本号与版本代号、原始文件名，图纸有更新版本时提示“已有新版”，有 `view_customers` 权限时可直接预览/下载，有 `edit_customer_prices` 权限时可关联或解除；删除报价行时其图纸关联一并清除。
+- 客户详情的“商品”页签按客户商品（BLD 号）列表管理图纸：新增商品要求 BLD 号已出现在该客户报价历史中（编码自动带出报价料号，名称留空用目录品名），BLD 号建立后不可改、商品行不可删除；每个商品行带 BLD 图纸与客户图纸两个图纸位，每版本一个 pdf/png/jpg/jpeg/webp 文件，可填版本代号，历史版本永久保留，预览弹窗内左右切换并可将任意旧版本“设为当前版本”；BLD 图纸位可一键引入产品目录图纸（ADR 0025，取代 ADR 0024 的方向分组模型）。报价单号详情的每条报价行可关联该客户名下的图纸版本（`quote_record_drawings`，迁移 035 建表）：行内展示图纸位、标题（BLD号 品名）、版本号与版本代号、原始文件名，图纸有更新版本时提示“已有新版”，有 `view_customers` 权限时可直接预览/下载，有 `edit_customer_prices` 权限时可关联或解除；删除报价行时其图纸关联一并清除。
 - 客户资料文件保存在 `data/customer_files/`（图纸在其 `drawings/` 子目录），不进入通用上传/输出清理，也不进入业务数据同步包；备份和迁移运行环境时必须与 SQLite 一起保留。
 
 合同管理：
@@ -254,7 +254,7 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 - `app/modules/quotes/`：报价 Domain、Service、Repository、Web、API v1 与旧 API 兼容适配器
 - `app/modules/customers/`：客户档案、联系人、报价/合同聚合与客户页面适配器
 - `app/modules/customer_documents/`：客户长期资料分类、版本、原子文件存储与下载边界
-- `app/modules/customer_drawings/`：客户双向（来图/出图）多版本图纸、原子文件存储与下载边界
+- `app/modules/customer_products/`：客户商品（按报价历史校验的 BLD 行）、双图纸位多版本图纸、原子文件存储与下载边界
 - `app/modules/products/`：产品 Domain、Repository、Service、目录/记录/媒体 Web 适配器、产品搜索/单价更新 API 和安全数据包同步
 - `app/modules/inquiry/`：询价 Service、按职责拆分的 Excel 引擎、匹配/下载/映射 Web 适配器、旧内部 API 与 v1 适配器
 - `app/platform/artifacts.py`：Principal 所有权、校验值和保留期 artifact 存储

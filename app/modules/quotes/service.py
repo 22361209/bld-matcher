@@ -388,12 +388,6 @@ class QuoteService:
                     "所选图纸不属于该报价行的客户，不能关联。",
                     field="drawing_file_id",
                 )
-            if reference.group_archived:
-                raise QuoteValidationError(
-                    "quote.drawing_archived",
-                    "该图纸档案已归档，不能关联。",
-                    field="drawing_file_id",
-                )
             unit_of_work.repository.link_drawing(quote_id, reference.file_id, actor=actor)
             unit_of_work.repository.audit("关联报价图纸", record, actor=actor)
             unit_of_work.commit()
@@ -471,6 +465,10 @@ class QuoteService:
                 str(customer_name),
                 limit=max(1, min(200, int(limit))),
             )
+
+    def customer_product_options(self, customer_id: int, customer_name: str) -> list[dict[str, str]]:
+        with self.unit_of_work_factory() as unit_of_work:
+            return unit_of_work.repository.customer_product_options(int(customer_id), str(customer_name))
 
     def rename_customer_references(self, customer_id: int, old_name: object, new_name: object) -> int:
         previous = clean_multiline(old_name)

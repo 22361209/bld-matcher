@@ -84,58 +84,60 @@ class CustomerDrawingDirectoryAdapter:
             file_id=reference.file.id,
             customer_id=reference.customer_id,
             group_id=reference.group_id,
-            direction=reference.direction,
-            direction_label=reference.direction_label,
+            direction=reference.kind,
+            direction_label=reference.kind_label,
             title=reference.title,
             version_no=reference.file.version_no,
             revision_label=reference.file.revision_label,
             original_name=reference.file.original_name,
             current_version=reference.current_version,
-            group_archived=reference.group_archived,
             previewable=reference.file.previewable,
         )
 
     def file_references(self, file_ids: Iterable[int]) -> dict[int, DrawingFileReference]:
-        from app.modules.customer_drawings.factory import get_customer_drawing_service
+        from app.modules.customer_products.factory import get_customer_product_service
 
-        references = get_customer_drawing_service().file_references(list(file_ids))
+        references = get_customer_product_service().file_references(list(file_ids))
         return {file_id: self._to_reference(reference) for file_id, reference in references.items()}
 
     def linkable_versions(self, customer_id: int) -> list[dict[str, object]]:
-        from app.modules.customer_drawings.domain import CustomerDrawingValidationError
-        from app.modules.customer_drawings.factory import get_customer_drawing_service
+        from app.modules.customer_products.domain import CustomerProductValidationError
+        from app.modules.customer_products.factory import get_customer_product_service
 
         try:
-            groups = get_customer_drawing_service().list_for_customer(customer_id, include_archived=False)
-        except CustomerDrawingValidationError:
+            products = get_customer_product_service().list_for_customer(customer_id)
+        except CustomerProductValidationError:
             return []
         options: list[dict[str, object]] = []
-        for group in groups:
-            versions = [
-                DrawingFileReference(
-                    file_id=file.id,
-                    customer_id=group.customer_id,
-                    group_id=group.id,
-                    direction=group.direction,
-                    direction_label=group.direction_label,
-                    title=group.title,
-                    version_no=file.version_no,
-                    revision_label=file.revision_label,
-                    original_name=file.original_name,
-                    current_version=group.current_version,
-                    group_archived=group.archived,
-                    previewable=file.previewable,
-                )
-                for file in sorted(group.files, key=lambda item: item.version_no, reverse=True)
-            ]
-            if versions:
-                options.append(
-                    {
-                        "group_id": group.id,
-                        "direction_label": group.direction_label,
-                        "title": group.title,
-                        "current_version": group.current_version,
-                        "versions": versions,
-                    }
-                )
+        for product in products:
+            title = " ".join(
+                part for part in (product.bld_no, product.customer_product_name) if part
+            )
+            for slot in product.drawings:
+                versions = [
+                    DrawingFileReference(
+                        file_id=file.id,
+                        customer_id=slot.customer_id,
+                        group_id=slot.id,
+                        direction=slot.kind,
+                        direction_label=slot.kind_label,
+                        title=title,
+                        version_no=file.version_no,
+                        revision_label=file.revision_label,
+                        original_name=file.original_name,
+                        current_version=slot.current_version,
+                        previewable=file.previewable,
+                    )
+                    for file in sorted(slot.files, key=lambda item: item.version_no, reverse=True)
+                ]
+                if versions:
+                    options.append(
+                        {
+                            "group_id": slot.id,
+                            "direction_label": slot.kind_label,
+                            "title": title,
+                            "current_version": slot.current_version,
+                            "versions": versions,
+                        }
+                    )
         return options

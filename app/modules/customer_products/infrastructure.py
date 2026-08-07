@@ -10,9 +10,13 @@ from uuid import uuid4
 
 from app.helpers import safe_upload_name
 
-from .domain import CustomerDrawingValidationError
+from .domain import (
+    CatalogProductInfo,
+    CustomerProductValidationError,
+    QuotedProductOption,
+)
 from .file_validation import upload_parts, validate_file_signature, validate_upload_metadata
-from .ports import PreparedCustomerFile, PreparedCustomerFileBatch
+from .ports import CatalogDrawingSource, PreparedCustomerFile, PreparedCustomerFileBatch
 
 
 _SAFE_STORAGE_SEGMENT = re.compile(r"[A-Za-z0-9_-]{8,128}\Z")
@@ -40,6 +44,56 @@ def _storage_safe_name(original_name: str, suffix: str) -> str:
     return f"{shortened or 'file'}{safe_suffix}"
 
 
+class QuoteHistoryAdapter:
+    """惰性调用 quotes 模块：读取客户报价历史中的候选商品。"""
+
+    def quoted_products(self, customer_id: int, customer_name: str) -> list[QuotedProductOption]:
+        from app.modules.quotes.factory import get_quote_service
+
+        rows = get_quote_service().customer_product_options(customer_id, customer_name)
+        return [
+            QuotedProductOption(
+                bld_no=str(row.get("bld_no") or ""),
+                customer_product_code=str(row.get("customer_product_code") or ""),
+            )
+            for row in rows
+            if str(row.get("bld_no") or "").strip()
+        ]
+
+
+class ProductCatalogAdapter:
+    """惰性调用 products 模块：目录品名、首图与目录图纸来源。"""
+
+    def info(self, bld_no: str) -> CatalogProductInfo | None:
+        from app.drawings import product_drawing_path
+        from app.helpers import product_image_thumb_url, product_image_url
+        from app.modules.products.factory import get_product_service
+
+        record = get_product_service().find_by_bld(bld_no, active_only=False)
+        if record is None:
+            return None
+        payload = record.web_payload()
+        return CatalogProductInfo(
+            bld_no=record.bld_no,
+            item_name=record.item,
+            image_url=product_image_url(payload),
+            thumb_url=product_image_thumb_url(payload),
+            has_drawing=product_drawing_path(payload) is not None,
+        )
+
+    def drawing_source(self, bld_no: str) -> CatalogDrawingSource | None:
+        from app.drawings import product_drawing_path
+        from app.modules.products.factory import get_product_service
+
+        record = get_product_service().find_by_bld(bld_no, active_only=False)
+        if record is None:
+            return None
+        path = product_drawing_path(record.web_payload())
+        if path is None:
+            return None
+        return CatalogDrawingSource(path=path, original_name=record.drawing_original_name or path.name)
+
+
 class CustomerDrawingFileStore:
     def __init__(
         self,
@@ -59,11 +113,11 @@ class CustomerDrawingFileStore:
         version_no: int,
     ) -> PreparedCustomerFileBatch:
         if not files:
-            raise CustomerDrawingValidationError(
+            raise CustomerProductValidationError(
                 "customer_drawing.files_required", "请选择一个图纸文件。", field="files"
             )
         if len(files) > 1:
-            raise CustomerDrawingValidationError(
+            raise CustomerProductValidationError(
                 "customer_drawing.too_many_files",
                 "每个版本只能上传一个图纸文件。",
                 field="files",
@@ -71,7 +125,7 @@ class CustomerDrawingFileStore:
         self._validate_storage_segment(customer_sync_id, "customer sync id")
         self._validate_storage_segment(group_sync_id, "group sync id")
         if version_no < 1:
-            raise CustomerDrawingValidationError("customer_drawing.invalid_version", "文件版本号不正确。")
+            raise CustomerProductValidationError("customer_drawing.invalid_version", "文件版本号不正确。")
 
         prepared: list[PreparedCustomerFile] = []
         try:
@@ -126,12 +180,12 @@ class CustomerDrawingFileStore:
                     if not chunk:
                         break
                     if not isinstance(chunk, bytes):
-                        raise CustomerDrawingValidationError(
+                        raise CustomerProductValidationError(
                             "customer_drawing.invalid_file", "上传文件无法读取。", field="files"
                         )
                     size += len(chunk)
                     if size > self.max_file_bytes:
-                        raise CustomerDrawingValidationError(
+                        raise CustomerProductValidationError(
                             "customer_drawing.file_too_large",
                             f"单个文件不能超过 {self.max_file_bytes // (1024 * 1024)} MB。",
                             field="files",
@@ -141,7 +195,7 @@ class CustomerDrawingFileStore:
                 handle.flush()
                 os.fsync(handle.fileno())
             if size == 0:
-                raise CustomerDrawingValidationError(
+                raise CustomerProductValidationError(
                     "customer_drawing.empty_file", f"文件 {original_name} 为空。", field="files"
                 )
             validate_file_signature(temporary, suffix)
@@ -169,7 +223,7 @@ class CustomerDrawingFileStore:
             for item in batch.files:
                 item.destination_path.parent.mkdir(parents=True, exist_ok=True)
                 if item.destination_path.exists():
-                    raise CustomerDrawingValidationError(
+                    raise CustomerProductValidationError(
                         "customer_drawing.storage_conflict", "图纸文件存储冲突，请重试。"
                     )
                 os.replace(item.temporary_path, item.destination_path)
@@ -201,7 +255,7 @@ class CustomerDrawingFileStore:
             group_sync_id=group_sync_id,
         )
         if not destination.is_file():
-            raise CustomerDrawingValidationError("customer_drawing.file_missing", "图纸文件不存在。")
+            raise CustomerProductValidationError("customer_drawing.file_missing", "图纸文件不存在。")
         return destination
 
     def verify(self, path: Path, *, size_bytes: int, sha256: str) -> bool:
@@ -219,25 +273,25 @@ class CustomerDrawingFileStore:
     def _destination(self, storage_path: str, *, customer_sync_id: str, group_sync_id: str = "") -> Path:
         pure = PurePosixPath(str(storage_path or ""))
         if pure.is_absolute() or not pure.parts or pure.parts[0] != customer_sync_id:
-            raise CustomerDrawingValidationError("customer_drawing.unsafe_path", "图纸文件路径无效。")
+            raise CustomerProductValidationError("customer_drawing.unsafe_path", "图纸文件路径无效。")
         if group_sync_id and (
             len(pure.parts) < 3 or pure.parts[1] != _DRAWINGS_SEGMENT or pure.parts[2] != group_sync_id
         ):
-            raise CustomerDrawingValidationError("customer_drawing.unsafe_path", "图纸文件路径无效。")
+            raise CustomerProductValidationError("customer_drawing.unsafe_path", "图纸文件路径无效。")
         if any(part in {"", ".", ".."} for part in pure.parts):
-            raise CustomerDrawingValidationError("customer_drawing.unsafe_path", "图纸文件路径无效。")
+            raise CustomerProductValidationError("customer_drawing.unsafe_path", "图纸文件路径无效。")
         root = self.root.resolve()
         candidate = (root / Path(*pure.parts)).resolve()
         try:
             candidate.relative_to(root)
         except ValueError as exc:
-            raise CustomerDrawingValidationError("customer_drawing.unsafe_path", "图纸文件路径无效。") from exc
+            raise CustomerProductValidationError("customer_drawing.unsafe_path", "图纸文件路径无效。") from exc
         return candidate
 
     @staticmethod
     def _validate_storage_segment(value: str, label: str) -> None:
         if not _SAFE_STORAGE_SEGMENT.fullmatch(value):
-            raise CustomerDrawingValidationError(
+            raise CustomerProductValidationError(
                 "customer_drawing.invalid_storage_identity", f"Invalid {label}."
             )
 

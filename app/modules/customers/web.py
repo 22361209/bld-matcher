@@ -12,7 +12,7 @@ from .factory import get_customer_service
 
 
 logger = logging.getLogger(__name__)
-CUSTOMER_VIEWS = frozenset({"overview", "contacts", "business", "documents", "drawings"})
+CUSTOMER_VIEWS = frozenset({"overview", "contacts", "business", "documents", "products"})
 
 
 def _owners(*, current_username: str = "", include_inactive: bool = False) -> list[dict[str, object]]:
@@ -44,10 +44,10 @@ def _document_service():
     return get_customer_document_service()
 
 
-def _drawing_service():
-    from app.modules.customer_drawings.factory import get_customer_drawing_service
+def _product_service():
+    from app.modules.customer_products.factory import get_customer_product_service
 
-    return get_customer_drawing_service()
+    return get_customer_product_service()
 
 
 def _detail_url(customer_id: int, view: str = "overview") -> str:
@@ -119,19 +119,18 @@ def register(app) -> None:
                 if view == "documents"
                 else []
             )
-            drawing_service = _drawing_service()
-            drawing_groups = (
-                drawing_service.list_for_customer(customer_id, include_archived=True)
-                if view == "drawings"
-                else []
-            )
-            drawing_groups_by_direction = {
-                direction["value"]: [group for group in drawing_groups if group.direction == direction["value"]]
-                for direction in drawing_service.directions()
-            }
             document_summary = document_service.summaries_for_customers([customer_id]).get(customer_id)
             if document_summary is not None:
                 context["summary"] = replace(context["summary"], file_count=document_summary.group_count)
+            customer_products = []
+            drawing_kinds = []
+            quoted_options = []
+            if view == "products":
+                product_service = _product_service()
+                customer_products = product_service.list_for_customer(customer_id)
+                drawing_kinds = product_service.kinds()
+                if can("edit_customers"):
+                    quoted_options = product_service.quoted_product_options(customer_id)
         except CustomerValidationError as exc:
             flash(exc.message, "error")
             return redirect(url_for("customers"))
@@ -144,8 +143,9 @@ def register(app) -> None:
             **context,
             document_groups=document_groups,
             document_categories=document_service.categories(),
-            drawing_groups_by_direction=drawing_groups_by_direction,
-            drawing_directions=drawing_service.directions(),
+            customer_products=customer_products,
+            drawing_kinds=drawing_kinds,
+            quoted_options=quoted_options,
             active_view=view,
             owners=_owners(current_username=str(context["customer"].owner_username or "")),
         )

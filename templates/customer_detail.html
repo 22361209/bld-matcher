@@ -7,6 +7,8 @@
 
 {% block page_head %}
   <link rel="stylesheet" href="{{ url_for('static', filename='pages/customers.css', v=static_version('pages/customers.css')) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='pages/product_media_uploader.css', v=static_version('pages/product_media_uploader.css')) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='pages/customer_products.css', v=static_version('pages/customer_products.css')) }}">
 {% endblock %}
 
 {% block page_content %}
@@ -36,7 +38,7 @@
   </section>
 
   <nav class="customer-detail-tabs" aria-label="客户档案栏目">
-    {% for key, label in (("overview", "概览"), ("contacts", "联系人"), ("business", "报价与合同"), ("documents", "模板与文件"), ("drawings", "图纸")) %}
+    {% for key, label in (("overview", "概览"), ("contacts", "联系人"), ("business", "报价与合同"), ("products", "商品"), ("documents", "模板与文件")) %}
       <a class="{% if active_view == key %}active{% endif %}" href="{{ url_for('customer_detail', customer_id=customer.id, view=key) }}" {% if active_view == key %}aria-current="page"{% endif %}>{{ label }}</a>
     {% endfor %}
   </nav>
@@ -157,95 +159,53 @@
       </section>
       {% endif %}
     </div>
-  {% elif active_view == "drawings" %}
-    <section class="data-section customer-document-section">
-      <div class="data-section-header"><div><h2>图纸</h2><p>按客户来图与我方出图分组保存多版本图纸；更新时保留旧版本，图纸只归档不删除。</p></div><span>{{ drawing_groups_by_direction["customer"]|length + drawing_groups_by_direction["issued"]|length }} 项</span></div>
+  {% elif active_view == "products" %}
+    <section class="data-section customer-products-section">
+      <div class="data-section-header"><div><h2>商品</h2><p>以客户商品（BLD 号）为中心管理 BLD 图纸与客户图纸；图纸按版本保留，可回拨任意历史版本为当前版本。BLD 号必须已在该客户的报价历史中出现。</p></div><span>{{ customer_products|length }} 项</span></div>
       {% if can("edit_customers") %}
-      <details class="customer-document-create-panel">
-        <summary>新增图纸档案</summary>
-        <form class="customer-document-form" action="{{ url_for('create_customer_drawing', customer_id=customer.id) }}" method="post" enctype="multipart/form-data">
-          {{ csrf_field() }}
-          <label><span>方向</span><select name="direction" required>{% for option in drawing_directions %}<option value="{{ option.value }}">{{ option.label }}</option>{% endfor %}</select></label>
-          <label><span>标题</span><input name="title" required maxlength="120" placeholder="例如 支架总成图纸"></label>
-          <label><span>关联 BLD 号</span><input name="bld_no" maxlength="80" placeholder="选填，可稍后关联"></label>
-          <label><span>图号</span><input name="drawing_no" maxlength="120" placeholder="选填"></label>
-          <label><span>版本代号</span><input name="revision_label" maxlength="60" placeholder="例如 Rev A（选填）"></label>
-          <label class="customer-document-upload"><span>图纸文件（选填）</span><input name="files" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp"></label>
-          <div class="form-actions"><button class="linear-button primary" type="submit">保存图纸档案</button></div>
-        </form>
-      </details>
-      {% endif %}
-      <div class="customer-drawing-directions">
-        {% for direction in drawing_directions %}
-          {% set groups = drawing_groups_by_direction[direction.value] %}
-          <section class="customer-drawing-direction">
-            <h3>{{ direction.label }}<span>{{ groups|length }} 项</span></h3>
-            {% if groups %}
-              <div class="customer-document-grid">
-                {% for group in groups %}
-                  <article class="customer-document-card {% if group.archived %}archived{% endif %}">
-                    <div class="customer-document-card-heading"><div><span class="customer-document-category">{{ group.direction_label }}</span><h3>{{ group.title }}</h3></div>{% if group.archived %}<span class="linear-status inactive">已归档</span>{% endif %}</div>
-                    <dl><div><dt>BLD 号</dt><dd>{{ group.bld_no or "未关联" }}</dd></div><div><dt>图号</dt><dd>{{ group.drawing_no or "未填写" }}</dd></div><div><dt>当前版本</dt><dd>{{ "V" ~ group.current_version if group.current_version else "暂无文件" }}</dd></div></dl>
-                    {% if can("edit_customers") and not group.archived %}
-                      <details class="customer-document-edit-panel">
-                        <summary>编辑图纸信息</summary>
-                        <form class="customer-document-form compact" action="{{ url_for('update_customer_drawing', customer_id=customer.id, group_id=group.id) }}" method="post">
-                          {{ csrf_field() }}
-                          <label><span>方向</span><select name="direction" required>{% for option in drawing_directions %}<option value="{{ option.value }}" {% if group.direction == option.value %}selected{% endif %}>{{ option.label }}</option>{% endfor %}</select></label>
-                          <label><span>标题</span><input name="title" value="{{ group.title }}" required maxlength="120"></label>
-                          <label><span>关联 BLD 号</span><input name="bld_no" value="{{ group.bld_no }}" maxlength="80" placeholder="选填"></label>
-                          <label><span>图号</span><input name="drawing_no" value="{{ group.drawing_no }}" maxlength="120" placeholder="选填"></label>
-                          <div class="form-actions"><button class="linear-button primary compact" type="submit">保存信息</button></div>
-                        </form>
-                      </details>
-                      <details class="customer-document-edit-panel">
-                        <summary>上传新版本（旧版本保留）</summary>
-                        <form class="customer-document-form compact" action="{{ url_for('add_customer_drawing_version', customer_id=customer.id, group_id=group.id) }}" method="post" enctype="multipart/form-data">
-                          {{ csrf_field() }}
-                          <label><span>图纸文件</span><input name="files" type="file" required accept=".pdf,.png,.jpg,.jpeg,.webp"></label>
-                          <label><span>版本代号</span><input name="revision_label" maxlength="60" placeholder="例如 Rev B（选填）"></label>
-                          <label class="customer-document-description"><span>版本备注</span><textarea name="note" rows="2" maxlength="2000" placeholder="选填，例如 按客户 8 月意见修改"></textarea></label>
-                          <div class="form-actions"><button class="linear-button subtle compact" type="submit">上传新版本</button></div>
-                        </form>
-                      </details>
-                    {% endif %}
-                    <div class="customer-document-files">
-                      {% for version in group.versions %}
-                        <details {% if version.version_no == group.current_version %}open{% endif %}>
-                          <summary>V{{ version.version_no }}{% if version.revision_label %} · {{ version.revision_label }}{% endif %}{% if version.version_no == group.current_version %}（当前）{% endif %}</summary>
-                          <ul>
-                            <li>
-                              <span>{{ version.file.original_name }} · {{ version.file.size_bytes }} B<br>{{ version.file.uploaded_by or "—" }} · {{ version.file.created_at }}{% if version.note %}<br>{{ version.note }}{% endif %}</span>
-                              <span>{% if version.file.previewable %}<a target="_blank" rel="noopener" href="{{ url_for('preview_customer_drawing_file', customer_id=customer.id, file_id=version.file.id) }}">预览</a>{% endif %}<a href="{{ url_for('download_customer_drawing_file', customer_id=customer.id, file_id=version.file.id) }}">下载</a></span>
-                            </li>
-                          </ul>
-                        </details>
-                      {% else %}
-                        <span>暂无图纸文件，可上传第一个版本</span>
-                      {% endfor %}
-                    </div>
-                    {% if can("delete_customers") %}
-                      {% if group.archived %}
-                        <form class="customer-document-archive-form" action="{{ url_for('unarchive_customer_drawing', customer_id=customer.id, group_id=group.id) }}" method="post">
-                          {{ csrf_field() }}
-                          <button class="linear-button subtle compact" type="submit">恢复使用</button>
-                        </form>
-                      {% else %}
-                        <form class="customer-document-archive-form" action="{{ url_for('archive_customer_drawing', customer_id=customer.id, group_id=group.id) }}" method="post">
-                          {{ csrf_field() }}
-                          <button class="linear-button danger compact" type="submit" data-confirm="确认归档图纸“{{ group.title }}”？归档后退出当前使用，但全部历史版本和文件继续保留并可下载。">归档</button>
-                        </form>
-                      {% endif %}
-                    {% endif %}
-                  </article>
-                {% endfor %}
-              </div>
-            {% else %}
-              <div class="empty-state"><p>暂无{{ direction.label }}。</p></div>
-            {% endif %}
-          </section>
-        {% endfor %}
+      <div class="command-actions customer-products-actions">
+        <button class="linear-button primary" type="button" data-open-customer-product-modal {% if not quoted_options %}disabled title="该客户暂无报价记录，无法新增商品"{% endif %}>新增商品</button>
       </div>
+      {% endif %}
+      {% if customer_products %}
+        <div class="data-table-scroll"><table class="data-table customer-products-table"><thead><tr><th>BLD号</th><th>客户产品编码</th><th>客户产品名称</th><th>产品图片</th><th>BLD 图纸</th><th>客户图纸</th>{% if can("edit_customers") %}<th>操作</th>{% endif %}</tr></thead><tbody>
+          {% for product in customer_products %}
+            <tr>
+              <td>{{ product.bld_no }}</td>
+              <td>{{ product.customer_product_code or "—" }}</td>
+              <td>{{ product.customer_product_name or "—" }}</td>
+              <td>
+                {% if product.catalog and (product.catalog.thumb_url or product.catalog.image_url) %}
+                  <a class="image-link customer-product-thumb-link" target="_blank" rel="noopener" href="{{ product.catalog.image_url or product.catalog.thumb_url }}" title="打开 {{ product.bld_no }} 产品图片"><img class="customer-product-thumb" src="{{ product.catalog.thumb_url or product.catalog.image_url }}" alt="{{ product.bld_no }} 产品图片" loading="lazy"></a>
+                {% else %}—{% endif %}
+              </td>
+              {% for kind_meta in drawing_kinds %}
+                {% set slot = product.slot(kind_meta.value) %}
+                <td>
+                  <button type="button" class="customer-drawing-open" data-open-drawing-modal
+                    data-kind="{{ kind_meta.value }}" data-kind-label="{{ kind_meta.label }}" data-bld-no="{{ product.bld_no }}"
+                    data-versions-url="{{ url_for('customer_product_drawing_versions', customer_id=customer.id, product_id=product.id, kind=kind_meta.value) }}"
+                    data-upload-url="{{ url_for('upload_customer_product_drawing_version', customer_id=customer.id, product_id=product.id, kind=kind_meta.value) }}"
+                    data-current-url="{{ url_for('set_customer_product_drawing_current', customer_id=customer.id, product_id=product.id, kind=kind_meta.value) }}"
+                    {% if kind_meta.value == "bld" %}data-import-url="{{ url_for('import_customer_product_catalog_drawing', customer_id=customer.id, product_id=product.id) }}"{% endif %}
+                    data-catalog-has-drawing="{{ 'true' if product.catalog and product.catalog.has_drawing else 'false' }}">
+                    {% if slot and slot.current_file %}
+                      <span class="customer-drawing-badge">V{{ slot.current_version }}{% if slot.current_file.revision_label %} · {{ slot.current_file.revision_label }}{% endif %}</span><span class="customer-drawing-open-label">预览</span>
+                    {% else %}
+                      <span class="customer-drawing-open-label">未上传</span>
+                    {% endif %}
+                  </button>
+                </td>
+              {% endfor %}
+              {% if can("edit_customers") %}
+                <td><button class="linear-button subtle compact" type="button" data-open-customer-product-edit data-update-url="{{ url_for('update_customer_product', customer_id=customer.id, product_id=product.id) }}" data-bld-no="{{ product.bld_no }}" data-code="{{ product.customer_product_code }}" data-name="{{ product.customer_product_name }}">编辑</button></td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+        </tbody></table></div>
+      {% else %}
+        <div class="empty-state"><p>暂无客户商品，新增前请确认该商品已有报价记录。</p></div>
+      {% endif %}
     </section>
   {% elif active_view == "documents" %}
     <section class="data-section customer-document-section">
@@ -319,4 +279,107 @@
       {% endif %}
     </section>
   {% endif %}
+{% endblock %}
+
+{% block page_modals %}
+  {% if can("edit_customers") %}
+  <div class="editor-modal" aria-hidden="true" data-customer-product-modal>
+    <div class="editor-modal-backdrop" data-close-customer-product-modal></div>
+    <div class="editor-modal-panel customer-product-modal-panel" role="dialog" aria-modal="true" aria-label="新增客户商品" data-draggable-modal-panel>
+      <button class="image-modal-close" type="button" data-close-customer-product-modal aria-label="关闭新增商品">×</button>
+      <div class="modal-heading draggable-modal-heading" data-modal-drag-handle>
+        <h2>新增客户商品</h2>
+        <p class="note">BLD 号必须已出现在该客户的报价历史中；客户产品编码会自动带出报价中的编码，名称留空时使用产品目录品名。</p>
+      </div>
+      <form action="{{ url_for('create_customer_product', customer_id=customer.id) }}" method="post" class="record-form modal-form customer-product-form" data-customer-product-form>
+        {{ csrf_field() }}
+        <label>
+          BLD 号
+          <input name="bld_no" list="customer-product-bld-options" required maxlength="80" autocomplete="off" data-customer-product-bld>
+          <datalist id="customer-product-bld-options">
+            {% for option in quoted_options %}<option value="{{ option.bld_no }}" data-code="{{ option.customer_product_code }}">{{ option.customer_product_code or option.bld_no }}</option>{% endfor %}
+          </datalist>
+        </label>
+        <label>
+          客户产品编码
+          <input name="customer_product_code" maxlength="120" placeholder="选填" data-customer-product-code>
+        </label>
+        <label>
+          客户产品名称
+          <input name="customer_product_name" maxlength="200" placeholder="选填，留空使用产品目录品名">
+        </label>
+        <div class="form-actions modal-actions">
+          <button type="submit">保存商品</button>
+          <button class="ghost" type="button" data-close-customer-product-modal>取消</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="editor-modal" aria-hidden="true" data-customer-product-edit-modal>
+    <div class="editor-modal-backdrop" data-close-customer-product-edit-modal></div>
+    <div class="editor-modal-panel customer-product-modal-panel" role="dialog" aria-modal="true" aria-label="编辑客户商品" data-draggable-modal-panel>
+      <button class="image-modal-close" type="button" data-close-customer-product-edit-modal aria-label="关闭编辑商品">×</button>
+      <div class="modal-heading draggable-modal-heading" data-modal-drag-handle>
+        <h2>编辑客户商品</h2>
+        <p class="note">BLD 号建立后不可修改；图纸在两个图纸位各自的预览窗口中上传。</p>
+      </div>
+      <form method="post" class="record-form modal-form customer-product-form" data-customer-product-edit-form>
+        {{ csrf_field() }}
+        <label>
+          BLD 号
+          <input data-customer-product-edit-bld readonly tabindex="-1">
+        </label>
+        <label>
+          客户产品编码
+          <input name="customer_product_code" maxlength="120" placeholder="选填" data-customer-product-edit-code>
+        </label>
+        <label>
+          客户产品名称
+          <input name="customer_product_name" maxlength="200" placeholder="选填" data-customer-product-edit-name>
+        </label>
+        <div class="form-actions modal-actions">
+          <button type="submit">保存商品</button>
+          <button class="ghost" type="button" data-close-customer-product-edit-modal>取消</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+  <div class="image-modal customer-drawing-modal" aria-hidden="true" data-customer-drawing-modal>
+    <div class="image-modal-backdrop" data-close-customer-drawing-modal></div>
+    <div class="image-modal-panel customer-drawing-modal-panel" role="dialog" aria-modal="true" aria-label="图纸预览与上传">
+      <button class="image-modal-close" type="button" data-close-customer-drawing-modal aria-label="关闭图纸预览">×</button>
+      <div class="image-modal-viewer drawing-modal-viewer">
+        <button class="image-modal-nav prev" type="button" data-drawing-prev aria-label="上一个版本">‹</button>
+        <div class="drawing-modal-stage" data-drawing-stage></div>
+        <button class="image-modal-nav next" type="button" data-drawing-next aria-label="下一个版本">›</button>
+      </div>
+      <p class="image-modal-caption drawing-modal-caption" data-drawing-caption aria-live="polite"></p>
+      <div class="drawing-modal-actions">
+        <a class="linear-button subtle compact" data-drawing-download href="#" hidden>下载该版本</a>
+        {% if can("edit_customers") %}
+        <button class="linear-button primary compact" type="button" data-drawing-set-current hidden>设为当前版本</button>
+        <button class="linear-button subtle compact" type="button" data-drawing-import-catalog hidden>引入产品目录图纸</button>
+        {% endif %}
+      </div>
+      {% if can("edit_customers") %}
+      <div class="drawing-upload" data-drawing-upload>
+        <div class="product-media-intake drawing-upload-intake" data-drawing-intake>
+          <button class="product-media-intake-button" type="button" data-drawing-browse>
+            <span>+</span>
+            <strong>拖入图纸文件或点击选择，上传为新版本</strong>
+            <small>支持 PDF / PNG / JPG / WEBP，单个文件；上传成功后自动成为当前版本</small>
+          </button>
+          <input class="drawing-upload-input" data-drawing-file-input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp">
+        </div>
+        <label class="drawing-upload-revision"><span>版本代号（选填）</span><input data-drawing-revision-input maxlength="60" placeholder="例如 Rev B"></label>
+        <p class="product-media-upload-status drawing-upload-status" data-drawing-upload-status aria-live="polite"></p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
+
+{% block page_scripts %}
+  <script type="module" src="{{ url_for('static', filename='pages/customer_products.js', v=static_version('pages/customer_products.js')) }}"></script>
 {% endblock %}

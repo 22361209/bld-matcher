@@ -181,7 +181,6 @@ class DrawingFileReference:
     revision_label: str
     original_name: str
     current_version: int
-    group_archived: bool
     previewable: bool
 
     @property

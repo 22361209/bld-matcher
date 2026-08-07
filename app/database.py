@@ -278,23 +278,33 @@ CREATE TABLE IF NOT EXISTS customer_document_files (
 
 CREATE INDEX IF NOT EXISTS idx_customer_document_files_version ON customer_document_files(group_id, version_no, id);
 
-CREATE TABLE IF NOT EXISTS customer_drawing_groups (
+CREATE TABLE IF NOT EXISTS customer_products (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   customer_id INTEGER NOT NULL REFERENCES customers(id),
   sync_id TEXT NOT NULL UNIQUE,
-  bld_no TEXT NOT NULL DEFAULT '',
-  direction TEXT NOT NULL CHECK(direction IN ('customer','issued')),
-  title TEXT NOT NULL DEFAULT '',
-  drawing_no TEXT NOT NULL DEFAULT '',
-  current_version INTEGER NOT NULL DEFAULT 0,
-  archived INTEGER NOT NULL DEFAULT 0,
+  bld_no TEXT NOT NULL,
+  customer_product_code TEXT NOT NULL DEFAULT '',
+  customer_product_name TEXT NOT NULL DEFAULT '',
   created_by TEXT NOT NULL DEFAULT '',
   updated_by TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_customer_drawing_groups_customer ON customer_drawing_groups(customer_id, archived, updated_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_products_customer_bld ON customer_products(customer_id, bld_no COLLATE NOCASE);
+
+CREATE TABLE IF NOT EXISTS customer_drawing_groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_product_id INTEGER NOT NULL REFERENCES customer_products(id),
+  customer_id INTEGER NOT NULL REFERENCES customers(id),
+  sync_id TEXT NOT NULL UNIQUE,
+  kind TEXT NOT NULL CHECK(kind IN ('bld','customer')),
+  current_version INTEGER NOT NULL DEFAULT 0,
+  created_by TEXT NOT NULL DEFAULT '',
+  updated_by TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS customer_drawing_files (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -6,11 +6,14 @@ from pathlib import Path
 from typing import Protocol
 
 from .domain import (
+    CatalogProductInfo,
     CustomerDrawingFile,
     CustomerDrawingFileReference,
-    CustomerDrawingGroup,
+    CustomerDrawingSlot,
     CustomerDrawingSummary,
     CustomerIdentity,
+    CustomerProduct,
+    QuotedProductOption,
 )
 
 
@@ -42,45 +45,58 @@ class CustomerFilePayload:
 
 
 @dataclass(frozen=True, slots=True)
+class CatalogDrawingSource:
+    path: Path = field(repr=False)
+    original_name: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class CustomerDrawingFileAccess:
     file: CustomerDrawingFile
     customer_id: int
     customer_sync_id: str
     group_sync_id: str
-    group_archived: bool
 
 
-class CustomerDrawingRepository(Protocol):
+class CustomerProductRepository(Protocol):
     def customer_identity(self, customer_id: int) -> CustomerIdentity | None: ...
 
-    def list_groups(self, customer_id: int, *, include_archived: bool) -> list[CustomerDrawingGroup]: ...
+    def list_products(self, customer_id: int) -> list[CustomerProduct]: ...
 
-    def get_group(self, customer_id: int, group_id: int) -> CustomerDrawingGroup | None: ...
+    def get_product(self, customer_id: int, product_id: int) -> CustomerProduct | None: ...
 
-    def insert_group(
+    def insert_product(
         self,
         *,
         customer_id: int,
         sync_id: str,
-        direction: str,
         bld_no: str,
-        title: str,
-        drawing_no: str,
-        current_version: int,
+        customer_product_code: str,
+        customer_product_name: str,
         actor: str,
     ) -> int: ...
 
-    def update_group(
+    def update_product(
         self,
         customer_id: int,
-        group_id: int,
+        product_id: int,
         *,
-        direction: str,
-        bld_no: str,
-        title: str,
-        drawing_no: str,
+        customer_product_code: str,
+        customer_product_name: str,
         actor: str,
     ) -> bool: ...
+
+    def get_slot(self, customer_id: int, product_id: int, kind: str) -> CustomerDrawingSlot | None: ...
+
+    def insert_slot(
+        self,
+        *,
+        customer_product_id: int,
+        customer_id: int,
+        sync_id: str,
+        kind: str,
+        actor: str,
+    ) -> int: ...
 
     def claim_next_version(
         self,
@@ -88,8 +104,11 @@ class CustomerDrawingRepository(Protocol):
         group_id: int,
         *,
         expected_version: int,
+        new_version: int,
         actor: str,
-    ) -> int | None: ...
+    ) -> bool: ...
+
+    def set_current_version(self, customer_id: int, group_id: int, version_no: int, *, actor: str) -> bool: ...
 
     def insert_file(
         self,
@@ -102,10 +121,6 @@ class CustomerDrawingRepository(Protocol):
         actor: str,
     ) -> None: ...
 
-    def archive_group(self, customer_id: int, group_id: int, *, actor: str) -> bool: ...
-
-    def unarchive_group(self, customer_id: int, group_id: int, *, actor: str) -> bool: ...
-
     def get_file_access(self, customer_id: int, file_id: int) -> CustomerDrawingFileAccess | None: ...
 
     def file_references(self, file_ids: Sequence[int]) -> dict[int, CustomerDrawingFileReference]: ...
@@ -115,18 +130,28 @@ class CustomerDrawingRepository(Protocol):
     def audit(self, action: str, target_key: str, detail: str, *, actor: str) -> None: ...
 
 
-class CustomerDrawingUnitOfWork(Protocol):
+class CustomerProductUnitOfWork(Protocol):
     @property
-    def repository(self) -> CustomerDrawingRepository: ...
+    def repository(self) -> CustomerProductRepository: ...
 
-    def __enter__(self) -> CustomerDrawingUnitOfWork: ...
+    def __enter__(self) -> CustomerProductUnitOfWork: ...
 
     def __exit__(self, exc_type, exc, traceback) -> None: ...
 
     def commit(self) -> None: ...
 
 
-CustomerDrawingUnitOfWorkFactory = Callable[[], CustomerDrawingUnitOfWork]
+CustomerProductUnitOfWorkFactory = Callable[[], CustomerProductUnitOfWork]
+
+
+class QuoteHistoryPort(Protocol):
+    def quoted_products(self, customer_id: int, customer_name: str) -> list[QuotedProductOption]: ...
+
+
+class ProductCatalogPort(Protocol):
+    def info(self, bld_no: str) -> CatalogProductInfo | None: ...
+
+    def drawing_source(self, bld_no: str) -> CatalogDrawingSource | None: ...
 
 
 class CustomerDrawingStorage(Protocol):

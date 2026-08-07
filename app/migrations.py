@@ -5,6 +5,7 @@ import re
 import sqlite3
 from collections.abc import Callable
 from datetime import datetime, timedelta
+from uuid import uuid4
 
 from .platform.api_principal import LEGACY_COMPATIBILITY_SCOPES
 from .platform.permissions import (
@@ -1022,10 +1023,12 @@ def _add_customer_drawings(conn: sqlite3.Connection) -> None:
         )
         """
     )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_customer_drawing_groups_customer "
-        "ON customer_drawing_groups(customer_id, archived, updated_at)"
-    )
+    # 全新初始化的库已由主 schema 建成新结构（无 archived 列），旧索引仅在旧结构表上创建。
+    if "archived" in _columns(conn, "customer_drawing_groups"):
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_customer_drawing_groups_customer "
+            "ON customer_drawing_groups(customer_id, archived, updated_at)"
+        )
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS customer_drawing_files (
@@ -1071,6 +1074,146 @@ def _add_customer_drawings(conn: sqlite3.Connection) -> None:
     )
 
 
+def _create_customer_drawing_group_indexes(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_drawing_groups_product_kind "
+        "ON customer_drawing_groups(customer_product_id, kind)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_customer_drawing_groups_customer "
+        "ON customer_drawing_groups(customer_id, updated_at)"
+    )
+
+
+def _rebuild_customer_drawing_groups(conn: sqlite3.Connection) -> None:
+    # 客户商品行：同一客户同一 BLD 号（忽略大小写）唯一。
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS customer_products (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          customer_id INTEGER NOT NULL REFERENCES customers(id),
+          sync_id TEXT NOT NULL UNIQUE,
+          bld_no TEXT NOT NULL,
+          customer_product_code TEXT NOT NULL DEFAULT '',
+          customer_product_name TEXT NOT NULL DEFAULT '',
+          created_by TEXT NOT NULL DEFAULT '',
+          updated_by TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_products_customer_bld "
+        "ON customer_products(customer_id, bld_no COLLATE NOCASE)"
+    )
+    # 索引由迁移统一创建：主 schema 在旧结构表上建这些索引会失败。
+    if "kind" in _columns(conn, "customer_drawing_groups"):
+        # 全新初始化的库由主 schema 直接建成新结构，无需重建。
+        _create_customer_drawing_group_indexes(conn)
+        return
+    conn.execute("ALTER TABLE customer_drawing_groups RENAME TO customer_drawing_groups_legacy")
+    # 旧索引随表保留原名，先删除再为新表重建。
+    conn.execute("DROP INDEX IF EXISTS idx_customer_drawing_groups_customer")
+    conn.execute(
+        """
+        CREATE TABLE customer_drawing_groups (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          customer_product_id INTEGER NOT NULL REFERENCES customer_products(id),
+          customer_id INTEGER NOT NULL REFERENCES customers(id),
+          sync_id TEXT NOT NULL UNIQUE,
+          kind TEXT NOT NULL CHECK(kind IN ('bld','customer')),
+          current_version INTEGER NOT NULL DEFAULT 0,
+          created_by TEXT NOT NULL DEFAULT '',
+          updated_by TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+        """
+    )
+    _create_customer_drawing_group_indexes(conn)
+    legacy_rows = conn.execute("SELECT * FROM customer_drawing_groups_legacy ORDER BY id").fetchall()
+    product_ids: dict[tuple[int, str], int] = {}
+    group_ids: dict[tuple[int, str], int] = {}
+    for row in legacy_rows:
+        customer_id = int(row["customer_id"])
+        bld_no = str(row["bld_no"] or "").strip()
+        product_key = (customer_id, bld_no.upper())
+        product_id = product_ids.get(product_key)
+        if product_id is None:
+            cursor = conn.execute(
+                """
+                INSERT INTO customer_products
+                  (customer_id, sync_id, bld_no, created_by, updated_by, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    customer_id,
+                    uuid4().hex,
+                    bld_no,
+                    str(row["created_by"] or ""),
+                    str(row["updated_by"] or ""),
+                    str(row["created_at"]),
+                    str(row["updated_at"]),
+                ),
+            )
+            if cursor.lastrowid is None:
+                raise RuntimeError("customer_products 回填未返回 id。")
+            product_id = int(cursor.lastrowid)
+            product_ids[product_key] = product_id
+        # 旧 direction 'issued'（我方出图）→ bld 图纸位；'customer'（客户来图）→ customer 图纸位。
+        kind = "bld" if row["direction"] == "issued" else "customer"
+        group_key = (product_id, kind)
+        target_group_id = group_ids.get(group_key)
+        legacy_group_id = int(row["id"])
+        if target_group_id is None:
+            # 保留旧组 id 与 sync_id：customer_drawing_files.group_id 与磁盘路径不受影响。
+            conn.execute(
+                """
+                INSERT INTO customer_drawing_groups
+                  (id, customer_product_id, customer_id, sync_id, kind, current_version,
+                   created_by, updated_by, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    legacy_group_id,
+                    product_id,
+                    customer_id,
+                    str(row["sync_id"]),
+                    kind,
+                    int(row["current_version"]),
+                    str(row["created_by"] or ""),
+                    str(row["updated_by"] or ""),
+                    str(row["created_at"]),
+                    str(row["updated_at"]),
+                ),
+            )
+            group_ids[group_key] = legacy_group_id
+            continue
+        # 同商品同图纸位出现多个旧组：文件并入先建组，版本号顺移避免冲突。
+        next_version = int(
+            conn.execute(
+                "SELECT COALESCE(MAX(version_no), 0) FROM customer_drawing_files WHERE group_id = ?",
+                (target_group_id,),
+            ).fetchone()[0]
+        )
+        files = conn.execute(
+            "SELECT id FROM customer_drawing_files WHERE group_id = ? ORDER BY version_no",
+            (legacy_group_id,),
+        ).fetchall()
+        for file_row in files:
+            next_version += 1
+            conn.execute(
+                "UPDATE customer_drawing_files SET group_id = ?, version_no = ? WHERE id = ?",
+                (target_group_id, next_version, int(file_row["id"])),
+            )
+        conn.execute(
+            "UPDATE customer_drawing_groups SET current_version = ?, updated_at = ? WHERE id = ?",
+            (next_version, str(row["updated_at"]), target_group_id),
+        )
+    conn.execute("DROP TABLE customer_drawing_groups_legacy")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -1107,6 +1250,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("033_revoke_view_product_prices", _revoke_view_product_prices_permission),
     ("034_split_granular_permissions", _split_granular_permissions),
     ("035_customer_drawings", _add_customer_drawings),
+    ("036_customer_products", _rebuild_customer_drawing_groups),
 )
 
 

@@ -5,18 +5,18 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 
-class CustomerDrawingDirection(StrEnum):
+class CustomerDrawingKind(StrEnum):
+    BLD = "bld"
     CUSTOMER = "customer"
-    ISSUED = "issued"
 
 
-DIRECTION_LABELS: dict[str, str] = {
-    CustomerDrawingDirection.CUSTOMER: "客户来图",
-    CustomerDrawingDirection.ISSUED: "我方出图",
+KIND_LABELS: dict[str, str] = {
+    CustomerDrawingKind.BLD: "BLD 图纸",
+    CustomerDrawingKind.CUSTOMER: "客户图纸",
 }
 
-CUSTOMER_DRAWING_DIRECTIONS: tuple[dict[str, str], ...] = tuple(
-    {"value": direction.value, "label": DIRECTION_LABELS[direction.value]} for direction in CustomerDrawingDirection
+CUSTOMER_DRAWING_KINDS: tuple[dict[str, str], ...] = tuple(
+    {"value": kind.value, "label": KIND_LABELS[kind.value]} for kind in CustomerDrawingKind
 )
 
 PREVIEWABLE_CONTENT_TYPES = frozenset(
@@ -31,7 +31,7 @@ PREVIEWABLE_CONTENT_TYPES = frozenset(
 _BLD_NO_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/ -]*")
 
 
-class CustomerDrawingValidationError(ValueError):
+class CustomerProductValidationError(ValueError):
     def __init__(self, code: str, message: str, *, field: str = "") -> None:
         super().__init__(message)
         self.code = code
@@ -44,6 +44,36 @@ class CustomerIdentity:
     id: int
     name: str
     sync_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class QuotedProductOption:
+    bld_no: str
+    customer_product_code: str = ""
+
+    def payload(self) -> dict[str, str]:
+        return {
+            "bld_no": self.bld_no,
+            "customer_product_code": self.customer_product_code,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class CatalogProductInfo:
+    bld_no: str
+    item_name: str = ""
+    image_url: str = ""
+    thumb_url: str = ""
+    has_drawing: bool = False
+
+    def payload(self) -> dict[str, object]:
+        return {
+            "bld_no": self.bld_no,
+            "item_name": self.item_name,
+            "image_url": self.image_url,
+            "thumb_url": self.thumb_url,
+            "has_drawing": self.has_drawing,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,16 +123,15 @@ class CustomerDrawingVersion:
 
 
 @dataclass(frozen=True, slots=True)
-class CustomerDrawingGroup:
+class CustomerDrawingSlot:
+    """客户商品行下的一个图纸位（BLD 图纸 / 客户图纸），携带全部版本文件。"""
+
     id: int
+    customer_product_id: int
     customer_id: int
     sync_id: str
-    direction: str
-    bld_no: str
-    title: str
-    drawing_no: str
+    kind: str
     current_version: int
-    archived: bool
     created_by: str
     updated_by: str
     created_at: str
@@ -110,8 +139,8 @@ class CustomerDrawingGroup:
     files: tuple[CustomerDrawingFile, ...] = ()
 
     @property
-    def direction_label(self) -> str:
-        return DIRECTION_LABELS.get(self.direction, DIRECTION_LABELS[CustomerDrawingDirection.CUSTOMER])
+    def kind_label(self) -> str:
+        return KIND_LABELS.get(self.kind, KIND_LABELS[CustomerDrawingKind.CUSTOMER])
 
     @property
     def current_file(self) -> CustomerDrawingFile | None:
@@ -135,15 +164,12 @@ class CustomerDrawingGroup:
     def payload(self) -> dict[str, object]:
         return {
             "id": self.id,
+            "customer_product_id": self.customer_product_id,
             "customer_id": self.customer_id,
             "sync_id": self.sync_id,
-            "direction": self.direction,
-            "direction_label": self.direction_label,
-            "bld_no": self.bld_no,
-            "title": self.title,
-            "drawing_no": self.drawing_no,
+            "kind": self.kind,
+            "kind_label": self.kind_label,
             "current_version": self.current_version,
-            "archived": self.archived,
             "created_by": self.created_by,
             "updated_by": self.updated_by,
             "created_at": self.created_at,
@@ -163,18 +189,62 @@ class CustomerDrawingGroup:
 
 
 @dataclass(frozen=True, slots=True)
+class CustomerProduct:
+    id: int
+    customer_id: int
+    sync_id: str
+    bld_no: str
+    customer_product_code: str
+    customer_product_name: str
+    created_by: str
+    updated_by: str
+    created_at: str
+    updated_at: str
+    drawings: tuple[CustomerDrawingSlot, ...] = ()
+    catalog: CatalogProductInfo | None = None
+
+    def slot(self, kind: str) -> CustomerDrawingSlot | None:
+        for drawing in self.drawings:
+            if drawing.kind == kind:
+                return drawing
+        return None
+
+    def payload(self) -> dict[str, object]:
+        return {
+            "id": self.id,
+            "customer_id": self.customer_id,
+            "sync_id": self.sync_id,
+            "bld_no": self.bld_no,
+            "customer_product_code": self.customer_product_code,
+            "customer_product_name": self.customer_product_name,
+            "created_by": self.created_by,
+            "updated_by": self.updated_by,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "drawings": [drawing.payload() for drawing in self.drawings],
+            "catalog": self.catalog.payload() if self.catalog else None,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class CustomerDrawingFileReference:
     file: CustomerDrawingFile
     group_id: int
     customer_id: int
-    direction: str
-    title: str
+    customer_product_id: int
+    kind: str
+    bld_no: str
+    customer_product_name: str
     current_version: int
-    group_archived: bool
 
     @property
-    def direction_label(self) -> str:
-        return DIRECTION_LABELS.get(self.direction, DIRECTION_LABELS[CustomerDrawingDirection.CUSTOMER])
+    def kind_label(self) -> str:
+        return KIND_LABELS.get(self.kind, KIND_LABELS[CustomerDrawingKind.CUSTOMER])
+
+    @property
+    def title(self) -> str:
+        parts = [part for part in (self.bld_no, self.customer_product_name) if part]
+        return " ".join(parts)
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,52 +259,54 @@ class CustomerDrawingSummary:
         }
 
 
-def clean_direction(value: object) -> str:
-    direction = str(value or "").strip().lower()
-    if direction not in DIRECTION_LABELS:
-        raise CustomerDrawingValidationError(
-            "customer_drawing.invalid_direction", "请选择有效的图纸方向。", field="direction"
+def clean_kind(value: object) -> str:
+    kind = str(value or "").strip().lower()
+    if kind not in KIND_LABELS:
+        raise CustomerProductValidationError(
+            "customer_drawing.invalid_kind", "请选择有效的图纸位。", field="kind"
         )
-    return direction
-
-
-def clean_title(value: object) -> str:
-    title = " ".join(str(value or "").split())
-    if not title:
-        raise CustomerDrawingValidationError("customer_drawing.title_required", "图纸标题不能为空。", field="title")
-    if len(title) > 120:
-        raise CustomerDrawingValidationError(
-            "customer_drawing.title_too_long", "图纸标题不能超过 120 个字符。", field="title"
-        )
-    return title
+    return kind
 
 
 def clean_bld_no(value: object) -> str:
     bld_no = " ".join(str(value or "").split()).upper()
-    if len(bld_no) > 80:
-        raise CustomerDrawingValidationError(
-            "customer_drawing.bld_no_too_long", "关联 BLD 号不能超过 80 个字符。", field="bld_no"
+    if not bld_no:
+        raise CustomerProductValidationError(
+            "customer_product.bld_no_required", "BLD 号不能为空。", field="bld_no"
         )
-    if bld_no and not _BLD_NO_PATTERN.fullmatch(bld_no):
-        raise CustomerDrawingValidationError(
-            "customer_drawing.invalid_bld_no", "关联 BLD 号只能包含字母、数字和常见分隔符。", field="bld_no"
+    if len(bld_no) > 80:
+        raise CustomerProductValidationError(
+            "customer_product.bld_no_too_long", "BLD 号不能超过 80 个字符。", field="bld_no"
+        )
+    if not _BLD_NO_PATTERN.fullmatch(bld_no):
+        raise CustomerProductValidationError(
+            "customer_product.invalid_bld_no", "BLD 号只能包含字母、数字和常见分隔符。", field="bld_no"
         )
     return bld_no
 
 
-def clean_drawing_no(value: object) -> str:
-    drawing_no = " ".join(str(value or "").split())
-    if len(drawing_no) > 120:
-        raise CustomerDrawingValidationError(
-            "customer_drawing.drawing_no_too_long", "图号不能超过 120 个字符。", field="drawing_no"
+def clean_product_code(value: object) -> str:
+    code = " ".join(str(value or "").split())
+    if len(code) > 120:
+        raise CustomerProductValidationError(
+            "customer_product.code_too_long", "客户产品编码不能超过 120 个字符。", field="customer_product_code"
         )
-    return drawing_no
+    return code
+
+
+def clean_product_name(value: object) -> str:
+    name = " ".join(str(value or "").split())
+    if len(name) > 200:
+        raise CustomerProductValidationError(
+            "customer_product.name_too_long", "客户产品名称不能超过 200 个字符。", field="customer_product_name"
+        )
+    return name
 
 
 def clean_revision_label(value: object) -> str:
     revision_label = " ".join(str(value or "").split())
     if len(revision_label) > 60:
-        raise CustomerDrawingValidationError(
+        raise CustomerProductValidationError(
             "customer_drawing.revision_label_too_long", "版本代号不能超过 60 个字符。", field="revision_label"
         )
     return revision_label
@@ -243,7 +315,7 @@ def clean_revision_label(value: object) -> str:
 def clean_note(value: object) -> str:
     note = str(value or "").replace("\r\n", "\n").replace("\r", "\n").strip()
     if len(note) > 2000:
-        raise CustomerDrawingValidationError(
+        raise CustomerProductValidationError(
             "customer_drawing.note_too_long", "版本备注不能超过 2000 个字符。", field="note"
         )
     return note

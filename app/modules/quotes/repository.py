@@ -358,6 +358,26 @@ class SQLiteQuoteRepository:
             for row in rows
         ]
 
+    def customer_product_options(self, customer_id: int, customer_name: str) -> list[dict[str, str]]:
+        rows = self.connection.execute(
+            """
+            SELECT DISTINCT COALESCE(NULLIF(bld_no, ''), product_model) AS bld_no,
+                   customer_product_code
+            FROM quote_records
+            WHERE (customer_id = ? OR (customer_id IS NULL AND customer_name = ? COLLATE NOCASE))
+              AND COALESCE(NULLIF(bld_no, ''), product_model) <> ''
+            ORDER BY bld_no COLLATE NOCASE, customer_product_code COLLATE NOCASE
+            """,
+            (customer_id, customer_name),
+        ).fetchall()
+        return [
+            {
+                "bld_no": str(row["bld_no"]),
+                "customer_product_code": str(row["customer_product_code"] or ""),
+            }
+            for row in rows
+        ]
+
     def rename_customer_references(self, customer_id: int, old_name: str, new_name: str) -> int:
         cursor = self.connection.execute(
             """

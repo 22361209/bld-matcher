@@ -8,8 +8,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.database import connect
-from app.modules.customer_drawings.repository import SQLiteCustomerDrawingUnitOfWork
-from app.modules.customer_drawings.service import CustomerDrawingService
+from app.modules.customer_products.repository import SQLiteCustomerProductUnitOfWork
+from app.modules.customer_products.service import CustomerProductService
 from app.modules.quotes.domain import QuoteValidationError
 from app.modules.quotes.infrastructure import CustomerDrawingDirectoryAdapter
 from app.modules.quotes.repository import SQLiteQuoteUnitOfWork
@@ -60,14 +60,25 @@ class QuoteDrawingLinkTest(unittest.TestCase):
             )
             connection.executemany(
                 """
-                INSERT INTO customer_drawing_groups
-                  (id, customer_id, sync_id, direction, title, current_version, archived, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, '2026-08-01 00:00:00', '2026-08-01 00:00:00')
+                INSERT INTO customer_products
+                  (id, customer_id, sync_id, bld_no, customer_product_name, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, '2026-08-01 00:00:00', '2026-08-01 00:00:00')
                 """,
                 [
-                    (1, 1, "group-1", "customer", "支架图纸", 2, 0),
-                    (2, 2, "group-2", "issued", "对方图纸", 1, 0),
-                    (3, 1, "group-3", "customer", "已归档图纸", 1, 1),
+                    (1, 1, "product-1", "MODULE-001", "支架总成"),
+                    (2, 2, "product-2", "OTHER-001", ""),
+                ],
+            )
+            connection.executemany(
+                """
+                INSERT INTO customer_drawing_groups
+                  (id, customer_product_id, customer_id, sync_id, kind, current_version, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, '2026-08-01 00:00:00', '2026-08-01 00:00:00')
+                """,
+                [
+                    (1, 1, 1, "group-1", "customer", 2),
+                    (2, 2, 2, "group-2", "bld", 1),
+                    (3, 1, 1, "group-3", "bld", 1),
                 ],
             )
             connection.executemany(
@@ -81,16 +92,16 @@ class QuoteDrawingLinkTest(unittest.TestCase):
                     (11, 1, "file-11", 1, "Rev A", "bracket-v1.pdf", "cust-1/drawings/group-1/v0001/a.pdf"),
                     (12, 1, "file-12", 2, "Rev B", "bracket-v2.pdf", "cust-1/drawings/group-1/v0002/b.pdf"),
                     (13, 2, "file-13", 1, "", "other-v1.pdf", "cust-2/drawings/group-2/v0001/c.pdf"),
-                    (14, 3, "file-14", 1, "", "archived-v1.pdf", "cust-1/drawings/group-3/v0001/d.pdf"),
+                    (14, 3, "file-14", 1, "", "bld-v1.pdf", "cust-1/drawings/group-3/v0001/d.pdf"),
                 ],
             )
             connection.commit()
-        self.drawing_service = CustomerDrawingService(
-            lambda: SQLiteCustomerDrawingUnitOfWork(self.db_path),
+        self.drawing_service = CustomerProductService(
+            lambda: SQLiteCustomerProductUnitOfWork(self.db_path),
             storage=None,
         )
         factory_patch = patch(
-            "app.modules.customer_drawings.factory.get_customer_drawing_service",
+            "app.modules.customer_products.factory.get_customer_product_service",
             return_value=self.drawing_service,
         )
         factory_patch.start()
@@ -169,13 +180,11 @@ class QuoteDrawingLinkTest(unittest.TestCase):
             self.service.link_drawing(record.id, 13, actor="linker")
         self.assertEqual(self._link_count(record.id), 0)
 
-    def test_link_drawing_rejects_archived_group(self):
+    def test_link_drawing_accepts_both_drawing_kinds(self):
         record = self.service.create(self.quote_data(), actor="linker")
-        with self.assertRaises(QuoteValidationError) as raised:
-            self.service.link_drawing(record.id, 14, actor="linker")
-        self.assertEqual(raised.exception.code, "quote.drawing_archived")
-        self.assertEqual(raised.exception.field, "drawing_file_id")
-        self.assertEqual(self._link_count(record.id), 0)
+        self.service.link_drawing(record.id, 11, actor="linker")
+        self.service.link_drawing(record.id, 14, actor="linker")
+        self.assertEqual(self._link_count(record.id), 2)
 
     def test_link_drawing_rejects_unknown_file_or_quote(self):
         record = self.service.create(self.quote_data(), actor="linker")
@@ -230,28 +239,47 @@ class QuoteDrawingLinkTest(unittest.TestCase):
         by_version = {view.file.version_no: view for view in views}
         self.assertEqual(set(by_version), {1, 2})
         older = by_version[1]
-        self.assertEqual(older.file.direction_label, "客户来图")
-        self.assertEqual(older.file.title, "支架图纸")
+        self.assertEqual(older.file.direction_label, "客户图纸")
+        self.assertEqual(older.file.title, "MODULE-001 支架总成")
         self.assertEqual(older.file.revision_label, "Rev A")
         self.assertEqual(older.file.original_name, "bracket-v1.pdf")
         self.assertEqual(older.file.customer_id, 1)
         self.assertTrue(older.file.has_newer_version)
         self.assertFalse(by_version[2].file.has_newer_version)
 
-    def test_drawing_link_options_group_unarchived_versions_per_record(self):
+    def test_drawing_link_options_cover_all_product_slots_per_record(self):
         record = self.service.create(self.quote_data(), actor="linker")
         options = self.service.drawing_link_options_by_quote_no(record.quote_no)[record.id]
-        self.assertEqual(len(options), 1)
-        group = options[0]
-        self.assertEqual(group["title"], "支架图纸")
-        self.assertEqual(group["direction_label"], "客户来图")
-        self.assertEqual([version.version_no for version in group["versions"]], [2, 1])
+        self.assertEqual(len(options), 2)
+        by_label = {option["direction_label"]: option for option in options}
+        self.assertEqual(set(by_label), {"客户图纸", "BLD 图纸"})
+        customer_slot = by_label["客户图纸"]
+        self.assertEqual(customer_slot["title"], "MODULE-001 支架总成")
+        self.assertEqual([version.version_no for version in customer_slot["versions"]], [2, 1])
+        bld_slot = by_label["BLD 图纸"]
+        self.assertEqual([version.version_no for version in bld_slot["versions"]], [1])
 
         stranger_id = self._legacy_quote(customer_name="stranger", quote_no="Q-STRANGER")
         self.assertEqual(
             self.service.drawing_link_options_by_quote_no("Q-STRANGER"),
             {stranger_id: []},
         )
+
+    def test_customer_product_options_matches_by_customer_id_or_legacy_name(self):
+        self.service.create(self.quote_data(customer_product_code="CUST-1"), actor="linker")
+        self._legacy_quote()
+        self.service.create(
+            self.quote_data(customer_name="Other Customer", bld_no="OTHER-001"),
+            actor="linker",
+        )
+
+        options = self.service.customer_product_options(1, "Module Customer")
+        by_bld = {option["bld_no"]: option["customer_product_code"] for option in options}
+        # customer_id 直配与 customer_name NOCASE 回退（legacy 行）双轨命中。
+        self.assertEqual(by_bld, {"LEGACY-001": "", "MODULE-001": "CUST-1"})
+
+        other_options = self.service.customer_product_options(2, "Other Customer")
+        self.assertEqual([option["bld_no"] for option in other_options], ["OTHER-001"])
 
 
 if __name__ == "__main__":

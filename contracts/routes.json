@@ -295,41 +295,6 @@
       "rule": "/customers/<int:customer_id>/documents/files/<int:file_id>/preview"
     },
     {
-      "endpoint": "create_customer_drawing",
-      "methods": [
-        "POST"
-      ],
-      "rule": "/customers/<int:customer_id>/drawings"
-    },
-    {
-      "endpoint": "archive_customer_drawing",
-      "methods": [
-        "POST"
-      ],
-      "rule": "/customers/<int:customer_id>/drawings/<int:group_id>/archive"
-    },
-    {
-      "endpoint": "unarchive_customer_drawing",
-      "methods": [
-        "POST"
-      ],
-      "rule": "/customers/<int:customer_id>/drawings/<int:group_id>/unarchive"
-    },
-    {
-      "endpoint": "update_customer_drawing",
-      "methods": [
-        "POST"
-      ],
-      "rule": "/customers/<int:customer_id>/drawings/<int:group_id>/update"
-    },
-    {
-      "endpoint": "add_customer_drawing_version",
-      "methods": [
-        "POST"
-      ],
-      "rule": "/customers/<int:customer_id>/drawings/<int:group_id>/versions"
-    },
-    {
       "endpoint": "download_customer_drawing_file",
       "methods": [
         "GET"
@@ -342,6 +307,48 @@
         "GET"
       ],
       "rule": "/customers/<int:customer_id>/drawings/files/<int:file_id>/preview"
+    },
+    {
+      "endpoint": "create_customer_product",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/customers/<int:customer_id>/products"
+    },
+    {
+      "endpoint": "set_customer_product_drawing_current",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/customers/<int:customer_id>/products/<int:product_id>/drawings/<kind>/current"
+    },
+    {
+      "endpoint": "upload_customer_product_drawing_version",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/customers/<int:customer_id>/products/<int:product_id>/drawings/<kind>/versions"
+    },
+    {
+      "endpoint": "customer_product_drawing_versions",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/customers/<int:customer_id>/products/<int:product_id>/drawings/<kind>/versions.json"
+    },
+    {
+      "endpoint": "import_customer_product_catalog_drawing",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/customers/<int:customer_id>/products/<int:product_id>/drawings/bld/import-catalog"
+    },
+    {
+      "endpoint": "update_customer_product",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/customers/<int:customer_id>/products/<int:product_id>/update"
     },
     {
       "endpoint": "set_customer_status",

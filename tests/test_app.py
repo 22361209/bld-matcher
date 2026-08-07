@@ -5494,6 +5494,7 @@ class WebAppTest(unittest.TestCase):
                 "033_revoke_view_product_prices",
                 "034_split_granular_permissions",
                 "035_customer_drawings",
+                "036_customer_products",
             ],
         )
 

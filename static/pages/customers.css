@@ -439,35 +439,6 @@
   margin: 0;
 }
 
-.customer-drawing-directions {
-  display: grid;
-  gap: 16px;
-  padding: 14px 16px 16px;
-}
-
-.customer-drawing-direction {
-  display: grid;
-  gap: 10px;
-}
-
-.customer-drawing-direction > h3 {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin: 0;
-  font-size: 14px;
-}
-
-.customer-drawing-direction > h3 span {
-  color: var(--linear-muted);
-  font-size: 12px;
-  font-weight: 400;
-}
-
-.customer-drawing-direction .customer-document-grid {
-  padding: 0;
-}
-
 @media (max-width: 1050px) {
   .customer-overview-grid,
   .customer-contact-list {

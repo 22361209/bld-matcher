@@ -1,0 +1,211 @@
+/* 客户详情页「商品」页签：商品表格、图纸版本徽标与图纸预览/上传弹窗。 */
+
+.customer-products-actions {
+  margin: 0 0 12px;
+}
+
+.customer-products-table td {
+  vertical-align: middle;
+}
+
+.customer-product-thumb-link {
+  display: inline-block;
+  width: fit-content;
+}
+
+.customer-product-thumb {
+  display: block;
+  width: 66px;
+  height: 48px;
+  object-fit: contain;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.customer-product-thumb-link:hover .customer-product-thumb,
+.customer-product-thumb-link:focus-visible .customer-product-thumb {
+  border-color: var(--linear-line-strong);
+}
+
+.customer-drawing-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  border: 0;
+  background: transparent;
+  color: var(--linear-accent);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.customer-drawing-open:hover,
+.customer-drawing-open:focus-visible {
+  text-decoration: underline;
+}
+
+.customer-drawing-badge {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border: 1px solid var(--linear-line-strong);
+  border-radius: 999px;
+  background: #e8f1f9;
+  color: #245b86;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.customer-drawing-open-label {
+  white-space: nowrap;
+}
+
+.customer-product-modal-panel {
+  width: min(560px, calc(100vw - 48px));
+}
+
+/* 弹窗渲染在 .app-surface 之外（page_modals），需要就地补齐 --linear-* 变量 */
+.customer-product-modal-panel,
+.customer-drawing-modal-panel {
+  --linear-line: var(--precision-line);
+  --linear-line-strong: var(--precision-line-strong);
+  --linear-text: var(--precision-ink);
+  --linear-muted: var(--precision-muted);
+  --linear-accent: var(--precision-cobalt);
+  --linear-focus: rgba(32, 93, 132, 0.2);
+}
+
+.customer-product-form {
+  display: grid;
+  gap: 16px;
+}
+
+.customer-product-form > label,
+.customer-product-form input {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.customer-product-form input[readonly] {
+  background: #f2f6f9;
+  color: var(--linear-muted);
+}
+
+.customer-product-modal-panel [data-modal-drag-handle] {
+  cursor: move;
+  user-select: none;
+}
+
+.drawing-modal-viewer {
+  min-height: 320px;
+}
+
+.drawing-modal-stage {
+  display: grid;
+  place-items: center;
+  width: min(calc(92vw - 148px), 860px);
+  height: min(58vh, 620px);
+  overflow: hidden;
+  border: 1px solid var(--linear-line);
+  border-radius: 6px;
+  background: #f2f6f9;
+}
+
+.drawing-modal-stage > img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background: #ffffff;
+}
+
+.drawing-modal-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #ffffff;
+}
+
+.drawing-modal-empty {
+  margin: 0;
+  padding: 24px;
+  color: var(--linear-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.drawing-modal-caption {
+  max-width: min(calc(92vw - 148px), 860px);
+  overflow-wrap: anywhere;
+}
+
+.drawing-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.drawing-upload {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  max-width: min(calc(92vw - 148px), 860px);
+  margin-top: 4px;
+}
+
+.drawing-upload-intake {
+  inline-size: 100%;
+  block-size: auto;
+}
+
+.drawing-upload-intake .product-media-intake-button {
+  min-height: 96px;
+  padding: 12px;
+}
+
+.drawing-upload-intake .product-media-intake-button small {
+  max-width: 100%;
+}
+
+.drawing-upload-input {
+  position: absolute;
+  width: 1px;
+  min-width: 0;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.drawing-upload-revision {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.drawing-upload-revision > span {
+  color: var(--linear-muted);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.drawing-upload-status {
+  margin: 0;
+}
+
+@media (max-width: 720px) {
+  .drawing-modal-stage {
+    width: calc(100vw - 132px);
+    height: 46vh;
+  }
+
+  .drawing-upload-revision {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
