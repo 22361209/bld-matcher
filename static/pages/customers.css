@@ -115,12 +115,6 @@
   margin: 0;
 }
 
-.customer-back-link {
-  display: inline-block;
-  margin-bottom: 7px;
-  font-size: 13px;
-}
-
 .customer-identity-line {
   display: flex;
   align-items: center;

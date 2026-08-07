@@ -604,6 +604,14 @@ class CustomerProductsTabRenderTest(unittest.TestCase):
             '<a class="active" href="/customers/1?view=products" aria-current="page">客户产品编码</a>',
             html,
         )
+        self.assertIn(
+            '<a class="linear-button subtle customer-back-link" href="/customers">← 返回客户列表</a>',
+            html,
+        )
+        self.assertRegex(
+            html,
+            r'<div class="command-actions">\s*<a class="linear-button subtle customer-back-link"',
+        )
         self.assertIn('enctype="multipart/form-data"', html)
         self.assertIn('name="customer_drawing_file"', html)
         self.assertIn('tabindex="-1" aria-hidden="true" hidden data-customer-product-create-drawing-input', html)

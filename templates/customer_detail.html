@@ -14,7 +14,6 @@
 {% block page_content %}
   <section class="customer-detail-heading">
     <div>
-      <a class="customer-back-link" href="{{ url_for('customers') }}">← 返回客户列表</a>
       <div class="customer-identity-line">
         <h2>{{ customer.name }}</h2>
         <span class="linear-status {{ 'active' if customer.status == 'active' else 'inactive' }}">{{ "正常" if customer.status == "active" else "已停用" }}</span>
@@ -22,6 +21,7 @@
       <p>{{ customer.code or "未设置客户编号" }} · 负责人 {{ customer.owner_username or "未指定" }}</p>
     </div>
     <div class="command-actions">
+      <a class="linear-button subtle customer-back-link" href="{{ url_for('customers') }}">← 返回客户列表</a>
       {% if can("view_customer_prices") %}<a class="linear-button primary" href="{{ url_for('quote_web.quotes', customer_name=customer.name) }}">查看报价</a>{% endif %}
       {% if can("edit_customers") %}
       <form method="post" action="{{ url_for('set_customer_status', customer_id=customer.id) }}">
