@@ -223,7 +223,7 @@ def register(app) -> None:
         return redirect(url_for("material_items"))
 
     @app.get("/material-drawings")
-    @login_required
+    @permission_required("view_material_drawings")
     def material_drawings():
         context = get_material_service().drawing_page(
             query=request.args.get("q", ""),
@@ -255,7 +255,7 @@ def register(app) -> None:
         return redirect(url_for("material_drawings"))
 
     @app.get("/material-drawings/preview/<path:name>")
-    @login_required
+    @permission_required("view_material_drawings")
     def preview_material_drawing(name: str):
         path = get_material_service().drawing_path(name)
         if path is None:
@@ -263,7 +263,7 @@ def register(app) -> None:
         return send_file(path, as_attachment=False, mimetype="application/pdf", download_name=path.name)
 
     @app.get("/material-drawings/<path:name>")
-    @login_required
+    @permission_required("view_material_drawings")
     def download_material_drawing(name: str):
         path = get_material_service().drawing_path(name)
         if path is None:

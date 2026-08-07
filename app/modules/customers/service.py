@@ -163,86 +163,116 @@ class CustomerService:
             connection.commit()
             return customer
 
-    def update_profile(
-        self,
-        customer_id: int,
-        data: Mapping[str, object],
-        *,
-        actor: str,
-    ) -> Customer:
+    def update_owner(self, customer_id: int, owner_username: object, *, actor: str) -> Customer:
+        normalized_owner = clean_single_line(owner_username, limit=120)
         with self.connection_factory() as connection:
             customer = repository.get_customer(connection, customer_id)
             if customer is None:
                 raise CustomerValidationError("customer.not_found", "客户不存在。")
-            name = clean_customer_name(data.get("name", customer.name))
-            code = clean_single_line(data.get("code", customer.code), limit=80)
-            owner_username = clean_single_line(data.get("owner_username", customer.owner_username), limit=120)
-            if not name:
-                raise CustomerValidationError("customer.name_required", "客户名称不能为空。")
-            if len(name) > 200:
-                raise CustomerValidationError("customer.name_too_long", "客户名称不能超过 200 个字符。")
-            existing = repository.find_by_name(connection, name)
-            if existing and existing.id != customer.id:
-                raise CustomerValidationError("customer.duplicate", f"客户 {name} 已存在。")
-            if code:
-                same_code = repository.find_by_code(connection, code)
-                if same_code and same_code.id != customer.id:
-                    raise CustomerValidationError("customer.code_duplicate", f"客户编号 {code} 已被使用。")
-            owner_changed = owner_username != customer.owner_username
-            if owner_changed and owner_username and self.owner_validator and not self.owner_validator(owner_username):
+            if (
+                normalized_owner != customer.owner_username
+                and normalized_owner
+                and self.owner_validator
+                and not self.owner_validator(normalized_owner)
+            ):
                 raise CustomerValidationError("customer.owner_invalid", "负责人账号不存在或已停用。")
-            repository.update_customer_profile(
-                connection,
-                customer.id,
-                name=name,
-                code=code,
-                owner_username=owner_username,
-            )
-            renamed_customer = customer.name != name
-            changes = []
-            if renamed_customer:
-                changes.append(f"名称：{customer.name} → {name}")
-            if customer.code != code:
-                changes.append(f"客户编号：{customer.code or '未填写'} → {code or '未填写'}")
-            if customer.owner_username != owner_username:
-                changes.append(f"负责人：{customer.owner_username or '未指定'} → {owner_username or '未指定'}")
+            if normalized_owner != customer.owner_username:
+                repository.update_customer_owner(
+                    connection,
+                    customer.id,
+                    owner_username=normalized_owner,
+                )
+                log_event(
+                    connection,
+                    "更新客户负责人",
+                    "customer",
+                    customer.name,
+                    f"负责人：{customer.owner_username or '未指定'} → {normalized_owner or '未指定'}",
+                    actor=actor,
+                )
+                connection.commit()
+            updated = repository.get_customer(connection, customer.id)
+            assert updated is not None
+        return updated
+
+    def rename(self, customer_id: int, name: object, *, reason: object, actor: str) -> Customer:
+        normalized_name = clean_customer_name(name)
+        normalized_reason = self._change_reason(reason)
+        if not normalized_name:
+            raise CustomerValidationError("customer.name_required", "客户名称不能为空。")
+        if len(normalized_name) > 200:
+            raise CustomerValidationError("customer.name_too_long", "客户名称不能超过 200 个字符。")
+        with self.connection_factory() as connection:
+            customer = repository.get_customer(connection, customer_id)
+            if customer is None:
+                raise CustomerValidationError("customer.not_found", "客户不存在。")
+            if normalized_name == customer.name:
+                raise CustomerValidationError("customer.identity_unchanged", "客户名称未发生变化。")
+            existing = repository.find_by_name(connection, normalized_name)
+            if existing and existing.id != customer.id:
+                raise CustomerValidationError("customer.duplicate", f"客户 {normalized_name} 已存在。")
+            repository.update_customer_name(connection, customer.id, name=normalized_name)
             log_event(
                 connection,
-                "更新客户档案",
+                "变更客户名称",
                 "customer",
-                name,
-                "；".join(changes) or "档案内容未变化",
+                normalized_name,
+                f"名称：{customer.name} → {normalized_name}；原因：{normalized_reason}",
                 actor=actor,
             )
             connection.commit()
             updated = repository.get_customer(connection, customer.id)
             assert updated is not None
-        if renamed_customer:
-            try:
-                self.business_reader.rename_customer_references(customer.id, customer.name, name)
-            except Exception:
-                with self.connection_factory() as connection:
-                    repository.update_customer_profile(
-                        connection,
-                        customer.id,
-                        name=customer.name,
-                        code=customer.code,
-                        owner_username=customer.owner_username,
-                    )
-                    log_event(
-                        connection,
-                        "客户档案更新回滚",
-                        "customer",
-                        customer.name,
-                        "历史报价名称同步失败，客户档案已恢复。",
-                        actor=actor,
-                    )
-                    connection.commit()
-                raise
+        try:
+            self.business_reader.rename_customer_references(customer.id, customer.name, normalized_name)
+        except Exception:
+            with self.connection_factory() as connection:
+                repository.update_customer_name(connection, customer.id, name=customer.name)
+                log_event(
+                    connection,
+                    "客户名称变更回滚",
+                    "customer",
+                    customer.name,
+                    f"历史报价名称同步失败，客户名称已恢复；原变更原因：{normalized_reason}",
+                    actor=actor,
+                )
+                connection.commit()
+            raise
         return updated
 
-    def rename(self, customer_id: int, name: object, *, actor: str) -> Customer:
-        return self.update_profile(customer_id, {"name": name}, actor=actor)
+    def update_code(self, customer_id: int, code: object, *, reason: object, actor: str) -> Customer:
+        normalized_code = clean_single_line(code, limit=80)
+        normalized_reason = self._change_reason(reason)
+        with self.connection_factory() as connection:
+            customer = repository.get_customer(connection, customer_id)
+            if customer is None:
+                raise CustomerValidationError("customer.not_found", "客户不存在。")
+            if normalized_code == customer.code:
+                raise CustomerValidationError("customer.identity_unchanged", "客户编号未发生变化。")
+            if normalized_code:
+                same_code = repository.find_by_code(connection, normalized_code)
+                if same_code and same_code.id != customer.id:
+                    raise CustomerValidationError("customer.code_duplicate", f"客户编号 {normalized_code} 已被使用。")
+            repository.update_customer_code(connection, customer.id, code=normalized_code)
+            log_event(
+                connection,
+                "变更客户编号",
+                "customer",
+                customer.name,
+                f"客户编号：{customer.code or '未填写'} → {normalized_code or '未填写'}；原因：{normalized_reason}",
+                actor=actor,
+            )
+            connection.commit()
+            updated = repository.get_customer(connection, customer.id)
+            assert updated is not None
+            return updated
+
+    @staticmethod
+    def _change_reason(value: object) -> str:
+        reason = clean_single_line(value, limit=500)
+        if not reason:
+            raise CustomerValidationError("customer.change_reason_required", "请填写变更原因。")
+        return reason
 
     def set_status(self, customer_id: int, status: object, *, actor: str) -> Customer:
         normalized = clean_customer_status(status)

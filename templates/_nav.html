@@ -29,7 +29,9 @@
         <a class="{% if active_page == 'material_items' %}active{% endif %}" href="{{ url_for('material_items') }}">材料明细</a>
       </div>
     </div>
-    <a class="{% if active_page == 'material_drawings' %}active{% endif %}" href="{{ url_for('material_drawings') }}">物料图纸</a>
+    {% if can("view_material_drawings") %}
+      <a class="{% if active_page == 'material_drawings' %}active{% endif %}" href="{{ url_for('material_drawings') }}">物料图纸</a>
+    {% endif %}
     </div>
   </div>
   <div class="nav-user">

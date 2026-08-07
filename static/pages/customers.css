@@ -149,19 +149,11 @@
   margin-bottom: 12px;
 }
 
-.customer-overview-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
-  gap: 12px;
-}
-
-.customer-profile-panel,
-.customer-primary-contact-panel {
+.customer-profile-panel {
   min-width: 0;
   margin: 0;
 }
 
-.customer-profile-form,
 .customer-contact-create,
 .customer-contact-card {
   display: grid;
@@ -169,11 +161,14 @@
   padding: 14px 16px;
 }
 
-.customer-profile-form {
+.customer-profile-summary {
+  display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 16px;
+  margin: 0;
+  padding: 8px 16px 16px;
 }
 
-.customer-profile-form label,
 .customer-contact-create label,
 .customer-contact-card label {
   display: grid;
@@ -181,7 +176,6 @@
   gap: 5px;
 }
 
-.customer-profile-form label > span,
 .customer-contact-create label > span,
 .customer-contact-card label > span {
   color: var(--linear-muted);
@@ -189,9 +183,101 @@
   font-weight: 650;
 }
 
-.customer-profile-form .form-actions,
 .customer-contact-create .form-actions {
   grid-column: 1 / -1;
+}
+
+.customer-profile-summary div {
+  min-width: 0;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--linear-line);
+}
+
+.customer-profile-summary dt {
+  margin-bottom: 3px;
+  color: var(--linear-muted);
+  font-size: 12px;
+}
+
+.customer-profile-summary dd {
+  min-width: 0;
+  margin: 0;
+}
+
+.customer-owner-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.customer-owner-form select {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.customer-identity-dialog {
+  width: min(540px, calc(100vw - 32px));
+  padding: 18px;
+}
+
+.customer-identity-dialog-header {
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.customer-identity-dialog-header h2,
+.customer-identity-dialog-header p {
+  margin: 0;
+}
+
+.customer-identity-dialog-header h2 {
+  font-size: 18px;
+}
+
+.customer-identity-dialog-header p,
+.customer-identity-current {
+  color: var(--linear-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.customer-identity-dialog-header p {
+  margin-top: 5px;
+}
+
+.customer-identity-form {
+  display: grid;
+  gap: 14px;
+}
+
+.customer-identity-current {
+  margin: 0;
+}
+
+.customer-identity-current strong {
+  color: var(--linear-text);
+}
+
+.customer-identity-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.customer-identity-form label > span {
+  color: var(--linear-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.customer-identity-form textarea {
+  min-height: 86px;
+  resize: vertical;
+}
+
+.customer-identity-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .customer-contact-summary {
@@ -434,7 +520,6 @@
 }
 
 @media (max-width: 1050px) {
-  .customer-overview-grid,
   .customer-contact-list {
     grid-template-columns: 1fr;
   }
@@ -455,7 +540,7 @@
     flex-wrap: wrap;
   }
 
-  .customer-profile-form,
+  .customer-profile-summary,
   .customer-contact-create,
   .customer-contact-card,
   .customer-document-grid,
@@ -466,7 +551,6 @@
 
   .customer-contact-card-heading,
   .customer-contact-card .form-actions,
-  .customer-profile-form .form-actions,
   .customer-contact-create .form-actions {
     grid-column: 1;
   }
@@ -477,6 +561,20 @@
 
   .customer-contact-summary div:nth-child(odd) {
     padding-right: 0;
+  }
+
+  .customer-owner-form {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .customer-owner-form .linear-button,
+  .customer-identity-actions .linear-button {
+    width: 100%;
+  }
+
+  .customer-identity-actions {
+    flex-direction: column-reverse;
   }
 
   .customer-document-version-form,

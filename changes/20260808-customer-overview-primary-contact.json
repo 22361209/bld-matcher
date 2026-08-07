@@ -1,0 +1,14 @@
+{
+  "date": "2026-08-08",
+  "version": "unreleased",
+  "title": "客户概览移除主要联系人卡片",
+  "entries": [
+    "客户详情的概览页不再展示“主要联系人”卡片，基础资料区域改为完整宽度展示。联系人资料、主要联系人标记和“联系人”页签保持不变。"
+  ],
+  "impact": {
+    "users": "概览页更精简；联系人仍可在“联系人”页签中查看和维护。",
+    "api": "compatible",
+    "data": "none",
+    "operations": "restart-required"
+  }
+}

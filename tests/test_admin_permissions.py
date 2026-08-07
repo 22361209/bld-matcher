@@ -9,6 +9,7 @@ from pathlib import Path
 from app.database import connect
 from app.migrations import (
     MIGRATIONS,
+    _add_customer_identity_and_material_drawing_permissions,
     _add_editable_roles_and_user_permission_overrides,
     _grant_view_product_prices_to_existing_roles,
     _revoke_view_product_prices_permission,
@@ -20,6 +21,7 @@ from app.modules.admin.service import AdminService
 from app.platform.permissions import (
     ADMIN_ROLE_KEY,
     ALL_PERMISSION_KEYS,
+    ASSIGNABLE_PERMISSION_KEYS,
     LEGACY_ROLE_PERMISSIONS,
     effective_permissions,
     permission_groups,
@@ -119,7 +121,7 @@ class AdminPermissionTest(unittest.TestCase):
         self.assertEqual(roles[ADMIN_ROLE_KEY]["is_system"], 1)
         self.assertEqual(roles["editor"]["is_system"], 0)
         self.assertIsNotNone(migration)
-        self.assertEqual(MIGRATIONS[-1][0], "036_customer_products")
+        self.assertEqual(MIGRATIONS[-1][0], "037_customer_identity_and_material_drawing_permissions")
 
     def test_migration_seeds_unknown_historical_roles_idempotently(self) -> None:
         historical_path = Path(self.temporary.name) / "historical.sqlite3"
@@ -288,6 +290,49 @@ class AdminPermissionTest(unittest.TestCase):
         for key in ("add_customer_prices", "edit_customer_prices", "delete_customer_prices"):
             self.assertEqual(overrides.get(key), "deny")
 
+    def test_migration_037_preserves_material_drawing_access_without_granting_identity_changes(self) -> None:
+        historical_path = Path(self.temporary.name) / "historical-037.sqlite3"
+        connection = sqlite3.connect(historical_path)
+        connection.row_factory = sqlite3.Row
+        _add_editable_roles_and_user_permission_overrides(connection)
+        connection.execute("DELETE FROM role_permissions WHERE permission = 'view_material_drawings'")
+        connection.execute(
+            """
+            INSERT INTO roles (role_key, name, description, is_system, created_at, updated_at)
+            VALUES ('custom-role', '自建角色', '', 0, '2026-01-01', '2026-01-01')
+            """
+        )
+
+        _add_customer_identity_and_material_drawing_permissions(connection)
+        _add_customer_identity_and_material_drawing_permissions(connection)
+
+        material_drawing_roles = {
+            row["role_key"]
+            for row in connection.execute(
+                "SELECT role_key FROM role_permissions WHERE permission = 'view_material_drawings'"
+            ).fetchall()
+        }
+        identity_change_roles = {
+            row["role_key"]
+            for row in connection.execute(
+                """
+                SELECT role_key FROM role_permissions
+                WHERE permission = 'change_customer_identity' AND role_key != ?
+                """,
+                (ADMIN_ROLE_KEY,),
+            ).fetchall()
+        }
+        custom_role_grants = connection.execute(
+            "SELECT COUNT(*) FROM role_permissions WHERE role_key = 'custom-role'"
+        ).fetchone()[0]
+        connection.close()
+
+        self.assertEqual(material_drawing_roles, {"editor", "user", "viewer", "custom-role"})
+        self.assertEqual(identity_change_roles, set())
+        self.assertEqual(custom_role_grants, 1)
+        self.assertIn("change_customer_identity", ASSIGNABLE_PERMISSION_KEYS)
+        self.assertIn("view_material_drawings", ASSIGNABLE_PERMISSION_KEYS)
+
     def test_role_changes_and_user_overrides_recalculate_immediately(self) -> None:
         role_key = self.service.save_role(
             {"name": "询价专员", "description": "处理询价"},
@@ -331,7 +376,7 @@ class AdminPermissionTest(unittest.TestCase):
         with connect(self.database_path) as connection:
             user = get_user(connection, user_id)
         assert user is not None
-        self.assertEqual(set(user["permissions"]), {"view_customer_prices"})
+        self.assertEqual(set(user["permissions"]), {"view_customer_prices", "view_material_drawings"})
         self.assertEqual(
             user["permission_overrides"],
             {"manage_aliases": "deny", "view_customer_prices": "allow"},

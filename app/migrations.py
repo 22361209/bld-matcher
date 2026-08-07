@@ -1214,6 +1214,22 @@ def _rebuild_customer_drawing_groups(conn: sqlite3.Connection) -> None:
     conn.execute("DROP TABLE customer_drawing_groups_legacy")
 
 
+def _add_customer_identity_and_material_drawing_permissions(conn: sqlite3.Connection) -> None:
+    # 客户名称/编号变更是新增的高影响操作，不将它自动授予任何非管理员角色。
+    # 物料图纸此前对所有已登录账号可见，因此迁移时保留每个既有非管理员角色
+    # 的实际访问能力；管理员始终通过固定管理员角色拥有全部注册权限。
+    timestamp = conn.execute("SELECT datetime('now','localtime')").fetchone()[0]
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO role_permissions (role_key, permission, created_at)
+        SELECT role_key, 'view_material_drawings', ?
+        FROM roles
+        WHERE role_key != ?
+        """,
+        (timestamp, ADMIN_ROLE_KEY),
+    )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -1251,6 +1267,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("034_split_granular_permissions", _split_granular_permissions),
     ("035_customer_drawings", _add_customer_drawings),
     ("036_customer_products", _rebuild_customer_drawing_groups),
+    ("037_customer_identity_and_material_drawing_permissions", _add_customer_identity_and_material_drawing_permissions),
 )
 
 

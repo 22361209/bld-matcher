@@ -309,6 +309,27 @@
       "rule": "/customers/<int:customer_id>/drawings/files/<int:file_id>/preview"
     },
     {
+      "endpoint": "update_customer_code",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/customers/<int:customer_id>/identity/code"
+    },
+    {
+      "endpoint": "rename_customer",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/customers/<int:customer_id>/identity/name"
+    },
+    {
+      "endpoint": "update_customer_owner",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/customers/<int:customer_id>/owner"
+    },
+    {
       "endpoint": "create_customer_product",
       "methods": [
         "POST"

@@ -68,7 +68,7 @@ class CustomerModuleTest(unittest.TestCase):
     def test_rename_cascades_quote_records(self):
         customer = self.service.create("浙江多迦", actor="tester")
         self._add_quote("浙江多迦")
-        renamed = self.service.rename(customer.id, "宁波多迦", actor="tester")
+        renamed = self.service.rename(customer.id, "宁波多迦", reason="客户主体名称更新", actor="tester")
         self.assertEqual(renamed.name, "宁波多迦")
         self.assertEqual(renamed.sync_id, customer.sync_id)
         with connect(self.db_path) as connection:
@@ -76,7 +76,7 @@ class CustomerModuleTest(unittest.TestCase):
         self.assertEqual(name, "宁波多迦")
         self.service.create("博世", actor="tester")
         with self.assertRaisesRegex(CustomerValidationError, "已存在"):
-            self.service.rename(customer.id, "博世", actor="tester")
+            self.service.rename(customer.id, "博世", reason="客户主体名称更新", actor="tester")
 
     def test_delete_blocked_when_quotes_reference_customer(self):
         customer = self.service.create("吉利", actor="tester")

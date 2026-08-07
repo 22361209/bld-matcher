@@ -51,50 +51,40 @@
       <div><span>模板与文件</span><strong>{{ summary.file_count }}</strong></div>
     </section>
 
-    <div class="customer-overview-grid">
-      <section class="data-section customer-profile-panel">
-        <div class="data-section-header"><div><h2>基础资料</h2><p>名称修改后会继续关联原有报价，客户编号可按公司内部规则维护。</p></div></div>
-        {% if can("edit_customers") %}
-        <form class="customer-profile-form" action="{{ url_for('save_customer') }}" method="post">
-          {{ csrf_field() }}
-          <input type="hidden" name="id" value="{{ customer.id }}">
-          <label><span>客户名称</span><input name="name" value="{{ customer.name }}" required maxlength="200"></label>
-          <label><span>客户编号</span><input name="code" value="{{ customer.code }}" maxlength="80" placeholder="选填"></label>
-          <label>
-            <span>负责人</span>
-            <select name="owner_username">
-              <option value="">未指定</option>
-              {% for owner in owners %}
-                <option value="{{ owner.username }}" {% if customer.owner_username == owner.username %}selected{% endif %}>{{ owner.display_name or owner.username }}（{{ owner.username }}）{% if owner.missing %} · 账号不可用{% elif not owner.active %} · 账号已停用{% endif %}</option>
-              {% endfor %}
-            </select>
-          </label>
-          <div class="form-actions"><button class="linear-button primary" type="submit">保存基础资料</button></div>
-        </form>
-        {% else %}
-          <dl class="customer-contact-summary">
-            <div><dt>客户名称</dt><dd>{{ customer.name }}</dd></div>
-            <div><dt>客户编号</dt><dd>{{ customer.code or "未设置" }}</dd></div>
-            <div><dt>负责人</dt><dd>{{ customer.owner_username or "未指定" }}</dd></div>
-          </dl>
+    <section class="data-section customer-profile-panel">
+      <div class="data-section-header">
+        <div><h2>基础资料</h2><p>客户名称和客户编号为受控资料，变更时须记录原因；负责人可在此维护。</p></div>
+        {% if can("change_customer_identity") %}
+        <div class="data-section-actions">
+          <button class="linear-button subtle" type="button" data-open-customer-identity-dialog="name">变更名称</button>
+          <button class="linear-button subtle" type="button" data-open-customer-identity-dialog="code">变更编号</button>
+        </div>
         {% endif %}
-      </section>
-
-      <section class="data-section customer-primary-contact-panel">
-        <div class="data-section-header"><div><h2>主要联系人</h2><p>用于快速识别当前业务对接人。</p></div><a href="{{ url_for('customer_detail', customer_id=customer.id, view='contacts') }}">管理联系人</a></div>
-        {% if summary.primary_contact %}
-          <dl class="customer-contact-summary">
-            <div><dt>姓名</dt><dd>{{ summary.primary_contact.name }}</dd></div>
-            <div><dt>角色</dt><dd>{{ summary.primary_contact.role or summary.primary_contact.title or "未填写" }}</dd></div>
-            <div><dt>电话</dt><dd>{{ summary.primary_contact.phone or "未填写" }}</dd></div>
-            <div><dt>邮箱</dt><dd>{{ summary.primary_contact.email or "未填写" }}</dd></div>
-            <div><dt>微信</dt><dd>{{ summary.primary_contact.wechat or "未填写" }}</dd></div>
-          </dl>
-        {% else %}
-          <div class="empty-state"><p>{% if contacts %}尚未设置主要联系人。{% else %}还没有联系人。添加的第一位联系人会自动设为主要联系人。{% endif %}</p></div>
-        {% endif %}
-      </section>
-    </div>
+      </div>
+      <dl class="customer-profile-summary">
+        <div><dt>客户名称</dt><dd>{{ customer.name }}</dd></div>
+        <div><dt>客户编号</dt><dd>{{ customer.code or "未设置" }}</dd></div>
+        <div>
+          <dt>负责人</dt>
+          <dd>
+            {% if can("edit_customers") %}
+            <form class="customer-owner-form" action="{{ url_for('update_customer_owner', customer_id=customer.id) }}" method="post">
+              {{ csrf_field() }}
+              <select name="owner_username" aria-label="负责人">
+                <option value="">未指定</option>
+                {% for owner in owners %}
+                  <option value="{{ owner.username }}" {% if customer.owner_username == owner.username %}selected{% endif %}>{{ owner.display_name or owner.username }}（{{ owner.username }}）{% if owner.missing %} · 账号不可用{% elif not owner.active %} · 账号已停用{% endif %}</option>
+                {% endfor %}
+              </select>
+              <button class="linear-button primary" type="submit">保存负责人</button>
+            </form>
+            {% else %}
+              {{ customer.owner_username or "未指定" }}
+            {% endif %}
+          </dd>
+        </div>
+      </dl>
+    </section>
   {% elif active_view == "contacts" %}
     <section class="data-section customer-contact-section">
       <div class="data-section-header"><div><h2>联系人</h2><p>记录采购、技术、财务和决策人；一位联系人可设为主要联系人。</p></div><span>{{ contacts|length }} 人</span></div>
@@ -292,6 +282,46 @@
 {% endblock %}
 
 {% block page_modals %}
+  {% if can("change_customer_identity") %}
+  <dialog class="dialog-panel customer-identity-dialog" id="customer-name-change-dialog" aria-labelledby="customer-name-change-dialog-title" data-customer-identity-dialog="name">
+    <div class="dialog-header customer-identity-dialog-header">
+      <div>
+        <h2 id="customer-name-change-dialog-title">变更客户名称</h2>
+        <p>名称会同步到历史报价显示，不会改变客户 ID 或跨设备同步标识。</p>
+      </div>
+      <button class="dialog-close" type="button" data-close-customer-identity-dialog aria-label="关闭客户名称变更窗口">×</button>
+    </div>
+    <form class="customer-identity-form" action="{{ url_for('rename_customer', customer_id=customer.id) }}" method="post">
+      {{ csrf_field() }}
+      <p class="customer-identity-current">当前客户名称：<strong>{{ customer.name }}</strong></p>
+      <label><span>新客户名称</span><input name="name" value="{{ customer.name }}" required maxlength="200" autocomplete="organization" data-customer-identity-value></label>
+      <label><span>变更原因</span><textarea name="reason" required maxlength="500" rows="3" placeholder="例如：客户主体名称已更新"></textarea></label>
+      <div class="customer-identity-actions">
+        <button class="linear-button subtle" type="button" data-close-customer-identity-dialog>取消</button>
+        <button class="linear-button primary" type="submit">确认变更名称</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog class="dialog-panel customer-identity-dialog" id="customer-code-change-dialog" aria-labelledby="customer-code-change-dialog-title" data-customer-identity-dialog="code">
+    <div class="dialog-header customer-identity-dialog-header">
+      <div>
+        <h2 id="customer-code-change-dialog-title">变更客户编号</h2>
+        <p>客户编号必须唯一；留空可清除已设置的编号。</p>
+      </div>
+      <button class="dialog-close" type="button" data-close-customer-identity-dialog aria-label="关闭客户编号变更窗口">×</button>
+    </div>
+    <form class="customer-identity-form" action="{{ url_for('update_customer_code', customer_id=customer.id) }}" method="post">
+      {{ csrf_field() }}
+      <p class="customer-identity-current">当前客户编号：<strong>{{ customer.code or "未设置" }}</strong></p>
+      <label><span>新客户编号</span><input name="code" value="{{ customer.code }}" maxlength="80" autocomplete="off" placeholder="留空可清除"></label>
+      <label><span>变更原因</span><textarea name="reason" required maxlength="500" rows="3" placeholder="例如：按公司编码规则重新编号"></textarea></label>
+      <div class="customer-identity-actions">
+        <button class="linear-button subtle" type="button" data-close-customer-identity-dialog>取消</button>
+        <button class="linear-button primary" type="submit">确认变更编号</button>
+      </div>
+    </form>
+  </dialog>
+  {% endif %}
   {% if can("edit_customers") %}
   <div class="editor-modal" aria-hidden="true" data-customer-product-modal>
     <div class="editor-modal-backdrop" data-close-customer-product-modal></div>
@@ -404,5 +434,6 @@
 {% endblock %}
 
 {% block page_scripts %}
+  <script type="module" src="{{ url_for('static', filename='pages/customer_detail.js', v=static_version('pages/customer_detail.js')) }}"></script>
   <script type="module" src="{{ url_for('static', filename='pages/customer_products.js', v=static_version('pages/customer_products.js')) }}"></script>
 {% endblock %}

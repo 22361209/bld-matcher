@@ -137,21 +137,51 @@ def insert_customer(
     return customer
 
 
-def update_customer_profile(
+def update_customer_name(
     connection: sqlite3.Connection,
     customer_id: int,
     *,
     name: str,
+) -> None:
+    connection.execute(
+        """
+        UPDATE customers
+        SET name = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        (name, now_text(), customer_id),
+    )
+
+
+def update_customer_code(
+    connection: sqlite3.Connection,
+    customer_id: int,
+    *,
     code: str,
+) -> None:
+    connection.execute(
+        """
+        UPDATE customers
+        SET code = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        (code, now_text(), customer_id),
+    )
+
+
+def update_customer_owner(
+    connection: sqlite3.Connection,
+    customer_id: int,
+    *,
     owner_username: str,
 ) -> None:
     connection.execute(
         """
         UPDATE customers
-        SET name = ?, code = ?, owner_username = ?, updated_at = ?
+        SET owner_username = ?, updated_at = ?
         WHERE id = ?
         """,
-        (name, code, owner_username, now_text(), customer_id),
+        (owner_username, now_text(), customer_id),
     )
 
 

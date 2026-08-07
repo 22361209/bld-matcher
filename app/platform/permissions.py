@@ -32,26 +32,68 @@ PERMISSION_DEFINITIONS: tuple[PermissionDefinition, ...] = (
     PermissionDefinition("manage_product_options", "维护基础选项", "维护品牌、产品名称和产品状态候选值。", "产品目录"),
     PermissionDefinition("manage_aliases", "维护号码映射", "维护人工号码映射和未命中号码归档。", "产品目录"),
     PermissionDefinition("generate_match", "处理询价", "运行号码或 Excel 匹配并下载匹配结果。", "询价、客户与报价"),
-    PermissionDefinition("view_customers", "查看客户信息", "查看客户档案、联系人和客户资料文件。", "询价、客户与报价"),
+    PermissionDefinition(
+        "view_customers",
+        "查看客户信息",
+        "查看客户档案、联系人、客户产品编码、客户产品图纸和客户资料文件。",
+        "询价、客户与报价",
+    ),
     PermissionDefinition("add_customers", "新增客户", "新增客户档案。", "询价、客户与报价"),
-    PermissionDefinition("edit_customers", "修正客户", "修改客户档案、联系人和客户资料文件，启用或停用客户。", "询价、客户与报价"),
+    PermissionDefinition(
+        "edit_customers",
+        "修正客户",
+        "维护客户负责人、联系人、客户产品编码和图纸、客户资料文件，启用或停用客户；不含客户名称和编号变更。",
+        "询价、客户与报价",
+    ),
+    PermissionDefinition(
+        "change_customer_identity",
+        "变更客户名称与编号",
+        "变更客户名称和客户编号，并将名称同步到关联的报价历史。",
+        "询价、客户与报价",
+    ),
     PermissionDefinition(
         "delete_customers",
         "删除客户",
-        "删除客户档案、联系人、客户产品及其图纸，归档客户资料文件。",
+        "删除联系人、客户产品编码及其全部图纸版本，归档客户资料文件；客户主档保留停用历史。",
         "询价、客户与报价",
     ),
-    PermissionDefinition("view_customer_prices", "查看报价记录", "查看客户报价记录。", "询价、客户与报价"),
+    PermissionDefinition(
+        "view_customer_prices",
+        "查看报价记录",
+        "查看客户报价记录及其关联的客户产品图纸版本。",
+        "询价、客户与报价",
+    ),
     PermissionDefinition("view_price_history", "查看历史价格", "查看客户与产品的历史报价价格。", "询价、客户与报价"),
-    PermissionDefinition("add_customer_prices", "新增报价", "新增、导入报价并从询价结果写入报价；同时参与控制产品目录单价的可见性。", "询价、客户与报价"),
-    PermissionDefinition("edit_customer_prices", "修正报价", "修正已有报价并调整询价结果报价；同时参与控制产品目录单价的可见性。", "询价、客户与报价"),
+    PermissionDefinition(
+        "add_customer_prices",
+        "新增报价",
+        "新增、导入报价并从询价结果写入报价；新增时可关联客户产品图纸版本，同时参与控制产品目录单价的可见性。",
+        "询价、客户与报价",
+    ),
+    PermissionDefinition(
+        "edit_customer_prices",
+        "修正报价",
+        "修正已有报价、调整询价结果报价并维护报价行关联图纸；同时参与控制产品目录单价的可见性。",
+        "询价、客户与报价",
+    ),
     PermissionDefinition("delete_customer_prices", "删除报价", "删除报价记录；同时参与控制产品目录单价的可见性。", "询价、客户与报价"),
     PermissionDefinition("view_contracts", "查看合同", "查看采购、销售合同记录并下载合同文档。", "合同与生产"),
     PermissionDefinition("generate_contract", "生成合同", "生成采购、销售合同。", "合同与生产"),
     PermissionDefinition("generate_material_sheet", "生成生产料单", "查询并生成生产料单。", "合同与生产"),
-    PermissionDefinition("manage_material_items", "维护材料明细", "新增、编辑、停用材料明细，导入材料数据并上传物料图纸。", "合同与生产"),
+    PermissionDefinition(
+        "manage_material_items",
+        "维护材料明细",
+        "新增、编辑、停用材料明细，导入材料数据并上传、替换物料图纸。",
+        "合同与生产",
+    ),
+    PermissionDefinition("view_material_drawings", "查看物料图纸", "查看、预览和下载物料图纸。", "合同与生产"),
     PermissionDefinition("manage_tube_items", "维护管件资料", "新增、编辑管件资料。", "合同与生产"),
-    PermissionDefinition("sync_product_data", "业务数据同步", "导入或导出跨设备业务数据包。", "数据管理"),
+    PermissionDefinition(
+        "sync_product_data",
+        "业务数据同步",
+        "导入、导出跨设备客户、产品目录、报价记录、管件资料和材料明细数据包，并可显式携带产品图纸、产品图片和物料图纸。",
+        "数据管理",
+    ),
 )
 
 PERMISSION_BY_KEY = {definition.key: definition for definition in PERMISSION_DEFINITIONS}
@@ -83,12 +125,14 @@ LEGACY_ROLE_PERMISSIONS = {
         "generate_match",
         "view_logs",
         "generate_material_sheet",
+        "view_material_drawings",
     },
     "user": {
         "generate_match",
         "generate_material_sheet",
+        "view_material_drawings",
     },
-    "viewer": set(),
+    "viewer": {"view_material_drawings"},
 }
 
 

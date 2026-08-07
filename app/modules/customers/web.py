@@ -162,37 +162,33 @@ def register(app) -> None:
         return response
 
     @app.post("/customers/save")
-    @login_required
+    @permission_required("add_customers")
     def save_customer():
-        customer_id = _form_customer_id()
-        required_permission = "edit_customers" if customer_id is not None else "add_customers"
-        if not can(required_permission):
+        submitted_id = request.form.get("id", "").strip()
+        if submitted_id:
+            customer_id = _form_customer_id()
+            message = "客户名称、客户编号和负责人请使用档案中的对应维护入口。"
             if wants_json_response():
-                return jsonify({"ok": False, "error": "当前账号没有权限执行这个操作。"}), 403
-            flash("当前账号没有权限执行这个操作。", "error")
-            return redirect(url_for("customers"))
+                return jsonify({"ok": False, "error": message}), 400
+            flash(message, "error")
+            return redirect(_detail_url(customer_id) if customer_id is not None else url_for("customers"))
         try:
-            service = get_customer_service()
-            if customer_id is None:
-                customer = service.create(request.form.get("name", ""), actor=actor_name())
-            else:
-                values = {field: request.form[field] for field in ("name", "code", "owner_username") if field in request.form}
-                customer = service.update_profile(customer_id, values, actor=actor_name())
+            customer = get_customer_service().create(request.form.get("name", ""), actor=actor_name())
         except CustomerValidationError as exc:
             if wants_json_response():
                 return jsonify({"ok": False, "error": exc.message}), 400
             flash(f"客户保存失败：{exc.message}", "error")
-            return redirect(_detail_url(customer_id) if customer_id else url_for("customers"))
+            return redirect(url_for("customers"))
         except Exception:
             logger.exception("Customer save failed")
             if wants_json_response():
                 return jsonify({"ok": False, "error": "客户保存失败，请稍后重试。"}), 500
             flash("客户保存失败，请稍后重试。", "error")
-            return redirect(_detail_url(customer_id) if customer_id else url_for("customers"))
+            return redirect(url_for("customers"))
         if wants_json_response():
             return jsonify({"ok": True, "customer": {"id": customer.id, "name": customer.name}})
         flash("客户已保存。", "success")
-        return redirect(_detail_url(customer.id) if customer_id else url_for("customers"))
+        return redirect(_detail_url(customer.id))
 
     @app.post("/customers/<int:customer_id>/status")
     @permission_required("edit_customers")

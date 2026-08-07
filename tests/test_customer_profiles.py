@@ -43,11 +43,20 @@ class CustomerProfileTest(unittest.TestCase):
 
     def test_profile_fields_status_and_active_lookup(self) -> None:
         customer = self.service.create("宁波多迦", actor="tester")
-        updated = self.service.update_profile(
+        renamed = self.service.rename(
             customer.id,
-            {"name": "宁波多迦汽车部件", "code": "C-001", "owner_username": "007"},
+            "宁波多迦汽车部件",
+            reason="客户主体名称已更新",
             actor="tester",
         )
+        updated = self.service.update_code(
+            customer.id,
+            "C-001",
+            reason="按客户编码规则登记",
+            actor="tester",
+        )
+        updated = self.service.update_owner(customer.id, "007", actor="tester")
+        self.assertEqual(renamed.name, "宁波多迦汽车部件")
         self.assertEqual(updated.name, "宁波多迦汽车部件")
         self.assertEqual(updated.code, "C-001")
         self.assertEqual(updated.owner_username, "007")
@@ -66,31 +75,28 @@ class CustomerProfileTest(unittest.TestCase):
     def test_customer_codes_are_optional_but_unique(self) -> None:
         first = self.service.create("客户甲", actor="tester")
         second = self.service.create("客户乙", actor="tester")
-        self.service.update_profile(first.id, {"code": "ACME"}, actor="tester")
+        self.service.update_code(first.id, "ACME", reason="建立客户编码", actor="tester")
         with self.assertRaisesRegex(CustomerValidationError, "已被使用"):
-            self.service.update_profile(second.id, {"code": "acme"}, actor="tester")
+            self.service.update_code(second.id, "acme", reason="建立客户编码", actor="tester")
 
     def test_inactive_current_owner_is_preserved_until_owner_changes(self) -> None:
         customer = self.service.create("负责人测试客户", actor="tester")
-        self.service.update_profile(customer.id, {"owner_username": "former-owner"}, actor="tester")
+        self.service.update_owner(customer.id, "former-owner", actor="tester")
         guarded_service = CustomerService(
             self.connection_factory,
             self.service.business_reader,
             owner_validator=lambda username: username == "active-owner",
         )
 
-        updated = guarded_service.update_profile(
+        updated = guarded_service.rename(
             customer.id,
-            {"name": "负责人测试客户（更新）", "owner_username": "former-owner"},
+            "负责人测试客户（更新）",
+            reason="客户名称更新",
             actor="tester",
         )
         self.assertEqual(updated.owner_username, "former-owner")
         with self.assertRaisesRegex(CustomerValidationError, "不存在或已停用"):
-            guarded_service.update_profile(
-                customer.id,
-                {"owner_username": "another-inactive-owner"},
-                actor="tester",
-            )
+            guarded_service.update_owner(customer.id, "another-inactive-owner", actor="tester")
 
     def test_owner_options_keep_current_inactive_or_missing_account(self) -> None:
         class FakeAdminService:
@@ -137,8 +143,26 @@ class CustomerProfileTest(unittest.TestCase):
         service = CustomerService(self.connection_factory, FailingQuoteReader())
         customer = service.create("改名前客户", actor="tester")
         with self.assertRaisesRegex(RuntimeError, "quote store unavailable"):
-            service.rename(customer.id, "改名后客户", actor="tester")
+            service.rename(customer.id, "改名后客户", reason="客户名称更新", actor="tester")
         self.assertEqual(service.get(customer.id).name, "改名前客户")
+
+    def test_identity_changes_require_reason_change_value_and_write_specific_audit(self) -> None:
+        customer = self.service.create("身份资料客户", actor="tester")
+        with self.assertRaisesRegex(CustomerValidationError, "请填写变更原因"):
+            self.service.rename(customer.id, "身份资料客户（新）", reason="", actor="tester")
+        with self.assertRaisesRegex(CustomerValidationError, "未发生变化"):
+            self.service.update_code(customer.id, "", reason="确认编号", actor="tester")
+
+        self.service.rename(customer.id, "身份资料客户（新）", reason="客户合同主体调整", actor="tester")
+        self.service.update_code(customer.id, "ID-001", reason="建立统一编码", actor="tester")
+        with connect(self.db_path) as connection:
+            events = connection.execute(
+                "SELECT action, detail, actor FROM audit_logs WHERE target_type = 'customer' ORDER BY id"
+            ).fetchall()
+        self.assertEqual([event["action"] for event in events[-2:]], ["变更客户名称", "变更客户编号"])
+        self.assertIn("原因：客户合同主体调整", events[-2]["detail"])
+        self.assertIn("原因：建立统一编码", events[-1]["detail"])
+        self.assertEqual([event["actor"] for event in events[-2:]], ["tester", "tester"])
 
     def test_contacts_crud_and_single_primary_contact(self) -> None:
         customer = self.service.create("联系人测试客户", actor="tester")
@@ -225,11 +249,7 @@ class CustomerProfileTest(unittest.TestCase):
 
     def test_list_filters_are_bounded_and_accept_owner_alias_matches(self) -> None:
         customer = self.service.create("负责人筛选客户", actor="tester")
-        self.service.update_profile(
-            customer.id,
-            {"owner_username": "007"},
-            actor="tester",
-        )
+        self.service.update_owner(customer.id, "007", actor="tester")
 
         self.assertEqual(
             self.service.list_summaries(query="x" * 201, status="invalid" * 10),

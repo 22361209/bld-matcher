@@ -556,6 +556,24 @@ class CustomerProductsTabRenderTest(unittest.TestCase):
             methods=["POST"],
             view_func=lambda customer_id: "status",
         )
+        app.add_url_rule(
+            "/customers/<int:customer_id>/owner",
+            endpoint="update_customer_owner",
+            methods=["POST"],
+            view_func=lambda customer_id: "owner",
+        )
+        app.add_url_rule(
+            "/customers/<int:customer_id>/identity/name",
+            endpoint="rename_customer",
+            methods=["POST"],
+            view_func=lambda customer_id: "name",
+        )
+        app.add_url_rule(
+            "/customers/<int:customer_id>/identity/code",
+            endpoint="update_customer_code",
+            methods=["POST"],
+            view_func=lambda customer_id: "code",
+        )
         app.add_url_rule("/quotes", endpoint="quote_web.quotes", view_func=lambda: "quotes")
 
         context = {
@@ -637,6 +655,57 @@ class CustomerProductsTabRenderTest(unittest.TestCase):
         self.assertNotIn("data-drawing-set-current", html)
         self.assertNotIn("data-drawing-import-catalog", html)
         self.assertIn("data-customer-drawing-modal", html)
+
+    def test_overview_keeps_customer_profile_and_hides_primary_contact_card(self) -> None:
+        html = self._render(
+            {"view_customers"},
+            active_view="overview",
+            contacts=[],
+            summary=SimpleNamespace(
+                quote_count=0,
+                quoted_product_count=0,
+                latest_quote_date="",
+                file_count=0,
+                primary_contact=None,
+            ),
+        )
+        self.assertIn('class="data-section customer-profile-panel"', html)
+        self.assertNotIn("customer-primary-contact-panel", html)
+        self.assertNotIn("主要联系人", html)
+        self.assertNotIn("管理联系人", html)
+
+    def test_overview_makes_identity_read_only_and_uses_controlled_change_dialogs(self) -> None:
+        summary = SimpleNamespace(
+            quote_count=0,
+            quoted_product_count=0,
+            latest_quote_date="",
+            file_count=0,
+            primary_contact=None,
+        )
+        without_identity_permission = self._render(
+            {"view_customers", "edit_customers"},
+            active_view="overview",
+            contacts=[],
+            summary=summary,
+        )
+        self.assertIn('class="customer-profile-summary"', without_identity_permission)
+        self.assertIn('action="/customers/1/owner"', without_identity_permission)
+        self.assertNotIn("变更名称", without_identity_permission)
+        self.assertNotIn('name="name" value="测试客户"', without_identity_permission)
+
+        html = self._render(
+            {"view_customers", "edit_customers", "change_customer_identity"},
+            active_view="overview",
+            contacts=[],
+            summary=summary,
+        )
+        self.assertIn("变更名称", html)
+        self.assertIn("变更编号", html)
+        self.assertIn('action="/customers/1/identity/name"', html)
+        self.assertIn('action="/customers/1/identity/code"', html)
+        self.assertEqual(html.count('name="reason" required maxlength="500"'), 2)
+        self.assertIn("客户名称和客户编号为受控资料", html)
+        self.assertIn("pages/customer_detail.js", html)
 
     def test_products_tab_delete_only_permission_shows_delete_without_edit(self) -> None:
         product = _product(drawings=(_slot("customer"),))

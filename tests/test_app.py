@@ -5563,6 +5563,7 @@ class WebAppTest(unittest.TestCase):
                 "034_split_granular_permissions",
                 "035_customer_drawings",
                 "036_customer_products",
+                "037_customer_identity_and_material_drawing_permissions",
             ],
         )
 

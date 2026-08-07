@@ -33,3 +33,4 @@ ADR 用于记录难以撤销或会影响多个领域的决定。新增框架、�
 - [ADR 0025: Customer Products Rework](0025-customer-products-rework.md)
 - [ADR 0026: Customer Product Create-Time Drawing Upload And Deletion](0026-customer-product-create-upload-and-deletion.md)
 - [ADR 0027: Business Sync Package V3 And Material Drawings](0027-business-sync-material-drawings.md)
+- [ADR 0028: Customer Identity And Recent Capability Permission Catalog](0028-customer-identity-and-permission-catalog.md)
