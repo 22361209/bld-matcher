@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import unicodedata
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -22,6 +23,10 @@ from app.material_sheet import (
 
 ALLOWED_DRAWING_SUFFIXES = frozenset({".pdf"})
 DEFAULT_DRAWING_CATEGORY = "球销"
+
+
+def _portable_filename_key(filename: str) -> str:
+    return unicodedata.normalize("NFC", filename).casefold()
 
 
 class MaterialImportBusyError(RuntimeError):
@@ -102,9 +107,9 @@ class MaterialFileAdapter:
         )
 
     @contextmanager
-    def import_guard(self, actor: str):
+    def import_guard(self, actor: str, operation: str = "材料数据导入"):
         try:
-            with self.lock_factory(actor, "材料数据导入"):
+            with self.lock_factory(actor, operation):
                 yield
         except ImportLockError as exc:
             raise MaterialImportBusyError(str(exc)) from exc
@@ -196,8 +201,17 @@ class MaterialFileAdapter:
 
     def _unique_drawing_path(self, filename: str) -> Path:
         safe_name = safe_upload_name(clean_original_filename(filename, fallback_suffix=".pdf"))
+        safe_path = Path(safe_name)
+        safe_name = f"{safe_path.stem}.pdf"
+        existing_names: dict[str, str] = {}
+        for path in self.drawing_dir.iterdir():
+            normalized_name = _portable_filename_key(path.name)
+            existing_name = existing_names.get(normalized_name)
+            if existing_name is not None and existing_name != path.name:
+                raise ValueError("物料图纸目录包含仅大小写或 Unicode 形式不同的重复文件，请先整理。")
+            existing_names[normalized_name] = path.name
         candidate = self.drawing_dir / safe_name
-        if not candidate.exists():
+        if _portable_filename_key(candidate.name) not in existing_names:
             return candidate
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
         return self.drawing_dir / f"{candidate.stem}-{timestamp}{candidate.suffix}"

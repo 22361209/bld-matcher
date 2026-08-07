@@ -40,6 +40,7 @@ PRODUCT_IMAGE_DIR = DATA_DIR / "product_images"
 PRODUCT_IMAGE_THUMB_DIR = PRODUCT_IMAGE_DIR / "thumbs"
 PRODUCT_IMAGE_ARCHIVE_DIR = PRODUCT_IMAGE_DIR / "archive"
 PRODUCT_IMAGE_DATA_PREFIX = "data_product_images/"
+MATERIAL_DRAWING_DIR = DATA_DIR / "material_drawings"
 
 CATALOG_PATH = DATA_DIR / "catalog.xlsx"
 MANUAL_MAP_PATH = DATA_DIR / "manual_map.json"

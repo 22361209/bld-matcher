@@ -19,6 +19,11 @@
   background: #ffffff;
 }
 
+.sync-export-panel {
+  display: flex;
+  flex-direction: column;
+}
+
 .sync-panel-head {
   display: flex;
   align-items: flex-start;
@@ -84,6 +89,24 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   align-content: start;
+}
+
+.sync-option-group {
+  display: grid;
+  gap: 8px;
+}
+
+.sync-option-group h3 {
+  margin: 0;
+  color: var(--linear-muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.sync-option-grid-unified .sync-option {
+  height: 72px;
+  min-height: 72px;
 }
 
 .sync-option {
@@ -159,6 +182,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 14px;
+  margin-top: auto;
   padding-top: 12px;
   border-top: 1px solid var(--linear-line);
 }
@@ -212,6 +236,10 @@
   .sync-option-grid,
   .sync-panel-foot {
     display: grid;
+  }
+
+  .sync-export-panel {
+    display: flex;
   }
 
   .sync-option-grid {

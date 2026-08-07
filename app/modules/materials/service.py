@@ -180,20 +180,21 @@ class MaterialService:
         }
 
     def upload_drawing(self, file, *, actor: str) -> Path:
-        destination = self.files.save_drawing(file)
-        try:
-            with self.unit_of_work_factory() as unit_of_work:
-                unit_of_work.repository.audit(
-                    "上传物料图纸",
-                    "material_drawing",
-                    destination.name,
-                    f"上传物料图纸 {destination.name}",
-                    actor=actor,
-                )
-                unit_of_work.commit()
-        except Exception:
-            destination.unlink(missing_ok=True)
-            raise
+        with self.files.import_guard(actor, "物料图纸上传"):
+            destination = self.files.save_drawing(file)
+            try:
+                with self.unit_of_work_factory() as unit_of_work:
+                    unit_of_work.repository.audit(
+                        "上传物料图纸",
+                        "material_drawing",
+                        destination.name,
+                        f"上传物料图纸 {destination.name}",
+                        actor=actor,
+                    )
+                    unit_of_work.commit()
+            except Exception:
+                destination.unlink(missing_ok=True)
+                raise
         return destination
 
     def drawing_path(self, name: str) -> Path | None:

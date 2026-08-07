@@ -8,15 +8,16 @@ from pathlib import Path
 from unittest.mock import patch
 
 from openpyxl import Workbook
-from werkzeug.datastructures import MultiDict
+from werkzeug.datastructures import FileStorage, MultiDict
 
 from app.database import connect
+from app.locks import ImportLockError
 from app.modules.products.persistence import upsert_product
 from app.modules.admin.repository import SQLiteAdminUnitOfWork
 from app.modules.admin.service import AdminService
 from app.modules.contracts.repository import SQLiteContractRepository, SQLiteContractUnitOfWork
 from app.modules.contracts.service import ContractService
-from app.modules.materials.infrastructure import MaterialFileAdapter
+from app.modules.materials.infrastructure import MaterialFileAdapter, MaterialImportBusyError
 from app.modules.materials.repository import SQLiteMaterialRepository, SQLiteMaterialUnitOfWork
 from app.modules.materials.service import MaterialService
 from app.modules.products.repository import SQLiteProductUnitOfWork
@@ -140,6 +141,76 @@ class DomainPageModuleTest(unittest.TestCase):
         self.assertEqual(page.total, 1)
         self.assertEqual(page.records[0]["code"], "NEW-CODE")
 
+    def test_material_drawing_upload_uses_global_import_lock(self) -> None:
+        data_dir = self.root / "data"
+        labels: list[tuple[str, str]] = []
+
+        @contextmanager
+        def recording_lock(actor: str, label: str):
+            labels.append((actor, label))
+            yield
+
+        files = MaterialFileAdapter(
+            data_dir=data_dir,
+            material_data_path=data_dir / "stamping_materials.xlsx",
+            template_path=data_dir / "template.xlsx",
+            drawing_dir=data_dir / "material_drawings",
+            lock_factory=recording_lock,
+        )
+        service = MaterialService(
+            lambda: SQLiteMaterialUnitOfWork(self.database_path),
+            lambda: None,
+            files,
+        )
+        drawing = FileStorage(stream=io.BytesIO(b"%PDF-1.4\nlocked\n"), filename="LOCKED.pdf")
+        destination = service.upload_drawing(drawing, actor="module-test")
+
+        self.assertEqual(labels, [("module-test", "物料图纸上传")])
+        self.assertEqual(destination.read_bytes(), b"%PDF-1.4\nlocked\n")
+
+        @contextmanager
+        def busy_lock(_actor: str, _label: str):
+            raise ImportLockError("当前已有用户正在执行导入操作，请稍后再试")
+            yield
+
+        files.lock_factory = busy_lock
+        blocked = FileStorage(stream=io.BytesIO(b"%PDF-1.4\nblocked\n"), filename="BLOCKED.pdf")
+        with self.assertRaisesRegex(MaterialImportBusyError, "当前已有用户"):
+            service.upload_drawing(blocked, actor="module-test")
+        self.assertFalse((data_dir / "material_drawings" / "BLOCKED.pdf").exists())
+
+    def test_material_drawing_upload_uses_portable_lowercase_unique_name(self) -> None:
+        data_dir = self.root / "portable-drawing-data"
+        drawing_dir = data_dir / "material_drawings"
+        drawing_dir.mkdir(parents=True)
+        (drawing_dir / "EXISTING.pdf").write_bytes(b"existing")
+        files = MaterialFileAdapter(
+            data_dir=data_dir,
+            material_data_path=data_dir / "stamping_materials.xlsx",
+            template_path=data_dir / "template.xlsx",
+            drawing_dir=drawing_dir,
+        )
+        service = MaterialService(
+            lambda: SQLiteMaterialUnitOfWork(self.database_path),
+            lambda: None,
+            files,
+        )
+        drawing = FileStorage(stream=io.BytesIO(b"%PDF-1.4\nportable\n"), filename="NEW.PDF")
+
+        def portable_key(name: str) -> str:
+            return "same" if name in {"EXISTING.pdf", "NEW.pdf"} else name.casefold()
+
+        with patch.dict(
+            MaterialFileAdapter._unique_drawing_path.__globals__,
+            {"_portable_filename_key": portable_key},
+        ):
+            destination = service.upload_drawing(drawing, actor="module-test")
+
+        self.assertEqual(destination.suffix, ".pdf")
+        self.assertNotEqual(destination.name, "NEW.pdf")
+        self.assertEqual(destination.read_bytes(), b"%PDF-1.4\nportable\n")
+        self.assertEqual((drawing_dir / "EXISTING.pdf").read_bytes(), b"existing")
+
     def test_contract_service_enriches_product_and_compensates_failed_audit(self) -> None:
         with connect(self.database_path) as connection:
             upsert_product(
@@ -194,4 +265,3 @@ class DomainPageModuleTest(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 service.generate("purchase", failed_form, output_root=self.root / "outputs", actor="module-test")
         self.assertEqual(list((self.root / "outputs").rglob("*CT-SERVICE-FAIL*.pdf")), [])
-

@@ -241,6 +241,9 @@ def register(app) -> None:
             return redirect(url_for("material_drawings"))
         try:
             get_material_service().upload_drawing(file, actor=actor_name())
+        except MaterialImportBusyError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("material_drawings"))
         except ValueError as exc:
             flash(str(exc), "error")
             return redirect(url_for("material_drawings"))

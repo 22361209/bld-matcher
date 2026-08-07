@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import io
 import json
+import os
 import tarfile
 import tempfile
 import unittest
 from pathlib import Path
 from typing import cast
+from unittest.mock import Mock, patch
 
 from openpyxl import Workbook
 
@@ -82,6 +85,28 @@ class BusinessSyncServiceTest(unittest.TestCase):
             with tarfile.open(package, "w:gz") as archive:
                 archive.add(root / "manifest.json", arcname="manifest.json")
                 archive.add(root / "data.json", arcname="data.json")
+        return package
+
+    def _write_raw_package(
+        self,
+        *,
+        name: str,
+        manifest: dict[str, object],
+        payload: dict[str, list[dict[str, object]]],
+        media: dict[str, bytes] | None = None,
+    ) -> Path:
+        package = self.root / name
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            (root / "data.json").write_text(json.dumps(payload), encoding="utf-8")
+            with tarfile.open(package, "w:gz") as archive:
+                archive.add(root / "manifest.json", arcname="manifest.json")
+                archive.add(root / "data.json", arcname="data.json")
+                for member_name, content in (media or {}).items():
+                    member = tarfile.TarInfo(member_name)
+                    member.size = len(content)
+                    archive.addfile(member, io.BytesIO(content))
         return package
 
     def test_export_preview_and_apply_round_trip_all_datasets(self) -> None:
@@ -711,7 +736,10 @@ class BusinessSyncServiceTest(unittest.TestCase):
             BusinessSyncRepository(self.target, drawing_dir=target_drawings, image_dir=target_images)
         )
         preview = target_service.preview(package)
-        self.assertEqual(preview["media"]["files"], {"drawings": 1, "product_images": 1})
+        self.assertEqual(
+            preview["media"]["files"],
+            {"drawings": 1, "product_images": 1, "material_drawings": 0},
+        )
         summary = cast(dict[str, dict[str, object]], preview["summary"])
         self.assertEqual(cast(dict[str, int], summary["products"]["counts"])["local_only"], 1)
         result = target_service.apply(
@@ -728,3 +756,660 @@ class BusinessSyncServiceTest(unittest.TestCase):
         self.assertEqual((target_images / "SYNC-PRODUCT.png").read_bytes(), b"source-image")
         with connect(self.target) as connection:
             self.assertEqual(connection.execute("SELECT active FROM products WHERE bld_no = 'LOCAL-ONLY'").fetchone()[0], 0)
+
+    def test_material_drawings_follow_materials_export_preview_and_explicit_import(self) -> None:
+        source_material_drawings = self.root / "source-material-drawings"
+        target_material_drawings = self.root / "target-material-drawings"
+        source_material_drawings.mkdir()
+        target_material_drawings.mkdir()
+        (source_material_drawings / "QD1000.pdf").write_bytes(b"source-material-drawing")
+        local_extra = target_material_drawings / "LOCAL-EXTRA.pdf"
+        local_extra.write_bytes(b"local-extra")
+        with connect(self.source) as connection:
+            self._seed(connection)
+            connection.commit()
+
+        package = self.root / "business-with-material-drawings.tar.gz"
+        source_service = BusinessSyncService(
+            BusinessSyncRepository(self.source, material_drawing_dir=source_material_drawings)
+        )
+        source_service.export(
+            output_path=package,
+            selected=("materials",),
+            include_material_drawings=True,
+            actor="test",
+        )
+        with tarfile.open(package, "r:gz") as archive:
+            self.assertIn("data/material_drawings/QD1000.pdf", archive.getnames())
+
+        target_service = BusinessSyncService(
+            BusinessSyncRepository(self.target, material_drawing_dir=target_material_drawings)
+        )
+        preview = target_service.preview(package)
+        self.assertTrue(preview["media"]["material_drawings"])
+        self.assertEqual(
+            preview["media"]["files"],
+            {"drawings": 0, "product_images": 0, "material_drawings": 1},
+        )
+        result = target_service.apply(
+            package,
+            backup_path=self.root / "material-drawing-backup.sqlite3",
+            actor="test",
+            expected_token=cast(str, preview["token"]),
+            include_material_drawings=True,
+        )
+
+        self.assertEqual(result["materials"]["new"], 1)
+        self.assertEqual(
+            (target_material_drawings / "QD1000.pdf").read_bytes(),
+            b"source-material-drawing",
+        )
+        self.assertEqual(local_extra.read_bytes(), b"local-extra")
+
+    def test_material_drawings_are_not_exported_without_materials_dataset(self) -> None:
+        source_material_drawings = self.root / "source-material-drawings-without-materials"
+        source_material_drawings.mkdir()
+        (source_material_drawings / "QD-NOT-EXPORTED.pdf").write_bytes(b"not-exported")
+        with connect(self.source) as connection:
+            self._seed(connection)
+            connection.commit()
+
+        package = self.root / "business-products-with-material-drawing-option.tar.gz"
+        repository = BusinessSyncRepository(
+            self.source,
+            material_drawing_dir=source_material_drawings,
+        )
+        BusinessSyncService(repository).export(
+            output_path=package,
+            selected=("products",),
+            include_material_drawings=True,
+            actor="test",
+        )
+
+        manifest, _payload = repository.read(package)
+        media = cast(dict[str, object], manifest["media"])
+        files = cast(dict[str, int], media["files"])
+        self.assertFalse(media["material_drawings"])
+        self.assertEqual(files["material_drawings"], 0)
+        with tarfile.open(package, "r:gz") as archive:
+            self.assertFalse(
+                any(name.startswith("data/material_drawings/") for name in archive.getnames())
+            )
+
+    def test_material_drawings_are_not_overwritten_when_import_is_not_selected(self) -> None:
+        source_material_drawings = self.root / "source-material-drawings-not-selected"
+        target_material_drawings = self.root / "target-material-drawings-not-selected"
+        source_material_drawings.mkdir()
+        target_material_drawings.mkdir()
+        (source_material_drawings / "QD-KEEP-LOCAL.pdf").write_bytes(b"incoming")
+        target = target_material_drawings / "QD-KEEP-LOCAL.pdf"
+        extra_target = target_material_drawings / "LOCAL-EXTRA.pdf"
+        target.write_bytes(b"local")
+        extra_target.write_bytes(b"extra")
+        with connect(self.source) as connection:
+            self._seed(connection)
+            connection.commit()
+
+        package = self.root / "business-material-drawing-not-selected.tar.gz"
+        BusinessSyncService(
+            BusinessSyncRepository(self.source, material_drawing_dir=source_material_drawings)
+        ).export(
+            output_path=package,
+            selected=("materials",),
+            include_material_drawings=True,
+            actor="test",
+        )
+        target_service = BusinessSyncService(
+            BusinessSyncRepository(self.target, material_drawing_dir=target_material_drawings)
+        )
+        preview = target_service.preview(package)
+        result = target_service.apply(
+            package,
+            backup_path=self.root / "material-drawing-not-selected-backup.sqlite3",
+            actor="test",
+            expected_token=cast(str, preview["token"]),
+            include_material_drawings=False,
+        )
+
+        self.assertEqual(result["materials"]["new"], 1)
+        self.assertEqual(target.read_bytes(), b"local")
+        self.assertEqual(extra_target.read_bytes(), b"extra")
+
+    def test_legacy_v2_package_without_material_drawings_media_is_compatible(self) -> None:
+        with connect(self.source) as connection:
+            self._seed(connection)
+            connection.commit()
+        generated = self.root / "generated-business-v2.tar.gz"
+        BusinessSyncService(BusinessSyncRepository(self.source)).export(
+            output_path=generated,
+            selected=("materials",),
+            actor="test",
+        )
+        with tarfile.open(generated, "r:gz") as archive:
+            manifest_file = archive.extractfile("manifest.json")
+            data_file = archive.extractfile("data.json")
+            assert manifest_file is not None
+            assert data_file is not None
+            manifest = json.loads(manifest_file.read().decode("utf-8"))
+            data_bytes = data_file.read()
+        manifest["version"] = 2
+        manifest["media"] = {
+            "drawings": False,
+            "product_images": False,
+            "files": {"drawings": 0, "product_images": 0},
+        }
+        legacy = self.root / "legacy-business-v2.tar.gz"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "manifest.json").write_text(
+                json.dumps(manifest, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            (root / "data.json").write_bytes(data_bytes)
+            with tarfile.open(legacy, "w:gz") as archive:
+                archive.add(root / "manifest.json", arcname="manifest.json")
+                archive.add(root / "data.json", arcname="data.json")
+
+        service = BusinessSyncService(BusinessSyncRepository(self.target))
+        preview = service.preview(legacy)
+        media = cast(dict[str, object], preview["media"])
+        files = cast(dict[str, int], media["files"])
+        self.assertFalse(media["material_drawings"])
+        self.assertEqual(files.get("material_drawings", 0), 0)
+        result = service.apply(
+            legacy,
+            backup_path=self.root / "legacy-v2-backup.sqlite3",
+            actor="test",
+            expected_token=cast(str, preview["token"]),
+            include_material_drawings=True,
+        )
+
+        self.assertEqual(result["materials"]["new"], 1)
+
+    def test_material_drawing_export_only_includes_root_lowercase_pdf_files(self) -> None:
+        source_material_drawings = self.root / "source-material-drawing-filter"
+        source_material_drawings.mkdir()
+        (source_material_drawings / "ROOT.pdf").write_bytes(b"root")
+        (source_material_drawings / "UPPER.PDF").write_bytes(b"upper")
+        (source_material_drawings / "notes.txt").write_bytes(b"notes")
+        hardlink_source = source_material_drawings / "HARDLINK-SOURCE.pdf"
+        hardlink_source.write_bytes(b"hardlink")
+        (source_material_drawings / "HARDLINK-ALIAS.pdf").hardlink_to(hardlink_source)
+        nested = source_material_drawings / "nested"
+        nested.mkdir()
+        (nested / "NESTED.pdf").write_bytes(b"nested")
+        with connect(self.source) as connection:
+            self._seed(connection)
+            connection.commit()
+
+        package = self.root / "business-material-drawing-filter.tar.gz"
+        repository = BusinessSyncRepository(
+            self.source,
+            material_drawing_dir=source_material_drawings,
+        )
+        repository.export(
+            output_path=package,
+            selected=("materials",),
+            include_material_drawings=True,
+            actor="test",
+        )
+
+        with tarfile.open(package, "r:gz") as archive:
+            media_names = [
+                name for name in archive.getnames() if name.startswith("data/material_drawings/")
+            ]
+        manifest, _payload = repository.read(package)
+        media = cast(dict[str, object], manifest["media"])
+        files = cast(dict[str, int], media["files"])
+        self.assertEqual(media_names, ["data/material_drawings/ROOT.pdf"])
+        self.assertEqual(files["material_drawings"], 1)
+
+    def test_material_drawing_package_rejects_unsafe_path_and_count_mismatch(self) -> None:
+        manifest: dict[str, object] = {
+            "package_type": "bld_business_data",
+            "version": 3,
+            "datasets": ["materials"],
+            "media": {
+                "drawings": False,
+                "product_images": False,
+                "material_drawings": True,
+                "files": {"drawings": 0, "product_images": 0, "material_drawings": 1},
+            },
+        }
+        payload = {"materials": [{"sync_id": "unsafe-material"}]}
+        unsafe = self._write_raw_package(
+            name="unsafe-material-drawing.tar.gz",
+            manifest=manifest,
+            payload=payload,
+            media={"data/material_drawings//tmp/escape.pdf": b"unsafe"},
+        )
+        with self.assertRaisesRegex(ValueError, "不安全的媒体路径"):
+            BusinessSyncRepository.read(unsafe)
+
+        media_manifest = cast(dict[str, object], manifest["media"])
+        files = cast(dict[str, int], media_manifest["files"])
+        files["material_drawings"] = 0
+        mismatched = self._write_raw_package(
+            name="mismatched-material-drawing.tar.gz",
+            manifest=manifest,
+            payload=payload,
+            media={"data/material_drawings/SAFE.pdf": b"safe"},
+        )
+        with self.assertRaisesRegex(ValueError, "计数与实际内容不一致"):
+            BusinessSyncRepository.read(mismatched)
+
+    def test_business_sync_rejects_casefold_equivalent_media_targets(self) -> None:
+        package = self._write_raw_package(
+            name="casefold-collision-business-package.tar.gz",
+            manifest={
+                "package_type": "bld_business_data",
+                "version": 3,
+                "datasets": ["materials"],
+                "media": {
+                    "drawings": False,
+                    "product_images": False,
+                    "material_drawings": True,
+                    "files": {"drawings": 0, "product_images": 0, "material_drawings": 2},
+                },
+            },
+            payload={"materials": [{"sync_id": "casefold-material"}]},
+            media={
+                "data/material_drawings/A.pdf": b"first",
+                "data/material_drawings/a.pdf": b"second",
+            },
+        )
+        with self.assertRaisesRegex(ValueError, "指向同一目标"):
+            BusinessSyncRepository.read(package)
+
+    def test_business_sync_export_rejects_portable_media_name_collisions(self) -> None:
+        source_material_drawings = self.root / "source-export-name-collision"
+        source_material_drawings.mkdir()
+        (source_material_drawings / "FIRST.pdf").write_bytes(b"first")
+        (source_material_drawings / "SECOND.pdf").write_bytes(b"second")
+        with connect(self.source) as connection:
+            self._seed(connection)
+            connection.commit()
+        package = self.root / "export-name-collision.tar.gz"
+        repository = BusinessSyncRepository(
+            self.source,
+            material_drawing_dir=source_material_drawings,
+        )
+
+        audit = Mock()
+        with patch.dict(
+            BusinessSyncRepository.export.__globals__,
+            {"_normalized_media_target": lambda _relative: "same", "log_event": audit},
+        ):
+            with self.assertRaisesRegex(ValueError, "指向同一目标"):
+                repository.export(
+                    output_path=package,
+                    selected=("materials",),
+                    include_material_drawings=True,
+                    actor="test",
+                )
+
+        self.assertFalse(package.exists())
+        audit.assert_not_called()
+
+    def test_business_sync_rejects_package_version_newer_than_supported(self) -> None:
+        package = self._write_raw_package(
+            name="future-business-package.tar.gz",
+            manifest={
+                "package_type": "bld_business_data",
+                "version": 4,
+                "datasets": ["materials"],
+            },
+            payload={"materials": [{"sync_id": "future-material"}]},
+        )
+        with self.assertRaisesRegex(ValueError, "请先升级系统"):
+            BusinessSyncRepository.read(package)
+
+    def test_business_sync_rejects_package_resource_limit_overruns(self) -> None:
+        package = self._write_package({"materials": [{"sync_id": "resource-limit-material"}]})
+        limits = (
+            "MAX_PACKAGE_MEMBER_COUNT",
+            "MAX_PACKAGE_TOTAL_SIZE",
+            "MAX_PACKAGE_METADATA_SIZE",
+        )
+        for limit in limits:
+            with self.subTest(limit=limit):
+                with patch.dict(BusinessSyncRepository.read.__globals__, {limit: 1}):
+                    with self.assertRaisesRegex(ValueError, "格式或文件大小无效"):
+                        BusinessSyncRepository.read(package)
+
+    def test_business_sync_rejects_unsafe_tar_member_types_and_paths(self) -> None:
+        manifest: dict[str, object] = {
+            "package_type": "bld_business_data",
+            "version": 3,
+            "datasets": ["materials"],
+            "media": {
+                "drawings": False,
+                "product_images": False,
+                "material_drawings": True,
+                "files": {"drawings": 0, "product_images": 0, "material_drawings": 1},
+            },
+        }
+        payload = {"materials": [{"sync_id": "unsafe-member-material"}]}
+
+        def write_case(name: str, members: list[tarfile.TarInfo]) -> Path:
+            package = self.root / f"unsafe-member-{name}.tar.gz"
+            manifest_bytes = json.dumps(manifest).encode()
+            payload_bytes = json.dumps(payload).encode()
+            with tarfile.open(package, "w:gz") as archive:
+                manifest_member = tarfile.TarInfo("manifest.json")
+                manifest_member.size = len(manifest_bytes)
+                archive.addfile(manifest_member, io.BytesIO(manifest_bytes))
+                payload_member = tarfile.TarInfo("data.json")
+                payload_member.size = len(payload_bytes)
+                archive.addfile(payload_member, io.BytesIO(payload_bytes))
+                for member in members:
+                    content = b"unsafe" if member.isfile() else None
+                    member.size = len(content) if content is not None else 0
+                    archive.addfile(member, io.BytesIO(content) if content is not None else None)
+            return package
+
+        regular_cases = {
+            "non-pdf": "data/material_drawings/NOT-PDF.txt",
+            "traversal": "data/material_drawings/../ESCAPE.pdf",
+        }
+        for name, member_name in regular_cases.items():
+            with self.subTest(case=name):
+                with self.assertRaises(ValueError):
+                    BusinessSyncRepository.read(write_case(name, [tarfile.TarInfo(member_name)]))
+
+        for name, member_type in (("symlink", tarfile.SYMTYPE), ("hardlink", tarfile.LNKTYPE)):
+            with self.subTest(case=name):
+                member = tarfile.TarInfo(f"data/material_drawings/{name}.pdf")
+                member.type = member_type
+                member.linkname = "data/material_drawings/target.pdf"
+                with self.assertRaisesRegex(ValueError, "格式或文件大小无效"):
+                    BusinessSyncRepository.read(write_case(name, [member]))
+
+        duplicate_name = "data/material_drawings/DUPLICATE.pdf"
+        with self.assertRaisesRegex(ValueError, "格式或文件大小无效"):
+            BusinessSyncRepository.read(
+                write_case(
+                    "duplicate",
+                    [tarfile.TarInfo(duplicate_name), tarfile.TarInfo(duplicate_name)],
+                )
+            )
+
+    def test_material_drawing_import_overwrites_unique_portable_equivalent_target(self) -> None:
+        source_material_drawings = self.root / "source-portable-target"
+        target_material_drawings = self.root / "target-portable-target"
+        source_material_drawings.mkdir()
+        target_material_drawings.mkdir()
+        (source_material_drawings / "INCOMING.pdf").write_bytes(b"incoming")
+        existing = target_material_drawings / "LOCAL.pdf"
+        existing.write_bytes(b"local")
+        with connect(self.source) as connection:
+            self._seed(connection)
+            connection.commit()
+        package = self.root / "portable-target.tar.gz"
+        BusinessSyncRepository(
+            self.source,
+            material_drawing_dir=source_material_drawings,
+        ).export(
+            output_path=package,
+            selected=("materials",),
+            include_material_drawings=True,
+            actor="test",
+        )
+        repository = BusinessSyncRepository(
+            self.target,
+            material_drawing_dir=target_material_drawings,
+        )
+        preview = repository.preview(package)
+
+        with patch.dict(
+            BusinessSyncRepository._copy_media.__globals__,
+            {"_normalized_media_target": lambda _relative: "same"},
+        ):
+            repository.apply(
+                package,
+                backup_path=self.root / "portable-target-backup.sqlite3",
+                actor="test",
+                expected_token=cast(str, preview["token"]),
+                selected_conflicts={},
+                include_material_drawings=True,
+            )
+
+        self.assertEqual(existing.read_bytes(), b"incoming")
+        self.assertFalse((target_material_drawings / "INCOMING.pdf").exists())
+
+    def test_material_drawing_import_rejects_ambiguous_portable_local_targets(self) -> None:
+        source_material_drawings = self.root / "source-ambiguous-target"
+        target_material_drawings = self.root / "target-ambiguous-target"
+        source_material_drawings.mkdir()
+        target_material_drawings.mkdir()
+        (source_material_drawings / "INCOMING.pdf").write_bytes(b"incoming")
+        (target_material_drawings / "FIRST.pdf").write_bytes(b"first")
+        (target_material_drawings / "SECOND.pdf").write_bytes(b"second")
+        with connect(self.source) as connection:
+            self._seed(connection)
+            connection.commit()
+        package = self.root / "ambiguous-target.tar.gz"
+        BusinessSyncRepository(
+            self.source,
+            material_drawing_dir=source_material_drawings,
+        ).export(
+            output_path=package,
+            selected=("materials",),
+            include_material_drawings=True,
+            actor="test",
+        )
+        repository = BusinessSyncRepository(
+            self.target,
+            material_drawing_dir=target_material_drawings,
+        )
+        preview = repository.preview(package)
+
+        with patch.dict(
+            BusinessSyncRepository._copy_media.__globals__,
+            {"_normalized_media_target": lambda _relative: "same"},
+        ):
+            with self.assertRaisesRegex(ValueError, "重复文件"):
+                repository.apply(
+                    package,
+                    backup_path=self.root / "ambiguous-target-backup.sqlite3",
+                    actor="test",
+                    expected_token=cast(str, preview["token"]),
+                    selected_conflicts={},
+                    include_material_drawings=True,
+                )
+
+    def test_export_audit_is_only_written_after_package_success(self) -> None:
+        source_material_drawings = self.root / "source-export-audit"
+        source_material_drawings.mkdir()
+        (source_material_drawings / "AUDIT.pdf").write_bytes(b"audit")
+        with connect(self.source) as connection:
+            self._seed(connection)
+            connection.commit()
+        repository = BusinessSyncRepository(
+            self.source,
+            material_drawing_dir=source_material_drawings,
+        )
+        package = self.root / "audited-export.tar.gz"
+        audit_details: list[str] = []
+
+        def record_audit(_connection, _action, _entity_type, _entity_id, detail, *, actor):
+            self.assertTrue(package.is_file())
+            self.assertEqual(actor, "test")
+            audit_details.append(detail)
+
+        with patch.dict(BusinessSyncRepository.export.__globals__, {"log_event": record_audit}):
+            repository.export(
+                output_path=package,
+                selected=("materials",),
+                include_material_drawings=True,
+                actor="test",
+            )
+        self.assertEqual(len(audit_details), 1)
+        self.assertIn("物料图纸 1 个", audit_details[0])
+
+        failed_package = self.root / "failed-export.tar.gz"
+        audit = Mock()
+        with (
+            patch.object(repository, "_add_media_directory", side_effect=ValueError("collision")),
+            patch.dict(BusinessSyncRepository.export.__globals__, {"log_event": audit}),
+        ):
+            with self.assertRaisesRegex(ValueError, "collision"):
+                repository.export(
+                    output_path=failed_package,
+                    selected=("materials",),
+                    include_material_drawings=True,
+                    actor="test",
+                )
+        self.assertFalse(failed_package.exists())
+        audit.assert_not_called()
+
+        limited_package = self.root / "resource-limited-export.tar.gz"
+        audit = Mock()
+        with patch.dict(
+            BusinessSyncRepository.export.__globals__,
+            {"MAX_PACKAGE_TOTAL_SIZE": 1, "log_event": audit},
+        ):
+            with self.assertRaisesRegex(ValueError, "格式或文件大小无效"):
+                repository.export(
+                    output_path=limited_package,
+                    selected=("materials",),
+                    actor="test",
+                )
+        self.assertFalse(limited_package.exists())
+        audit.assert_not_called()
+
+        audit_failed_package = self.root / "audit-failed-export.tar.gz"
+
+        def fail_audit(*_args, **_kwargs):
+            raise RuntimeError("audit unavailable")
+
+        with patch.dict(BusinessSyncRepository.export.__globals__, {"log_event": fail_audit}):
+            with self.assertRaisesRegex(RuntimeError, "audit unavailable"):
+                repository.export(
+                    output_path=audit_failed_package,
+                    selected=("materials",),
+                    actor="test",
+                )
+        self.assertFalse(audit_failed_package.exists())
+
+        concurrently_replaced_package = self.root / "concurrently-replaced-export.tar.gz"
+
+        def replace_then_fail(*_args, **_kwargs):
+            replacement = self.root / "other-request-export.tmp"
+            replacement.write_bytes(b"other request package")
+            os.replace(replacement, concurrently_replaced_package)
+            raise RuntimeError("audit failed after concurrent replacement")
+
+        with patch.dict(BusinessSyncRepository.export.__globals__, {"log_event": replace_then_fail}):
+            with self.assertRaisesRegex(RuntimeError, "concurrent replacement"):
+                repository.export(
+                    output_path=concurrently_replaced_package,
+                    selected=("materials",),
+                    actor="test",
+                )
+        self.assertEqual(concurrently_replaced_package.read_bytes(), b"other request package")
+
+    def test_material_drawing_media_is_restored_when_database_apply_fails(self) -> None:
+        source_material_drawings = self.root / "source-material-drawing-rollback"
+        target_material_drawings = self.root / "target-material-drawing-rollback"
+        source_material_drawings.mkdir()
+        target_material_drawings.mkdir()
+        (source_material_drawings / "EXISTING.pdf").write_bytes(b"incoming-existing")
+        (source_material_drawings / "NEW.pdf").write_bytes(b"incoming-new")
+        existing_target = target_material_drawings / "EXISTING.pdf"
+        new_target = target_material_drawings / "NEW.pdf"
+        existing_target.write_bytes(b"local-existing")
+        with connect(self.source) as connection:
+            self._seed(connection)
+            connection.commit()
+
+        package = self.root / "business-material-drawing-rollback.tar.gz"
+        BusinessSyncRepository(
+            self.source,
+            material_drawing_dir=source_material_drawings,
+        ).export(
+            output_path=package,
+            selected=("materials",),
+            include_material_drawings=True,
+            actor="test",
+        )
+        target_repository = BusinessSyncRepository(
+            self.target,
+            material_drawing_dir=target_material_drawings,
+        )
+        preview = target_repository.preview(package)
+
+        def fail_audit(*_args, **_kwargs):
+            raise RuntimeError("forced audit failure")
+
+        with patch.dict(BusinessSyncRepository.apply.__globals__, {"log_event": fail_audit}):
+            with self.assertRaisesRegex(RuntimeError, "forced audit failure"):
+                target_repository.apply(
+                    package,
+                    backup_path=self.root / "rollback-backup.sqlite3",
+                    actor="test",
+                    expected_token=cast(str, preview["token"]),
+                    selected_conflicts={},
+                    include_material_drawings=True,
+                )
+
+        self.assertEqual(existing_target.read_bytes(), b"local-existing")
+        self.assertFalse(new_target.exists())
+        with connect(self.target) as connection:
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM material_items").fetchone()[0], 0)
+
+    def test_material_drawing_media_is_restored_when_later_media_write_fails(self) -> None:
+        source_material_drawings = self.root / "source-material-drawing-write-failure"
+        target_material_drawings = self.root / "target-material-drawing-write-failure"
+        source_material_drawings.mkdir()
+        target_material_drawings.mkdir()
+        (source_material_drawings / "EXISTING.pdf").write_bytes(b"incoming-existing")
+        (source_material_drawings / "NEW.pdf").write_bytes(b"incoming-new")
+        existing_target = target_material_drawings / "EXISTING.pdf"
+        new_target = target_material_drawings / "NEW.pdf"
+        existing_target.write_bytes(b"local-existing")
+        with connect(self.source) as connection:
+            self._seed(connection)
+            connection.commit()
+
+        package = self.root / "business-material-drawing-write-failure.tar.gz"
+        BusinessSyncRepository(
+            self.source,
+            material_drawing_dir=source_material_drawings,
+        ).export(
+            output_path=package,
+            selected=("materials",),
+            include_material_drawings=True,
+            actor="test",
+        )
+        target_repository = BusinessSyncRepository(
+            self.target,
+            material_drawing_dir=target_material_drawings,
+        )
+        preview = target_repository.preview(package)
+        original_copy_stream = target_repository._atomic_copy_stream
+        copy_count = 0
+
+        def fail_second_copy(source, target):
+            nonlocal copy_count
+            copy_count += 1
+            if copy_count == 2:
+                source.close()
+                raise OSError("forced second media write failure")
+            original_copy_stream(source, target)
+
+        with patch.object(target_repository, "_atomic_copy_stream", side_effect=fail_second_copy):
+            with self.assertRaisesRegex(OSError, "forced second media write failure"):
+                target_repository.apply(
+                    package,
+                    backup_path=self.root / "write-failure-backup.sqlite3",
+                    actor="test",
+                    expected_token=cast(str, preview["token"]),
+                    selected_conflicts={},
+                    include_material_drawings=True,
+                )
+
+        self.assertEqual(existing_target.read_bytes(), b"local-existing")
+        self.assertFalse(new_target.exists())
+        with connect(self.target) as connection:
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM material_items").fetchone()[0], 0)

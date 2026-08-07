@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from app.config import DATA_DIR, DB_PATH, MATERIAL_DATA_PATH, MATERIAL_TEMPLATE_PATH
+from app.config import DATA_DIR, DB_PATH, MATERIAL_DATA_PATH, MATERIAL_DRAWING_DIR, MATERIAL_TEMPLATE_PATH
 
 from .excel_import import bootstrap_materials_from_excel
 from .infrastructure import MaterialFileAdapter
@@ -19,6 +19,6 @@ def get_material_service() -> MaterialService:
             data_dir=DATA_DIR,
             material_data_path=MATERIAL_DATA_PATH,
             template_path=MATERIAL_TEMPLATE_PATH,
-            drawing_dir=DATA_DIR / "material_drawings",
+            drawing_dir=MATERIAL_DRAWING_DIR,
         ),
     )

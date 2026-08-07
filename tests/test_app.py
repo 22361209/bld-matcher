@@ -886,6 +886,74 @@ class WebAppTest(unittest.TestCase):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
 
+    def test_business_data_sync_exports_material_drawings_with_materials(self):
+        self.login()
+        drawing_dir = self.root / "data" / "material_drawings"
+        drawing_dir.mkdir(parents=True, exist_ok=True)
+        drawing = drawing_dir / "WEB-SYNC-MATERIAL.pdf"
+        drawing.write_bytes(b"%PDF-1.4\nweb material drawing\n")
+        try:
+            page = self.client.get("/business-data-sync")
+            html = page.get_data(as_text=True)
+            self.assertIn('name="include_material_drawings"', html)
+            self.assertIn("<h3>导出内容</h3>", html)
+            self.assertIn("<strong>物料图纸</strong>", html)
+            self.assertNotIn("包含物料图纸", html)
+            self.assertEqual(html.count('class="sync-option-grid sync-option-grid-unified"'), 1)
+            self.assertEqual(html.count('class="sync-option"'), 8)
+            for media_field in ("include_drawings", "include_images", "include_material_drawings"):
+                media_input = re.search(rf'<input\b[^>]*name="{media_field}"[^>]*>', html)
+                self.assertIsNotNone(media_input)
+                self.assertNotIn("checked", media_input.group(0))
+
+            response = self.client.post(
+                "/business-data-sync/export",
+                data={"dataset": "materials", "include_material_drawings": "1"},
+            )
+            try:
+                self.assertEqual(response.status_code, 200)
+                package_bytes = response.data
+                with tarfile.open(fileobj=io.BytesIO(package_bytes), mode="r:gz") as archive:
+                    self.assertIn("data/material_drawings/WEB-SYNC-MATERIAL.pdf", archive.getnames())
+                    manifest_file = archive.extractfile("manifest.json")
+                    self.assertIsNotNone(manifest_file)
+                    manifest = json.loads(manifest_file.read().decode("utf-8"))
+            finally:
+                response.close()
+            self.assertEqual(manifest["version"], 3)
+            self.assertTrue(manifest["media"]["material_drawings"])
+            self.assertEqual(manifest["media"]["files"]["material_drawings"], 1)
+
+            preview = self.client.post(
+                "/business-data-sync/preview",
+                data={"package": (io.BytesIO(package_bytes), "web-material-sync.tar.gz")},
+                content_type="multipart/form-data",
+            )
+            preview_html = preview.get_data(as_text=True)
+            self.assertEqual(preview.status_code, 200)
+            self.assertIn("物料图纸 1 个", preview_html)
+            self.assertIn('name="include_material_drawings"', preview_html)
+            package_path = re.search(r'name="package_path" value="([^"]+)"', preview_html)
+            preview_token = re.search(r'name="preview_token" value="([^"]+)"', preview_html)
+            self.assertIsNotNone(package_path)
+            self.assertIsNotNone(preview_token)
+
+            drawing.write_bytes(b"local replacement")
+            applied = self.client.post(
+                "/business-data-sync/apply",
+                data={
+                    "package_path": package_path.group(1),
+                    "preview_token": preview_token.group(1),
+                    "include_material_drawings": "1",
+                },
+                follow_redirects=True,
+            )
+            self.assertEqual(applied.status_code, 200)
+            self.assertIn("业务数据导入完成", applied.get_data(as_text=True))
+            self.assertEqual(drawing.read_bytes(), b"%PDF-1.4\nweb material drawing\n")
+        finally:
+            drawing.unlink(missing_ok=True)
+
     def test_product_list_omits_redundant_workspace_header(self):
         self.login()
 

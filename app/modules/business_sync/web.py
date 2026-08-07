@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from pathlib import Path
+from uuid import uuid4
 
 from flask import flash, redirect, render_template, request, send_file, url_for
 
@@ -19,8 +20,15 @@ logger = logging.getLogger(__name__)
 
 
 def _service() -> BusinessSyncService:
-    from app.config import DB_PATH, DRAWING_DIR, PRODUCT_IMAGE_DIR
-    return BusinessSyncService(BusinessSyncRepository(DB_PATH, drawing_dir=DRAWING_DIR, image_dir=PRODUCT_IMAGE_DIR))
+    from app.config import DB_PATH, DRAWING_DIR, MATERIAL_DRAWING_DIR, PRODUCT_IMAGE_DIR
+    return BusinessSyncService(
+        BusinessSyncRepository(
+            DB_PATH,
+            drawing_dir=DRAWING_DIR,
+            image_dir=PRODUCT_IMAGE_DIR,
+            material_drawing_dir=MATERIAL_DRAWING_DIR,
+        )
+    )
 
 
 def _selected() -> tuple[str, ...]:
@@ -69,7 +77,8 @@ def register(app) -> None:
         if not selected:
             flash("请至少选择一类业务数据。", "error")
             return redirect(url_for("business_data_sync"))
-        path = user_output_dir() / f"business-data-{user_file_label()}-{datetime.now().strftime('%Y%m%d-%H%M%S')}{PACKAGE_SUFFIX}"
+        export_id = f"{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}-{uuid4().hex[:8]}"
+        path = user_output_dir() / f"business-data-{user_file_label()}-{export_id}{PACKAGE_SUFFIX}"
         try:
             return send_file(
                 _service().export(
@@ -77,6 +86,7 @@ def register(app) -> None:
                     selected=selected,
                     include_drawings=request.form.get("include_drawings") == "1",
                     include_images=request.form.get("include_images") == "1",
+                    include_material_drawings=request.form.get("include_material_drawings") == "1",
                     actor=actor_name(),
                 ),
                 as_attachment=True,
@@ -125,6 +135,7 @@ def register(app) -> None:
                     customer_mappings=_customer_mappings(),
                     include_drawings=request.form.get("include_drawings") == "1",
                     include_images=request.form.get("include_images") == "1",
+                    include_material_drawings=request.form.get("include_material_drawings") == "1",
                     deactivate_local_only=request.form.get("deactivate_local_only") == "1",
                 )
         except ImportLockError as exc:
