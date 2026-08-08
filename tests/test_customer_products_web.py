@@ -766,6 +766,9 @@ class CustomerDrawingFileRouteTest(unittest.TestCase):
             service = SimpleNamespace(file_payload=lambda *args, **kwargs: payload)
             with patch.object(drawings_web, "get_customer_product_service", return_value=service):
                 response = app.test_client().get("/customers/1/drawings/files/9/download")
+            # Windows 不允许删除仍被占用的文件，先读完数据并关闭响应再清理临时目录。
+            response.get_data()
+            response.close()
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["Cache-Control"], "private, no-store")
         self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
@@ -794,6 +797,9 @@ class CustomerDrawingFileRouteTest(unittest.TestCase):
             service = SimpleNamespace(file_payload=file_payload)
             with patch.object(drawings_web, "get_customer_product_service", return_value=service):
                 response = app.test_client().get("/customers/1/drawings/files/9/preview")
+            # Windows 不允许删除仍被占用的文件，先读完数据并关闭响应再清理临时目录。
+            response.get_data()
+            response.close()
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("attachment", response.headers["Content-Disposition"])
         args, kwargs = calls[0]

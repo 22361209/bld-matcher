@@ -1,0 +1,14 @@
+{
+  "date": "2026-08-08",
+  "version": "unreleased",
+  "title": "客户产品图纸文件路由测试的 Windows 兼容修复",
+  "entries": [
+    "修复客户产品图纸下载与预览路由测试在 Windows 上因临时文件句柄未关闭导致的清理失败：测试在临时目录清理前显式读完并关闭响应。仅测试代码调整，不影响任何线上功能。"
+  ],
+  "impact": {
+    "users": "无用户可见变化。",
+    "api": "compatible",
+    "data": "none",
+    "operations": "none"
+  }
+}
