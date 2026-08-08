@@ -22,7 +22,6 @@ from .runtime_factory import get_runtime_settings
 
 
 IDEMPOTENCY_KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$")
-IDEMPOTENCY_TTL = timedelta(hours=24)
 IDEMPOTENCY_PENDING_TTL = timedelta(minutes=5)
 
 

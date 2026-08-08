@@ -1,0 +1,66 @@
+    <form action="{{ url_for('save_role_route') }}" method="post" class="access-editor-form" data-submit-wait data-submit-wait-text="正在保存角色，请稍候..." data-submit-wait-button-text="保存中...">
+      {{ csrf_field() }}
+      <input type="hidden" name="role_key" value="{{ editing_role.role_key if editing_role else '' }}">
+
+      <section class="access-editor-surface" aria-labelledby="role-editor-title">
+        <div class="access-editor-toolbar">
+          <div>
+            <h2 id="role-editor-title">{{ "重命名角色" if editing_role else "新增角色" }}</h2>
+            <p>先创建角色名称，再到“角色”页勾选权限。</p>
+          </div>
+          <div class="access-command-area">
+            <div class="command-actions">
+              <button class="linear-button primary" type="submit">保存角色</button>
+              {% if editing_role %}<a class="linear-button subtle" href="{{ url_for('users', view='role-list') }}">取消编辑</a>{% endif %}
+            </div>
+            <p class="submit-wait-message" data-submit-wait-message aria-live="polite"></p>
+          </div>
+        </div>
+
+        <div class="workbench-form access-identity-grid access-role-identity-grid">
+          <label>
+            <span>角色名称</span>
+            <input name="name" value="{{ editing_role.name if editing_role else '' }}" maxlength="40" required>
+          </label>
+        </div>
+      </section>
+    </form>
+
+    <section class="data-section">
+      <div class="data-section-header">
+        <div><h2>角色列表</h2><p>管理员是系统固定角色；其他角色可重命名，未被账号使用时可删除。</p></div>
+        <span>{{ roles | length }} 个</span>
+      </div>
+      <div class="data-table-scroll">
+        <table class="data-table access-table role-table">
+          <thead><tr><th>角色</th><th>说明</th><th>权限</th><th>使用账号</th><th>更新时间</th><th>操作</th></tr></thead>
+          <tbody>
+            {% for role in roles %}
+              <tr>
+                <td><strong>{{ role.name }}</strong>{% if role.is_system %}<span class="access-system-badge">系统固定</span>{% endif %}</td>
+                <td>{{ role.description or "—" }}</td>
+                <td>{{ role.permissions | length }} 项</td>
+                <td>{{ role.user_count }} 个</td>
+                <td>{{ role.updated_at }}</td>
+                <td class="access-row-actions">
+                  {% if role.is_system %}
+                    <span class="muted-cell">不可编辑</span>
+                  {% else %}
+                    <a href="{{ url_for('edit_role', role_key=role.role_key) }}">重命名</a>
+                    <a href="{{ url_for('users', view='roles', role_key=role.role_key) }}">权限</a>
+                    {% if role.user_count %}
+                      <small>使用中，不可删除</small>
+                    {% else %}
+                      <form action="{{ url_for('delete_role_route', role_key=role.role_key) }}" method="post">
+                        {{ csrf_field() }}
+                        <button class="link-button danger-link" type="submit" data-confirm="确认删除角色“{{ role.name }}”？该角色当前未被账号使用，删除后不能恢复。">删除</button>
+                      </form>
+                    {% endif %}
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>

@@ -573,6 +573,111 @@ class ProductInquiryModuleTest(unittest.TestCase):
         self.assertEqual(parsed["page"], ["3"])
         self.assertEqual(urlsplit(page_url).fragment, "products-results")
 
+    def test_filter_option_single_scan_matches_legacy_disjunctive_facets(self) -> None:
+        from dataclasses import replace
+
+        from app.modules.products.domain import ProductFilterOptions, build_product_filters
+        from app.modules.products.repository import SQLiteProductRepository
+        from app.modules.products.repository_queries import (
+            _add_option_count,
+            _finalize_options,
+            _option_values,
+        )
+
+        # Insert K20 before K2 so an unordered scan cannot accidentally rely on
+        # row insertion order for the display spelling selected by BLD order.
+        self.add_product(
+            "K20",
+            "FACET-COMPARE-20",
+            item="CONTROL ARM",
+            series="HONDA\nKIA",
+            product_status="2 个衬套 1 个球头",
+        )
+        self.add_product(
+            "K2",
+            "FACET-COMPARE-2",
+            item="Control Arm",
+            series="HONDA",
+            product_status="2个衬套1个球头",
+        )
+        self.add_product(
+            "K3",
+            "FACET-COMPARE-3",
+            item="Tie Rod",
+            series="KIA",
+            product_status="1 个球头",
+        )
+        self.add_product("K4", "FACET-COMPARE-4", item="", series="", product_status="")
+
+        def legacy_options(repository, filters):
+            facet_filters = {
+                "brand": replace(filters, brands=(), brand_blank=False),
+                "item": replace(filters, items=(), item_blank=False),
+                "product_status": replace(
+                    filters,
+                    product_statuses=(),
+                    product_status_blank=False,
+                ),
+            }
+            selected = {
+                "brand": filters.brands,
+                "item": filters.items,
+                "product_status": filters.product_statuses,
+            }
+            blank_selected = {
+                "brand": filters.brand_blank,
+                "item": filters.item_blank,
+                "product_status": filters.product_status_blank,
+            }
+            payload = {}
+            for field, legacy_filters in facet_filters.items():
+                buckets = {}
+                for row in repository._rows(legacy_filters, limit=None):
+                    for value, label in _option_values(row, field=field):
+                        _add_option_count(buckets, value=value, label=label)
+                payload[field] = _finalize_options(
+                    buckets,
+                    field=field,
+                    selected=selected[field],
+                    blank_selected=blank_selected[field],
+                )
+            return ProductFilterOptions(**payload)
+
+        cases = (
+            {},
+            {"brand": ["HONDA"]},
+            {"item": ["Control Arm"]},
+            {"product_status": ["2衬套1球头"]},
+            {"brand": ["HONDA"], "item": ["Control Arm"]},
+            {"brand": ["KIA"], "product_status": ["1球头"]},
+            {"brand": [""], "item": [""]},
+            {"q": "HONDA", "status": "all"},
+        )
+        with connect(self.database_path) as connection:
+            repository = SQLiteProductRepository(connection, self.database_path)
+            for raw_filters in cases:
+                with self.subTest(filters=raw_filters):
+                    filters = build_product_filters(raw_filters)
+                    expected = legacy_options(repository, filters).web_payload()
+                    actual = repository.filter_options(filters).web_payload()
+                    for field in ("brand", "item", "product_status"):
+                        self.assertEqual(actual[field], expected[field], field)
+
+            statements = []
+            connection.set_trace_callback(statements.append)
+            repository.filter_options(build_product_filters({}))
+            connection.set_trace_callback(None)
+
+        option_queries = [
+            statement
+            for statement in statements
+            if "include_product_status" in statement.lower()
+        ]
+        self.assertEqual(len(option_queries), 1)
+        self.assertNotIn("SELECT *", option_queries[0].upper())
+        self.assertNotIn("ORDER BY", option_queries[0].upper())
+        self.assertNotIn("BLD_NATURAL", option_queries[0].upper())
+
     def test_catalog_export_reuses_filters_for_both_formats_and_all_activity_states(self) -> None:
         for index in range(55):
             self.add_product(

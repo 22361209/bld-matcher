@@ -1,0 +1,58 @@
+/* Customer directory and profile responsive adaptations. */
+
+@media (max-width: 1050px) {
+  .customer-contact-list {
+    grid-template-columns: 1fr;
+  }
+
+  .customer-document-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .customer-detail-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .customer-detail-heading .command-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .customer-profile-summary,
+  .customer-contact-create,
+  .customer-contact-card,
+  .customer-document-grid,
+  .customer-document-form,
+  .customer-document-form.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .customer-contact-card-heading,
+  .customer-contact-card .form-actions,
+  .customer-contact-create .form-actions {
+    grid-column: 1;
+  }
+
+  .customer-owner-form {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .customer-owner-form .linear-button,
+  .customer-identity-actions .linear-button {
+    width: 100%;
+  }
+
+  .customer-identity-actions {
+    flex-direction: column-reverse;
+  }
+
+  .customer-document-version-form,
+  .customer-document-files li {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

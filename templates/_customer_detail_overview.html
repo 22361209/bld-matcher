@@ -1,0 +1,41 @@
+    <section class="metric-strip customer-metric-strip" aria-label="客户业务摘要">
+      <div><span>报价单</span><strong>{{ summary.quote_count }}</strong></div>
+      <div><span>报价产品</span><strong>{{ summary.quoted_product_count }}</strong></div>
+      <div><span>最近报价</span><strong>{{ summary.latest_quote_date or "暂无" }}</strong></div>
+      <div><span>模板与文件</span><strong>{{ summary.file_count }}</strong></div>
+    </section>
+
+    <section class="data-section customer-profile-panel">
+      <div class="data-section-header">
+        <div><h2>基础资料</h2><p>客户名称和客户编号为受控资料，变更时须记录原因；负责人可在此维护。</p></div>
+        {% if can("change_customer_identity") %}
+        <div class="data-section-actions">
+          <button class="linear-button subtle" type="button" data-open-customer-identity-dialog="name">变更名称</button>
+          <button class="linear-button subtle" type="button" data-open-customer-identity-dialog="code">变更编号</button>
+        </div>
+        {% endif %}
+      </div>
+      <dl class="customer-profile-summary">
+        <div><dt>客户名称</dt><dd>{{ customer.name }}</dd></div>
+        <div><dt>客户编号</dt><dd>{{ customer.code or "未设置" }}</dd></div>
+        <div>
+          <dt>负责人</dt>
+          <dd>
+            {% if can("edit_customers") %}
+            <form class="customer-owner-form" action="{{ url_for('update_customer_owner', customer_id=customer.id) }}" method="post">
+              {{ csrf_field() }}
+              <select name="owner_username" aria-label="负责人">
+                <option value="">未指定</option>
+                {% for owner in owners %}
+                  <option value="{{ owner.username }}" {% if customer.owner_username == owner.username %}selected{% endif %}>{{ owner.display_name or owner.username }}（{{ owner.username }}）{% if owner.missing %} · 账号不可用{% elif not owner.active %} · 账号已停用{% endif %}</option>
+                {% endfor %}
+              </select>
+              <button class="linear-button primary" type="submit">保存负责人</button>
+            </form>
+            {% else %}
+              {{ customer.owner_username or "未指定" }}
+            {% endif %}
+          </dd>
+        </div>
+      </dl>
+    </section>

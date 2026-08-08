@@ -1,0 +1,236 @@
+/* Shared search-workspace controls. */
+
+.search-hero {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 46px 0 18px;
+  text-align: center;
+}
+
+.search-hero h1 {
+  margin: 0;
+  color: #1d2734;
+  font-size: clamp(40px, 7vw, 72px);
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.05;
+}
+
+.search-hero h1 span {
+  color: var(--linear-accent);
+}
+
+.search-hero p {
+  margin: 0;
+  color: var(--linear-muted);
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.search-workspace {
+  --search-panel-width: 760px;
+  --search-action-width: 128px;
+  --search-command-gap: 10px;
+}
+
+.compact-metrics {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.compact-metrics span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid var(--linear-line);
+  border-radius: 999px;
+  color: var(--linear-muted);
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.compact-metrics strong {
+  color: var(--linear-text);
+  font-size: 13px;
+}
+
+.search-command {
+  display: grid;
+  gap: 12px;
+  width: var(--search-panel-width);
+  max-width: 100%;
+  margin: 0 auto 12px;
+  padding: 6px 0 24px;
+  border-bottom: 1px solid var(--linear-line);
+  align-items: stretch;
+}
+
+.search-command-note {
+  color: var(--linear-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.search-command-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: end;
+  gap: var(--search-command-gap);
+}
+
+.upload-command {
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.search-command-row label {
+  min-width: 0;
+  gap: 6px;
+  color: var(--linear-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.file-picker-field {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  color: var(--linear-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.search-command-row .file-picker {
+  width: 100%;
+}
+
+.search-command-row .file-picker-control,
+.search-command-row input:not(.file-picker-input) {
+  height: 44px;
+  border-color: var(--linear-line-strong);
+  border-radius: 6px;
+  background: var(--linear-surface);
+  box-shadow: none;
+}
+
+.search-command-row input:not(.file-picker-input) {
+  padding: 0 12px;
+}
+
+.search-command-row .file-picker-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--linear-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.search-command-row .file-picker-text::placeholder {
+  color: #98a1af;
+}
+
+.search-command-row .file-picker-text:focus {
+  outline: 0;
+}
+
+.search-command-row .file-picker-button {
+  padding: 0 12px;
+  border-right-color: var(--linear-line-strong);
+  border-radius: 0;
+  background: #f8fafc;
+  cursor: pointer;
+}
+
+.search-command-row .file-picker-clear {
+  font-size: 13px;
+}
+
+.search-command-row .file-picker-name {
+  padding: 0 12px;
+}
+
+.embedded-search-field {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.embedded-input-control {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 44px;
+  overflow: hidden;
+  border: 1px solid var(--linear-line-strong);
+  border-radius: 6px;
+  background: var(--linear-surface);
+}
+
+.embedded-input-control input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.embedded-input-control input:focus {
+  outline: 0;
+}
+
+.embedded-submit {
+  align-self: stretch;
+  flex: 0 0 auto;
+  min-width: 96px;
+  min-height: 0;
+  padding: 0 18px;
+  border-left: 1px solid var(--linear-accent-hover);
+  border-radius: 0;
+  background: var(--linear-accent);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.embedded-submit:hover,
+.embedded-submit:focus-visible {
+  background: var(--linear-accent-hover);
+  filter: none;
+}
+
+.embedded-submit:disabled,
+.linear-button:disabled,
+.download-confirm-button:disabled,
+.download-cancel-button:disabled {
+  cursor: progress;
+  opacity: 0.72;
+  filter: none;
+}
+
+.compact-search-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.search-command-row .linear-button {
+  min-height: 44px;
+  padding-inline: 18px;
+}
+
+.upload-command > .linear-button {
+  width: 100%;
+}

@@ -1,0 +1,70 @@
+    <section class="data-section customer-document-section">
+      <div class="data-section-header"><div><h2>模板与文件</h2><p>保存客户特定标签、包装要求、单据模板和示例；更新时保留旧版本。</p></div><span>{{ document_groups|length }} 项</span></div>
+      {% if can("edit_customers") %}
+      <details class="customer-document-create-panel">
+        <summary>新增客户资料</summary>
+        <form class="customer-document-form" action="{{ url_for('create_customer_document', customer_id=customer.id) }}" method="post" enctype="multipart/form-data">
+          {{ csrf_field() }}
+          <label><span>分类</span><select name="category" required>{% for option in document_categories %}<option value="{{ option.value }}">{{ option.label }}</option>{% endfor %}</select></label>
+          <label><span>标题</span><input name="title" required maxlength="120" placeholder="例如 宁波多迦外箱标签要求"></label>
+          <label><span>语言</span><select name="language"><option value="zh-CN">中文</option><option value="en">英文</option><option value="und">通用/不区分语言</option></select></label>
+          <label class="customer-document-description"><span>文字说明</span><textarea name="description" rows="4" maxlength="4000" placeholder="可只保存文字要求，也可同时上传文件"></textarea></label>
+          <label class="customer-document-upload"><span>附件（可多选）</span><input name="files" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.xlsm,.ppt,.pptx,.txt,.csv"></label>
+          <div class="form-actions"><button class="linear-button primary" type="submit">保存客户资料</button></div>
+        </form>
+      </details>
+      {% endif %}
+      {% if document_groups %}
+        <div class="customer-document-grid">
+          {% for group in document_groups %}
+            <article class="customer-document-card {% if group.archived %}archived{% endif %}">
+              <div class="customer-document-card-heading"><div><span class="customer-document-category">{{ group.category_label }}</span><h3>{{ group.title }}</h3></div>{% if group.archived %}<span class="linear-status inactive">已归档</span>{% endif %}</div>
+              <p>{{ group.description or "无补充说明" }}</p>
+              {% if can("edit_customers") and not group.archived %}
+                <details class="customer-document-edit-panel">
+                  <summary>编辑说明</summary>
+                  <form class="customer-document-form compact" action="{{ url_for('update_customer_document', customer_id=customer.id, group_id=group.id) }}" method="post">
+                    {{ csrf_field() }}
+                    <label><span>分类</span><select name="category" required>{% for option in document_categories %}<option value="{{ option.value }}" {% if group.category == option.value %}selected{% endif %}>{{ option.label }}</option>{% endfor %}</select></label>
+                    <label><span>标题</span><input name="title" value="{{ group.title }}" required maxlength="120"></label>
+                    <label><span>语言</span><input name="language" value="{{ group.language }}" maxlength="32"></label>
+                    <label class="customer-document-description"><span>文字说明</span><textarea name="description" rows="3" maxlength="4000">{{ group.description }}</textarea></label>
+                    <div class="form-actions"><button class="linear-button primary compact" type="submit">保存说明</button></div>
+                  </form>
+                </details>
+              {% endif %}
+              <dl><div><dt>语言</dt><dd>{{ group.language or "通用" }}</dd></div><div><dt>当前版本</dt><dd>{{ "V" ~ group.current_version if group.current_version else "仅文字" }}</dd></div><div><dt>更新时间</dt><dd>{{ group.updated_at }}</dd></div></dl>
+              {% if can("edit_customers") and not group.archived %}
+                <form class="customer-document-version-form" action="{{ url_for('add_customer_document_version', customer_id=customer.id, group_id=group.id) }}" method="post" enctype="multipart/form-data">
+                  {{ csrf_field() }}
+                  <label><span>上传新版本（旧版本保留）</span><input name="files" type="file" required multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.xlsm,.ppt,.pptx,.txt,.csv"></label>
+                  <button class="linear-button subtle compact" type="submit">上传新版本</button>
+                </form>
+              {% endif %}
+              <div class="customer-document-files">
+                {% for version in group.versions %}
+                  <details {% if version == group.current_version %}open{% endif %}>
+                    <summary>V{{ version }}{% if version == group.current_version %}（当前）{% endif %}</summary>
+                    <ul>
+                      {% for file in group.files if file.version_no == version %}
+                        <li><span>{{ file.original_name }} · {{ file.size_bytes }} B</span><span>{% if file.previewable %}<a target="_blank" rel="noopener" href="{{ url_for('preview_customer_document_file', customer_id=customer.id, file_id=file.id) }}">预览</a>{% endif %}<a href="{{ url_for('download_customer_document_file', customer_id=customer.id, file_id=file.id) }}">下载</a></span></li>
+                      {% endfor %}
+                    </ul>
+                  </details>
+                {% else %}
+                  <span>仅文字要求，无附件</span>
+                {% endfor %}
+              </div>
+              {% if can("delete_customers") and not group.archived %}
+                <form class="customer-document-archive-form" action="{{ url_for('archive_customer_document', customer_id=customer.id, group_id=group.id) }}" method="post">
+                  {{ csrf_field() }}
+                  <button class="linear-button danger compact" type="submit" data-confirm="确认归档客户资料“{{ group.title }}”？归档后资料退出当前使用，但全部历史版本和文件继续保留并可下载。">归档</button>
+                </form>
+              {% endif %}
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state"><p>还没有保存客户模板或特殊要求。</p></div>
+      {% endif %}
+    </section>

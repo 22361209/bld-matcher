@@ -2,8 +2,9 @@ import {
   createProductCatalogRequestGate,
   productCatalogFragmentUrl,
   productCatalogHistoryUrl,
+  productCatalogRequiresFullNavigation,
   productCatalogState,
-} from "./product_catalog_navigation.js?v=20260720-1";
+} from "./product_catalog_navigation.js?v=20260808-1";
 import { scrollDataGridToTop } from "./inline_results_navigation.js?v=20260729-3";
 import {
   invalidateProductOptionCache,
@@ -20,7 +21,10 @@ if (document.body.dataset.page === "products.list") {
   const resultsHost = document.querySelector("[data-products-results-host]");
   const inlineStatus = document.querySelector("[data-products-inline-status]");
   const exportForm = document.querySelector(".toolbar-export-form");
+  const brandPreviewLink = document.querySelector("[data-products-brand-preview-link]");
   const requestGate = createProductCatalogRequestGate();
+  const shellBrandPreviewActive = resultsHost?.dataset.productsBrandPreviewActive === "1";
+  const shellBrandPreviewAvailable = shellBrandPreviewActive || brandPreviewLink !== null;
   let requestController = null;
   let cleanupProductTable = () => {};
 
@@ -101,6 +105,22 @@ if (document.body.dataset.page === "products.list") {
   };
 
   const loadProducts = async (targetHref, { history = "push", scroll = "preserve" } = {}) => {
+    if (productCatalogRequiresFullNavigation(
+      window.location.href,
+      targetHref,
+      shellBrandPreviewActive,
+      shellBrandPreviewAvailable,
+    )) {
+      const absoluteTarget = new URL(targetHref, window.location.href).toString();
+      if (history === "none" && absoluteTarget === window.location.href) {
+        window.location.reload();
+      } else if (history === "replace" || history === "none") {
+        window.location.replace(absoluteTarget);
+      } else {
+        window.location.assign(absoluteTarget);
+      }
+      return false;
+    }
     if (!(resultsHost instanceof HTMLElement) || !resultsHost.dataset.productsFragmentUrl) {
       window.location.assign(targetHref);
       return false;
@@ -212,6 +232,12 @@ if (document.body.dataset.page === "products.list") {
   const catalogUploadInput = document.querySelector("[data-catalog-upload-input]");
   catalogUploadInput?.addEventListener("change", () => {
     if (catalogUploadInput.files?.length) catalogUploadInput.form?.requestSubmit();
+  });
+  brandPreviewLink?.addEventListener("click", (event) => {
+    const target = new URL(window.location.href);
+    target.searchParams.set("brand_preview", "1");
+    event.preventDefault();
+    window.location.assign(target.toString());
   });
 
   const productModal = document.querySelector("#product-modal");

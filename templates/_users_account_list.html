@@ -1,0 +1,101 @@
+    {% set is_editing_user = editing_user and editing_user.id %}
+    {% set selected_role_key = editing_user.role if editing_user else default_role_key %}
+    {% set selected_any_role = namespace(found=false) %}
+    {% for role in roles %}
+      {% if role.role_key == selected_role_key %}{% set selected_any_role.found = true %}{% endif %}
+    {% endfor %}
+    {% if not is_editing_user and not can_create_user %}
+      <section class="workbench-section access-role-required" aria-labelledby="access-role-required-title">
+        <h2 id="access-role-required-title">请先创建非管理员角色</h2>
+        <p>当前没有可用于快速建号的普通角色。为避免新账号误设为管理员，新增账号已暂停。</p>
+        <a class="linear-button primary" href="{{ url_for('users', view='role-list') }}">前往创建角色</a>
+      </section>
+    {% else %}
+      <form action="{{ url_for('save_user_route') }}" method="post" class="access-editor-form" data-submit-wait data-submit-wait-text="正在保存账号，请稍候..." data-submit-wait-button-text="保存中...">
+        {{ csrf_field() }}
+        <input type="hidden" name="id" value="{{ editing_user.id if editing_user else '' }}">
+
+        <section class="access-editor-surface" aria-labelledby="account-editor-title">
+          <div class="access-editor-toolbar">
+            <div>
+              <h2 id="account-editor-title">{{ "编辑账号" if is_editing_user else "新增账号" }}</h2>
+              <p>角色用于快速建号；个人权限例外在“账号”页管理。</p>
+            </div>
+            <div class="access-command-area">
+              <div class="command-actions">
+                <button class="linear-button primary" type="submit">保存账号</button>
+                {% if is_editing_user %}<a class="linear-button subtle" href="{{ url_for('users') }}">取消编辑</a>{% endif %}
+              </div>
+              <p class="submit-wait-message" data-submit-wait-message aria-live="polite"></p>
+            </div>
+          </div>
+
+          <div class="workbench-form access-identity-grid">
+            <label>
+              <span>登录名</span>
+              <input name="username" value="{{ editing_user.username if editing_user else '' }}" maxlength="80" required autocomplete="username">
+            </label>
+            <label>
+              <span>显示名</span>
+              <input name="display_name" value="{{ editing_user.display_name if editing_user else '' }}" maxlength="80" autocomplete="name">
+            </label>
+            <label>
+              <span>角色模板</span>
+              <select name="role" required>
+                {% if not selected_any_role.found %}
+                  <option value="" selected disabled>请选择可用角色</option>
+                {% endif %}
+                {% for role in roles %}
+                  <option value="{{ role.role_key }}" {% if selected_role_key == role.role_key %}selected{% endif %}>{{ role.name }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label>
+              <span>{{ "新密码（留空则不修改）" if is_editing_user else "初始密码" }}</span>
+              <input name="password" type="password" {% if not is_editing_user %}required{% endif %} autocomplete="new-password">
+            </label>
+            <label class="check access-status-control">
+              <span>账号状态</span>
+              <span class="access-status-choice">
+                <input type="checkbox" name="active" value="1" {% if not editing_user or editing_user.active %}checked{% endif %}>
+                启用账号
+              </span>
+            </label>
+          </div>
+        </section>
+      </form>
+    {% endif %}
+
+    <section class="data-section">
+      <div class="data-section-header">
+        <div>
+          <h2>账号列表</h2>
+          <p>“个性设置”显示该账号单独设置的权限数量，点击账号行“编辑”维护基本信息。</p>
+        </div>
+        <span>{{ users | length }} 个</span>
+      </div>
+      <div class="data-table-scroll">
+        <table class="data-table access-table">
+          <thead>
+            <tr><th>登录名</th><th>显示名</th><th>角色</th><th>有效权限</th><th>个性设置</th><th>状态</th><th>更新时间</th><th>操作</th></tr>
+          </thead>
+          <tbody>
+            {% for user in users %}
+              <tr class="{% if not user.active %}muted-row{% endif %}">
+                <td><strong>{{ user.username }}</strong></td>
+                <td>{{ user.display_name or "—" }}</td>
+                <td>{{ user.role_name }}</td>
+                <td>{{ user.permissions | length }} 项</td>
+                <td>{{ user.permission_overrides | length }} 项</td>
+                <td><span class="status-pill {{ 'on' if user.active else 'off' }}">{{ "启用" if user.active else "停用" }}</span></td>
+                <td>{{ user.updated_at }}</td>
+                <td>
+                  <a href="{{ url_for('edit_user', user_id=user.id) }}">编辑</a>
+                  <a href="{{ url_for('users', view='accounts', user_id=user.id) }}">权限</a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>

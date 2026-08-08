@@ -5,6 +5,7 @@ import {
   createProductCatalogRequestGate,
   productCatalogFragmentUrl,
   productCatalogHistoryUrl,
+  productCatalogRequiresFullNavigation,
   productCatalogState,
 } from "../../static/pages/product_catalog_navigation.js";
 
@@ -49,6 +50,18 @@ test("history URLs keep query state and normalize the results hash", () => {
     productCatalogHistoryUrl("http://127.0.0.1:5055/products?oe=54500#old"),
     "/products?oe=54500#products-results"
   );
+});
+
+test("brand preview state uses full navigation while ordinary catalog state stays inline", () => {
+  const ordinary = "http://127.0.0.1:5055/products?brand=HONDA#products-results";
+  const preview = "http://127.0.0.1:5055/products?brand=HONDA&brand_preview=1#products-results";
+  const nextPage = "http://127.0.0.1:5055/products?brand=HONDA&page=2#products-results";
+
+  assert.equal(productCatalogRequiresFullNavigation(ordinary, nextPage, false, true), false);
+  assert.equal(productCatalogRequiresFullNavigation(ordinary, preview, false, true), true);
+  assert.equal(productCatalogRequiresFullNavigation(preview, nextPage, false, true), true);
+  assert.equal(productCatalogRequiresFullNavigation(nextPage, nextPage, true, true), true);
+  assert.equal(productCatalogRequiresFullNavigation(preview, nextPage, false, false), false);
 });
 
 test("request generations reject stale responses", () => {

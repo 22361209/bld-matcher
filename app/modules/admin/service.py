@@ -5,16 +5,6 @@ from dataclasses import dataclass
 from typing import Callable, Protocol
 
 
-class AdminUnitOfWork(Protocol):
-    repository: object
-
-    def __enter__(self): ...
-
-    def __exit__(self, exc_type, exc, traceback) -> None: ...
-
-    def commit(self) -> None: ...
-
-
 class UpdateReader(Protocol):
     @property
     def source_name(self) -> str: ...

@@ -1,6 +1,6 @@
 # BLD Project Brief
 
-更新时间：2026-08-07
+更新时间：2026-08-08
 
 这是给新接手 Codex 或开发者的短版项目说明。先读 `AGENTS.md`，再读本文件。详细历史在 `项目交接说明.md`，需要查旧决策时用 `rg` 搜索，不要默认整篇读取。
 
@@ -126,10 +126,10 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 - 除固定在最右侧的操作列外，业务列可从列头文字区域拖动换序；顺序按当前浏览器登录用户保存。“重置列表”统一恢复可排序列的默认顺序、默认列宽并清除列头筛选，主搜索和启停状态保持不变。
 - 品牌、产品名称和产品状态支持列头多选筛选；候选关键词可直接形成匹配选择，并支持全选、全不选；筛选与搜索、启用状态和分页共同保存在 URL，重置某列等于恢复该列全选。
 - 产品目录搜索、启停状态、列筛选、重置和分页通过页面内只读 HTML 片段更新结果区；URL、刷新、分享、前进和后退保持可恢复，新增、编辑和删除成功后也只刷新目录结果区。
-- 产品品牌按“每行一个品牌”存储并统一为大写；历史 `RAM` 归入 `DODGE`，手工保存、目录导入和产品数据包同步共用同一套幂等规范化规则。
+- 产品品牌按“每行一个品牌”存储并统一为大写；历史 `RAM` 归入 `DODGE`，手工保存、目录导入和产品数据包同步共用同一套幂等规范化规则。具有 `import_catalog` 权限的账号按需点击“检查品牌规范”生成全量预览，普通目录和搜索首屏不执行该预览。
 - 筛选面板支持中文输入法组合输入；单列选择超过 200 项或单项超过 256 字符时会明确拒绝，不会静默放宽筛选或误导出全量数据；空白值与字面值 `__blank__` 分开处理。
 - 导出目录继承当前搜索和全部列筛选，导出完整命中集合而不是仅导出当前页；网页列顺序不改变 Excel 的既有格式。
-- 表格使用缩略图，点击图片浮层预览原图。
+- 表格使用缩略图，点击图片浮层预览原图；缩略图文件缺失时返回小型图片占位，不重定向到产品目录页面。
 - 有 PDF 图纸时点击 BLD 号预览图纸。
 - 表格在含税单价后显示“产品状态”，数据库保存中文配置，产品目录默认显示英文；询价结果预览和人民币报价导出显示中文，美金报价导出显示英文。
 - 导出目录需要 `export_catalog` 权限。
@@ -207,8 +207,12 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 - 当前页面使用“精密工业工作台”视觉系统：深石墨导航、冷灰画布、白色数据表面、BLD 蓝主操作与信号橙提示；登录、工作台、列表、编辑、导入预览和系统管理页共享同一视觉层级。
 - 产品目录、材料明细、管件资料、报价记录和询价结果使用统一数据表框体与列头控件：搜索命令区和表格同属一张数据卡片，表头左对齐垂直居中，内容支持双向滚动，列间使用浅色细分隔线，底栏整合当前范围、筛选总数、相邻页码和指定页跳转；列拖拽、筛选和候选浮层复用共享组件，所有列宽可拖动调整并按当前登录用户保存在浏览器中。分页进入新页时定位到明细表顶部，拖动中断时会自动恢复页面交互状态。
 - CSS 按 `static/styles.css` 基础层、`static/components/` 共享组件层和 `static/pages/` 页面层归属；页面资产由所属模板加载，共享层禁止业务选择器，项目门禁执行文件容量、零 ID 选择器与禁止新增 `!important`。
-- 全部现有业务、登录与产品同步由领域 Service/Repository 负责事务、审计和文件补偿；Web 与 API 适配器不直接访问 SQLite。
+- 全部现有业务、登录与业务数据同步由领域 Service/Repository 负责事务、审计和文件补偿；Web 与 API 适配器不直接访问 SQLite。
 - 产品与询价 Web 路由已按职责拆分；单个路由适配器最多 320 行、15 个 endpoint，统一验收禁止动态路由注册绕过检查。
+- 询价结果页保留 `static/pages/inquiry_result.js` 单一入口，规则、价格调整、产品选择、下载、人工映射和图片处理位于同名前缀职责模块。
+- 产品 SQLite 持久化保留 `app/modules/products/repository.py` 公共兼容门面，查询、写入、媒体事务、词表和目录处理位于 `repository_*.py` 职责模块。
+- 业务数据同步保留 `app/modules/business_sync/infrastructure.py` 公共兼容门面，归档校验、差异比较、预览、数据库应用和媒体回滚位于 `_*.py` 内部模块。
+- 综合 Web 回归按领域位于 `tests/test_web_*.py`，`tests/test_app.py` 仅保留直接运行兼容加载，不在 discovery 中重复收集。
 - 询价 Excel 按读取、清理、分析、价格和导出职责位于 `app/modules/inquiry/excel/`；`app/excel_io.py` 仅保留旧导入兼容门面，门禁分别限制处理模块 360 行和兼容门面 80 行。
 - 合同文档按默认条款、表单解析、金额规则、PDF 样式及采购/销售渲染职责位于 `app/modules/contracts/`；`app/purchase_contract.py` 仅保留旧导入兼容门面，采购与销售 PDF 输出受结构和像素基准保护。
 - 材料持久化按规格解析、明细 SQL 与 Excel 导入/启动引导职责位于 `app/modules/materials/`；`persistence.py` 仅保留旧导入兼容门面，数据库 Schema 与迁移不因拆分而变化。
@@ -256,7 +260,8 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 - `app/modules/customers/`：客户档案、联系人、报价/合同聚合与客户页面适配器
 - `app/modules/customer_documents/`：客户长期资料分类、版本、原子文件存储与下载边界
 - `app/modules/customer_products/`：客户商品（按报价历史校验的 BLD 行）、双图纸位多版本图纸、原子文件存储与下载边界
-- `app/modules/products/`：产品 Domain、Repository、Service、目录/记录/媒体 Web 适配器、产品搜索/单价更新 API 和安全数据包同步
+- `app/modules/products/`：产品 Domain、按查询/写入/媒体/目录拆分的 Repository、Service、目录/记录/媒体 Web 适配器和产品搜索/单价更新 API
+- `app/modules/business_sync/`：客户、产品、报价、管件、材料与可选媒体的归档、预览、增量应用和失败回滚
 - `app/modules/inquiry/`：询价 Service、按职责拆分的 Excel 引擎、匹配/下载/映射 Web 适配器、旧内部 API 与 v1 适配器
 - `app/platform/artifacts.py`：Principal 所有权、校验值和保留期 artifact 存储
 - `app/routes/products.py`：产品 Web 适配器注册入口
@@ -272,10 +277,10 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 - `templates/purchase_contracts.html`：合同管理和采购/销售合同页面
 - `templates/_product_rows.html`：产品目录行模板
 - `static/styles.css`：token、reset 和基础页面壳
-- `static/components/workspace.css`：跨页面工作台、搜索、表格和文件选择组件
+- `static/components/workspace.css`、`data_table.css`、`search_workspace.css`、`workspace_responsive.css`：跨页面工作台核心、数据表面、搜索命令和响应式组件
 - `static/components/precision.css`：精密工业工作台视觉 token 映射、导航和共享表面
-- `static/pages/`：由所属模板显式加载的页面 CSS/JavaScript
-- `tests/test_app.py`：主要回归测试
+- `static/pages/`：由所属模板显式加载的页面 CSS/JavaScript；询价结果、用户和客户热点按职责拆分
+- `tests/test_app.py`、`tests/test_web_*.py`：综合 Web 回归兼容入口和按领域拆分的实际测试模块
 - `PROJECT_CONSTITUTION.md`：长期架构、安全、页面、API 和变更治理硬规则
 - `scripts/init_database.py`：容器启动 Gunicorn 前执行迁移和首启管理员初始化
 - `scripts/runtime_probe.py`、`scripts/cleanup_runtime.py`：部署业务探针和默认 dry-run 的保留期执行器

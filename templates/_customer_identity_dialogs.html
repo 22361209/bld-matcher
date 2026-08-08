@@ -1,0 +1,40 @@
+  {% if can("change_customer_identity") %}
+  <dialog class="dialog-panel customer-identity-dialog" id="customer-name-change-dialog" aria-labelledby="customer-name-change-dialog-title" data-customer-identity-dialog="name">
+    <div class="dialog-header customer-identity-dialog-header">
+      <div>
+        <h2 id="customer-name-change-dialog-title">变更客户名称</h2>
+        <p>名称会同步到历史报价显示，不会改变客户 ID 或跨设备同步标识。</p>
+      </div>
+      <button class="dialog-close" type="button" data-close-customer-identity-dialog aria-label="关闭客户名称变更窗口">×</button>
+    </div>
+    <form class="customer-identity-form" action="{{ url_for('rename_customer', customer_id=customer.id) }}" method="post">
+      {{ csrf_field() }}
+      <p class="customer-identity-current">当前客户名称：<strong>{{ customer.name }}</strong></p>
+      <label><span>新客户名称</span><input name="name" value="{{ customer.name }}" required maxlength="200" autocomplete="organization" data-customer-identity-value></label>
+      <label><span>变更原因</span><textarea name="reason" required maxlength="500" rows="3" placeholder="例如：客户主体名称已更新"></textarea></label>
+      <div class="customer-identity-actions">
+        <button class="linear-button subtle" type="button" data-close-customer-identity-dialog>取消</button>
+        <button class="linear-button primary" type="submit">确认变更名称</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog class="dialog-panel customer-identity-dialog" id="customer-code-change-dialog" aria-labelledby="customer-code-change-dialog-title" data-customer-identity-dialog="code">
+    <div class="dialog-header customer-identity-dialog-header">
+      <div>
+        <h2 id="customer-code-change-dialog-title">变更客户编号</h2>
+        <p>客户编号必须唯一；留空可清除已设置的编号。</p>
+      </div>
+      <button class="dialog-close" type="button" data-close-customer-identity-dialog aria-label="关闭客户编号变更窗口">×</button>
+    </div>
+    <form class="customer-identity-form" action="{{ url_for('update_customer_code', customer_id=customer.id) }}" method="post">
+      {{ csrf_field() }}
+      <p class="customer-identity-current">当前客户编号：<strong>{{ customer.code or "未设置" }}</strong></p>
+      <label><span>新客户编号</span><input name="code" value="{{ customer.code }}" maxlength="80" autocomplete="off" placeholder="留空可清除"></label>
+      <label><span>变更原因</span><textarea name="reason" required maxlength="500" rows="3" placeholder="例如：按公司编码规则重新编号"></textarea></label>
+      <div class="customer-identity-actions">
+        <button class="linear-button subtle" type="button" data-close-customer-identity-dialog>取消</button>
+        <button class="linear-button primary" type="submit">确认变更编号</button>
+      </div>
+    </form>
+  </dialog>
+  {% endif %}

@@ -27,6 +27,21 @@ export const productCatalogHistoryUrl = (href) => {
   return `${url.pathname}${url.search}${url.hash}`;
 };
 
+export const productCatalogRequiresFullNavigation = (
+  currentHref,
+  targetHref,
+  shellBrandPreviewActive = false,
+  shellBrandPreviewAvailable = false,
+) => {
+  const current = new URL(currentHref);
+  const target = new URL(targetHref, current);
+  return shellBrandPreviewAvailable && (
+    shellBrandPreviewActive
+    || current.searchParams.get("brand_preview") === "1"
+    || target.searchParams.get("brand_preview") === "1"
+  );
+};
+
 export const createProductCatalogRequestGate = () => {
   let generation = 0;
   return {

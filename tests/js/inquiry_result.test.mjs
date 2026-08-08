@@ -3,15 +3,27 @@ import test from "node:test";
 
 import {
   clearQuoteCustomerValidity,
+  createInquiryInitializationGate,
   createInquiryRequestGate,
   inquiryAttachmentFilename,
   inquiryBldSelectionState,
+  inquiryImageGallery,
   inquiryPriceAdjustment,
   inquiryProductDisplay,
   inquiryTargetAdjustment,
   rankInquiryProducts,
   validateInquiryPrice,
 } from "../../static/pages/inquiry_result.js";
+
+test("page initialization roots can only be claimed once", () => {
+  const gate = createInquiryInitializationGate();
+  const firstRoot = {};
+  const secondRoot = {};
+  assert.equal(gate.claim(firstRoot), true);
+  assert.equal(gate.claim(firstRoot), false);
+  assert.equal(gate.claim(secondRoot), true);
+  assert.equal(gate.claim(null), false);
+});
 
 test("inquiry prices reject touched blanks, out-of-range values, and fractional cents", () => {
   assert.equal(validateInquiryPrice("").valid, false);
@@ -93,6 +105,14 @@ test("BLD candidates rank exact then prefix then contains matches without losing
     rankInquiryProducts(products, " k8053l ").map((product) => product.bld_no),
     ["K8053L", "K8053LA", "K8053LB", "X-K8053L"],
   );
+});
+
+test("image galleries accept arrays and reject malformed serialized values", () => {
+  const gallery = [{ url: "/static/product.jpg", thumb: "/static/product-thumb.jpg" }];
+  assert.equal(inquiryImageGallery(gallery), gallery);
+  assert.deepEqual(inquiryImageGallery(JSON.stringify(gallery)), gallery);
+  assert.deepEqual(inquiryImageGallery("not-json"), []);
+  assert.deepEqual(inquiryImageGallery('{"url":"not-an-array"}'), []);
 });
 
 test("quote attachment download rejects redirects and non-Excel responses", () => {

@@ -1,0 +1,30 @@
+  <section class="customer-detail-heading">
+    <div>
+      <div class="customer-identity-line">
+        <h2>{{ customer.name }}</h2>
+        <span class="linear-status {{ 'active' if customer.status == 'active' else 'inactive' }}">{{ "正常" if customer.status == "active" else "已停用" }}</span>
+      </div>
+      <p>{{ customer.code or "未设置客户编号" }} · 负责人 {{ customer.owner_username or "未指定" }}</p>
+    </div>
+    <div class="command-actions">
+      <a class="linear-button subtle customer-back-link" href="{{ url_for('customers') }}">← 返回客户列表</a>
+      {% if can("view_customer_prices") %}<a class="linear-button primary" href="{{ url_for('quote_web.quotes', customer_name=customer.name) }}">查看报价</a>{% endif %}
+      {% if can("edit_customers") %}
+      <form method="post" action="{{ url_for('set_customer_status', customer_id=customer.id) }}">
+        {{ csrf_field() }}
+        <input type="hidden" name="status" value="{{ 'inactive' if customer.status == 'active' else 'active' }}">
+        {% if customer.status == "active" %}
+          <button class="linear-button danger" type="submit" data-confirm="确认停用客户“{{ customer.name }}”？客户档案、报价、合同和文件都会保留，停用后不能用于新报价，之后仍可重新启用。">停用客户</button>
+        {% else %}
+          <button class="linear-button subtle" type="submit">重新启用</button>
+        {% endif %}
+      </form>
+      {% endif %}
+    </div>
+  </section>
+
+  <nav class="customer-detail-tabs" aria-label="客户档案栏目">
+    {% for key, label in (("overview", "概览"), ("contacts", "联系人"), ("business", "报价与合同"), ("products", "客户产品编码"), ("documents", "模板与文件")) %}
+      <a class="{% if active_view == key %}active{% endif %}" href="{{ url_for('customer_detail', customer_id=customer.id, view=key) }}" {% if active_view == key %}aria-current="page"{% endif %}>{{ label }}</a>
+    {% endfor %}
+  </nav>

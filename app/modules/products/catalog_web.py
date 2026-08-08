@@ -52,7 +52,7 @@ def _request_page() -> int:
         return 1
 
 
-def _product_page_url(filters: ProductFilters, page: int) -> str:
+def _product_page_params(filters: ProductFilters, page: int) -> dict[str, Any]:
     params: dict[str, Any] = {}
     if filters.oe_query:
         params["oe"] = filters.oe_query
@@ -76,6 +76,17 @@ def _product_page_url(filters: ProductFilters, page: int) -> str:
         params["product_status"] = product_status_values
     if page > 1:
         params["page"] = page
+    return params
+
+
+def _product_page_url(filters: ProductFilters, page: int) -> str:
+    params = _product_page_params(filters, page)
+    return f"{url_for('products', **params)}#products-results"
+
+
+def _product_brand_preview_url(filters: ProductFilters, page: int) -> str:
+    params = _product_page_params(filters, page)
+    params["brand_preview"] = "1"
     return f"{url_for('products', **params)}#products-results"
 
 
@@ -155,9 +166,12 @@ def _product_list_context(*, include_admin_preview: bool) -> dict[str, Any]:
         },
         "stats": service.stats().as_dict(),
     }
-    if include_admin_preview:
+    if include_admin_preview and can("import_catalog"):
+        preview_requested = request.args.get("brand_preview") == "1"
+        context["brand_normalization_preview_requested"] = preview_requested
+        context["brand_normalization_preview_url"] = _product_brand_preview_url(filters, current_page)
         context["brand_normalization_preview"] = (
-            service.preview_brand_normalization() if can("import_catalog") else None
+            service.preview_brand_normalization() if preview_requested else None
         )
     return context
 

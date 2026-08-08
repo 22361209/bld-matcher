@@ -1,0 +1,33 @@
+  <div class="image-modal customer-drawing-modal" aria-hidden="true" data-customer-drawing-modal>
+    <div class="image-modal-backdrop" data-close-customer-drawing-modal></div>
+    <div class="image-modal-panel customer-drawing-modal-panel" role="dialog" aria-modal="true" aria-label="图纸预览与上传">
+      <button class="image-modal-close" type="button" data-close-customer-drawing-modal aria-label="关闭图纸预览">×</button>
+      <div class="image-modal-viewer drawing-modal-viewer">
+        <button class="image-modal-nav prev" type="button" data-drawing-prev aria-label="上一个版本">‹</button>
+        <div class="drawing-modal-stage" data-drawing-stage></div>
+        <button class="image-modal-nav next" type="button" data-drawing-next aria-label="下一个版本">›</button>
+      </div>
+      <p class="image-modal-caption drawing-modal-caption" data-drawing-caption aria-live="polite"></p>
+      <div class="drawing-modal-actions">
+        <a class="linear-button subtle compact" data-drawing-download href="#" hidden>下载该版本</a>
+        {% if can("edit_customers") %}
+        <button class="linear-button primary compact" type="button" data-drawing-set-current hidden>设为当前版本</button>
+        <button class="linear-button subtle compact" type="button" data-drawing-import-catalog hidden>引入产品目录图纸</button>
+        {% endif %}
+      </div>
+      {% if can("edit_customers") %}
+      <div class="drawing-upload" data-drawing-upload>
+        <div class="product-media-intake drawing-upload-intake" data-drawing-intake>
+          <button class="product-media-intake-button" type="button" data-drawing-browse>
+            <span>+</span>
+            <strong>拖入图纸文件或点击选择，上传为新版本</strong>
+            <small>支持 PDF / PNG / JPG / WEBP，单个文件；上传成功后自动成为当前版本</small>
+          </button>
+          <input class="drawing-upload-input" data-drawing-file-input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp">
+        </div>
+        <label class="drawing-upload-revision"><span>版本代号（选填）</span><input data-drawing-revision-input maxlength="60" placeholder="例如 Rev B"></label>
+        <p class="product-media-upload-status drawing-upload-status" data-drawing-upload-status aria-live="polite"></p>
+      </div>
+      {% endif %}
+    </div>
+  </div>

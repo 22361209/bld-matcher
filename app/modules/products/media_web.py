@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import cast
 
-from flask import abort, flash, redirect, render_template, request, send_file, url_for
+from flask import Response, abort, flash, redirect, render_template, request, send_file, url_for
 
 from app.drawings import product_drawing_path
 from app.modules.products.factory import get_product_service
@@ -13,6 +13,8 @@ from app.security import actor_name, login_required, permission_required
 
 
 logger = logging.getLogger(__name__)
+
+_MISSING_THUMBNAIL_SVG = b"""<svg xmlns="http://www.w3.org/2000/svg" width="160" height="120" viewBox="0 0 160 120"><rect width="160" height="120" rx="8" fill="#eef1f4"/><path d="M45 84l22-24 15 15 11-12 22 21H45zm18-35a8 8 0 1 1 0-16 8 8 0 0 1 0 16z" fill="#a7b0ba"/></svg>"""
 
 
 def register(app) -> None:
@@ -35,8 +37,10 @@ def register(app) -> None:
     def product_image_thumb_data(name: str):
         path = resolve_product_image_thumb_path(name)
         if not path:
-            flash("产品图片不存在。", "error")
-            return redirect(url_for("products"))
+            response = Response(_MISSING_THUMBNAIL_SVG, mimetype="image/svg+xml")
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            return response
         return send_file(path)
 
     @app.post("/products/<int:product_id>/drawing")

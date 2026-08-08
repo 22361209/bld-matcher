@@ -1,0 +1,22 @@
+    <div class="customer-business-stack">
+      {% if can("view_price_history") %}
+      <section class="data-section">
+        <div class="data-section-header"><div><h2>历史报价</h2><p>按报价单号汇总，不把同一报价的多条产品明细重复计数。</p></div><a href="{{ url_for('quote_web.quotes', customer_name=customer.name) }}">查看全部报价</a></div>
+        <div class="data-table-scroll"><table class="data-table"><thead><tr><th>报价单号</th><th>日期</th><th>明细</th><th>产品</th><th>币种</th><th>报价人</th></tr></thead><tbody>
+          {% for quote in quotes %}
+            <tr><td><a href="{{ url_for('quote_web.quotes', customer_name=customer.name, quote_no=quote.quote_no) }}#quote-results">{{ quote.quote_no }}</a></td><td>{{ quote.quote_date }}</td><td>{{ quote.line_count }}</td><td>{{ quote.product_count }}</td><td>{{ quote.currency }}</td><td>{{ quote.quoted_by or "—" }}</td></tr>
+          {% else %}<tr><td colspan="6">该客户暂无报价记录。</td></tr>{% endfor %}
+        </tbody></table></div>
+      </section>
+      {% endif %}
+      {% if can("view_contracts") %}
+      <section class="data-section">
+        <div class="data-section-header"><div><h2>销售合同</h2><p>由报价明细生成的销售合同会在这里保留来源关系。</p></div></div>
+        <div class="data-table-scroll"><table class="data-table"><thead><tr><th>合同编号</th><th>来源报价</th><th>语言</th><th>币种</th><th>生成人</th><th>生成时间</th><th></th></tr></thead><tbody>
+          {% for contract in contracts %}
+            <tr><td>{{ contract.contract_no }}</td><td>{{ contract.source_quote_no or "手工创建" }}</td><td>{{ contract.language_label }}</td><td>{{ contract.currency }}</td><td>{{ contract.created_by }}</td><td>{{ contract.created_at }}</td><td><a href="{{ url_for('download_contract_document', document_id=contract.id) }}">下载</a></td></tr>
+          {% else %}<tr><td colspan="7">该客户暂无已关联的销售合同。</td></tr>{% endfor %}
+        </tbody></table></div>
+      </section>
+      {% endif %}
+    </div>

@@ -1,0 +1,52 @@
+/* Shared workspace responsive adaptations. */
+
+@media (max-width: 760px) {
+  .workspace-header,
+  .workspace-flow,
+  .workspace-command,
+  .data-section-header,
+  .workbench-split {
+    display: block;
+  }
+
+  .workspace-meta {
+    margin-top: 8px;
+    text-align: left;
+  }
+
+  .search-form input,
+  .command-form input,
+  .app-surface select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .search-hero {
+    padding-top: 30px;
+  }
+
+  .search-command-row,
+  .upload-command,
+  .compact-search-row {
+    grid-template-columns: 1fr;
+  }
+
+  .search-command-row .linear-button,
+  .file-picker-control {
+    width: 100%;
+  }
+
+  .command-form .file-picker-input {
+    width: 1px;
+  }
+
+  .data-section-actions {
+    justify-content: flex-start;
+    margin-top: 8px;
+  }
+
+  .command-actions,
+  .workbench-section + .workbench-section {
+    margin-top: 8px;
+  }
+}

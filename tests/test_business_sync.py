@@ -13,6 +13,9 @@ from unittest.mock import Mock, patch
 from openpyxl import Workbook
 
 from app.database import connect
+from app.modules.business_sync import _database_apply as database_apply
+from app.modules.business_sync import _media_transaction as media_transaction
+from app.modules.business_sync import _package_archive as package_archive
 from app.modules.business_sync.infrastructure import BusinessSyncRepository
 from app.modules.business_sync.service import BusinessSyncService
 from app.modules.materials.excel_import import import_materials_from_excel
@@ -742,15 +745,19 @@ class BusinessSyncServiceTest(unittest.TestCase):
         )
         summary = cast(dict[str, dict[str, object]], preview["summary"])
         self.assertEqual(cast(dict[str, int], summary["products"]["counts"])["local_only"], 1)
-        result = target_service.apply(
-            package,
-            backup_path=self.root / "media-backup.sqlite3",
-            actor="test",
-            expected_token=cast(str, preview["token"]),
-            include_drawings=True,
-            include_images=True,
-            deactivate_local_only=True,
-        )
+        original_tar_open = tarfile.open
+        with patch.object(tarfile, "open", wraps=original_tar_open) as archive_open:
+            result = target_service.apply(
+                package,
+                backup_path=self.root / "media-backup.sqlite3",
+                actor="test",
+                expected_token=cast(str, preview["token"]),
+                include_drawings=True,
+                include_images=True,
+                deactivate_local_only=True,
+            )
+        read_modes = [call.args[1] for call in archive_open.call_args_list]
+        self.assertEqual(read_modes.count("r:gz"), 2)
         self.assertEqual(result["products"]["deactivated"], 1)
         self.assertEqual((target_drawings / "SYNC-PRODUCT.pdf").read_bytes(), b"source-drawing")
         self.assertEqual((target_images / "SYNC-PRODUCT.png").read_bytes(), b"source-image")
@@ -1037,8 +1044,8 @@ class BusinessSyncServiceTest(unittest.TestCase):
 
         audit = Mock()
         with patch.dict(
-            BusinessSyncRepository.export.__globals__,
-            {"_normalized_media_target": lambda _relative: "same", "log_event": audit},
+            package_archive.export_package.__globals__,
+            {"normalized_media_target": lambda _relative: "same", "log_event": audit},
         ):
             with self.assertRaisesRegex(ValueError, "指向同一目标"):
                 repository.export(
@@ -1073,7 +1080,7 @@ class BusinessSyncServiceTest(unittest.TestCase):
         )
         for limit in limits:
             with self.subTest(limit=limit):
-                with patch.dict(BusinessSyncRepository.read.__globals__, {limit: 1}):
+                with patch.dict(package_archive.read_package.__globals__, {limit: 1}):
                     with self.assertRaisesRegex(ValueError, "格式或文件大小无效"):
                         BusinessSyncRepository.read(package)
 
@@ -1162,8 +1169,8 @@ class BusinessSyncServiceTest(unittest.TestCase):
         preview = repository.preview(package)
 
         with patch.dict(
-            BusinessSyncRepository._copy_media.__globals__,
-            {"_normalized_media_target": lambda _relative: "same"},
+            media_transaction.copy_requested_media.__globals__,
+            {"normalized_media_target": lambda _relative: "same"},
         ):
             repository.apply(
                 package,
@@ -1205,8 +1212,8 @@ class BusinessSyncServiceTest(unittest.TestCase):
         preview = repository.preview(package)
 
         with patch.dict(
-            BusinessSyncRepository._copy_media.__globals__,
-            {"_normalized_media_target": lambda _relative: "same"},
+            media_transaction.copy_requested_media.__globals__,
+            {"normalized_media_target": lambda _relative: "same"},
         ):
             with self.assertRaisesRegex(ValueError, "重复文件"):
                 repository.apply(
@@ -1237,7 +1244,7 @@ class BusinessSyncServiceTest(unittest.TestCase):
             self.assertEqual(actor, "test")
             audit_details.append(detail)
 
-        with patch.dict(BusinessSyncRepository.export.__globals__, {"log_event": record_audit}):
+        with patch.dict(package_archive.export_package.__globals__, {"log_event": record_audit}):
             repository.export(
                 output_path=package,
                 selected=("materials",),
@@ -1251,7 +1258,7 @@ class BusinessSyncServiceTest(unittest.TestCase):
         audit = Mock()
         with (
             patch.object(repository, "_add_media_directory", side_effect=ValueError("collision")),
-            patch.dict(BusinessSyncRepository.export.__globals__, {"log_event": audit}),
+            patch.dict(package_archive.export_package.__globals__, {"log_event": audit}),
         ):
             with self.assertRaisesRegex(ValueError, "collision"):
                 repository.export(
@@ -1266,7 +1273,7 @@ class BusinessSyncServiceTest(unittest.TestCase):
         limited_package = self.root / "resource-limited-export.tar.gz"
         audit = Mock()
         with patch.dict(
-            BusinessSyncRepository.export.__globals__,
+            package_archive.export_package.__globals__,
             {"MAX_PACKAGE_TOTAL_SIZE": 1, "log_event": audit},
         ):
             with self.assertRaisesRegex(ValueError, "格式或文件大小无效"):
@@ -1283,7 +1290,7 @@ class BusinessSyncServiceTest(unittest.TestCase):
         def fail_audit(*_args, **_kwargs):
             raise RuntimeError("audit unavailable")
 
-        with patch.dict(BusinessSyncRepository.export.__globals__, {"log_event": fail_audit}):
+        with patch.dict(package_archive.export_package.__globals__, {"log_event": fail_audit}):
             with self.assertRaisesRegex(RuntimeError, "audit unavailable"):
                 repository.export(
                     output_path=audit_failed_package,
@@ -1300,7 +1307,7 @@ class BusinessSyncServiceTest(unittest.TestCase):
             os.replace(replacement, concurrently_replaced_package)
             raise RuntimeError("audit failed after concurrent replacement")
 
-        with patch.dict(BusinessSyncRepository.export.__globals__, {"log_event": replace_then_fail}):
+        with patch.dict(package_archive.export_package.__globals__, {"log_event": replace_then_fail}):
             with self.assertRaisesRegex(RuntimeError, "concurrent replacement"):
                 repository.export(
                     output_path=concurrently_replaced_package,
@@ -1342,7 +1349,7 @@ class BusinessSyncServiceTest(unittest.TestCase):
         def fail_audit(*_args, **_kwargs):
             raise RuntimeError("forced audit failure")
 
-        with patch.dict(BusinessSyncRepository.apply.__globals__, {"log_event": fail_audit}):
+        with patch.dict(database_apply.apply_package.__globals__, {"log_event": fail_audit}):
             with self.assertRaisesRegex(RuntimeError, "forced audit failure"):
                 target_repository.apply(
                     package,
@@ -1389,12 +1396,13 @@ class BusinessSyncServiceTest(unittest.TestCase):
         preview = target_repository.preview(package)
         original_copy_stream = target_repository._atomic_copy_stream
         copy_count = 0
+        failed_sources = []
 
         def fail_second_copy(source, target):
             nonlocal copy_count
             copy_count += 1
             if copy_count == 2:
-                source.close()
+                failed_sources.append(source)
                 raise OSError("forced second media write failure")
             original_copy_stream(source, target)
 
@@ -1411,5 +1419,7 @@ class BusinessSyncServiceTest(unittest.TestCase):
 
         self.assertEqual(existing_target.read_bytes(), b"local-existing")
         self.assertFalse(new_target.exists())
+        self.assertEqual(len(failed_sources), 1)
+        self.assertTrue(failed_sources[0].closed)
         with connect(self.target) as connection:
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM material_items").fetchone()[0], 0)

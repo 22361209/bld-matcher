@@ -1,57 +1,13 @@
 from __future__ import annotations
 
-import gc
-import os
-import sys
-import tempfile
 import unittest
-from pathlib import Path
-from importlib.util import module_from_spec, spec_from_file_location
 
 from PIL import Image
 
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-
-
-def load_web_module():
-    spec = spec_from_file_location("bld_matcher_test_web", PROJECT_ROOT / "app.py")
-    module = module_from_spec(spec)
-    assert spec and spec.loader
-    sys.modules["bld_matcher_test_web"] = module
-    spec.loader.exec_module(module)
-    return module
+from tests.web_app_test_base import WebAppTestBase
 
 
-class ProductRenameTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.tmp = tempfile.TemporaryDirectory()
-        root = Path(cls.tmp.name)
-        cls.root = root
-        os.environ["SECRET_KEY"] = "test-secret"
-        os.environ["MAX_UPLOAD_MB"] = "20"
-        os.environ["PRODUCT_SYNC_MAX_UPLOAD_MB"] = "512"
-        os.environ["BLD_DATA_DIR"] = str(root / "data")
-        os.environ["BLD_UPLOAD_DIR"] = str(root / "uploads")
-        os.environ["BLD_OUTPUT_DIR"] = str(root / "outputs")
-        os.environ["DEFAULT_ADMIN_PASSWORD"] = "test-admin-pw"
-        os.environ["INTERNAL_API_TOKEN"] = ""
-        for module_name in [name for name in sys.modules if name == "app" or name.startswith("app.")]:
-            sys.modules.pop(module_name, None)
-        cls.web = load_web_module()
-        if not cls.web.DB_PATH.resolve().is_relative_to(root.resolve()):
-            raise RuntimeError(f"Tests must use the isolated database under {root}, got {cls.web.DB_PATH}")
-        cls.web.app.config["TESTING"] = True
-        cls.client = cls.web.app.test_client()
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.client = None
-        cls.web = None
-        gc.collect()
-        cls.tmp.cleanup()
-
+class ProductRenameTests(WebAppTestBase):
     def login(self, username="007", password="test-admin-pw"):
         return self.client.post(
             "/login",

@@ -1,0 +1,42 @@
+{% if can("edit_customer_prices") %}
+  <dialog class="quote-edit-dialog" id="quote-edit-dialog" aria-labelledby="quote-edit-dialog-title">
+    <div class="quote-edit-dialog-header">
+      <h2 id="quote-edit-dialog-title">修正报价记录</h2>
+      <button class="quote-edit-close" type="button" data-close-quote-edit aria-label="关闭修正报价窗口">关闭</button>
+    </div>
+    <form action="{{ url_for('quote_web.quotes') }}" method="post" class="toolbar-popover-form quote-form" data-quote-edit-form>
+      {{ csrf_field() }}
+      <input type="hidden" name="version">
+      <label>
+        <span>客户</span>
+        <span class="combobox" data-combobox="customer" data-lookup-url="{{ url_for('customer_lookup') }}" {% if can("add_customers") %}data-can-create="1" data-create-url="{{ url_for('save_customer') }}"{% endif %}>
+          <input name="customer_name" required>
+        </span>
+      </label>
+      <label>
+        <span>BLD号</span>
+        <span class="combobox" data-combobox="bld" data-lookup-url="{{ url_for('product_lookup') }}">
+          <input name="bld_no" required>
+        </span>
+      </label>
+      <label><span>客户产品编码</span><input name="customer_product_code"></label>
+      <label><span>含税单价</span><input type="number" step="0.0001" name="tax_price"></label>
+      <label><span>不含税单价</span><input type="number" step="0.0001" name="net_price"></label>
+      <label>
+        <span>币种</span>
+        <select name="currency">
+          {% for item in ["CNY", "USD", "EUR"] %}<option value="{{ item }}">{{ item }}</option>{% endfor %}
+        </select>
+      </label>
+      <label><span>报价日期</span><input type="date" name="quote_date"></label>
+      <label class="span-2"><span>备注</span><textarea name="remark" rows="2"></textarea></label>
+      <div class="form-actions span-2">
+        <button class="linear-button primary" type="submit" data-quote-edit-save disabled>保存修正</button>
+        {% if can("delete_customer_prices") %}
+          <button class="linear-button danger" type="submit" formmethod="post" formnovalidate data-quote-edit-delete disabled>删除</button>
+        {% endif %}
+        <button class="linear-button subtle" type="button" data-close-quote-edit>取消</button>
+      </div>
+    </form>
+  </dialog>
+{% endif %}

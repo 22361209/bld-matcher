@@ -8,11 +8,94 @@ import {
 import { setupQuoteFieldComboboxes } from "../components/quote_comboboxes.js?v=20260728-1";
 import { setupDataGridControls } from "../components/data_grid_controls.js?v=20260729-2";
 
-if (document.body.dataset.page === "quotes.list") {
+const QUOTE_CURRENCIES = new Set(["CNY", "USD", "EUR"]);
+
+const jsonObject = (raw) => {
+  try {
+    const value = typeof raw === "string" ? JSON.parse(raw) : raw;
+    return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+  } catch (_error) {
+    return null;
+  }
+};
+
+const quoteMutationUrl = (value, quoteId, action) => {
+  const expected = `/quotes/${quoteId}/${action}`;
+  return typeof value === "string" && value === expected ? value : "";
+};
+
+const quoteText = (value) => (value == null ? "" : String(value));
+
+export const parseQuoteEditPayload = (raw) => {
+  const value = jsonObject(raw);
+  if (!value) return null;
+  const id = Number(value.id);
+  const version = Number(value.version);
+  if (!Number.isInteger(id) || id <= 0 || !Number.isInteger(version) || version < 0) return null;
+  const editUrl = quoteMutationUrl(value.edit_url, id, "edit");
+  if (!editUrl) return null;
+  const deleteUrl = value.delete_url == null ? "" : quoteMutationUrl(value.delete_url, id, "delete");
+  if (value.delete_url != null && !deleteUrl) return null;
+  return {
+    id,
+    version,
+    customer_name: quoteText(value.customer_name),
+    bld_no: quoteText(value.bld_no),
+    customer_product_code: quoteText(value.customer_product_code),
+    tax_price: value.tax_price == null ? "" : quoteText(value.tax_price),
+    net_price: value.net_price == null ? "" : quoteText(value.net_price),
+    currency: QUOTE_CURRENCIES.has(value.currency) ? value.currency : "CNY",
+    quote_date: quoteText(value.quote_date),
+    remark: quoteText(value.remark),
+    edit_url: editUrl,
+    delete_url: deleteUrl,
+  };
+};
+
+export const quoteDeleteConfirmation = (payload) => (
+  `确认删除这条报价记录（${payload.customer_name} / ${payload.bld_no} / ${payload.quote_date}）？删除后不能恢复。`
+);
+
+export const parseQuoteFilterState = (raw) => {
+  const value = jsonObject(raw) || {};
+  const rawOptions = jsonObject(value.options) || {};
+  const rawSelected = jsonObject(value.selected) || {};
+  const options = {};
+  const selected = {};
+  Object.entries(rawOptions).forEach(([key, entries]) => {
+    if (!Array.isArray(entries)) return;
+    options[key] = entries
+      .filter((entry) => entry && typeof entry === "object" && !Array.isArray(entry))
+      .map((entry) => ({
+        value: quoteText(entry.value),
+        label: quoteText(entry.label),
+        count: Number.isFinite(Number(entry.count)) ? Number(entry.count) : 0,
+      }));
+  });
+  Object.entries(rawSelected).forEach(([key, entries]) => {
+    if (Array.isArray(entries)) selected[key] = entries.map(quoteText);
+  });
+  return { options, selected };
+};
+
+export const quoteFilterOptionState = (state, key) => {
+  const options = Array.isArray(state?.options?.[key]) ? state.options[key] : [];
+  const selected = Array.isArray(state?.selected?.[key]) ? state.selected[key] : [];
+  const selectedValues = new Set(selected);
+  return options.map((option) => ({
+    ...option,
+    checked: selected.length === 0 || selectedValues.has(option.value),
+  }));
+};
+
+if (typeof document !== "undefined" && document.body?.dataset.page === "quotes.list") {
   const resultsHost = document.querySelector("[data-quote-results-host]");
   const requestGate = createInlineResultsRequestGate();
   let requestController = null;
   let cleanupQuoteTable = () => {};
+  const editDialog = document.querySelector("#quote-edit-dialog");
+  const editForm = editDialog?.querySelector("[data-quote-edit-form]");
+  let quoteEditTrigger = null;
 
   const notifyDataGrids = (action) => {
     document.dispatchEvent(new CustomEvent(`bld:data-grids:${action}`, { detail: { root: resultsHost } }));
@@ -26,11 +109,63 @@ if (document.body.dataset.page === "quotes.list") {
     if (message && state) status.classList.add(state);
   };
 
-  const openQuoteEdit = (dialog) => {
-    if (dialog?.showModal) {
-      dialog.showModal();
-      dialog.querySelector("input[name='customer_name']")?.focus();
+  const resetQuoteEdit = () => {
+    if (!(editForm instanceof HTMLFormElement)) return;
+    editForm.reset();
+    editForm.setAttribute("action", "/quotes");
+    editForm.querySelector("[data-quote-edit-save]")?.setAttribute("disabled", "");
+    const deleteButton = editForm.querySelector("[data-quote-edit-delete]");
+    if (deleteButton instanceof HTMLButtonElement) {
+      deleteButton.disabled = true;
+      deleteButton.removeAttribute("formaction");
+      deleteButton.removeAttribute("data-confirm");
     }
+  };
+
+  const closeQuoteEdit = ({ restoreFocus = true } = {}) => {
+    if (!(editDialog instanceof HTMLDialogElement) || !editDialog.open) return;
+    if (!restoreFocus) quoteEditTrigger = null;
+    editDialog.close();
+  };
+
+  const setQuoteEditValue = (name, value) => {
+    if (!(editForm instanceof HTMLFormElement)) return;
+    const field = editForm.elements.namedItem(name);
+    if (field instanceof HTMLInputElement || field instanceof HTMLSelectElement || field instanceof HTMLTextAreaElement) {
+      field.value = value;
+    }
+  };
+
+  const openQuoteEdit = (button) => {
+    if (!(editDialog instanceof HTMLDialogElement) || !(editForm instanceof HTMLFormElement)) return;
+    const payload = parseQuoteEditPayload(button.dataset.quoteEditRecord || "");
+    if (!payload) return;
+    editForm.setAttribute("action", payload.edit_url);
+    setQuoteEditValue("version", String(payload.version));
+    setQuoteEditValue("customer_name", payload.customer_name);
+    setQuoteEditValue("bld_no", payload.bld_no);
+    setQuoteEditValue("customer_product_code", payload.customer_product_code);
+    setQuoteEditValue("tax_price", payload.tax_price);
+    setQuoteEditValue("net_price", payload.net_price);
+    setQuoteEditValue("currency", payload.currency);
+    setQuoteEditValue("quote_date", payload.quote_date);
+    setQuoteEditValue("remark", payload.remark);
+    const saveButton = editForm.querySelector("[data-quote-edit-save]");
+    if (saveButton instanceof HTMLButtonElement) saveButton.disabled = false;
+    const deleteButton = editForm.querySelector("[data-quote-edit-delete]");
+    if (deleteButton instanceof HTMLButtonElement) {
+      deleteButton.disabled = !payload.delete_url;
+      if (payload.delete_url) {
+        deleteButton.setAttribute("formaction", payload.delete_url);
+        deleteButton.dataset.confirm = quoteDeleteConfirmation(payload);
+      } else {
+        deleteButton.removeAttribute("formaction");
+        deleteButton.removeAttribute("data-confirm");
+      }
+    }
+    quoteEditTrigger = button;
+    if (!editDialog.open) editDialog.showModal();
+    editForm.elements.namedItem("customer_name")?.focus();
   };
 
   const numberDialog = document.querySelector("#quote-number-dialog");
@@ -110,10 +245,71 @@ if (document.body.dataset.page === "quotes.list") {
     });
   }
 
+  if (editDialog instanceof HTMLDialogElement) {
+    setupQuoteFieldComboboxes(editDialog);
+    editDialog.querySelectorAll("[data-close-quote-edit]").forEach((button) => {
+      button.addEventListener("click", () => closeQuoteEdit());
+    });
+    editDialog.addEventListener("click", (event) => {
+      if (event.target === editDialog) closeQuoteEdit();
+    });
+    editDialog.addEventListener("close", () => {
+      const trigger = quoteEditTrigger;
+      quoteEditTrigger = null;
+      resetQuoteEdit();
+      if (trigger?.isConnected) trigger.focus();
+    });
+  }
+
+  const hydrateQuoteFilterPanel = (panel, state) => {
+    if (!(panel instanceof HTMLElement) || panel.dataset.quoteFilterHydrated === "1") return;
+    const container = panel.querySelector("[data-quote-filter-options]");
+    if (!(container instanceof HTMLElement)) return;
+    const options = quoteFilterOptionState(state, panel.dataset.quoteFilterOptionsKey || "");
+    const fragment = document.createDocumentFragment();
+    options.forEach((option) => {
+      const label = document.createElement("label");
+      label.className = "data-grid-filter-option";
+      label.dataset.columnFilterOption = "";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.value = option.value;
+      input.checked = option.checked;
+      input.dataset.initialChecked = String(option.checked);
+      const text = document.createElement("span");
+      text.textContent = option.label;
+      const count = document.createElement("small");
+      count.textContent = String(option.count);
+      label.append(input, text, count);
+      fragment.appendChild(label);
+    });
+    container.replaceChildren(fragment);
+    const empty = panel.querySelector("[data-quote-filter-empty]");
+    if (empty instanceof HTMLElement) empty.hidden = options.length > 0;
+    panel.dataset.quoteFilterHydrated = "1";
+  };
+
+  const setupLazyQuoteFilters = (table, filterPortal) => {
+    if (!(table instanceof HTMLTableElement) || !(filterPortal instanceof HTMLElement)) return () => {};
+    const results = table.closest("[data-quote-results]");
+    const state = parseQuoteFilterState(results?.dataset.quoteFilterState || "");
+    const hydrateTriggeredPanel = (event) => {
+      if (!(event.target instanceof Element)) return;
+      const trigger = event.target.closest("[data-column-filter-trigger]");
+      if (!(trigger instanceof HTMLButtonElement)) return;
+      const panelId = trigger.getAttribute("aria-controls");
+      hydrateQuoteFilterPanel(panelId ? document.getElementById(panelId) : null, state);
+    };
+    filterPortal.addEventListener("click", hydrateTriggeredPanel, true);
+    return () => filterPortal.removeEventListener("click", hydrateTriggeredPanel, true);
+  };
+
   const initializeResults = () => {
     cleanupQuoteTable();
     const table = resultsHost?.querySelector("#quotes-table");
-    cleanupQuoteTable = setupDataGridControls(table, {
+    const filterPortal = table?.closest("[data-quote-results]");
+    const cleanupLazyQuoteFilters = setupLazyQuoteFilters(table, filterPortal);
+    const cleanupDataGridControls = setupDataGridControls(table, {
       columns: [
         "quote-no",
         "date",
@@ -130,31 +326,21 @@ if (document.body.dataset.page === "quotes.list") {
       storagePrefix: "bld.quotes",
       resultsHash: "quote-results",
       navigate: (url) => loadResults(url),
-      filterPortal: table?.closest("[data-quote-results]"),
+      filterPortal,
       resetFilterParams: [
         "qf_quote_no", "qf_quote_date", "qf_customer_name", "qf_bld_no",
         "qf_customer_product_code", "qf_tax_price", "qf_net_price", "qf_currency",
         "qf_quoted_by", "qf_source_type", "qf_remark",
       ],
     });
+    cleanupQuoteTable = () => {
+      cleanupDataGridControls();
+      cleanupLazyQuoteFilters();
+    };
     setupQuoteFieldComboboxes(resultsHost || document);
     resultsHost?.querySelector("[data-quote-search-form]")?.addEventListener("submit", (event) => {
       event.preventDefault();
       loadResults(formGetUrl(event.currentTarget, window.location.href));
-    });
-    resultsHost?.querySelectorAll("[data-open-quote-edit]").forEach((button) => {
-      button.addEventListener("click", () => openQuoteEdit(document.getElementById(button.dataset.openQuoteEdit)));
-    });
-    resultsHost?.querySelectorAll("[data-quote-number-url]").forEach((button) => {
-      button.addEventListener("click", () => openQuoteNumber(button));
-    });
-    resultsHost?.querySelectorAll("[data-close-quote-edit]").forEach((button) => {
-      button.addEventListener("click", () => button.closest("dialog")?.close());
-    });
-    resultsHost?.querySelectorAll(".quote-edit-dialog").forEach((dialog) => {
-      dialog.addEventListener("click", (event) => {
-        if (event.target === dialog) dialog.close();
-      });
     });
   };
 
@@ -200,6 +386,7 @@ if (document.body.dataset.page === "quotes.list") {
       const nextResults = template.content.querySelector("[data-quote-results]");
       if (!(nextResults instanceof HTMLElement)) throw new Error("invalid fragment");
 
+      closeQuoteEdit({ restoreFocus: false });
       cleanupQuoteTable();
       notifyDataGrids("cleanup");
       resultsHost.replaceChildren(template.content);
@@ -233,6 +420,16 @@ if (document.body.dataset.page === "quotes.list") {
 
   resultsHost?.addEventListener("click", (event) => {
     if (!(event.target instanceof Element)) return;
+    const editButton = event.target.closest("[data-open-quote-edit]");
+    if (editButton instanceof HTMLButtonElement) {
+      openQuoteEdit(editButton);
+      return;
+    }
+    const quoteNumberButton = event.target.closest("[data-quote-number-url]");
+    if (quoteNumberButton instanceof HTMLButtonElement) {
+      openQuoteNumber(quoteNumberButton);
+      return;
+    }
     const link = event.target.closest("a[data-inline-results-link], a[data-quote-results-link]");
     if (!(link instanceof HTMLAnchorElement) || event.defaultPrevented) return;
     if (event instanceof MouseEvent && event.button !== 0) return;

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% set active_page = "quotes" %}
+{% block shared_optional_styles %}{% endblock %}
 {% block page_title %}报价记录{% endblock %}
 {% block page_id %}quotes.list{% endblock %}
 {% block page_type %}list{% endblock %}
@@ -19,6 +20,7 @@
 {% endblock %}
 
 {% block page_modals %}
+  {% include "_quote_edit_dialog.html" %}
   <dialog class="dialog-panel quote-number-dialog" id="quote-number-dialog" aria-labelledby="quote-number-dialog-title">
     <div class="dialog-header quote-number-dialog-header">
       <div class="quote-number-dialog-title">

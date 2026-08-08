@@ -28,6 +28,29 @@ from app.platform.permissions import (
 )
 
 
+USER_TEMPLATE_FILES = (
+    "users.html",
+    "_users_account_permissions.html",
+    "_users_account_list.html",
+    "_users_role_permissions.html",
+    "_users_role_list.html",
+)
+USER_STYLESHEET_FILES = (
+    "users.css",
+    "users_permissions.css",
+    "users_lists.css",
+    "users_responsive.css",
+)
+
+
+def _users_template_source(root: Path) -> str:
+    return "\n".join((root / "templates" / name).read_text() for name in USER_TEMPLATE_FILES)
+
+
+def _users_stylesheet_source(root: Path) -> str:
+    return "\n".join((root / "static" / "pages" / name).read_text() for name in USER_STYLESHEET_FILES)
+
+
 class _UpdateReader:
     source_name = "test"
 
@@ -479,16 +502,14 @@ class AdminPermissionTest(unittest.TestCase):
         self.assertEqual(page.default_role_key, "")
         self.assertEqual([role["role_key"] for role in page.roles], [ADMIN_ROLE_KEY])
 
-        template = (
-            Path(__file__).resolve().parents[1] / "templates" / "users.html"
-        ).read_text()
+        template = _users_template_source(Path(__file__).resolve().parents[1])
         self.assertIn("{% if not is_editing_user and not can_create_user %}", template)
         self.assertIn('<option value="" selected disabled>请选择可用角色</option>', template)
 
     def test_access_page_follows_page_javascript_and_submit_wait_protocols(self) -> None:
         root = Path(__file__).resolve().parents[1]
         script = (root / "static" / "pages" / "users.js").read_text()
-        template = (root / "templates" / "users.html").read_text()
+        template = _users_template_source(root)
 
         self.assertIn('body[data-page="admin.users"]', script)
         self.assertEqual(template.count("data-submit-wait data-submit-wait-text="), 4)
@@ -496,7 +517,7 @@ class AdminPermissionTest(unittest.TestCase):
 
     def test_account_permission_matrix_has_stable_headers_groups_and_accessible_controls(self) -> None:
         root = Path(__file__).resolve().parents[1]
-        template = (root / "templates" / "users.html").read_text()
+        template = _users_template_source(root)
         account_table = re.search(
             r'<table\b[^>]*aria-labelledby="account-permissions-title"[^>]*>(.*?)</table>',
             template,
@@ -546,7 +567,7 @@ class AdminPermissionTest(unittest.TestCase):
 
     def test_role_permission_matrix_has_stable_groups_and_accessible_controls(self) -> None:
         root = Path(__file__).resolve().parents[1]
-        template = (root / "templates" / "users.html").read_text()
+        template = _users_template_source(root)
         role_table = re.search(
             r'<table\b[^>]*aria-labelledby="role-permissions-title"[^>]*>(.*?)</table>',
             template,
@@ -581,11 +602,13 @@ class AdminPermissionTest(unittest.TestCase):
 
     def test_permission_matrix_preserves_page_assets_and_form_submission_contract(self) -> None:
         root = Path(__file__).resolve().parents[1]
-        template = (root / "templates" / "users.html").read_text()
+        template = _users_template_source(root)
         script = (root / "static" / "pages" / "users.js").read_text()
-        stylesheet = (root / "static" / "pages" / "users.css").read_text()
+        stylesheet = _users_stylesheet_source(root)
 
         self.assertIn("filename='pages/users.css'", template)
+        for stylesheet_name in USER_STYLESHEET_FILES[1:]:
+            self.assertIn(f"filename='pages/{stylesheet_name}'", template)
         self.assertIn("filename='pages/users.js'", template)
         self.assertIn('<script type="module"', template)
         self.assertEqual(

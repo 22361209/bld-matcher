@@ -1,0 +1,57 @@
+    <section class="data-section customer-products-section">
+      <div class="data-section-header"><div><h2>客户产品编码</h2><p>按客户产品编码管理对应 BLD 号、产品名称与双方图纸；图纸按版本保留，可回拨任意历史版本为当前版本。BLD 号必须已在该客户的报价历史中出现。</p></div><span>{{ customer_products|length }} 项</span></div>
+      {% if can("edit_customers") %}
+      <div class="command-actions customer-products-actions">
+        <button class="linear-button primary" type="button" data-open-customer-product-modal {% if not quoted_options %}disabled title="该客户暂无报价记录，无法新增商品"{% endif %}>新增商品</button>
+      </div>
+      {% endif %}
+      {% if customer_products %}
+        <div class="data-table-scroll"><table class="data-table customer-products-table"><thead><tr><th>BLD号</th><th>客户产品编码</th><th>客户产品名称</th><th>产品图片</th><th>BLD 图纸</th><th>客户图纸</th>{% if can_any("edit_customers", "delete_customers") %}<th>操作</th>{% endif %}</tr></thead><tbody>
+          {% for product in customer_products %}
+            <tr>
+              <td>{{ product.bld_no }}</td>
+              <td>{{ product.customer_product_code or "—" }}</td>
+              <td>{{ product.customer_product_name or "—" }}</td>
+              <td>
+                {% if product.catalog and (product.catalog.thumb_url or product.catalog.image_url) %}
+                  <a class="image-link customer-product-thumb-link" target="_blank" rel="noopener" href="{{ product.catalog.image_url or product.catalog.thumb_url }}" title="打开 {{ product.bld_no }} 产品图片"><img class="customer-product-thumb" src="{{ product.catalog.thumb_url or product.catalog.image_url }}" alt="{{ product.bld_no }} 产品图片" loading="lazy"></a>
+                {% else %}—{% endif %}
+              </td>
+              {% for kind_meta in drawing_kinds %}
+                {% set slot = product.slot(kind_meta.value) %}
+                <td>
+                  <button type="button" class="customer-drawing-open" data-open-drawing-modal
+                    data-kind="{{ kind_meta.value }}" data-kind-label="{{ kind_meta.label }}" data-bld-no="{{ product.bld_no }}"
+                    data-versions-url="{{ url_for('customer_product_drawing_versions', customer_id=customer.id, product_id=product.id, kind=kind_meta.value) }}"
+                    data-upload-url="{{ url_for('upload_customer_product_drawing_version', customer_id=customer.id, product_id=product.id, kind=kind_meta.value) }}"
+                    data-current-url="{{ url_for('set_customer_product_drawing_current', customer_id=customer.id, product_id=product.id, kind=kind_meta.value) }}"
+                    {% if kind_meta.value == "bld" %}data-import-url="{{ url_for('import_customer_product_catalog_drawing', customer_id=customer.id, product_id=product.id) }}"{% endif %}
+                    data-catalog-has-drawing="{{ 'true' if product.catalog and product.catalog.has_drawing else 'false' }}">
+                    {% if slot and slot.current_file %}
+                      <span class="customer-drawing-badge">V{{ slot.current_version }}{% if slot.current_file.revision_label %} · {{ slot.current_file.revision_label }}{% endif %}</span><span class="customer-drawing-open-label">预览</span>
+                    {% else %}
+                      <span class="customer-drawing-open-label">未上传</span>
+                    {% endif %}
+                  </button>
+                </td>
+              {% endfor %}
+              {% if can_any("edit_customers", "delete_customers") %}
+                <td>
+                  <div class="customer-product-row-actions">
+                    {% if can("edit_customers") %}<button class="linear-button subtle compact" type="button" data-open-customer-product-edit data-update-url="{{ url_for('update_customer_product', customer_id=customer.id, product_id=product.id) }}" data-bld-no="{{ product.bld_no }}" data-code="{{ product.customer_product_code }}" data-name="{{ product.customer_product_name }}">编辑</button>{% endif %}
+                    {% if can("delete_customers") %}
+                    <form method="post" action="{{ url_for('delete_customer_product', customer_id=customer.id, product_id=product.id) }}">
+                      {{ csrf_field() }}
+                      <button class="linear-button danger compact" type="submit" data-confirm="确认删除客户产品“{{ product.customer_product_code or product.bld_no }}”（BLD {{ product.bld_no }}）？该客户产品的 BLD 图纸、客户图纸和全部历史版本将永久删除，报价记录中的图纸关联也会一并清除；报价记录本身保留。此操作无法恢复。">删除</button>
+                    </form>
+                    {% endif %}
+                  </div>
+                </td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+        </tbody></table></div>
+      {% else %}
+        <div class="empty-state"><p>暂无客户商品，新增前请确认该商品已有报价记录。</p></div>
+      {% endif %}
+    </section>

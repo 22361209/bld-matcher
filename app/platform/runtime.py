@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 from app.migrations import MIGRATIONS
@@ -81,7 +81,3 @@ class RuntimeHealthService:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA query_only=ON")
         return connection
-
-
-def retention_cutoff(*, now: datetime, days: int) -> datetime:
-    return now - timedelta(days=days)

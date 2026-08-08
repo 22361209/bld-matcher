@@ -1,0 +1,286 @@
+/* Permission navigation and matrix. */
+
+.permission-editor {
+  min-width: 0;
+  margin-top: 10px;
+}
+.access-permission-layout {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  align-items: start;
+  grid-template-columns: 176px minmax(0, 1fr);
+  gap: 10px;
+}
+.permission-category-nav {
+  position: sticky;
+  top: 10px;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--linear-line);
+  border-radius: 4px;
+  background: var(--linear-surface);
+}
+.permission-category-nav a {
+  display: grid;
+  min-height: 38px;
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--linear-line);
+  color: #435166;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-decoration: none;
+}
+.permission-category-nav a:last-child {
+  border-bottom: 0;
+}
+.permission-category-nav a:hover,
+.permission-category-nav a:focus-visible {
+  background: var(--linear-subtle);
+  color: var(--linear-accent);
+}
+.permission-category-nav a[aria-current="location"] {
+  background: var(--linear-accent-soft);
+  color: var(--linear-accent);
+  box-shadow: inset 3px 0 0 var(--linear-accent);
+}
+.permission-category-nav span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.permission-category-nav strong {
+  min-width: 22px;
+  color: inherit;
+  font-size: 11px;
+  text-align: right;
+}
+.access-permission-grid {
+  min-width: 0;
+  min-height: 0;
+  border-radius: 4px;
+}
+.access-matrix-heading {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--linear-line);
+  background: var(--linear-surface);
+}
+.access-permission-grid [data-grid-scroll] {
+  max-height: min(62vh, 620px);
+}
+.data-grid .permission-matrix {
+  width: 100%;
+  margin: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+.data-grid .account-permission-matrix {
+  min-width: 920px;
+}
+.data-grid .role-permission-matrix {
+  min-width: 720px;
+}
+.account-permission-matrix .permission-column-name {
+  width: 42%;
+}
+.permission-column-baseline,
+.permission-column-result {
+  width: 11%;
+}
+.permission-column-choice {
+  width: 12%;
+}
+.role-permission-matrix .permission-column-name {
+  width: 54%;
+}
+.role-permission-column-choice {
+  width: 18%;
+}
+.role-permission-column-note {
+  width: 28%;
+}
+.permission-matrix th,
+.permission-matrix td {
+  box-sizing: border-box;
+  padding: 5px 9px;
+  vertical-align: middle;
+}
+.permission-matrix thead th {
+  text-align: center;
+}
+.permission-matrix thead th:first-child {
+  left: 0;
+  z-index: 7;
+  text-align: left;
+  box-shadow: inset -1px 0 0 var(--linear-line);
+}
+.permission-group-row {
+  scroll-margin-top: 34px;
+}
+.permission-matrix .permission-group-row th {
+  position: static;
+  height: 30px;
+  padding: 6px 9px;
+  overflow: visible;
+  border-bottom: 1px solid var(--linear-line-strong);
+  background: #e9eff5;
+  color: #354256;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: left;
+  text-overflow: clip;
+  white-space: normal;
+}
+.permission-group-row small {
+  margin-left: 8px;
+  color: var(--linear-muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+.permission-data-row > th,
+.permission-data-row > td {
+  background: #ffffff;
+}
+.permission-data-row:nth-child(even) > th,
+.permission-data-row:nth-child(even) > td {
+  background: #fbfcfe;
+}
+.permission-data-row:hover > th,
+.permission-data-row:hover > td {
+  background: #f2f7fb;
+}
+.permission-row-retained > th,
+.permission-row-retained > td {
+  background: #fffaf3;
+}
+.permission-row-retained:hover > th,
+.permission-row-retained:hover > td {
+  background: #fff4e7;
+}
+.access-permission-grid .permission-matrix .permission-name-cell {
+  position: sticky;
+  top: auto;
+  left: 0;
+  z-index: 2;
+  height: auto;
+  overflow: visible;
+  box-shadow: inset -1px 0 0 var(--linear-line);
+  text-align: left;
+  text-overflow: clip;
+  white-space: normal;
+}
+.permission-name {
+  display: inline-block;
+  color: #273447;
+  font-size: 13px;
+  font-weight: 800;
+}
+.permission-description {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--linear-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.permission-name-cell code {
+  display: inline-block;
+  margin-left: 7px;
+  color: #7a8798;
+  font-size: 9px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.permission-state-cell,
+.permission-locked-cell,
+.permission-choice-cell,
+.role-permission-choice-cell {
+  text-align: center;
+}
+.permission-state-cell [data-state] {
+  display: inline-flex;
+  min-width: 42px;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+}
+.permission-state-cell [data-state="allow"] {
+  color: var(--precision-success);
+}
+.permission-state-cell [data-state="deny"] {
+  color: var(--precision-danger);
+}
+.permission-exclusive {
+  color: var(--precision-signal);
+  font-size: 11px;
+  font-weight: 800;
+}
+.permission-matrix .permission-choice-cell {
+  padding: 0;
+}
+.permission-choice-cell label {
+  display: grid;
+  width: 100%;
+  min-height: 42px;
+  min-width: 0;
+  cursor: pointer;
+  place-items: center;
+}
+.permission-choice-cell label:has(input:checked) {
+  background: var(--linear-accent-soft);
+}
+.permission-choice-cell label:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+.permission-choice-cell input,
+.role-permission-choice-cell input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+}
+.permission-locked-cell {
+  color: var(--linear-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.role-permission-choice-cell label {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  gap: 7px;
+  padding: 5px 9px;
+  border: 1px solid var(--linear-line-strong);
+  border-radius: 4px;
+  background: var(--linear-surface);
+  color: #445268;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+}
+.role-permission-choice-cell label:has(input:checked) {
+  border-color: #8fb2d2;
+  background: var(--linear-accent-soft);
+  color: var(--linear-accent);
+}
+.permission-status-note {
+  color: var(--linear-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}

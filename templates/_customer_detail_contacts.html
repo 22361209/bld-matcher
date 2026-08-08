@@ -1,0 +1,40 @@
+    <section class="data-section customer-contact-section">
+      <div class="data-section-header"><div><h2>联系人</h2><p>记录采购、技术、财务和决策人；一位联系人可设为主要联系人。</p></div><span>{{ contacts|length }} 人</span></div>
+      {% if can("edit_customers") %}
+      <form class="customer-contact-create" action="{{ url_for('save_customer_contact', customer_id=customer.id) }}" method="post">
+        {{ csrf_field() }}
+        <label><span>姓名</span><input name="name" required maxlength="120"></label>
+        <label><span>职位</span><input name="title" maxlength="120"></label>
+        <label><span>角色</span><input name="role" maxlength="120" placeholder="例如 采购、技术、财务"></label>
+        <label><span>电话</span><input name="phone" maxlength="80"></label>
+        <label><span>邮箱</span><input name="email" type="email" maxlength="200"></label>
+        <label><span>微信</span><input name="wechat" maxlength="120"></label>
+        <label class="customer-primary-check"><input name="is_primary" value="1" type="checkbox"><span>设为主要联系人</span></label>
+        <div class="form-actions"><button class="linear-button primary" type="submit">添加联系人</button></div>
+      </form>
+      {% endif %}
+      {% if contacts %}
+        <div class="customer-contact-list">
+          {% for contact in contacts %}
+            <form class="customer-contact-card" action="{{ url_for('save_customer_contact', customer_id=customer.id) }}" method="post">
+              {{ csrf_field() }}
+              <input type="hidden" name="contact_id" value="{{ contact.id }}">
+              <div class="customer-contact-card-heading"><strong>{{ contact.name }}</strong>{% if contact.is_primary %}<span class="linear-status active">主要联系人</span>{% endif %}</div>
+              <label><span>姓名</span><input name="name" value="{{ contact.name }}" required maxlength="120"></label>
+              <label><span>职位</span><input name="title" value="{{ contact.title }}" maxlength="120"></label>
+              <label><span>角色</span><input name="role" value="{{ contact.role }}" maxlength="120"></label>
+              <label><span>电话</span><input name="phone" value="{{ contact.phone }}" maxlength="80"></label>
+              <label><span>邮箱</span><input name="email" type="email" value="{{ contact.email }}" maxlength="200"></label>
+              <label><span>微信</span><input name="wechat" value="{{ contact.wechat }}" maxlength="120"></label>
+              <label class="customer-primary-check"><input name="is_primary" value="1" type="checkbox" {% if contact.is_primary %}checked{% endif %}><span>主要联系人</span></label>
+              <div class="form-actions">
+                {% if can("edit_customers") %}<button class="linear-button primary" type="submit">保存</button>{% endif %}
+                {% if can("delete_customers") %}<button class="linear-button danger" type="submit" formaction="{{ url_for('delete_customer_contact', customer_id=customer.id, contact_id=contact.id) }}" data-confirm="确认删除联系人“{{ contact.name }}”？删除联系人不会影响客户、报价、合同和文件记录。">删除</button>{% endif %}
+              </div>
+            </form>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state"><p>尚未登记联系人。</p></div>
+      {% endif %}
+    </section>

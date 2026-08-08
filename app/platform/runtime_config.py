@@ -5,11 +5,6 @@ import os
 from pydantic import BaseModel, ConfigDict, Field
 
 
-def _bool(name: str, default: bool) -> bool:
-    raw = os.environ.get(name)
-    return default if raw is None else raw.strip().lower() in {"1", "true", "yes", "on"}
-
-
 def _int(name: str, default: int) -> int:
     try:
         return int(os.environ.get(name, str(default)))

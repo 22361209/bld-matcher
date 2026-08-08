@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from bisect import bisect_left
 import json
 import math
 import re
@@ -208,6 +209,7 @@ class ProductCatalog:
                         if psa_key and self._row_is_psa_352x(row):
                             self.by_psa_352x.setdefault(psa_key[0], []).append(row)
             self.quick_search_rows.append((row, bld_no, bld_key, tuple(quick_codes)))
+        self._sorted_oe_keys: tuple[str, ...] = tuple(sorted(self.by_oe))
 
     @classmethod
     def from_excel(cls, path: Path, manual_map: dict[str, str] | None = None) -> "ProductCatalog":
@@ -287,9 +289,10 @@ class ProductCatalog:
 
         rows: list[dict] = []
         fields: set[str] = set()
-        for code_key, code_rows in self.by_oe.items():
-            if not code_key.startswith(key) or code_key == key:
+        for code_key in self._oe_keys_with_prefix(key):
+            if code_key == key:
                 continue
+            code_rows = self.by_oe[code_key]
             rows.extend(code_rows)
             fields.update(self.by_oe_fields.get(code_key, set()))
 
@@ -318,10 +321,9 @@ class ProductCatalog:
 
         rows: list[dict] = []
         fields: set[str] = set()
-        for code_key, code_rows in self.by_oe.items():
-            if code_key.startswith(base_key):
-                rows.extend(code_rows)
-                fields.update(self.by_oe_fields.get(code_key, set()))
+        for code_key in self._oe_keys_with_prefix(base_key):
+            rows.extend(self.by_oe[code_key])
+            fields.update(self.by_oe_fields.get(code_key, set()))
 
         unique_rows = self._unique_rows(rows)
         if len(unique_rows) != 1:
@@ -336,6 +338,15 @@ class ProductCatalog:
             row,
             matched_codes=((compact_text(inquiry_oe),) if compact_text(inquiry_oe) else ()),
         )
+
+    def _oe_keys_with_prefix(self, prefix: str) -> tuple[str, ...]:
+        if not prefix:
+            return ()
+        start = bisect_left(self._sorted_oe_keys, prefix)
+        # OE keys are normalized to ASCII A-Z/0-9, so the maximum Unicode
+        # code point safely bounds every possible suffix for this prefix.
+        stop = bisect_left(self._sorted_oe_keys, prefix + "\U0010ffff", lo=start)
+        return self._sorted_oe_keys[start:stop]
 
     def _match_psa_352x(self, inquiry_oe: object) -> CatalogMatch | None:
         probe = psa_352x_key(inquiry_oe)

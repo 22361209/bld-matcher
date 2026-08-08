@@ -78,6 +78,14 @@
                   <button class="linear-button primary" type="submit">确认规范品牌</button>
                 </form>
               </details>
+            {% elif brand_normalization_preview_requested %}
+              <span class="note">品牌已规范</span>
+            {% else %}
+              <a
+                class="linear-button subtle"
+                href="{{ brand_normalization_preview_url }}"
+                data-products-brand-preview-link
+              >检查品牌规范</a>
             {% endif %}
           {% endif %}
           {% if can("export_catalog") %}
@@ -109,6 +117,7 @@
       <div
         data-products-results-host
         data-products-fragment-url="{{ url_for('products_fragment') }}"
+        data-products-brand-preview-active="{{ 1 if brand_normalization_preview_requested | default(false) else 0 }}"
         aria-live="polite"
       >
         {% include "_products_results.html" %}

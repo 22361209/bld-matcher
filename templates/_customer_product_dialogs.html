@@ -1,0 +1,76 @@
+  {% if can("edit_customers") %}
+  <div class="editor-modal" aria-hidden="true" data-customer-product-modal>
+    <div class="editor-modal-backdrop" data-close-customer-product-modal></div>
+    <div class="editor-modal-panel customer-product-modal-panel" role="dialog" aria-modal="true" aria-label="新增客户商品" data-draggable-modal-panel>
+      <button class="image-modal-close" type="button" data-close-customer-product-modal aria-label="关闭新增商品">×</button>
+      <div class="modal-heading draggable-modal-heading" data-modal-drag-handle>
+        <h2>新增客户商品</h2>
+        <p class="note">BLD 号必须已出现在该客户的报价历史中；客户产品编码会自动带出报价中的编码，名称留空时使用产品目录品名。</p>
+      </div>
+      <form action="{{ url_for('create_customer_product', customer_id=customer.id) }}" method="post" enctype="multipart/form-data" class="record-form modal-form customer-product-form" data-customer-product-form>
+        {{ csrf_field() }}
+        <label>
+          <span>BLD 号</span>
+          <input name="bld_no" list="customer-product-bld-options" required maxlength="80" autocomplete="off" data-customer-product-bld>
+          <datalist id="customer-product-bld-options">
+            {% for option in quoted_options %}<option value="{{ option.bld_no }}" data-code="{{ option.customer_product_code }}">{{ option.customer_product_code or option.bld_no }}</option>{% endfor %}
+          </datalist>
+        </label>
+        <label>
+          <span>客户产品编码</span>
+          <input name="customer_product_code" maxlength="120" placeholder="选填" data-customer-product-code>
+        </label>
+        <label class="customer-product-wide-field">
+          <span>客户产品名称</span>
+          <input name="customer_product_name" maxlength="200" placeholder="选填，留空使用产品目录品名">
+        </label>
+        <div class="customer-product-create-drawing customer-product-wide-field">
+          <div class="customer-product-create-drawing-heading"><span>客户图纸（选填）</span><small>可在新增时一并保存为客户图纸 V1</small></div>
+          <div class="product-media-intake customer-product-create-drawing-intake" data-customer-product-create-drawing-intake>
+            <button class="product-media-intake-button" type="button" data-customer-product-create-drawing-browse>
+              <span>+</span>
+              <strong data-customer-product-create-drawing-title>拖入客户图纸或点击选择</strong>
+              <small data-customer-product-create-drawing-note>支持 PDF / PNG / JPG / WEBP，单个文件不超过 20 MB</small>
+            </button>
+            <input class="drawing-upload-input" name="customer_drawing_file" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" tabindex="-1" aria-hidden="true" hidden data-customer-product-create-drawing-input>
+          </div>
+          <label class="customer-product-create-revision"><span>版本代号（选填）</span><input name="customer_drawing_revision_label" maxlength="60" placeholder="例如 Rev A"></label>
+          <p class="product-media-upload-status customer-product-create-drawing-status" data-customer-product-create-drawing-status aria-live="polite"></p>
+        </div>
+        <div class="form-actions modal-actions">
+          <button class="linear-button primary" type="submit">保存商品</button>
+          <button class="linear-button subtle" type="button" data-close-customer-product-modal>取消</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="editor-modal" aria-hidden="true" data-customer-product-edit-modal>
+    <div class="editor-modal-backdrop" data-close-customer-product-edit-modal></div>
+    <div class="editor-modal-panel customer-product-modal-panel" role="dialog" aria-modal="true" aria-label="编辑客户商品" data-draggable-modal-panel>
+      <button class="image-modal-close" type="button" data-close-customer-product-edit-modal aria-label="关闭编辑商品">×</button>
+      <div class="modal-heading draggable-modal-heading" data-modal-drag-handle>
+        <h2>编辑客户商品</h2>
+        <p class="note">BLD 号建立后不可修改；图纸在两个图纸位各自的预览窗口中上传。</p>
+      </div>
+      <form method="post" class="record-form modal-form customer-product-form" data-customer-product-edit-form>
+        {{ csrf_field() }}
+        <label>
+          <span>BLD 号</span>
+          <input data-customer-product-edit-bld readonly tabindex="-1">
+        </label>
+        <label>
+          <span>客户产品编码</span>
+          <input name="customer_product_code" maxlength="120" placeholder="选填" data-customer-product-edit-code>
+        </label>
+        <label class="customer-product-wide-field">
+          <span>客户产品名称</span>
+          <input name="customer_product_name" maxlength="200" placeholder="选填" data-customer-product-edit-name>
+        </label>
+        <div class="form-actions modal-actions">
+          <button class="linear-button primary" type="submit">保存商品</button>
+          <button class="linear-button subtle" type="button" data-close-customer-product-edit-modal>取消</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endif %}

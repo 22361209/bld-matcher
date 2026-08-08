@@ -13,6 +13,7 @@ from .domain import QuoteValidationError
 from .factory import get_quote_service
 from .list_query import filters_from_request, page_url, pagination as build_pagination, requested_page
 from .service import QuoteImportBusyError, QuoteImportError, QuoteNotFoundError, QuoteVersionConflictError
+from .web_context import quote_edit_payload
 
 
 logger = logging.getLogger(__name__)
@@ -104,12 +105,24 @@ def _quote_list_context() -> dict[str, object]:
         total = 0
         quote_filter_options = {}
         quote_column_filters = {}
+    can_edit_quotes = can("edit_customer_prices")
+    can_delete_quotes = can("delete_customer_prices")
     return {
         "records": records,
         "latest": latest,
         "filters": filters,
         "quote_filter_options": quote_filter_options,
         "quote_column_filters": quote_column_filters,
+        "quote_filter_state": {
+            "options": quote_filter_options,
+            "selected": quote_column_filters,
+        },
+        "quote_edit_payloads": {
+            record.id: quote_edit_payload(record, allow_delete=can_delete_quotes)
+            for record in records
+        }
+        if can_edit_quotes
+        else {},
         "total_records": total,
         "stats": stats,
         "pagination": pagination,

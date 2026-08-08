@@ -1,0 +1,135 @@
+    <section class="access-editor-surface" aria-labelledby="role-picker-title">
+      <div class="access-editor-toolbar">
+        <div>
+          <h2 id="role-picker-title">角色权限管理</h2>
+          <p>选择一个角色维护权限矩阵；角色名称在角色列表维护。</p>
+        </div>
+      </div>
+      <form action="{{ url_for('users') }}" method="get" class="workbench-form access-identity-grid">
+        <input type="hidden" name="view" value="roles">
+        <label>
+          <span>角色名称</span>
+          <select name="role_key" required>
+            {% if not editing_role %}<option value="" selected disabled>请选择角色</option>{% endif %}
+            {% for role in roles %}
+              <option value="{{ role.role_key }}" {% if editing_role and editing_role.role_key == role.role_key %}selected{% endif %}>{{ role.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <div class="command-actions">
+          <button class="linear-button primary" type="submit">选择角色</button>
+        </div>
+      </form>
+    </section>
+
+    {% if editing_role and editing_role.is_system %}
+      <section class="workbench-section">
+        <h2>管理员</h2>
+        <p class="note">管理员是系统固定角色，始终拥有全部权限，不能修改。</p>
+      </section>
+    {% elif editing_role %}
+      <form action="{{ url_for('save_role_permissions_route', role_key=editing_role.role_key) }}" method="post" class="access-editor-form" data-role-access-form data-submit-wait data-submit-wait-text="正在保存角色权限，请稍候..." data-submit-wait-button-text="保存中...">
+        {{ csrf_field() }}
+        <input type="hidden" name="permission_selection_present" value="1">
+
+        <section class="access-editor-surface" aria-labelledby="role-editor-title">
+          <div class="access-editor-toolbar">
+            <div>
+              <h2 id="role-editor-title">{{ editing_role.name }}</h2>
+              <p>修改后立即影响继承该角色的账号。</p>
+            </div>
+            <div class="access-command-area">
+              <div class="command-actions">
+                <button class="linear-button primary" type="submit">保存权限</button>
+              </div>
+              <p class="submit-wait-message" data-submit-wait-message aria-live="polite"></p>
+            </div>
+          </div>
+
+          <div class="access-effective-summary" data-role-permission-summary aria-live="polite">
+            <span>已选权限 <strong data-role-permission-count>{{ editing_role.permissions | length }}</strong> 项</span>
+            <span>使用账号 <strong>{{ editing_role.user_count }}</strong> 个</span>
+            <span>管理员权限 <strong>系统固定</strong></span>
+          </div>
+          {% if editing_role.user_count %}
+            <p class="access-impact-note">保存后将立即重新计算 {{ editing_role.user_count }} 个继承账号的有效权限，个人授权和明确禁止保持不变。</p>
+          {% endif %}
+        </section>
+
+        <section class="permission-editor" aria-labelledby="role-permissions-title">
+          <div class="access-permission-layout">
+            <nav class="permission-category-nav" aria-label="角色权限分类">
+              <a href="#role-permission-matrix" aria-current="location" data-permission-category="all">
+                <span>全部</span><strong>{{ permission_count }}</strong>
+              </a>
+              {% for group_name, definitions in permission_groups %}
+                <a href="#role-permission-group-{{ loop.index }}" data-permission-category="group-{{ loop.index }}">
+                  <span>{{ group_name }}</span><strong>{{ definitions | length }}</strong>
+                </a>
+              {% endfor %}
+            </nav>
+
+            <div class="data-grid access-permission-grid" id="role-permission-matrix">
+              <div class="access-matrix-heading">
+                <div>
+                  <h2 id="role-permissions-title">角色权限</h2>
+                  <p>只授予该岗位必需的能力；管理员专属权限不能分配。</p>
+                </div>
+              </div>
+              <div data-grid-scroll data-permission-matrix-scroll>
+                <table class="data-table permission-matrix role-permission-matrix" aria-labelledby="role-permissions-title">
+                  <colgroup>
+                    <col class="permission-column-name">
+                    <col class="role-permission-column-choice">
+                    <col class="role-permission-column-note">
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th scope="col">功能权限</th>
+                      <th scope="col">授予角色</th>
+                      <th scope="col">状态与说明</th>
+                    </tr>
+                  </thead>
+                  {% for group_name, definitions in permission_groups %}
+                    <tbody>
+                      {% set group_index = loop.index %}
+                      <tr class="permission-group-row" id="role-permission-group-{{ group_index }}">
+                        <th scope="rowgroup" colspan="3"><span>{{ group_name }}</span><small>{{ definitions | length }} 项</small></th>
+                      </tr>
+                      {% for permission in definitions %}
+                        <tr class="permission-data-row{% if not permission.active %} permission-row-retained{% endif %}">
+                          <th scope="row" class="permission-name-cell">
+                            <span class="permission-name">{{ permission.label }}</span>
+                            <code>{{ permission.key }}</code>
+                            <span class="permission-description" title="{{ permission.description }}">{{ permission.description }}</span>
+                          </th>
+                          <td class="role-permission-choice-cell">
+                            {% if permission.assignable %}
+                              <label>
+                                <input type="checkbox" name="permissions" value="{{ permission.key }}" aria-label="授予角色：{{ permission.label }}" {% if permission.key in editing_role.permissions %}checked{% endif %}>
+                                <span>授予</span>
+                              </label>
+                            {% else %}
+                              <span class="permission-exclusive">管理员专属</span>
+                            {% endif %}
+                          </td>
+                          <td class="permission-status-note">
+                            {% if not permission.assignable %}
+                              仅系统管理员拥有，不可加入自定义角色。
+                            {% elif permission.active %}
+                              当前功能入口可用
+                            {% else %}
+                              当前无网页入口，保留用于历史兼容
+                            {% endif %}
+                          </td>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  {% endfor %}
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+      </form>
+    {% endif %}

@@ -14,6 +14,7 @@ from app.platform.clock import now_text
 from app.product_media import PRODUCT_IMAGE_DATA_PREFIX, image_slot_field, product_image_storage_name
 
 from .brand_normalization import canonicalize_brands
+from .domain import ProductFilters
 from .option_values import register_product_option_values
 
 _BOOTSTRAP_LOCK = threading.Lock()
@@ -498,6 +499,92 @@ def count_products(
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)
     return int(connection.execute(sql, params).fetchone()[0] or 0)
+
+
+def product_filter_option_rows(
+    connection: sqlite3.Connection,
+    filters: ProductFilters,
+) -> list[sqlite3.Row]:
+    """Load all three disjunctive facet inputs with one unsorted narrow scan.
+
+    Each facet ignores its own current selection while retaining the other two
+    column filters.  The SQL predicates intentionally reuse the catalog filter
+    builder so candidate counts stay identical to the result query semantics.
+    """
+
+    base_clauses, base_params = _product_filter_clauses(
+        query=filters.query,
+        include_inactive=filters.include_inactive,
+        only_inactive=filters.only_inactive,
+        bld_query=filters.bld_query,
+        oe_query=filters.oe_query,
+        series_query=filters.series_query,
+        model_query=filters.model_query,
+    )
+
+    def inclusion_expression(
+        *,
+        brands: Sequence[str],
+        items: Sequence[str],
+        product_statuses: Sequence[str],
+        brand_blank: bool,
+        item_blank: bool,
+        product_status_blank: bool,
+    ) -> tuple[str, list[object]]:
+        clauses: list[str] = []
+        params: list[object] = []
+        _append_column_filters(
+            clauses,
+            params,
+            brands=brands,
+            items=items,
+            product_statuses=product_statuses,
+            brand_blank=brand_blank,
+            item_blank=item_blank,
+            product_status_blank=product_status_blank,
+        )
+        return (" AND ".join(clauses) if clauses else "1"), params
+
+    brand_expression, brand_params = inclusion_expression(
+        brands=(),
+        items=filters.items,
+        product_statuses=filters.product_statuses,
+        brand_blank=False,
+        item_blank=filters.item_blank,
+        product_status_blank=filters.product_status_blank,
+    )
+    item_expression, item_params = inclusion_expression(
+        brands=filters.brands,
+        items=(),
+        product_statuses=filters.product_statuses,
+        brand_blank=filters.brand_blank,
+        item_blank=False,
+        product_status_blank=filters.product_status_blank,
+    )
+    status_expression, status_params = inclusion_expression(
+        brands=filters.brands,
+        items=filters.items,
+        product_statuses=(),
+        brand_blank=filters.brand_blank,
+        item_blank=filters.item_blank,
+        product_status_blank=False,
+    )
+
+    sql = f"""
+        SELECT
+          bld_no,
+          series,
+          item,
+          product_status,
+          CASE WHEN ({brand_expression}) THEN 1 ELSE 0 END AS include_brand,
+          CASE WHEN ({item_expression}) THEN 1 ELSE 0 END AS include_item,
+          CASE WHEN ({status_expression}) THEN 1 ELSE 0 END AS include_product_status
+        FROM products
+    """
+    if base_clauses:
+        sql += " WHERE " + " AND ".join(base_clauses)
+    params = [*brand_params, *item_params, *status_params, *base_params]
+    return connection.execute(sql, params).fetchall()
 
 
 def product_stats(connection: sqlite3.Connection) -> dict[str, int]:
