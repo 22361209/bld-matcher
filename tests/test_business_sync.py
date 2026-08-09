@@ -707,6 +707,53 @@ class BusinessSyncServiceTest(unittest.TestCase):
         rows = cast(list[dict[str, object]], summary["products"]["rows"])
         self.assertEqual(len(rows), 35)
 
+    def test_disabled_products_are_excluded_from_export_and_legacy_import(self) -> None:
+        with connect(self.source) as connection:
+            connection.execute(
+                "INSERT INTO products (bld_no, active, created_at, updated_at) VALUES (?, 1, ?, ?)",
+                ("ACTIVE-PRODUCT", "2026-08-09 10:00:00", "2026-08-09 10:00:00"),
+            )
+            connection.execute(
+                "INSERT INTO products (bld_no, active, created_at, updated_at) VALUES (?, 0, ?, ?)",
+                ("DISABLED-PRODUCT", "2026-08-09 10:00:00", "2026-08-09 10:00:00"),
+            )
+            disabled_row = dict(
+                connection.execute("SELECT * FROM products WHERE bld_no = 'DISABLED-PRODUCT'").fetchone()
+            )
+            disabled_row.pop("id")
+            connection.commit()
+
+        exported = self.root / "active-products-only.tar.gz"
+        repository = BusinessSyncRepository(self.source)
+        repository.export(output_path=exported, selected=("products",), actor="test")
+        _manifest, exported_payload = repository.read(exported)
+        self.assertEqual(
+            [row["bld_no"] for row in exported_payload["products"]],
+            ["ACTIVE-PRODUCT"],
+        )
+
+        legacy = self._write_package({"products": [disabled_row]})
+        service = BusinessSyncService(BusinessSyncRepository(self.target))
+        preview = service.preview(legacy)
+        summary = cast(dict[str, dict[str, object]], preview["summary"])
+        counts = cast(dict[str, int], summary["products"]["counts"])
+        self.assertEqual(counts["ignored_inactive"], 1)
+        self.assertEqual(counts["new"], 0)
+        result = service.apply(
+            legacy,
+            backup_path=self.root / "disabled-product-backup.sqlite3",
+            actor="test",
+            expected_token=cast(str, preview["token"]),
+        )
+        self.assertEqual(result["products"]["ignored_inactive"], 1)
+        with connect(self.target) as connection:
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM products WHERE bld_no = 'DISABLED-PRODUCT'"
+                ).fetchone()[0],
+                0,
+            )
+
     def test_product_media_and_local_only_deactivation_use_business_sync(self) -> None:
         source_drawings = self.root / "source-drawings"
         source_images = self.root / "source-images"
@@ -722,6 +769,9 @@ class BusinessSyncServiceTest(unittest.TestCase):
         with connect(self.target) as connection:
             connection.execute(
                 "INSERT INTO products (bld_no, active, created_at, updated_at) VALUES ('LOCAL-ONLY', 1, '2026-07-17 10:00:00', '2026-07-17 10:00:00')"
+            )
+            connection.execute(
+                "INSERT INTO products (bld_no, active, created_at, updated_at) VALUES ('ALREADY-DISABLED', 0, '2026-07-17 10:00:00', '2026-07-17 10:00:00')"
             )
             connection.commit()
         package = self.root / "business-with-media.tar.gz"

@@ -192,9 +192,12 @@ def export_package(
         for key in selected:
             table, _identity, _label = DATASETS[key]
             record_columns = columns(connection, table)
+            where_clause = " WHERE active = 1" if key == "products" else ""
             rows = [
                 dict(row)
-                for row in connection.execute(f"SELECT {', '.join(record_columns)} FROM {table}").fetchall()
+                for row in connection.execute(
+                    f"SELECT {', '.join(record_columns)} FROM {table}{where_clause}"
+                ).fetchall()
             ]
             for row in rows:
                 for column in LOCAL_MEDIA_COLUMNS.get(key, set()):

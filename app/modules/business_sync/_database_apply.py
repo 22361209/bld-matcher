@@ -10,7 +10,14 @@ from app.modules.products.option_values import register_product_option_values
 from app.platform.audit_store import log_event
 from app.platform.sync_identity import stable_sync_id
 
-from ._comparison import columns, incoming_status, normalized_incoming, state_token, unresolved_customers
+from ._comparison import (
+    columns,
+    incoming_status,
+    normalized_incoming,
+    state_token,
+    syncable_incoming_rows,
+    unresolved_customers,
+)
 from ._package_archive import PackageReader
 from ._schema import DATASETS, LOCAL_MEDIA_COLUMNS, MEDIA_DATASETS
 
@@ -209,6 +216,7 @@ def apply_package(
         resolve_quote_customers_fn(connection, payload, customer_mappings)
         for key, incoming_rows in payload.items():
             table, identity, _label = DATASETS[key]
+            syncable_rows, ignored_inactive = syncable_incoming_rows(key, incoming_rows)
             record_columns = columns(connection, table)
             write_columns = [
                 column for column in record_columns if column not in LOCAL_MEDIA_COLUMNS.get(key, set())
@@ -218,8 +226,14 @@ def apply_package(
             updates = ", ".join(f"{column}=excluded.{column}" for column in write_columns if column != identity)
             local_rows = connection.execute(f"SELECT * FROM {table}").fetchall()
             local = {str(row[identity]): row for row in local_rows}
-            counts = {"new": 0, "updated": 0, "conflict": 0, "unchanged": 0}
-            for raw_incoming in incoming_rows:
+            counts = {
+                "new": 0,
+                "updated": 0,
+                "conflict": 0,
+                "unchanged": 0,
+                "ignored_inactive": ignored_inactive,
+            }
+            for raw_incoming in syncable_rows:
                 incoming = normalized_incoming_fn(key, raw_incoming)
                 row_status, local_row, adopt_sync_id = incoming_status(
                     key,
@@ -274,7 +288,8 @@ def apply_package(
                     imported_quote_ids.add(int(imported["id"]))
             result[key] = counts
         if deactivate_local_only and "products" in payload:
-            incoming_bld = {str(row["bld_no"]) for row in payload["products"]}
+            syncable_products, _ignored_inactive = syncable_incoming_rows("products", payload["products"])
+            incoming_bld = {str(row["bld_no"]) for row in syncable_products}
             placeholders = ", ".join("?" for _ in incoming_bld) or "''"
             cursor = connection.execute(
                 f"UPDATE products SET active = 0, updated_at = ? WHERE active = 1 AND bld_no NOT IN ({placeholders})",
@@ -294,6 +309,7 @@ def apply_package(
             package_path.name,
             "；".join(
                 f"{DATASETS[key][2]}新增 {counts['new']}、更新 {counts['updated']}、冲突 {counts['conflict']}"
+                + (f"、忽略禁用 {counts['ignored_inactive']}" if counts["ignored_inactive"] else "")
                 for key, counts in result.items()
             ),
             actor=actor,

@@ -21,7 +21,7 @@
         <label class="sync-option"><input type="checkbox" name="include_material_drawings" value="1"><span><strong>物料图纸</strong><small>随材料明细打包 data/material_drawings</small></span></label>
       </div>
     </div>
-    <div class="sync-panel-foot"><p>产品媒体随“产品目录”同步，物料图纸随“材料明细”同步；账号、权限、API Key 和操作日志不会导出。</p><button class="linear-button primary" type="submit">导出数据包</button></div>
+    <div class="sync-panel-foot"><p>产品目录只同步启用型号；产品媒体随“产品目录”同步，物料图纸随“材料明细”同步；账号、权限、API Key 和操作日志不会导出。</p><button class="linear-button primary" type="submit">导出数据包</button></div>
   </form>
   <form action="{{ url_for('preview_business_data_sync') }}" method="post" enctype="multipart/form-data" class="sync-panel">
     {{ csrf_field() }}
@@ -31,6 +31,7 @@
   </form>
 </section>
 {% if preview %}
+{% if preview.summary.products and preview.summary.products.counts.ignored_inactive %}<section class="workspace-command"><div><h2>已忽略禁用型号</h2><p class="note">数据包内有 {{ preview.summary.products.counts.ignored_inactive }} 个已禁用产品型号，不会导入当前系统。</p></div></section>{% endif %}
 <section class="metric-strip">{% for key, info in preview.summary.items() %}<div><span>{{ info.label }}新增</span><strong>{{ info.counts.new }}</strong></div><div><span>{{ info.label }}更新</span><strong>{{ info.counts.updated }}</strong></div><div><span>{{ info.label }}冲突</span><strong>{{ info.counts.conflict }}</strong></div>{% endfor %}</section>
 {% if preview.media.drawings or preview.media.product_images or preview.media.material_drawings %}<section class="workspace-command"><div><h2>包内媒体</h2><p class="note">产品图纸 {{ preview.media.files.drawings or 0 }} 个，产品图片 {{ preview.media.files.product_images or 0 }} 个，物料图纸 {{ preview.media.files.material_drawings or 0 }} 个；确认后可选择导入。</p></div></section>{% endif %}
 <form action="{{ url_for('apply_business_data_sync') }}" method="post" class="workbench-form wide">
@@ -104,6 +105,7 @@
           <span>更新 {{ info.counts.updated }}</span>
           <span>冲突 {{ info.counts.conflict }}</span>
           <span>无变化 {{ info.counts.unchanged }}</span>
+          {% if info.counts.ignored_inactive %}<span>忽略禁用 {{ info.counts.ignored_inactive }}</span>{% endif %}
         </span>
       </summary>
       <div class="import-preview-dataset-tools">

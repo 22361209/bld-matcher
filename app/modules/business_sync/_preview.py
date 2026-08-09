@@ -14,6 +14,7 @@ from ._comparison import (
     normalized_incoming,
     preview_label,
     state_token,
+    syncable_incoming_rows,
     unresolved_customers,
 )
 from ._package_archive import PackageReader
@@ -37,6 +38,7 @@ def preview_package(
     with connect(database_path) as connection:
         for key, incoming_rows in payload.items():
             table, identity, label = DATASETS[key]
+            syncable_rows, ignored_inactive = syncable_incoming_rows(key, incoming_rows)
             record_columns = columns(connection, table)
             if any(
                 identity not in row or any(column not in row for column in record_columns)
@@ -46,10 +48,16 @@ def preview_package(
                 raise ValueError(f"{label}字段与当前系统不一致，请先升级后再导入。")
             local_rows = connection.execute(f"SELECT * FROM {table}").fetchall()
             local = {str(row[identity]): row for row in local_rows}
-            counts = {"new": 0, "updated": 0, "conflict": 0, "unchanged": 0}
+            counts = {
+                "new": 0,
+                "updated": 0,
+                "conflict": 0,
+                "unchanged": 0,
+                "ignored_inactive": ignored_inactive,
+            }
             rows: list[dict[str, object]] = []
             conflicts: list[dict[str, object]] = []
-            for raw_incoming in incoming_rows:
+            for raw_incoming in syncable_rows:
                 incoming = normalized_incoming_fn(key, raw_incoming)
                 if not isinstance(incoming, dict):
                     raise ValueError(f"{label}包含无效记录。")
@@ -85,8 +93,12 @@ def preview_package(
                         }
                     )
             if key == "products":
-                incoming_ids = {str(row[identity]) for row in incoming_rows if isinstance(row, dict)}
-                counts["local_only"] = sum(1 for row in local_rows if str(row[identity]) not in incoming_ids)
+                incoming_ids = {str(row[identity]) for row in syncable_rows}
+                counts["local_only"] = sum(
+                    1
+                    for row in local_rows
+                    if bool(row["active"]) and str(row[identity]) not in incoming_ids
+                )
             summary[key] = {"label": label, "counts": counts, "rows": rows, "conflicts": conflicts}
         token = state_token(connection, package_path, tuple(payload))
         missing_customers = unresolved_customers(connection, payload)

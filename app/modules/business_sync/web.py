@@ -148,5 +148,13 @@ def register(app) -> None:
             logger.exception("Business data package apply failed")
             flash("业务数据包导入失败，已保留导入前备份。", "error")
             return redirect(url_for("business_data_sync"))
-        flash("业务数据导入完成：" + "；".join(f"{DATASETS[key][2]}新增 {value['new']}、更新 {value['updated']}、冲突 {value['conflict']}" for key, value in result.items()), "success")
+        flash(
+            "业务数据导入完成："
+            + "；".join(
+                f"{DATASETS[key][2]}新增 {value['new']}、更新 {value['updated']}、冲突 {value['conflict']}"
+                + (f"、忽略禁用 {value['ignored_inactive']}" if value["ignored_inactive"] else "")
+                for key, value in result.items()
+            ),
+            "success",
+        )
         return redirect(url_for("business_data_sync"))

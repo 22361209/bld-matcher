@@ -187,6 +187,18 @@ def normalized_incoming(key: str, incoming: object) -> dict[str, object]:
     return normalized
 
 
+def syncable_incoming_rows(
+    key: str,
+    incoming_rows: list[dict[str, object]],
+) -> tuple[list[dict[str, object]], int]:
+    """Exclude disabled products from cross-device business synchronization."""
+
+    if key != "products":
+        return incoming_rows, 0
+    syncable = [row for row in incoming_rows if row.get("active") not in (0, False, "0")]
+    return syncable, len(incoming_rows) - len(syncable)
+
+
 def media_summary(manifest: dict[str, object]) -> dict[str, object]:
     media = manifest.get("media", {})
     if not isinstance(media, dict):

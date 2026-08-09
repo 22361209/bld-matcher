@@ -25,6 +25,7 @@ class TestWebProductImportAndSync(WebAppTestBase):
             page = self.client.get("/business-data-sync")
             html = page.get_data(as_text=True)
             self.assertIn('name="include_material_drawings"', html)
+            self.assertIn("产品目录只同步启用型号", html)
             self.assertIn("<h3>导出内容</h3>", html)
             self.assertIn("<strong>物料图纸</strong>", html)
             self.assertNotIn("包含物料图纸", html)
