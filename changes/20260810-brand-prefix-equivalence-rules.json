@@ -1,0 +1,15 @@
+{
+  "date": "2026-08-10",
+  "version": "unreleased",
+  "title": "品牌号前缀等价规则与管理员规则列表",
+  "entries": [
+    "Moog 品牌号前缀 RK、CK、K 视为等价，后续数字一致即可命中同一产品。",
+    "Mevotech 品牌号前缀 CMS、MS、GS 视为等价，后续数字一致即可命中同一产品。",
+    "管理员后台新增“查询匹配规则”页面，可查看当前生效的品牌号前缀等价规则与系统内置匹配策略。"
+  ],
+  "impact": {
+    "data": "询价匹配索引会重新生成，新增的品牌号前缀变体将参与匹配",
+    "api": "compatible",
+    "operations": "restart-required"
+  }
+}

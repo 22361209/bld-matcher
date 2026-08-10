@@ -554,6 +554,13 @@
       "rule": "/match/write-quotes"
     },
     {
+      "endpoint": "matching_rules",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/matching-rules"
+    },
+    {
       "endpoint": "material_drawings",
       "methods": [
         "GET"

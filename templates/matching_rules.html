@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% set active_page = "matching_rules" %}
+{% block page_title %}查询匹配规则{% endblock %}
+{% block page_id %}admin.matching_rules{% endblock %}
+{% block page_type %}system-admin{% endblock %}
+{% block page_class %}shell wide app-surface{% endblock %}
+
+{% block page_content %}
+  <section class="data-section">
+    <div class="data-section-header">
+      <div>
+        <h2>品牌号前缀等价规则</h2>
+        <p>以下品牌号前缀在询价匹配时视为等价，只要后续数字一致即可命中。</p>
+      </div>
+    </div>
+    <div class="data-table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>品牌</th>
+            <th>等价前缀</th>
+            <th>示例</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for rule in brand_rules %}
+            <tr>
+              <td><strong>{{ rule.brand }}</strong></td>
+              <td>{{ rule.prefixes | join(" / ") }}</td>
+              <td>{{ rule.example }}</td>
+              <td>{{ rule.description }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="data-section">
+    <div class="data-section-header">
+      <div>
+        <h2>系统内置匹配策略</h2>
+        <p>询价时按以下策略顺序尝试匹配。</p>
+      </div>
+    </div>
+    <div class="data-table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>策略</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for strategy in strategies %}
+            <tr>
+              <td><strong>{{ strategy.name }}</strong></td>
+              <td>{{ strategy.description }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

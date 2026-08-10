@@ -233,6 +233,40 @@ class MatcherPrefixIndexEquivalenceTests(unittest.TestCase):
             with self.subTest(query=query):
                 self.assert_reference_match("", query)
 
+    def test_brand_prefix_equivalence_rules_generate_cross_prefix_aliases(self) -> None:
+        rows = [
+            {
+                "BLD NO.": "K-MOOG",
+                "SERIES": "TEST",
+                "ITEM": "Moog arm",
+                "OE NO.1": "",
+                "OE NO.2": "Moog: RK623344",
+            },
+            {
+                "BLD NO.": "K-MEVO",
+                "SERIES": "TEST",
+                "ITEM": "Mevotech arm",
+                "OE NO.1": "",
+                "OE NO.2": "Mevotech: CMS801114",
+            },
+        ]
+        catalog = ProductCatalog(rows)
+        cases = (
+            ("moog_k_variant", "", "K623344", "K-MOOG", "品牌号码精准命中"),
+            ("moog_ck_variant", "", "CK623344", "K-MOOG", "品牌号码精准命中"),
+            ("moog_rk_variant", "", "RK623344", "K-MOOG", "品牌号码精准命中"),
+            ("mevotech_ms_variant", "", "MS801114", "K-MEVO", "品牌号码精准命中"),
+            ("mevotech_gs_variant", "", "GS801114", "K-MEVO", "品牌号码精准命中"),
+            ("mevotech_cms_variant", "", "CMS801114", "K-MEVO", "品牌号码精准命中"),
+        )
+        for label, inquiry_name, inquiry_oe, expected_bld, expected_reason in cases:
+            with self.subTest(label=label):
+                match = catalog.match(inquiry_name, inquiry_oe)
+                self.assertIsNotNone(match)
+                assert match is not None
+                self.assertEqual(match.bld_no, expected_bld)
+                self.assertEqual(match.reason, expected_reason)
+
     def test_sorted_index_contains_every_oe_key_once(self) -> None:
         self.assertEqual(self.optimized._sorted_oe_keys, tuple(sorted(self.optimized.by_oe)))
 

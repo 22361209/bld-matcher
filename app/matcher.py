@@ -112,6 +112,24 @@ def split_codes(value: object) -> list[str]:
     return [part.strip() for part in parts if normalize_code(part)]
 
 
+BRAND_PREFIX_EQUIVALENCES: tuple[frozenset[str], ...] = (
+    frozenset({"RK", "CK", "K"}),
+    frozenset({"CMS", "MS", "GS"}),
+)
+
+
+def _brand_prefix_variants(key: str) -> list[str]:
+    if not key:
+        return []
+    for group in BRAND_PREFIX_EQUIVALENCES:
+        for prefix in group:
+            if key.startswith(prefix):
+                suffix = key[len(prefix) :]
+                if suffix and suffix.isdigit():
+                    return [f"{other}{suffix}" for other in group if other != prefix]
+    return []
+
+
 def brand_code_aliases(code: str) -> list[str]:
     aliases = [code]
     text = str(code).strip()
@@ -126,6 +144,7 @@ def brand_code_aliases(code: str) -> list[str]:
         match = re.fullmatch(r"[A-Z]{1,4}(\d{4,})", key)
         if match:
             aliases.append(match.group(1))
+        aliases.extend(_brand_prefix_variants(key))
 
     unique = []
     seen = set()
@@ -480,6 +499,35 @@ class ProductCatalog:
 
     def _multi_tolerant_reason(self, key: str) -> str:
         return "品牌号码多号码字符容错命中" if self._is_brand_code_key(key, tolerant=True) else "OE 多号码字符容错命中"
+
+
+def matcher_rules() -> list[dict]:
+    return [
+        {
+            "brand": "Moog",
+            "prefixes": sorted({"RK", "CK", "K"}),
+            "description": "Moog 品牌号前缀 RK、CK、K 视为等价，后续数字一致即视为同一号码。",
+            "example": "RK623344、CK623344、K623344",
+        },
+        {
+            "brand": "Mevotech",
+            "prefixes": sorted({"CMS", "MS", "GS"}),
+            "description": "Mevotech 品牌号前缀 CMS、MS、GS 视为等价，后续数字一致即视为同一号码。",
+            "example": "CMS801114、MS801114、GS801114",
+        },
+    ]
+
+
+def matcher_strategies() -> list[dict]:
+    return [
+        {"name": "BLD NO. 精准命中", "description": "查询号码与目录 BLD NO. 完全一致时直接命中。"},
+        {"name": "OE 精准命中", "description": "查询号码与目录 OE NO.1 或 OE NO.2 完全一致时命中。"},
+        {"name": "品牌号码组合前缀命中", "description": "查询号码（长度 ≥ 5）是目录品牌号的唯一前缀时命中。"},
+        {"name": "品牌号码尾字母容错命中", "description": "查询号码末尾多出一个或多个字母，去掉后仍能唯一命中目录品牌号时命中。"},
+        {"name": "品牌号码字符容错命中", "description": "查询号码将数字 0 与字母 O 互换后能唯一命中目录品牌号时命中。"},
+        {"name": "PSA 号码点号容错命中", "description": "3520/3521 系列 PSA 号码忽略点号位置差异后命中。"},
+        {"name": "人工确认映射", "description": "管理员维护的号码到 BLD NO. 映射优先命中。"},
+    ]
 
 
 def load_manual_map(path: Path) -> dict[str, str]:

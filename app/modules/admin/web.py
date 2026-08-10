@@ -4,6 +4,7 @@ import logging
 
 from flask import flash, g, make_response, redirect, render_template, request, url_for
 
+from app.matcher import matcher_rules, matcher_strategies
 from app.platform.api_principal import API_SCOPE_LABELS, DEFAULT_API_SCOPES
 from app.platform.permissions import PERMISSION_DEFINITIONS, permission_groups
 from app.security import actor_name, permission_required
@@ -288,3 +289,13 @@ def register(app) -> None:
     def system_updates():
         updates, source_name = get_admin_service().system_updates()
         return render_template("system_updates.html", updates=updates, source_name=source_name)
+
+    @app.get("/matching-rules")
+    @permission_required("manage_users")
+    def matching_rules():
+        return render_template(
+            "matching_rules.html",
+            active_page="matching_rules",
+            brand_rules=matcher_rules(),
+            strategies=matcher_strategies(),
+        )
