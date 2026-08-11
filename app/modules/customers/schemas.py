@@ -10,8 +10,25 @@ class CustomerListQuery(StrictApiModel):
     limit: int = Field(default=20, ge=1, le=50)
 
 
+class CustomerCreateRequest(StrictApiModel):
+    name: str = Field(min_length=1, max_length=200, description="客户名称；必须与已登记客户不重复。")
+
+
 class CustomerResponse(StrictApiModel):
     name: str
+
+
+class CustomerDetailResponse(StrictApiModel):
+    id: int
+    name: str
+    code: str
+    status: str
+    created_at: str
+    updated_at: str
+
+
+class CustomerData(StrictApiModel):
+    customer: CustomerDetailResponse
 
 
 class CustomerListData(StrictApiModel):
@@ -23,4 +40,11 @@ class CustomerListEnvelope(StrictApiModel):
     api_version: str = "1"
     request_id: str
     data: CustomerListData
+    warnings: list[str] = Field(default_factory=list)
+
+
+class CustomerEnvelope(StrictApiModel):
+    api_version: str = "1"
+    request_id: str
+    data: CustomerData
     warnings: list[str] = Field(default_factory=list)

@@ -1,0 +1,11 @@
+{
+  "date": "2026-08-11",
+  "version": "unreleased",
+  "title": "API v1 新增新建客户接口",
+  "entries": [
+    "新增 POST /api/v1/customers：集成方可用 quotes:write 范围的 API Key 登记新客户，请求体为 {\"name\": \"客户名称\"}，必须携带 Idempotency-Key；成功返回 201 和客户档案（id、名称、编号、状态、创建/更新时间）。",
+    "新客户报价可以先调 POST /api/v1/customers 登记客户，再调 POST /api/v1/quotes 记录报价，不再需要先到网页客户列表手工新增。",
+    "客户名称重复时返回 409 customer.duplicate；名称为空或超长返回 422；只有 quotes:read 的 Key 调用返回 403。"
+  ],
+  "impact": {"data": "none", "api": "compatible", "operations": "restart-required"}
+}

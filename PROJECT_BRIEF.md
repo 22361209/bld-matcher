@@ -188,7 +188,7 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 
 - `/quotes` 提供报价记录页面，可新增报价、按客户/型号/日期/币种/报价人筛选、查看同一客户和型号的历史报价，并显示最近一次报价；点击报价单号会显示该单号明细及其已生成的报价文件下载入口。
 - 报价的客户和 BLD 号必须已登记（客户信息是报价左侧的独立导航入口，改名级联历史记录；BLD 号见产品目录，含已停用产品），手动、Excel 导入、询价写入和 API v1 统一硬校验；录入时客户和 BLD 号用字符匹配下拉选择（方向键+回车），有 `add_customers` 权限可在下拉中快捷新增客户（ADR 0016）。
-- 新集成通过 `/api/v1/quotes` 调用报价；读取使用 `quotes:read`，写入使用 `quotes:write`，创建必须带 `Idempotency-Key`，修订还必须带当前 ETag 对应的 `If-Match`。
+- 新集成通过 `/api/v1/quotes` 调用报价；读取使用 `quotes:read`，写入使用 `quotes:write`，创建必须带 `Idempotency-Key`，修订还必须带当前 ETag 对应的 `If-Match`。客户主档也可经 API 维护：`GET /api/v1/customers` 模糊匹配已登记客户，`POST /api/v1/customers`（`quotes:write`，需幂等键）登记新客户，供新客户报价前调用。
 - 旧 `/api/quotes` 系列接口已移除（ADR 0013），报价对外 API 只有 `/api/v1/quotes`；历史 `price` 镜像列同步删除，价格只保留含税单价 `tax_price` 和不含税单价 `net_price`。
 - 新增和修正报价弹窗只录入业务字段，不显示报价人、来源、原文或附件路径；网页、Excel 导入和 API 新增分别由服务端自动记录可信账号及 `manual`、`excel`、`api` 来源，客户端提交的报价人和来源不会覆盖系统识别结果，也不能在修订中修改。
 - 报价数据写入 `quote_records`，整数 `version` 防止并发覆盖；客户改名和业务数据同步只要改变既有报价的客户、价格等来源字段，也必须从本机当前版本递增，使旧合同选择令牌失效。同步覆盖报价时按导入后的规范客户名称重新解析本机 `customer_id`，不能沿用属于其他客户的旧 ID。修订 before/after 写入 `quote_record_revisions`；删除入口在“修正”弹窗内，删除会清理该条修订日志并写审计事件。

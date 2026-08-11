@@ -97,6 +97,105 @@
         "title": "ArtifactResponse",
         "type": "object"
       },
+      "CustomerCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "description": "客户名称；必须与已登记客户不重复。",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CustomerCreateRequest",
+        "type": "object"
+      },
+      "CustomerData": {
+        "additionalProperties": false,
+        "properties": {
+          "customer": {
+            "$ref": "#/components/schemas/CustomerDetailResponse"
+          }
+        },
+        "required": [
+          "customer"
+        ],
+        "title": "CustomerData",
+        "type": "object"
+      },
+      "CustomerDetailResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "code",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CustomerDetailResponse",
+        "type": "object"
+      },
+      "CustomerEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "api_version": {
+            "default": "1",
+            "title": "Api Version",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/CustomerData"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "request_id",
+          "data"
+        ],
+        "title": "CustomerEnvelope",
+        "type": "object"
+      },
       "CustomerListData": {
         "additionalProperties": false,
         "properties": {
@@ -1746,6 +1845,62 @@
         "summary": "Match registered customers by name fragment",
         "x-required-scopes": [
           "quotes:read"
+        ]
+      },
+      "post": {
+        "operationId": "createCustomer",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 8,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerEnvelope"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Create a registered customer",
+        "x-required-scopes": [
+          "quotes:write"
         ]
       }
     },

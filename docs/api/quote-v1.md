@@ -21,6 +21,7 @@ GET   /api/v1/quotes/{quote_id}
 POST  /api/v1/quotes
 PATCH /api/v1/quotes/{quote_id}
 GET   /api/v1/customers?q=...&limit=...
+POST  /api/v1/customers
 ```
 
 列表支持 `customer_name`、`bld_no`、`date_from`、`date_to`、`currency`、`quoted_by`、`quote_no`、`limit` 和 `offset`。API v1 不接受或返回本机 `attachment_path`。
@@ -29,7 +30,7 @@ GET   /api/v1/customers?q=...&limit=...
 
 报价的客户名称和 BLD 号必须已登记：`customer_name` 必须存在于客户列表（网页「客户列表」维护），`bld_no` 必须存在于产品目录（含已停用产品）。不满足时创建和修订返回 `422`，错误码分别是 `quote.customer_unknown` 和 `quote.bld_unknown`。
 
-调用方通常只有客户简称：先用 `GET /api/v1/customers?q=<简称>`（`quotes:read`）模糊匹配已登记客户。返回唯一候选时直接使用其 `name`；返回多个候选时先向用户确认；没有候选时说明客户未登记，请用户在网页「客户列表」新增后再报价，不要自行拼写全称。
+调用方通常只有客户简称：先用 `GET /api/v1/customers?q=<简称>`（`quotes:read`）模糊匹配已登记客户。返回唯一候选时直接使用其 `name`；返回多个候选时先向用户确认；没有候选且确认是新客户时，用 `POST /api/v1/customers`（`quotes:write`，需 `Idempotency-Key`）登记后再报价，请求体为 `{"name": "<客户全称>"}`，成功返回 `201` 和 customer 对象，名称重复时返回 `409 customer.duplicate`。不要不经确认就自行拼写全称登记。
 
 每条报价记录都有服务端生成的 `quote_no`（报价单号，格式 `Q` + 6 位日期 + 3 位当日序号，如 `Q260725001`）。网页手工新增和 API 新增每条各生成一个单号；网页询价写入和 Excel 导入的整批记录共用一个单号。`quote_no` 由系统维护，创建和修订请求都不能指定或修改；历史记录在迁移 026 中按报价日期逐行补编号。列表按报价日期新→旧、报价单号新→旧、同一单号内按写入顺序返回。
 

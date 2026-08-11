@@ -905,6 +905,63 @@ class TestWebQuotesContractsCustomers(WebAppTestBase):
         self.assertEqual(data["customers"], [{"name": "宁波多迦"}])
         self.assertEqual(data["total"], 1)
 
+    def test_customer_v1_create_endpoint(self):
+        read_token = self.create_internal_api_token(scopes=["quotes:read"], name="Customers Read Only")
+        denied = self.client.post(
+            "/api/v1/customers",
+            json={"name": "API 无权客户"},
+            headers={"Authorization": f"Bearer {read_token}", "Idempotency-Key": "customer-create-denied"},
+        )
+        self.assertEqual(denied.status_code, 403)
+        self.assertEqual(denied.get_json()["error"]["code"], "auth.insufficient_scope")
+
+        token = self.create_internal_api_token(scopes=["quotes:write"], name="Customers Write")
+        headers = {"Authorization": f"Bearer {token}"}
+        create = self.client.post(
+            "/api/v1/customers",
+            json={"name": "  API 新客户  "},
+            headers={**headers, "Idempotency-Key": "customer-create-001"},
+        )
+        self.assertEqual(create.status_code, 201)
+        customer = create.get_json()["data"]["customer"]
+        self.assertTrue(customer["id"])
+        self.assertEqual(customer["name"], "API 新客户")
+        self.assertEqual(customer["status"], "active")
+
+        replay = self.client.post(
+            "/api/v1/customers",
+            json={"name": "  API 新客户  "},
+            headers={**headers, "Idempotency-Key": "customer-create-001"},
+        )
+        self.assertEqual(replay.status_code, 201)
+        self.assertEqual(replay.headers.get("Idempotency-Replayed"), "true")
+        self.assertEqual(replay.get_json()["data"]["customer"]["id"], customer["id"])
+
+        duplicate = self.client.post(
+            "/api/v1/customers",
+            json={"name": "API 新客户"},
+            headers={**headers, "Idempotency-Key": "customer-create-002"},
+        )
+        self.assertEqual(duplicate.status_code, 409)
+        self.assertEqual(duplicate.get_json()["error"]["code"], "customer.duplicate")
+
+        invalid = self.client.post(
+            "/api/v1/customers",
+            json={"name": "  "},
+            headers={**headers, "Idempotency-Key": "customer-create-003"},
+        )
+        self.assertEqual(invalid.status_code, 422)
+        self.assertEqual(invalid.get_json()["error"]["code"], "request.invalid")
+
+        self.register_customer_and_product("API 新客户", "K-API-NEW-CUST")
+        quote = self.client.post(
+            "/api/v1/quotes",
+            json={"customer_name": "API 新客户", "bld_no": "K-API-NEW-CUST", "tax_price": 9.9},
+            headers={**headers, "Idempotency-Key": "customer-create-quote-001"},
+        )
+        self.assertEqual(quote.status_code, 201)
+        self.assertEqual(quote.get_json()["data"]["quote"]["customer_name"], "API 新客户")
+
     def test_customer_page_filters_by_owner_label_and_bounds_long_queries(self):
         self.login()
         with self.web.connect(self.web.DB_PATH) as connection:

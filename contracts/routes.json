@@ -64,6 +64,13 @@
       "rule": "/api/v1/customers"
     },
     {
+      "endpoint": "customer_v1_api.create_customer_v1",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/v1/customers"
+    },
+    {
       "endpoint": "docs_v1_api.read_api_doc",
       "methods": [
         "GET"
