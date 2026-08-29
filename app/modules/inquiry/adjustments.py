@@ -79,14 +79,23 @@ def apply_adjustment(
 ) -> tuple[CatalogMatch | None, Decimal | None, str]:
     if adjustment is None:
         return match, None, ""
-    if match is None or " / " in match.bld_no:
+    if match is None:
         raise ValueError("只有唯一命中的产品可以进行本次报价调整。")
+    conflict_candidates: tuple[str, ...] = ()
+    if " / " in match.bld_no:
+        conflict_candidates = tuple(
+            part.strip() for part in match.bld_no.split(" / ") if normalize_code(part)
+        )
     if normalize_code(adjustment.expected_bld_no) != normalize_code(match.bld_no):
         raise ValueError("查询结果已变化，请重新查询后再调整产品或单价。")
 
     adjusted_match = match
     note = ""
     if adjustment.target_bld_no:
+        if conflict_candidates and normalize_code(adjustment.target_bld_no) not in {
+            normalize_code(candidate) for candidate in conflict_candidates
+        }:
+            raise ValueError("只能在本行命中的候选 BLD 中选择实际产品。")
         target = catalog.by_bld.get(normalize_code(adjustment.target_bld_no))
         if target is None:
             raise ValueError(f"指定产品 {adjustment.target_bld_no} 不存在或已停用。")
@@ -101,6 +110,8 @@ def apply_adjustment(
                 unmatched_codes=match.unmatched_codes,
             )
             note = f"本次报价指定：{match.bld_no} → {target_bld_no}"
+    elif conflict_candidates:
+        raise ValueError("多个候选 BLD 的命中行需要先选定实际产品，再调整单价。")
     if adjustment.tax_price is not None:
         price_note = f"本次报价含税单价：¥{adjustment.tax_price:.2f}"
         note = f"{note}；{price_note}" if note else price_note

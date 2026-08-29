@@ -123,9 +123,11 @@
           <tbody>
             {% for row in summary.rows %}
               {% set row_adjustment_allowed = row.adjustment_allowed if row.adjustment_allowed is defined else (row.bld_no and " / " not in row.bld_no) %}
+              {% set row_conflict_options = row.conflict_candidates if row.conflict_candidates is defined else [] %}
+              {% set row_variant_options = row.variant_options if row.variant_options is defined else [] %}
               {% set row_status = format_product_status(row.product_status, "zh") %}
               {% set row_image_gallery = product_image_urls(row) %}
-              <tr data-inquiry-result-row{% if row_adjustment_allowed %} data-adjustment-key="{{ row.adjustment_key }}" data-adjustment-allowed="1"{% endif %} data-default-bld="{{ row.bld_no }}" data-default-price="{{ row.price_cny if can_view_product_price and row.price_cny is not none else '' }}" data-default-status="{{ row_status }}">
+              <tr data-inquiry-result-row{% if row_conflict_options or row_adjustment_allowed %} data-adjustment-key="{{ row.adjustment_key }}"{% endif %}{% if row_adjustment_allowed %} data-adjustment-allowed="1"{% endif %}{% if row_conflict_options %} data-conflict-candidates='{{ row_conflict_options|tojson }}'{% endif %}{% if row_variant_options %} data-variant-options='{{ row_variant_options|tojson }}'{% endif %} data-default-bld="{{ row.bld_no }}" data-default-price="{{ row.price_cny if can_view_product_price and row.price_cny is not none else '' }}" data-default-status="{{ row_status }}">
                 <td data-col="row">{{ row.row }}</td>
                 <td data-col="oe">
                   {% if not row.bld_no and can("manage_aliases") %}
@@ -142,7 +144,19 @@
                 </td>
                 <td data-col="customer-code">{{ row.customer_product_code }}</td>
                 <td data-col="bld">
-                  {% if row_adjustment_allowed and can("edit_customer_prices") %}
+                  {% if row_conflict_options and can("edit_customer_prices") %}
+                    <div class="inquiry-bld-control">
+                      <select class="inquiry-bld-select" data-inquiry-conflict-select aria-label="第 {{ row.row }} 行本次报价实际 BLD NO.">
+                        <option value="" selected>请选择：{{ row.bld_no }}</option>
+                        {% for option in row_conflict_options %}
+                          <option value="{{ option.bld_no }}">{{ option.bld_no }}{% if option.product_status %}（{{ option.product_status }}）{% endif %}</option>
+                        {% endfor %}
+                      </select>
+                      <button type="button" class="inquiry-adjust-reset" data-reset-inquiry-product hidden>恢复待确认</button>
+                    </div>
+                  {% elif row_conflict_options %}
+                    <strong data-current-bld>{{ row.bld_no }}</strong>
+                  {% elif row_adjustment_allowed and can("edit_customer_prices") %}
                     <div class="inquiry-bld-control">
                       <input type="search" value="{{ row.bld_no }}" autocomplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="inquiry-bld-options" aria-invalid="false" aria-label="第 {{ row.row }} 行本次报价 BLD NO." aria-describedby="inquiry-bld-error-{{ loop.index }}" data-inquiry-bld-input>
                       <span class="inquiry-bld-error" id="inquiry-bld-error-{{ loop.index }}" data-inquiry-bld-error aria-live="polite" hidden></span>
@@ -178,7 +192,18 @@
                   {% endif %}
                 </td>
                 {% endif %}
-                <td data-col="status" class="product-status-cell">{{ row_status }}</td>
+                <td data-col="status" class="product-status-cell">
+                  {% if row_variant_options and can("edit_customer_prices") %}
+                    <select class="inquiry-status-select" data-inquiry-variant-select aria-label="第 {{ row.row }} 行选择产品状态">
+                      <option value="" hidden></option>
+                      {% for option in row_variant_options %}
+                        <option value="{{ option.bld_no }}"{% if option.bld_no == row.bld_no %} selected{% endif %}>{% if option.product_status %}{{ option.product_status }}（{{ option.bld_no }}）{% else %}{{ option.bld_no }}{% endif %}</option>
+                      {% endfor %}
+                    </select>
+                  {% else %}
+                    {{ row_status }}
+                  {% endif %}
+                </td>
                 <td data-col="score">{{ row.score }}</td>
                 <td data-col="reason">
                   {{ row.reason }}

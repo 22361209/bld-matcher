@@ -90,6 +90,49 @@ class InquiryAdjustmentParsingTest(unittest.TestCase):
             )
 
 
+class ConflictAdjustmentTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.catalog = _catalog()
+        self.match = self.catalog.match("", "OE-LA\nOE-9999")
+        assert self.match is not None
+        self.assertEqual(self.match.bld_no, "K8053LA / K9999A")
+
+    def test_selecting_a_conflict_candidate_replaces_the_match(self) -> None:
+        adjusted, tax_price, note = apply_adjustment(
+            self.catalog,
+            self.match,
+            InquiryAdjustment(expected_bld_no="K8053LA / K9999A", target_bld_no="K9999A"),
+        )
+        self.assertIsNotNone(adjusted)
+        self.assertEqual(adjusted.bld_no, "K9999A")
+        self.assertIsNone(tax_price)
+        self.assertEqual(note, "本次报价指定：K8053LA / K9999A → K9999A")
+
+    def test_conflict_rows_reject_products_outside_the_candidates(self) -> None:
+        with self.assertRaisesRegex(ValueError, "候选 BLD"):
+            apply_adjustment(
+                self.catalog,
+                self.match,
+                InquiryAdjustment(expected_bld_no="K8053LA / K9999A", target_bld_no="K8053LB"),
+            )
+
+    def test_conflict_rows_reject_price_only_adjustments(self) -> None:
+        with self.assertRaisesRegex(ValueError, "先选定实际产品"):
+            apply_adjustment(
+                self.catalog,
+                self.match,
+                InquiryAdjustment(expected_bld_no="K8053LA / K9999A", tax_price=Decimal("12.34")),
+            )
+
+    def test_conflict_adjustment_still_detects_result_drift(self) -> None:
+        with self.assertRaisesRegex(ValueError, "查询结果已变化"):
+            apply_adjustment(
+                self.catalog,
+                self.match,
+                InquiryAdjustment(expected_bld_no="K9999A", target_bld_no="K9999A"),
+            )
+
+
 class WorkbookInquiryAdjustmentTest(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()

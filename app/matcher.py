@@ -10,6 +10,8 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
+from app.product_variants import build_variant_groups, default_variant, variant_base
+
 
 CATALOG_HEADER_ALIASES = {
     "BLD NO.": {"BLD NO.", "BLD NO", "BLDNO", "BOLAIDE NO", "PART NO"},
@@ -64,6 +66,7 @@ class CatalogMatch:
     row: dict
     matched_codes: tuple[str, ...] = ()
     unmatched_codes: tuple[str, ...] = ()
+    candidate_rows: tuple[dict, ...] = ()
 
 
 def normalize_code(value: object) -> str:
@@ -229,6 +232,30 @@ class ProductCatalog:
                             self.by_psa_352x.setdefault(psa_key[0], []).append(row)
             self.quick_search_rows.append((row, bld_no, bld_key, tuple(quick_codes)))
         self._sorted_oe_keys: tuple[str, ...] = tuple(sorted(self.by_oe))
+        self._variant_groups = build_variant_groups(rows)
+
+    def variant_options_for(self, bld_no: object) -> list[dict]:
+        """Return the same-model status variants (e.g. K8053LA/K8053LB)."""
+        parsed = variant_base(bld_no)
+        if not parsed:
+            return []
+        return list(self._variant_groups.get(parsed[0], ()))
+
+    def _pick_variant_row(self, rows: list[dict]) -> dict | None:
+        """Return the default status variant when all rows share one model."""
+        unique_rows = self._unique_rows(rows)
+        if len(unique_rows) < 2:
+            return None
+        parsed = [variant_base(row.get("BLD NO.")) for row in unique_rows]
+        if not all(parsed):
+            return None
+        bases = {base for base, _ in parsed if base}
+        if len(bases) != 1:
+            return None
+        base = bases.pop()
+        if base not in self._variant_groups:
+            return None
+        return default_variant(unique_rows)
 
     @classmethod
     def from_excel(cls, path: Path, manual_map: dict[str, str] | None = None) -> "ProductCatalog":
@@ -278,7 +305,7 @@ class ProductCatalog:
             return None
 
         if oe_key and oe_key in self.by_oe:
-            row = self.by_oe[oe_key][0]
+            row = self._pick_variant_row(self.by_oe[oe_key]) or self.by_oe[oe_key][0]
             return CatalogMatch(compact_text(row.get("BLD NO.")), 95, self._exact_reason(oe_key), row, matched_codes=((compact_text(inquiry_oe),) if compact_text(inquiry_oe) else ()))
 
         prefix_match = self._match_unique_oe_prefix(oe_key, inquiry_oe)
@@ -292,8 +319,8 @@ class ProductCatalog:
         oe_zero_o_key = zero_o_key(inquiry_oe)
         if oe_zero_o_key and oe_zero_o_key != oe_key and oe_zero_o_key in self.by_oe_zero_o:
             rows = self._unique_rows(self.by_oe_zero_o[oe_zero_o_key])
-            if len(rows) == 1:
-                row = rows[0]
+            row = rows[0] if len(rows) == 1 else self._pick_variant_row(rows)
+            if row is not None:
                 return CatalogMatch(compact_text(row.get("BLD NO.")), 88, self._tolerant_reason(oe_zero_o_key), row, matched_codes=((compact_text(inquiry_oe),) if compact_text(inquiry_oe) else ()))
 
         if name_key and name_key in self.by_bld:
@@ -428,7 +455,7 @@ class ProductCatalog:
                 continue
 
             if part_key in self.by_oe:
-                row = self.by_oe[part_key][0]
+                row = self._pick_variant_row(self.by_oe[part_key]) or self.by_oe[part_key][0]
                 matches.append((part, CatalogMatch(compact_text(row.get("BLD NO.")), 95, self._multi_exact_reason(part_key), row)))
                 continue
 
@@ -440,8 +467,8 @@ class ProductCatalog:
             part_zero_o_key = zero_o_key(part)
             if part_zero_o_key and part_zero_o_key != part_key and part_zero_o_key in self.by_oe_zero_o:
                 rows = self._unique_rows(self.by_oe_zero_o[part_zero_o_key])
-                if len(rows) == 1:
-                    row = rows[0]
+                row = rows[0] if len(rows) == 1 else self._pick_variant_row(rows)
+                if row is not None:
                     matches.append((part, CatalogMatch(compact_text(row.get("BLD NO.")), 88, self._multi_tolerant_reason(part_zero_o_key), row)))
 
         unique: dict[str, CatalogMatch] = {}
@@ -457,16 +484,22 @@ class ProductCatalog:
             match = next(iter(unique.values()))
             return CatalogMatch(match.bld_no, match.score, match.reason, match.row, matched_codes=matched_parts, unmatched_codes=unmatched_parts)
 
+        unique_matches = list(unique.values())
+        picked_row = self._pick_variant_row([match.row for match in unique_matches])
+        if picked_row is not None:
+            chosen = next(match for match in unique_matches if match.row is picked_row)
+            return CatalogMatch(chosen.bld_no, chosen.score, chosen.reason, chosen.row, matched_codes=matched_parts, unmatched_codes=unmatched_parts)
+
         bld_list = " / ".join(unique)
-        first = next(iter(unique.values()))
-        return CatalogMatch(bld_list, 80, "多个号码命中不同 BLD，请人工确认", first.row, matched_codes=matched_parts, unmatched_codes=unmatched_parts)
+        first = unique_matches[0]
+        return CatalogMatch(bld_list, 80, "多个号码命中不同 BLD，请人工确认", first.row, matched_codes=matched_parts, unmatched_codes=unmatched_parts, candidate_rows=tuple(match.row for match in unique_matches))
 
     def _ambiguous_match(self, rows: list[dict], score: int, reason: str, matched_codes: tuple[str, ...]) -> CatalogMatch | None:
         unique_rows = self._unique_rows(rows)
         if not unique_rows:
             return None
         bld_list = " / ".join(compact_text(row.get("BLD NO.")) for row in unique_rows)
-        return CatalogMatch(bld_list, score, reason, unique_rows[0], matched_codes=matched_codes)
+        return CatalogMatch(bld_list, score, reason, unique_rows[0], matched_codes=matched_codes, candidate_rows=tuple(unique_rows))
 
     @staticmethod
     def _unique_rows(rows: list[dict]) -> list[dict]:

@@ -6,7 +6,13 @@ from pathlib import Path
 from flask import flash, redirect, render_template, request, url_for
 
 from app.excel_io import sanitize_inquiry_workbook_if_needed
-from app.helpers import clean_original_filename, result_output_path, user_output_dir, user_upload_path
+from app.helpers import (
+    clean_original_filename,
+    product_image_urls,
+    result_output_path,
+    user_output_dir,
+    user_upload_path,
+)
 from app.modules.inquiry.factory import get_inquiry_service
 from app.modules.inquiry.web_helpers import (
     customer_code_column_from_request,
@@ -15,12 +21,32 @@ from app.modules.inquiry.web_helpers import (
     selected_match_columns,
     validated_user_upload_path,
 )
+from app.product_status import format_product_status
 from app.security import actor_name, permission_required
 
 
 PASTED_INQUIRY_FILENAME = "粘贴号码询价.xlsx"
 PASTED_INQUIRY_MAX_CHARS = 5000
 logger = logging.getLogger(__name__)
+
+
+def _option_view(option: dict) -> dict:
+    return {
+        "bld_no": option.get("bld_no", ""),
+        "product_status": format_product_status(option.get("product_status", ""), "zh", multiline=False),
+        "price_cny": option.get("price_cny"),
+        "image_gallery": product_image_urls(option),
+    }
+
+
+def _enrich_result_rows(summary: dict) -> dict:
+    """Attach gallery URLs and display status to selectable BLD options."""
+    for row in summary.get("rows", []):
+        for key in ("conflict_candidates", "variant_options"):
+            options = row.get(key) or []
+            if options:
+                row[key] = [_option_view(option) for option in options]
+    return summary
 
 
 def _single_page_pagination(total: int) -> dict:
@@ -74,7 +100,7 @@ def _render_pasted_inquiry_result(query: str):
 
     return render_template(
         "result.html",
-        summary=summary,
+        summary=_enrich_result_rows(summary),
         output_path=output_path,
         output_pending=True,
         upload_path=upload_path,
@@ -169,7 +195,7 @@ def register(app) -> None:
 
         return render_template(
             "result.html",
-            summary=summary,
+            summary=_enrich_result_rows(summary),
             output_path=output_path,
             output_pending=True,
             upload_path=upload_path,

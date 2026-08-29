@@ -5,12 +5,14 @@ import {
   clearQuoteCustomerValidity,
   createInquiryInitializationGate,
   createInquiryRequestGate,
+  findInquiryOption,
   inquiryAttachmentFilename,
   inquiryBldSelectionState,
   inquiryImageGallery,
   inquiryPriceAdjustment,
   inquiryProductDisplay,
   inquiryTargetAdjustment,
+  parseInquiryRowOptions,
   rankInquiryProducts,
   validateInquiryPrice,
 } from "../../static/pages/inquiry_result.js";
@@ -115,8 +117,19 @@ test("image galleries accept arrays and reject malformed serialized values", () 
   assert.deepEqual(inquiryImageGallery('{"url":"not-an-array"}'), []);
 });
 
-test("quote attachment download rejects redirects and non-Excel responses", () => {
-  const response = (disposition, { ok = true, redirected = false } = {}) => ({
+test("row option payloads parse safely and match BLD numbers case-insensitively", () => {
+  const row = { dataset: { conflictCandidates: '[{"bld_no":"K8053LA"},{"bld_no":"K9999A"}]' } };
+  const options = parseInquiryRowOptions(row, "conflictCandidates");
+  assert.equal(options.length, 2);
+  assert.equal(findInquiryOption(options, " k9999a ").bld_no, "K9999A");
+  assert.equal(findInquiryOption(options, ""), null);
+  assert.equal(findInquiryOption(options, "K8053LB"), null);
+  assert.deepEqual(parseInquiryRowOptions({ dataset: {} }, "conflictCandidates"), []);
+  assert.deepEqual(parseInquiryRowOptions({ dataset: { variantOptions: "not-json" } }, "variantOptions"), []);
+  assert.deepEqual(parseInquiryRowOptions({ dataset: { variantOptions: '{"bld_no":"K1"}' } }, "variantOptions"), []);
+});
+
+test("quote attachment download rejects redirects and non-Excel responses", () => {  const response = (disposition, { ok = true, redirected = false } = {}) => ({
     ok,
     redirected,
     headers: { get: (name) => (name === "Content-Disposition" ? disposition : "") },

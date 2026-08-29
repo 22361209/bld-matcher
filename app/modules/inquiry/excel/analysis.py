@@ -4,7 +4,7 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
-from app.matcher import ProductCatalog, normalize_code, split_codes
+from app.matcher import ProductCatalog, compact_text, normalize_code, split_codes
 
 from ..adjustments import (
     InquiryAdjustment,
@@ -26,6 +26,31 @@ from .reader import (
 
 
 PRODUCT_IMAGE_FIELDS = ("image_path", "image_path_2", "image_path_3", "image_path_4", "image_path_5")
+
+
+def option_payload(row: dict) -> dict:
+    """Raw view data for one selectable BLD option (conflict or variant)."""
+    return {
+        "bld_no": compact_text(row.get("BLD NO.")),
+        "product_status": str(row.get("product_status") or "").strip(),
+        "price_cny": numeric_price(row.get("price_cny")),
+        **{field: str(row.get(field) or "").strip() for field in PRODUCT_IMAGE_FIELDS},
+    }
+
+
+def _conflict_option_payloads(match) -> list[dict]:
+    if match.candidate_rows:
+        return [option_payload(row) for row in match.candidate_rows]
+    return [
+        {
+            "bld_no": part.strip(),
+            "product_status": "",
+            "price_cny": None,
+            **{field: "" for field in PRODUCT_IMAGE_FIELDS},
+        }
+        for part in match.bld_no.split(" / ")
+        if normalize_code(part)
+    ]
 
 
 def annotate_row_summary_with_match_columns(
@@ -60,13 +85,15 @@ def summary_row(
     inquiry_name: object,
     match,
     customer_product_code: str = "",
+    variant_option_rows: list[dict] | None = None,
 ) -> dict:
     parts = split_codes(inquiry_oe)
     match_note = ""
     price_cny = None
     product_status = ""
     image_fields = {field: "" for field in PRODUCT_IMAGE_FIELDS}
-    if match and " / " not in (match.bld_no or ""):
+    is_conflict = bool(match and " / " in (match.bld_no or ""))
+    if match and not is_conflict:
         price_cny = numeric_price(match.row.get("price_cny"))
         product_status = str(match.row.get("product_status") or "").strip()
         image_fields = {
@@ -99,7 +126,13 @@ def summary_row(
         "match_note": match_note,
         "matched_oe_codes": [],
         "unmatched_oe_codes": [],
-        "adjustment_allowed": bool(match and " / " not in (match.bld_no or "")),
+        "adjustment_allowed": bool(match and not is_conflict),
+        "conflict_candidates": _conflict_option_payloads(match) if is_conflict else [],
+        "variant_options": (
+            [option_payload(row) for row in variant_option_rows]
+            if match and not is_conflict and variant_option_rows
+            else []
+        ),
     }
     if match and len(parts) > 1 and match.matched_codes:
         row["matched_oe_codes"] = list(match.matched_codes)
@@ -170,7 +203,14 @@ def analyze_xlsx_with_bld(
                 if match:
                     summary["matched"] += 1
                     row_summary = annotate_row_summary_with_match_columns(
-                        summary_row(row_index, inquiry_oe, inquiry_name, match, customer_product_code),
+                        summary_row(
+                            row_index,
+                            inquiry_oe,
+                            inquiry_name,
+                            match,
+                            customer_product_code,
+                            variant_option_rows=catalog.variant_options_for(match.bld_no),
+                        ),
                         match_values,
                         match,
                     )

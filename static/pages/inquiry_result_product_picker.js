@@ -1,8 +1,8 @@
 import { renderInquiryProductImage } from "./inquiry_result_images.js?v=20260808-1";
+import { applyInquiryRowProduct } from "./inquiry_result_options.js?v=20260829-1";
 import {
   createInquiryRequestGate,
   inquiryProductDisplay,
-  inquiryTargetAdjustment,
   rankInquiryProducts,
   validateInquiryPrice,
 } from "./inquiry_result_rules.js?v=20260808-1";
@@ -143,33 +143,8 @@ export const setupInquiryProductPicker = (root, adjustments) => {
   const applyProduct = (row, input, product) => {
     const display = inquiryProductDisplay(product);
     if (!display.bldNo) return;
-    const adjustment = adjustments.current(row);
-    const targetBldNo = inquiryTargetAdjustment(display.bldNo, row.dataset.defaultBld);
-    if (targetBldNo) adjustment.target_bld_no = targetBldNo;
-    else delete adjustment.target_bld_no;
-    delete adjustment.tax_price;
-    adjustments.persist(row, adjustment);
-
-    row.dataset.currentBld = display.bldNo;
-    row.dataset.bldConfirmed = "1";
-    input.value = display.bldNo;
-    adjustments.setBldError(input, adjustments.bldState(row, input), { reveal: false });
-    const status = row.querySelector("[data-col='status']");
-    if (status) status.textContent = product.product_status || "";
-    renderInquiryProductImage(row, product.image_gallery);
+    if (!applyInquiryRowProduct(row, product, adjustments, { bldInput: input })) return;
     const catalogPrice = product.price_cny ?? "";
-    row.dataset.catalogPrice = String(catalogPrice);
-    row.dataset.priceTouched = "0";
-    const price = row.querySelector("[data-inquiry-tax-price]");
-    if (price instanceof HTMLInputElement) {
-      price.value = catalogPrice === "" ? "" : Number(catalogPrice).toFixed(2);
-      adjustments.setPriceError(
-        price,
-        validateInquiryPrice(price.value, { allowBlank: true }),
-        { reveal: false },
-      );
-    }
-    adjustments.setRowState(row);
     if (statusRegion instanceof HTMLElement) {
       const priceMessage = catalogPrice === ""
         ? "目录含税价未填写"
@@ -320,7 +295,12 @@ export const setupInquiryProductPicker = (root, adjustments) => {
       row.dataset.bldConfirmed = "1";
       input.value = row.dataset.currentBld;
       adjustments.setBldError(input, adjustments.bldState(row, input), { reveal: false });
-      if (status) status.textContent = row.dataset.defaultStatus ?? "";
+      const variantSelect = row.querySelector("[data-inquiry-variant-select]");
+      if (variantSelect instanceof HTMLSelectElement) {
+        variantSelect.value = row.dataset.defaultBld || "";
+      } else if (status) {
+        status.textContent = row.dataset.defaultStatus ?? "";
+      }
       const imageCell = row.querySelector("[data-inquiry-image-cell]");
       renderInquiryProductImage(row, imageCell?.dataset.defaultImageGallery || "[]");
       row.dataset.catalogPrice = row.dataset.defaultPrice || "";

@@ -972,3 +972,90 @@ class TestWebInquiryExport(WebAppTestBase):
         self.assertEqual(generated_sheet.cell(2, 3).value, "K6004LC")
         self.assertEqual(generated_sheet.cell(2, 4).value, 55)
         generated.close()
+
+    def test_result_page_offers_conflict_choice_and_status_variant_select(self):
+        from app.modules.products.persistence import upsert_product
+        from openpyxl import Workbook
+
+        with self.web.connect(self.web.DB_PATH) as conn:
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "KVAR01LA",
+                    "series": "TOYOTA",
+                    "item": "CONTROL ARM WITH BALL JOINT",
+                    "oe_no_1": "VAR-LA",
+                    "price_cny": "80",
+                    "product_status": "2个衬套1个球头",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "KVAR01LB",
+                    "series": "TOYOTA",
+                    "item": "CONTROL ARM",
+                    "oe_no_1": "VAR-LB",
+                    "price_cny": "58",
+                    "product_status": "2个衬套",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            upsert_product(
+                conn,
+                {
+                    "bld_no": "KVAR99A",
+                    "series": "TOYOTA",
+                    "item": "CONTROL ARM",
+                    "oe_no_1": "VAR-99",
+                    "price_cny": "40",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["OE号"])
+        sheet.append(["VAR-LA\nVAR-99"])
+        sheet.append(["VAR-LA"])
+        buffer = io.BytesIO()
+        workbook.save(buffer)
+        buffer.seek(0)
+
+        self.login()
+        response = self.client.post(
+            "/match",
+            data={"inquiry": (buffer, "variant-choice.xlsx")},
+            content_type="multipart/form-data",
+        )
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        upload_path = re.search(r'name="upload_path" value="([^"]+)"', html).group(1)
+        output_name = re.search(r'name="output_name" value="([^"]+)"', html).group(1)
+
+        result = self.client.post(
+            "/match/column",
+            data={
+                "upload_path": upload_path,
+                "original_filename": "variant-choice.xlsx",
+                "output_name": output_name,
+                "match_column": "0",
+            },
+        )
+        result_html = result.get_data(as_text=True)
+
+        self.assertEqual(result.status_code, 200)
+        # 跨型号冲突行：下拉限定本行命中候选
+        self.assertIn("data-inquiry-conflict-select", result_html)
+        self.assertIn("data-conflict-candidates", result_html)
+        self.assertIn("请选择：KVAR01LA / KVAR99A", result_html)
+        self.assertRegex(result_html, r'<option value="KVAR99A">KVAR99A</option>')
+        # 同型号唯一命中行：产品状态列提供 LA/LB 变体切换
+        self.assertIn("data-inquiry-variant-select", result_html)
+        self.assertIn("data-variant-options", result_html)
+        self.assertIn("（KVAR01LA）", result_html)
+        self.assertIn("（KVAR01LB）", result_html)
