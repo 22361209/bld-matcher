@@ -162,6 +162,8 @@ class ProductOptionValue:
     kind: str
     value: str
     updated_at: str
+    sort_order: int = 0
+    usage_count: int = 0
 
 
 def compact(value: object) -> str:

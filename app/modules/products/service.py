@@ -329,6 +329,16 @@ class ProductService:
                 raise ValueError("候选值不存在，请刷新后重试。")
             unit_of_work.commit()
 
+    def move_option_value(self, option_id: int, direction: str, *, actor: str) -> str:
+        if direction not in ("up", "down"):
+            raise ValueError("未知的排序方向。")
+        with self.unit_of_work_factory() as unit_of_work:
+            moved = unit_of_work.repository.move_option_value(option_id, direction, actor=actor)
+            if moved is None:
+                raise ValueError("候选值不存在，请刷新后重试。")
+            unit_of_work.commit()
+            return moved.kind
+
     def preview_catalog_import(self, path: Path) -> CatalogImportPreview:
         rows = read_catalog_import(path, choices=self.catalog_import_choices())
         with self.unit_of_work_factory() as unit_of_work:

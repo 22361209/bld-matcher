@@ -10,16 +10,23 @@
 {% endblock %}
 
 {% block page_content %}
-      {% for kind, label, rows, hint in (
-        ("brand", "品牌", brands, "保存产品时自动登记；多个品牌可用“/”分隔一次新增。"),
-        ("item", "产品名称", items, "保存产品时自动登记。"),
-        ("product_status", "产品状态", statuses, "保存产品时自动登记，按规范形式存储。"),
-      ) %}
+      {% set view_meta = {
+        "brand": ("品牌", brands, "保存产品时自动登记；多个品牌可用“/”分隔一次新增。"),
+        "item": ("产品名称", items, "保存产品时自动登记；默认按使用次数排序。"),
+        "product_status": ("产品状态", statuses, "保存产品时自动登记，按规范形式存储。"),
+      } %}
+      {% set label, rows, hint = view_meta[active_view] %}
+      {% set kind = active_view %}
+      <nav class="option-kind-tabs" aria-label="候选值类别">
+        {% for view_key in ("brand", "item", "product_status") %}
+          <a class="{% if view_key == active_view %}active{% endif %}" href="{{ url_for('product_option_values', view=view_key) }}" {% if view_key == active_view %}aria-current="page"{% endif %}>{{ view_meta[view_key][0] }}（{{ view_meta[view_key][1]|length }}）</a>
+        {% endfor %}
+      </nav>
       <section class="data-section">
         <div class="data-section-header">
           <div>
             <h2>{{ label }}</h2>
-            <p>{{ hint }}删除或改名只影响未来可选，已有产品数据保持不变。</p>
+            <p>{{ hint }}删除或改名只影响未来可选，已有产品数据保持不变；上下移动的顺序即新建/编辑产品弹窗中的候选顺序。</p>
           </div>
           <span>{{ rows|length }} 个</span>
         </div>
@@ -33,7 +40,9 @@
         <table class="data-table">
           <thead>
             <tr>
+              <th>顺序</th>
               <th>值</th>
+              {% if kind == "item" %}<th>使用次数</th>{% endif %}
               <th>更新时间</th>
               <th>改名</th>
               <th></th>
@@ -42,7 +51,28 @@
           <tbody>
             {% for option in rows %}
               <tr>
+                <td class="product-option-move-cell">
+                  {% if not loop.first %}
+                  <form action="{{ url_for('move_product_option_value_route') }}" method="post">
+                    {{ csrf_field() }}
+                    <input type="hidden" name="id" value="{{ option.id }}">
+                    <input type="hidden" name="direction" value="up">
+                    <input type="hidden" name="view" value="{{ kind }}">
+                    <button class="linear-button subtle compact" type="submit" aria-label="上移 {{ option.value }}">上移</button>
+                  </form>
+                  {% endif %}
+                  {% if not loop.last %}
+                  <form action="{{ url_for('move_product_option_value_route') }}" method="post">
+                    {{ csrf_field() }}
+                    <input type="hidden" name="id" value="{{ option.id }}">
+                    <input type="hidden" name="direction" value="down">
+                    <input type="hidden" name="view" value="{{ kind }}">
+                    <button class="linear-button subtle compact" type="submit" aria-label="下移 {{ option.value }}">下移</button>
+                  </form>
+                  {% endif %}
+                </td>
                 <td><strong>{% if kind == "product_status" %}{{ format_product_status(option.value, "zh", multiline=False) }}{% else %}{{ option.value }}{% endif %}</strong></td>
+                {% if kind == "item" %}<td>{{ option.usage_count if option.usage_count else "—" }}</td>{% endif %}
                 <td>{{ option.updated_at }}</td>
                 <td>
                   <form action="{{ url_for('save_product_option_value_route') }}" method="post" class="product-option-edit-form">
@@ -57,16 +87,16 @@
                   <form action="{{ url_for('delete_product_option_value_route') }}" method="post">
                     {{ csrf_field() }}
                     <input type="hidden" name="id" value="{{ option.id }}">
+                    <input type="hidden" name="view" value="{{ kind }}">
                     <button class="linear-button danger compact" type="submit" data-confirm="确认删除{{ label }}“{{ option.value }}”？删除后只影响未来可选，已有产品数据保持不变。">删除</button>
                   </form>
                 </td>
               </tr>
             {% else %}
-              <tr><td colspan="4">暂无{{ label }}候选值。</td></tr>
+              <tr><td colspan="{{ 6 if kind == "item" else 5 }}">暂无{{ label }}候选值。</td></tr>
             {% endfor %}
           </tbody>
         </table>
         </div>
       </section>
-      {% endfor %}
 {% endblock %}

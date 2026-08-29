@@ -687,6 +687,13 @@
       "rule": "/product-options/delete"
     },
     {
+      "endpoint": "move_product_option_value_route",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/product-options/move"
+    },
+    {
       "endpoint": "save_product_option_value_route",
       "methods": [
         "POST"

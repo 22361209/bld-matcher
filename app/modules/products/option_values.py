@@ -9,17 +9,31 @@ from .domain import ProductOptionValue
 
 
 def _option_value(row: sqlite3.Row) -> ProductOptionValue:
+    keys = row.keys() if hasattr(row, "keys") else []
     return ProductOptionValue(
         id=int(row["id"]),
         kind=str(row["kind"]),
         value=str(row["value"]),
         updated_at=str(row["updated_at"] or ""),
+        sort_order=int(row["sort_order"]) if "sort_order" in keys else 0,
+        usage_count=int(row["usage_count"]) if "usage_count" in keys else 0,
     )
 
 
 def list_option_values(connection: sqlite3.Connection) -> list[ProductOptionValue]:
     rows = connection.execute(
-        "SELECT id, kind, value, updated_at FROM product_option_values ORDER BY kind, value COLLATE NOCASE"
+        """
+        SELECT o.id, o.kind, o.value, o.updated_at, o.sort_order,
+          CASE WHEN o.kind = 'item' THEN
+            (SELECT COUNT(*) FROM products p WHERE p.item = o.value AND p.active = 1)
+          ELSE 0 END AS usage_count
+        FROM product_option_values o
+        ORDER BY o.kind,
+          CASE WHEN o.sort_order > 0 THEN 0 ELSE 1 END,
+          o.sort_order,
+          usage_count DESC,
+          o.value COLLATE NOCASE
+        """
     ).fetchall()
     return [_option_value(row) for row in rows]
 
@@ -57,6 +71,19 @@ def rename_option_value(connection: sqlite3.Connection, option_id: int, value: s
 
 def delete_option_value(connection: sqlite3.Connection, option_id: int) -> None:
     connection.execute("DELETE FROM product_option_values WHERE id = ?", (option_id,))
+
+
+def write_option_sort_orders(connection: sqlite3.Connection, kind: str, ordered_ids: list[int]) -> None:
+    """Persist one kind's display order as 1-based sort_order values."""
+    connection.execute(
+        "UPDATE product_option_values SET sort_order = 0 WHERE kind = ?",
+        (kind,),
+    )
+    for position, option_id in enumerate(ordered_ids, start=1):
+        connection.execute(
+            "UPDATE product_option_values SET sort_order = ? WHERE id = ? AND kind = ?",
+            (position, option_id, kind),
+        )
 
 
 def normalized_option_values(kind: str, value: object) -> list[str]:

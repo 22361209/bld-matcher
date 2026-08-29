@@ -1,5 +1,37 @@
 /* 产品候选值管理页（admin.product_options） */
 
+.option-kind-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 12px;
+  padding: 0 8px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--linear-line);
+  background: var(--linear-surface);
+}
+
+.option-kind-tabs a {
+  flex: 0 0 auto;
+  padding: 10px 14px 8px;
+  border-bottom: 2px solid transparent;
+  color: var(--linear-muted);
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.option-kind-tabs a.active {
+  border-bottom-color: var(--linear-accent);
+  color: var(--linear-accent);
+}
+
+.product-option-move-cell {
+  white-space: nowrap;
+}
+
+.product-option-move-cell form {
+  display: inline-block;
+}
+
 .product-option-edit-form {
   display: flex;
   gap: 6px;

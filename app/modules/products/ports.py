@@ -122,6 +122,8 @@ class ProductRepository(Protocol):
 
     def delete_option_value(self, option_id: int, *, actor: str) -> ProductOptionValue | None: ...
 
+    def move_option_value(self, option_id: int, direction: str, *, actor: str) -> ProductOptionValue | None: ...
+
 
 class ProductUnitOfWork(Protocol):
     repository: ProductRepository

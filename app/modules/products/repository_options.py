@@ -8,6 +8,7 @@ from .option_values import (
     list_option_values,
     option_value_exists,
     rename_option_value,
+    write_option_sort_orders,
 )
 from .repository_context import ProductRepositoryContext
 
@@ -64,3 +65,26 @@ class ProductOptionRepositoryMixin(ProductRepositoryContext):
             actor=actor,
         )
         return current
+
+    def move_option_value(self, option_id: int, direction: str, *, actor: str) -> ProductOptionValue | None:
+        current = get_option_value(self.connection, option_id)
+        if current is None or direction not in ("up", "down"):
+            return None
+        siblings = [option for option in self.option_values() if option.kind == current.kind]
+        index = next((position for position, option in enumerate(siblings) if option.id == option_id), None)
+        if index is None:
+            return None
+        neighbor = index - 1 if direction == "up" else index + 1
+        if neighbor < 0 or neighbor >= len(siblings):
+            return current
+        siblings[index], siblings[neighbor] = siblings[neighbor], siblings[index]
+        write_option_sort_orders(self.connection, current.kind, [option.id for option in siblings])
+        self._log_event(
+            self.connection,
+            "调整产品候选值顺序",
+            "product_option_value",
+            f"{current.kind}:{current.value}",
+            f"{'上移' if direction == 'up' else '下移'}到第 {neighbor + 1} 位",
+            actor=actor,
+        )
+        return get_option_value(self.connection, option_id)

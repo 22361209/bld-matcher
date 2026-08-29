@@ -582,6 +582,7 @@ class TestWebMaterialsAndOperations(WebAppTestBase):
                 "035_customer_drawings",
                 "036_customer_products",
                 "037_customer_identity_and_material_drawing_permissions",
+                "038_product_option_value_sort_order",
             ],
         )
 

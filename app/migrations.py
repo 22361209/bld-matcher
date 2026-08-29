@@ -1230,6 +1230,14 @@ def _add_customer_identity_and_material_drawing_permissions(conn: sqlite3.Connec
     )
 
 
+def _add_product_option_value_sort_order(conn: sqlite3.Connection) -> None:
+    option_columns = _columns(conn, "product_option_values")
+    if not option_columns:
+        return
+    if "sort_order" not in option_columns:
+        conn.execute("ALTER TABLE product_option_values ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -1268,6 +1276,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("035_customer_drawings", _add_customer_drawings),
     ("036_customer_products", _rebuild_customer_drawing_groups),
     ("037_customer_identity_and_material_drawing_permissions", _add_customer_identity_and_material_drawing_permissions),
+    ("038_product_option_value_sort_order", _add_product_option_value_sort_order),
 )
 
 

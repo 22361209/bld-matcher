@@ -6,6 +6,7 @@ from flask import flash, jsonify, redirect, render_template, request, url_for
 
 from app.helpers import PRODUCT_IMAGE_SLOT_FIELDS, product_image_urls
 from app.modules.products.domain import (
+    PRODUCT_OPTION_KINDS,
     ProductFilterValidationError,
     build_product_filters,
 )
@@ -86,9 +87,13 @@ def register(app) -> None:
     @app.get("/product-options")
     @permission_required("manage_product_options")
     def product_option_values():
+        view = request.args.get("view", "").strip()
+        if view not in PRODUCT_OPTION_KINDS:
+            view = "item"
         values = get_product_service().option_values()
         return render_template(
             "product_options.html",
+            active_view=view,
             brands=[option for option in values if option.kind == "brand"],
             items=[option for option in values if option.kind == "item"],
             statuses=[option for option in values if option.kind == "product_status"],
@@ -105,29 +110,50 @@ def register(app) -> None:
             get_product_service().save_option_value(kind, value, option_id=option_id, actor=actor_name())
         except ValueError as exc:
             flash(f"候选值保存失败：{exc}", "error")
-            return redirect(url_for("product_option_values"))
+            return redirect(url_for("product_option_values", view=kind))
         except Exception:
             logger.exception("Product option value save failed")
             flash("候选值保存失败，请稍后重试。", "error")
-            return redirect(url_for("product_option_values"))
+            return redirect(url_for("product_option_values", view=kind))
         flash("候选值已保存。", "success")
-        return redirect(url_for("product_option_values"))
+        return redirect(url_for("product_option_values", view=kind))
 
     @app.post("/product-options/delete")
     @permission_required("manage_product_options")
     def delete_product_option_value_route():
         option_id_text = request.form.get("id", "").strip()
         option_id = int(option_id_text) if option_id_text.isdigit() else None
+        view = request.form.get("view", "").strip()
         try:
             if option_id is None:
                 raise ValueError("缺少候选值编号。")
             get_product_service().delete_option_value(option_id, actor=actor_name())
         except ValueError as exc:
             flash(f"候选值删除失败：{exc}", "error")
-            return redirect(url_for("product_option_values"))
+            return redirect(url_for("product_option_values", view=view))
         except Exception:
             logger.exception("Product option value delete failed")
             flash("候选值删除失败，请稍后重试。", "error")
-            return redirect(url_for("product_option_values"))
+            return redirect(url_for("product_option_values", view=view))
         flash("候选值已删除，仅影响未来可选；已有产品数据保持不变。", "success")
-        return redirect(url_for("product_option_values"))
+        return redirect(url_for("product_option_values", view=view))
+
+    @app.post("/product-options/move")
+    @permission_required("manage_product_options")
+    def move_product_option_value_route():
+        option_id_text = request.form.get("id", "").strip()
+        option_id = int(option_id_text) if option_id_text.isdigit() else None
+        direction = request.form.get("direction", "").strip()
+        view = request.form.get("view", "").strip()
+        try:
+            if option_id is None:
+                raise ValueError("缺少候选值编号。")
+            view = get_product_service().move_option_value(option_id, direction, actor=actor_name())
+        except ValueError as exc:
+            flash(f"候选值排序失败：{exc}", "error")
+            return redirect(url_for("product_option_values", view=view))
+        except Exception:
+            logger.exception("Product option value move failed")
+            flash("候选值排序失败，请稍后重试。", "error")
+            return redirect(url_for("product_option_values", view=view))
+        return redirect(url_for("product_option_values", view=view))
