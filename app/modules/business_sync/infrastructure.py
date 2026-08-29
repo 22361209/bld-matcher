@@ -16,6 +16,7 @@ from ._media_transaction import (
 from ._package_archive import add_media_directory, export_package, read_package
 from ._preview import preview_package
 from ._schema import DATASETS, PACKAGE_SUFFIX
+from app.helpers import clear_product_image_caches
 
 
 __all__ = ("DATASETS", "PACKAGE_SUFFIX", "BusinessSyncRepository")
@@ -145,6 +146,8 @@ class BusinessSyncRepository:
             atomic_copy_fn=self._atomic_copy,
             atomic_copy_stream_fn=self._atomic_copy_stream,
         )
+        if requests.get("product_images"):
+            clear_product_image_caches()
 
     @staticmethod
     def _atomic_copy(source: Path, target: Path) -> None:

@@ -1,0 +1,11 @@
+{
+  "date": "2026-08-29",
+  "version": "unreleased",
+  "title": "修复业务数据同步后产品图片不显示",
+  "entries": [
+    "业务数据同步勾选图片后，图片文件实际已写入本机 data/product_images/，但同步包不写产品的图片引用列（image_path），而图片显示兜底此前只查 static/product_images/，导致页面看不到任何已同步图片。",
+    "现在产品图片在引用为空时按 BLD 文件名兜底查找 data/product_images/（<BLD号>.jpg/jpeg/png/webp，多图位为 <BLD号>-2 至 -5），缩略图走同一兜底并由缩略图路由按需生成；显式 image_path 引用仍然优先。",
+    "业务数据同步导入产品图片后会自动清除图片磁盘探测缓存，新同步的图片无需重启即可显示。"
+  ],
+  "impact": {"data": "none", "api": "compatible", "operations": "restart-required"}
+}

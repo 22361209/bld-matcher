@@ -15,6 +15,7 @@ from .config import (
     DATA_DIR,
     OUTPUT_DIR,
     PRODUCT_IMAGE_DATA_PREFIX,
+    PRODUCT_IMAGE_DIR,
     UPLOAD_DIR,
 )
 from .matcher import ProductCatalog
@@ -50,6 +51,26 @@ def _default_product_thumb_relative(bld_no: str) -> str:
     return ""
 
 
+@lru_cache(maxsize=4096)
+def _data_product_image_name(bld_no: str, slot: int) -> str:
+    """Probe data/product_images for a synced/uploaded image named by BLD number."""
+    if not bld_no:
+        return ""
+    slot_suffix = "" if slot == 1 else f"-{slot}"
+    for suffix in (".jpg", ".jpeg", ".png", ".webp"):
+        name = f"{bld_no}{slot_suffix}{suffix}"
+        if (PRODUCT_IMAGE_DIR / name).is_file():
+            return name
+    return ""
+
+
+def clear_product_image_caches() -> None:
+    """Drop disk-probe caches after media files change outside uploads (e.g. sync)."""
+    _default_product_image_relative.cache_clear()
+    _default_product_thumb_relative.cache_clear()
+    _data_product_image_name.cache_clear()
+
+
 def _product_keys(product) -> set[str]:
     return set(product.keys())
 
@@ -66,9 +87,12 @@ def product_image_url(product, slot: int = 1) -> str:
             return explicit
         return url_for("static", filename=explicit.lstrip("/"))
 
+    bld_no = product["bld_no"] if "bld_no" in product.keys() else ""
+    data_name = _data_product_image_name(bld_no, slot)
+    if data_name:
+        return url_for("product_image_data", name=data_name)
     if slot != 1:
         return ""
-    bld_no = product["bld_no"] if "bld_no" in product.keys() else ""
     relative = _default_product_image_relative(bld_no)
     return url_for("static", filename=relative) if relative else ""
 
@@ -83,9 +107,12 @@ def product_image_thumb_url(product, slot: int = 1) -> str:
             return url_for("product_image_thumb_data", name=explicit[len(PRODUCT_IMAGE_DATA_PREFIX) :])
         return product_image_url(product, slot)
 
+    bld_no = product["bld_no"] if "bld_no" in product.keys() else ""
+    data_name = _data_product_image_name(bld_no, slot)
+    if data_name:
+        return url_for("product_image_thumb_data", name=data_name)
     if slot != 1:
         return ""
-    bld_no = product["bld_no"] if "bld_no" in product.keys() else ""
     relative = _default_product_thumb_relative(bld_no) or _default_product_image_relative(bld_no)
     return url_for("static", filename=relative) if relative else ""
 
