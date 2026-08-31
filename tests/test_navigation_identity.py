@@ -28,3 +28,23 @@ class NavigationIdentityTest(unittest.TestCase):
         self.assertIn('{% if can("manage_users") %}', template)
         self.assertIn('{% if can("view_logs") %}', template)
         self.assertIn('{% if can("sync_product_data") %}', template)
+
+    def test_mobile_navigation_marks_only_existing_core_entries_and_keeps_permission_guards(self):
+        template = (ROOT / "templates/_nav.html").read_text()
+        precision_css = (ROOT / "static/components/precision.css").read_text()
+        nav_js = (ROOT / "static/nav.js").read_text()
+
+        self.assertIn('class="mobile-workspace-trigger" type="button" aria-expanded="false"', template)
+        self.assertIn('aria-controls="mobile-workspace-nav" data-mobile-workspace-trigger', template)
+        self.assertIn('class="nav-links" id="mobile-workspace-nav" data-mobile-workspace-menu', template)
+        self.assertIn('{% if active_page == \'match\' %}', template)
+        self.assertIn('{% if active_page == \'products\' %}', template)
+        self.assertIn('{% if can("view_customers") %}\n      <a class="nav-mobile-secondary', template)
+        self.assertIn('{% if can("view_customer_prices") %}\n      <a class="nav-mobile-secondary', template)
+        self.assertIn('{% if can("view_contracts") %}\n      <div class="nav-menu contract-nav-menu nav-mobile-secondary"', template)
+        self.assertIn('{% if can("view_material_drawings") %}\n      <a class="nav-mobile-secondary', template)
+        self.assertIn("grid-template-columns: 58px minmax(0, 1fr) auto;", precision_css)
+        self.assertIn(".app-nav.is-mobile-menu-open .nav-links {\n    display: grid;", precision_css)
+        self.assertIn('nav.querySelector("[data-mobile-workspace-trigger]")', nav_js)
+        self.assertIn('mobileWorkspaceMenu.addEventListener("click"', nav_js)
+        self.assertIn('event.key === "Escape" && nav.classList.contains("is-mobile-menu-open")', nav_js)

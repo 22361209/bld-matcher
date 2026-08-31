@@ -50,6 +50,121 @@ class TestWebProductCatalog(WebAppTestBase):
         self.assertNotIn("data-products-results-host", html)
         self.assertNotIn("新增产品", html)
 
+    def test_product_results_keep_desktop_table_and_mobile_cards_in_fragment_refreshes(self):
+        from app.modules.products.persistence import upsert_product
+
+        bld_no = "K-MOBILE-CARD-001"
+        self.addCleanup(self.cleanup_products, "K-MOBILE-CARD-%")
+        self.login()
+        with self.web.connect(self.web.DB_PATH) as connection:
+            upsert_product(
+                connection,
+                {
+                    "bld_no": bld_no,
+                    "series": "MOBILE BRAND",
+                    "item": "Mobile Card Control Arm",
+                    "oe_no_1": "MOBILE-OE-001",
+                    "models": "Mobile Model",
+                    "product_status": "带球头",
+                    "price_cny": "91.23",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            connection.commit()
+
+        page = self.client.get("/products", query_string={"bld": bld_no})
+        fragment = self.client.get(
+            "/products/fragment",
+            query_string={"bld": bld_no},
+            headers={"X-Requested-With": "fetch", "Accept": "text/html"},
+        )
+
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(fragment.status_code, 200)
+        for html in (page.get_data(as_text=True), fragment.get_data(as_text=True)):
+            self.assertIn('id="products-table"', html)
+            self.assertIn("data-products-mobile-cards", html)
+            self.assertIn("data-product-mobile-card", html)
+            self.assertIn(bld_no, html)
+            self.assertIn("MOBILE-OE-001", html)
+            self.assertIn("data-product-mobile-price", html)
+
+    def test_product_mobile_cards_do_not_leak_prices_or_management_actions_without_permission(self):
+        from app.modules.admin.persistence import save_role, save_user
+        from app.modules.products.persistence import upsert_product
+
+        bld_no = "K-MOBILE-PRIVATE-001"
+        username = "mobile-catalog-readonly"
+        role_name = "移动目录只读"
+        self.addCleanup(self.cleanup_products, "K-MOBILE-PRIVATE-%")
+
+        def cleanup_access_records():
+            self.client.post("/logout")
+            with self.web.connect(self.web.DB_PATH) as connection:
+                user = connection.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+                if user:
+                    connection.execute("DELETE FROM user_permission_overrides WHERE user_id = ?", (user["id"],))
+                    connection.execute("DELETE FROM users WHERE id = ?", (user["id"],))
+                role = connection.execute("SELECT role_key FROM roles WHERE name = ?", (role_name,)).fetchone()
+                if role:
+                    connection.execute("DELETE FROM role_permissions WHERE role_key = ?", (role["role_key"],))
+                    connection.execute("DELETE FROM roles WHERE role_key = ?", (role["role_key"],))
+                connection.commit()
+
+        self.addCleanup(cleanup_access_records)
+        self.login()
+        with self.web.connect(self.web.DB_PATH) as connection:
+            role_key = save_role(
+                connection,
+                {"name": role_name, "description": "移动产品目录权限回归测试"},
+                ["generate_match"],
+                actor="tester",
+            )
+            save_user(
+                connection,
+                {"username": username, "password": "mobile-readonly-pw", "role": role_key, "active": "1"},
+                actor="tester",
+            )
+            upsert_product(
+                connection,
+                {
+                    "bld_no": bld_no,
+                    "series": "PRIVATE BRAND",
+                    "item": "Private Mobile Arm",
+                    "oe_no_1": "PRIVATE-MOBILE-OE",
+                    "price_cny": "91.23",
+                    "active": "1",
+                },
+                actor="tester",
+            )
+            connection.commit()
+
+        self.client.post("/logout")
+        login = self.client.post(
+            "/login",
+            data={"username": username, "password": "mobile-readonly-pw", "next": "/products"},
+            follow_redirects=False,
+        )
+        self.assertEqual(login.status_code, 302)
+
+        page = self.client.get("/products", query_string={"bld": bld_no})
+        fragment = self.client.get(
+            "/products/fragment",
+            query_string={"bld": bld_no},
+            headers={"X-Requested-With": "fetch", "Accept": "text/html"},
+        )
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(fragment.status_code, 200)
+        for html in (page.get_data(as_text=True), fragment.get_data(as_text=True)):
+            self.assertIn("data-product-mobile-card", html)
+            self.assertNotIn("data-product-mobile-price", html)
+            self.assertNotIn("91.23", html)
+            self.assertNotIn('data-col="price"', html)
+            self.assertNotIn("data-open-product-modal", html)
+            self.assertNotIn("data-open-edit-product-modal", html)
+            self.assertNotIn("data-copy-product-action", html)
+
     def test_product_lookup_returns_matching_products(self):
         from app.modules.products.persistence import upsert_product
 

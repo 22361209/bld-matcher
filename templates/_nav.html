@@ -3,17 +3,18 @@
     <span class="nav-brand-mark">BLD</span>
     <span class="nav-brand-copy"><strong>业务工作台</strong><small>AUTO PARTS OPERATIONS</small></span>
   </a>
+  <button class="mobile-workspace-trigger" type="button" aria-expanded="false" aria-controls="mobile-workspace-nav" data-mobile-workspace-trigger>BLD 工作台<span aria-hidden="true">⌄</span></button>
   <div class="nav-primary">
-    <div class="nav-links">
-    <a class="{% if active_page == 'match' %}active{% endif %}" href="{{ url_for('index') }}">询价处理</a>
+    <div class="nav-links" id="mobile-workspace-nav" data-mobile-workspace-menu>
+    <a class="nav-mobile-core {% if active_page == 'match' %}active{% endif %}" href="{{ url_for('index') }}">询价处理</a>
     {% if can("view_customers") %}
-      <a class="{% if active_page == 'customers' %}active{% endif %}" href="{{ url_for('customers') }}">客户信息</a>
+      <a class="nav-mobile-secondary {% if active_page == 'customers' %}active{% endif %}" href="{{ url_for('customers') }}">客户信息</a>
     {% endif %}
     {% if can("view_customer_prices") %}
-      <a class="{% if active_page == 'quotes' %}active{% endif %}" href="{{ url_for('quote_web.quotes') }}">报价记录</a>
+      <a class="nav-mobile-secondary {% if active_page == 'quotes' %}active{% endif %}" href="{{ url_for('quote_web.quotes') }}">报价记录</a>
     {% endif %}
     {% if can("view_contracts") %}
-      <div class="nav-menu contract-nav-menu" data-nav-menu>
+      <div class="nav-menu contract-nav-menu nav-mobile-secondary" data-nav-menu>
         <button class="{% if active_page == 'contracts' %}active{% endif %}" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="选择合同类型" data-nav-menu-trigger>合同管理</button>
         <div class="nav-menu-panel" role="menu" aria-label="合同类型">
           <a class="{% if active_page == 'contracts' and request.path != '/contracts/sales' %}active{% endif %}" href="{{ url_for('contracts') }}" role="menuitem">采购合同</a>
@@ -21,16 +22,16 @@
         </div>
       </div>
     {% endif %}
-    <a class="{% if active_page == 'products' %}active{% endif %}" href="{{ url_for('products') }}">产品目录</a>
-    <a class="{% if active_page == 'tubes' %}active{% endif %}" href="{{ url_for('tube_items') }}">管件资料</a>
-    <div class="nav-menu">
+    <a class="nav-mobile-core {% if active_page == 'products' %}active{% endif %}" href="{{ url_for('products') }}">产品目录</a>
+    <a class="nav-mobile-secondary {% if active_page == 'tubes' %}active{% endif %}" href="{{ url_for('tube_items') }}">管件资料</a>
+    <div class="nav-menu nav-mobile-secondary">
       <a class="{% if active_page in ['materials', 'material_items'] %}active{% endif %}" href="{{ url_for('materials') }}">生产料单</a>
       <div class="nav-menu-panel">
         <a class="{% if active_page == 'material_items' %}active{% endif %}" href="{{ url_for('material_items') }}">材料明细</a>
       </div>
     </div>
     {% if can("view_material_drawings") %}
-      <a class="{% if active_page == 'material_drawings' %}active{% endif %}" href="{{ url_for('material_drawings') }}">物料图纸</a>
+      <a class="nav-mobile-secondary {% if active_page == 'material_drawings' %}active{% endif %}" href="{{ url_for('material_drawings') }}">物料图纸</a>
     {% endif %}
     </div>
   </div>

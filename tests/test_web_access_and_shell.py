@@ -33,7 +33,8 @@ class TestWebAccessAndShell(WebAppTestBase):
         self.assertNotIn("货物识别", html)
         self.assertIn('class="search-hero"', html)
         self.assertNotIn('class="workspace-header"', html)
-        self.assertIn('class="nav-menu contract-nav-menu" data-nav-menu', html)
+        self.assertIn('class="nav-menu contract-nav-menu nav-mobile-secondary" data-nav-menu', html)
+        self.assertIn('aria-controls="mobile-workspace-nav" data-mobile-workspace-trigger>BLD 工作台', html)
         self.assertIn(
             'type="button" aria-haspopup="menu" aria-expanded="false" aria-label="选择合同类型" data-nav-menu-trigger>合同管理</button>',
             html,

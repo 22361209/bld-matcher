@@ -119,6 +119,7 @@
         <p class="empty-message">没有符合条件的产品。</p>
       {% endif %}
     </div>
+    {% include "_product_mobile_cards.html" %}
     {% set data_grid_label = "产品" %}
     {% set data_grid_total = total_products %}
     {% set data_grid_page_size = product_page_size %}

@@ -127,19 +127,53 @@
 
 @media (max-width: 720px) {
   .login-shell {
-    padding: 18px;
+    min-height: 100svh;
+    padding: 16px;
   }
 
   .login-shell > .login-panel {
+    width: min(100%, 460px);
     grid-template-columns: 1fr;
   }
 
   .login-brand {
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: 14px;
     min-height: 0;
-    padding: 28px;
+    padding: 20px;
+    align-content: center;
+  }
+
+  .login-brand-mark {
+    width: 44px;
+    height: 44px;
+    font-size: 16px;
+  }
+
+  .login-brand h1 {
+    margin: 3px 0 0;
+    font-size: 22px;
+  }
+
+  .login-brand p {
+    display: none;
+  }
+
+  .login-kicker {
+    font-size: 8px;
   }
 
   .login-form-area {
-    padding: 30px 28px 34px;
+    padding: 24px 20px 28px;
+  }
+
+  .login-form-heading {
+    margin-bottom: 20px;
+  }
+
+  .login-form-area input,
+  .login-form-area button[type="submit"] {
+    min-height: 50px;
+    font-size: 16px;
   }
 }

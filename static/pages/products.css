@@ -125,7 +125,188 @@
   }
 }
 
+.product-mobile-cards {
+  display: none;
+}
+
 @media (max-width: 760px) {
+  .products-command .search-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: end;
+    width: 100%;
+  }
+
+  .products-command .search-form label {
+    display: grid;
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+
+  .products-command .search-form input {
+    width: 100%;
+    min-height: 48px;
+    font-size: 16px;
+  }
+
+  .products-command .search-form > .linear-button {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-height: 48px;
+  }
+
+  .products-command .status-popover {
+    display: none;
+  }
+
+  .products-command .secondary-actions {
+    display: contents;
+  }
+
+  .products-command .secondary-actions > :not([data-products-inline-status]) {
+    display: none;
+  }
+
+  .products-command [data-products-inline-status] {
+    margin-top: 8px;
+  }
+
+  .products-list-section .data-table-scroll {
+    display: none;
+  }
+
+  .products-list-section .data-grid-viewport-fill {
+    height: auto;
+  }
+
+  .product-mobile-cards {
+    display: grid;
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .product-mobile-card {
+    display: grid;
+    grid-template-columns: 76px minmax(0, 1fr);
+    gap: 12px;
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid var(--linear-line);
+    border-radius: 7px;
+    background: #ffffff;
+  }
+
+  .product-mobile-card-image {
+    display: grid;
+    width: 76px;
+    height: 64px;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid var(--linear-line);
+    border-radius: 5px;
+    background: #f8fafc;
+  }
+
+  .product-mobile-card-image .product-thumb {
+    width: 74px;
+    height: 62px;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .product-mobile-card-image-empty {
+    color: var(--linear-muted);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .product-mobile-card-main {
+    min-width: 0;
+  }
+
+  .product-mobile-card-heading {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .product-mobile-card-heading .bld-action-menu {
+    min-width: 0;
+  }
+
+  .product-mobile-card-status {
+    flex: 0 0 auto;
+    max-width: 42%;
+    overflow: hidden;
+    color: var(--linear-muted);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.4;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .product-mobile-card-item,
+  .product-mobile-card-brand,
+  .product-mobile-card-summary,
+  .product-mobile-card-model {
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .product-mobile-card-item {
+    margin-top: 6px;
+    color: var(--linear-text);
+    font-size: 14px;
+    font-weight: 800;
+  }
+
+  .product-mobile-card-brand,
+  .product-mobile-card-summary,
+  .product-mobile-card-model {
+    margin-top: 3px;
+    color: var(--linear-muted);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .product-mobile-card-summary span {
+    margin-right: 5px;
+    color: var(--linear-text);
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .product-mobile-card-price {
+    display: flex;
+    grid-column: 2;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    padding-top: 7px;
+    border-top: 1px solid var(--linear-line);
+    color: var(--linear-muted);
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .product-mobile-card-price strong {
+    overflow: hidden;
+    color: var(--linear-text);
+    font-size: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .product-mobile-empty {
+    margin: 2px 0;
+  }
+
   .record-form {
     grid-template-columns: minmax(0, 1fr);
   }

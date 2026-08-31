@@ -16,6 +16,35 @@ if (nav instanceof HTMLElement && nav.dataset.navReady !== "true") {
   const navigationMenus = [...nav.querySelectorAll("[data-nav-menu]")];
   const navMenus = [...nav.querySelectorAll(".nav-menu")];
   const narrowViewport = window.matchMedia("(max-width: 760px)");
+  const mobileWorkspaceTrigger = nav.querySelector("[data-mobile-workspace-trigger]");
+  const mobileWorkspaceMenu = nav.querySelector("[data-mobile-workspace-menu]");
+
+  if (mobileWorkspaceTrigger instanceof HTMLButtonElement && mobileWorkspaceMenu instanceof HTMLElement) {
+    const closeMobileWorkspaceMenu = ({ restoreFocus = false } = {}) => {
+      nav.classList.remove("is-mobile-menu-open");
+      mobileWorkspaceTrigger.setAttribute("aria-expanded", "false");
+      if (restoreFocus) mobileWorkspaceTrigger.focus();
+    };
+
+    mobileWorkspaceTrigger.addEventListener("click", () => {
+      if (!narrowViewport.matches) return;
+      const willOpen = !nav.classList.contains("is-mobile-menu-open");
+      nav.classList.toggle("is-mobile-menu-open", willOpen);
+      mobileWorkspaceTrigger.setAttribute("aria-expanded", String(willOpen));
+    });
+    mobileWorkspaceMenu.addEventListener("click", (event) => {
+      if (event.target instanceof Element && event.target.closest("a")) closeMobileWorkspaceMenu();
+    });
+    document.addEventListener("click", (event) => {
+      if (!nav.contains(event.target)) closeMobileWorkspaceMenu();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && nav.classList.contains("is-mobile-menu-open")) {
+        closeMobileWorkspaceMenu({ restoreFocus: true });
+      }
+    });
+    narrowViewport.addEventListener("change", () => closeMobileWorkspaceMenu());
+  }
 
   const positionMobileMenuPanel = (navigationMenu) => {
     if (!narrowViewport.matches) return;
