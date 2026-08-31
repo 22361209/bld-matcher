@@ -1,6 +1,6 @@
 # BLD Project Brief
 
-更新时间：2026-08-08
+更新时间：2026-08-31
 
 这是给新接手 Codex 或开发者的短版项目说明。先读 `AGENTS.md`，再读本文件。详细历史在 `项目交接说明.md`，需要查旧决策时用 `rg` 搜索，不要默认整篇读取。
 
@@ -122,7 +122,7 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 
 产品目录：
 
-- 具有 `import_catalog` 权限的账号将鼠标悬停在“导入目录”即可选择“下载模板”或“上传文件”。模板按当前产品库生成；必填列为 `BLD NO.`、`SERIES`、`ITEM`、`OE NO.1`、`Models`、`产品状态`、`导入单价`，`OE NO.2` 和`图片`可选。`SERIES` 通过 `SERIES` 至 `SERIES 6` 的多个下拉选择位实现多选，导入时合并为多品牌；`ITEM` 为单选下拉。导入会拒绝下拉选项之外的 SERIES 或 ITEM。上传后先预览新增、无变化和逐条 BLD NO. 冲突；冲突默认完整保留现有资料，只有明确勾选后才使用 Excel 更新。Excel 内部重复 BLD NO. 或任一必填项缺失都会阻断导入。确认失败时目录文件、产品资料和图片会一起恢复。图片支持 JPG、PNG、WEBP，单张不超过 5 MB、任一边不超过 6000 像素，建议长边不超过 2000 像素。
+- 具有 `import_catalog` 权限的账号将鼠标悬停在“导入目录”即可选择“下载模板”或“上传文件”。模板按当前产品库生成；必填列为 `BLD NO.`、`SERIES`、`ITEM`、`OE NO.1`、`Models`、`产品状态`、`导入单价`，`OE NO.2` 和`图片`可选。`SERIES` 通过 `SERIES` 至 `SERIES 6` 的多个下拉选择位实现多选，导入时合并为多品牌；`ITEM` 为单选下拉。导入会拒绝下拉选项之外的 SERIES 或 ITEM。上传后先预览新增、无变化和逐条 BLD NO. 冲突；冲突默认完整保留现有资料，只有明确勾选后才使用 Excel 更新。Excel 内部重复 BLD NO. 或任一必填项缺失都会阻断导入。确认失败时目录文件、产品资料和图片会一起恢复。图片支持 JPG、PNG、WEBP，源文件单张不超过 30 MB、总像素不超过 5000 万；保存时统一转为长边不超过 1920 像素且严格不超过 500 KB 的 WebP 大图，同时生成最大 320×240 的 WebP 缩略图，上传源文件不保留。
 - 主搜索框同时按 BLD 号、品牌、车型搜索；OE 号有独立标准化搜索框。
 - 产品目录每页 50 条，避免大量产品和图片导致滚动卡顿。
 - 除固定在最右侧的操作列外，业务列可从列头文字区域拖动换序；顺序按当前浏览器登录用户保存。“重置列表”统一恢复可排序列的默认顺序、默认列宽并清除列头筛选，主搜索和启停状态保持不变。
@@ -130,8 +130,8 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 - 产品目录搜索、启停状态、列筛选、重置和分页通过页面内只读 HTML 片段更新结果区；URL、刷新、分享、前进和后退保持可恢复，新增、编辑和删除成功后也只刷新目录结果区。
 - 产品品牌按“每行一个品牌”存储并统一为大写；历史 `RAM` 归入 `DODGE`，手工保存、目录导入和产品数据包同步共用同一套幂等规范化规则。具有 `import_catalog` 权限的账号按需点击“检查品牌规范”生成全量预览，普通目录和搜索首屏不执行该预览。
 - 筛选面板支持中文输入法组合输入；单列选择超过 200 项或单项超过 256 字符时会明确拒绝，不会静默放宽筛选或误导出全量数据；空白值与字面值 `__blank__` 分开处理。
-- 导出目录继承当前搜索和全部列筛选，导出完整命中集合而不是仅导出当前页；网页列顺序不改变 Excel 的既有格式。
-- 表格使用缩略图，点击图片浮层预览原图；缩略图文件缺失时返回小型图片占位，不重定向到产品目录页面。
+- 导出目录继承当前搜索和全部列筛选，导出完整命中集合而不是仅导出当前页；网页列顺序不改变 Excel 的既有格式，Excel 内嵌图片只读取生成后的缩略图。
+- 表格只请求第一张主图的缩略图，点击图片后才加载 WebP 大图；缩略图文件缺失时返回小型图片占位，不回退加载大图，也不重定向到产品目录页面。
 - 有 PDF 图纸时点击 BLD 号预览图纸。
 - 表格在含税单价后显示“产品状态”，数据库保存中文配置，产品目录默认显示英文；询价结果预览和人民币报价导出显示中文，美金报价导出显示英文。
 - 导出目录需要 `export_catalog` 权限。
@@ -247,10 +247,11 @@ ssh -i ~/.ssh/bld_matcher_deploy deploy@192.168.110.93 'cd /volume1/docker/bld-m
 
 NAS `deploy` 用户已配置受限免密 sudo wrapper：`/usr/local/sbin/rebuild-bld-matcher`。常规重建和状态检查必须优先用 `sudo -n` 调用该 wrapper；只有 wrapper 缺失或不足以完成任务时，才打开可见 Terminal 让用户输入 sudo 密码。
 
-如果大量产品图片被新增或替换，部署后可生成缩略图：
+部署重建会先运行幂等的产品图片迁移服务，把历史目录图片转换为受限 WebP 大图并生成缩略图；结果写入 `data/product_image_migration_report.json`。也可以手工检查或执行：
 
 ```bash
-sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_product_thumbnails.py
+python tools/migrate_product_images.py
+python tools/migrate_product_images.py --apply
 ```
 
 ## 重要代码入口
@@ -274,7 +275,7 @@ sudo /usr/local/bin/docker-compose exec -T bld-matcher python tools/generate_pro
 - `app/modules/admin/`：登录、账号、API Key、操作日志和系统更新
 - `app/database.py`：SQLite Schema、连接和迁移入口，不保存业务查询
 - `app/matcher.py`：产品匹配逻辑
-- `app/product_media.py`：产品图片上传、缩略图生成和读取
+- `app/product_media.py`、`app/product_image_processing.py`：产品图片上传、WebP 压缩、缩略图生成和读取
 - `app/catalog_export.py`：产品目录 Excel 导出和图片嵌入
 - `app/purchase_contract.py`：采购/销售合同表单校验和 PDF 生成
 - `templates/products.html`：产品目录页面

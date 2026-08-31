@@ -993,14 +993,16 @@ class TestWebProductCatalog(WebAppTestBase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("/product-image-thumbs/K-THUMB-001.png", html)
         self.assertIn("/product-images/K-THUMB-001.png", html)
+        self.assertNotIn('src="/product-images/K-THUMB-001.png"', html)
 
         thumb = self.client.get("/product-image-thumbs/K-THUMB-001.png")
         self.assertEqual(thumb.status_code, 200)
         with Image.open(io.BytesIO(thumb.get_data())) as generated:
-            self.assertLessEqual(generated.width, 160)
-            self.assertLessEqual(generated.height, 120)
+            self.assertEqual(generated.format, "WEBP")
+            self.assertLessEqual(generated.width, 320)
+            self.assertLessEqual(generated.height, 240)
         thumb.close()
-        self.assertTrue((image_dir / "thumbs" / "K-THUMB-001.png").exists())
+        self.assertTrue((image_dir / "thumbs" / "K-THUMB-001.webp").exists())
 
     def test_missing_product_thumbnail_is_a_small_safe_image_response(self):
         self.login()

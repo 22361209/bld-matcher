@@ -63,6 +63,7 @@ bash tools/install_bld_launcher.sh
 - `DEFAULT_ADMIN_USERNAME` / `DEFAULT_ADMIN_PASSWORD`:首次启动创建管理员时使用,部署前覆盖
 - `MAX_UPLOAD_MB`：普通上传文件大小限制，默认 `20`
 - `PRODUCT_SYNC_MAX_UPLOAD_MB`：同步类数据包（产品数据同步、业务数据同步）上传大小限制，默认 `512`
+- `PRODUCT_IMAGE_REQUEST_MAX_UPLOAD_MB`：一次产品保存或目录导入请求的总上传上限，默认 `160`；单张产品图片仍固定按 30 MB 校验
 - `APP_HOST`：本机启动监听地址，默认 `127.0.0.1`
 - `APP_PORT`：本机启动端口，默认 `5055`
 - `BLD_DATA_DIR`：数据目录，默认 `data`
@@ -88,7 +89,7 @@ bash tools/install_bld_launcher.sh
 
 ## 数据库
 
-默认数据库是 `data/products.sqlite3`。这个文件是业务数据，不进入 Git。产品目录 `data/catalog.xlsx`、材料明细 `data/stamping_materials.xlsx`、PDF 图纸目录 `data/drawings/`、物料图纸目录 `data/material_drawings/` 和上传产品图片目录 `data/product_images/` 也按运行数据处理，不进入 Git。每个产品可维护含税单价、产品状态和最多 5 张产品图片；产品状态用于记录球头/衬套配置，例如“1 个球头 2 个衬套”。网页编辑上传的图片文件保存在 `data/product_images/`。产品目录列表使用 `data/product_images/thumbs/` 下的运行时缩略图，点击预览时才加载原图。NAS 上的 `data/` 目录要按 NAS 备份策略保护，更新代码时不要用本机数据覆盖 NAS 数据。
+默认数据库是 `data/products.sqlite3`。这个文件是业务数据，不进入 Git。产品目录 `data/catalog.xlsx`、材料明细 `data/stamping_materials.xlsx`、PDF 图纸目录 `data/drawings/`、物料图纸目录 `data/material_drawings/` 和上传产品图片目录 `data/product_images/` 也按运行数据处理，不进入 Git。每个产品可维护含税单价、产品状态和最多 5 张产品图片；产品状态用于记录球头/衬套配置，例如“1 个球头 2 个衬套”。网页编辑接收最大 30 MB、5000 万像素的 JPG/PNG/WebP 源图片，保存时只保留长边不超过 1920 像素且不超过 500 KB 的 WebP 大图以及最大 320×240 的 WebP 缩略图。产品目录列表只加载缩略图，点击预览时才加载大图。NAS 上的 `data/` 目录要按 NAS 备份策略保护，更新代码时不要用本机数据覆盖 NAS 数据。
 
 管理员菜单里的“产品数据同步”用于两端系统之间交换产品数据包。导出包只包含 `products` 表和 `manifest.json`，可选包含 `data/drawings/`、`data/product_images/`；导入时先预览差异，再增量合并 `products` 表，不覆盖本机账号、内部 API Key 或操作日志。包内更新时间早于当前系统的同 BLD 产品会标记为“包内旧数据”并跳过，避免旧包覆盖新数据；勾选图纸/图片时才复制包内媒体文件，覆盖前会把本机对应文件备份到 `data/local-backups/`。
 
@@ -101,10 +102,11 @@ tools/import_catalog_cell_images.py "产品目录/BLD catalogue 2603 new(2个OE)
 tools/import_catalog_cell_images.py "产品目录/BLD catalogue 2603 new(2个OE).xlsx" --apply
 ```
 
-如果产品图片是历史导入或批量复制进去的，可以预先生成缩略图，避免第一次滚动产品目录时边访问边生成：
+历史图片可使用同一幂等工具检查或批量转为 WebP；部署重建也会先自动执行一次：
 
 ```bash
-python tools/generate_product_thumbnails.py
+python tools/migrate_product_images.py
+python tools/migrate_product_images.py --apply
 ```
 
 ## 多用户文件和导入规则

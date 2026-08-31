@@ -1,6 +1,6 @@
 const PRODUCT_IMAGE_LIMIT = 5;
-const PRODUCT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
-const PRODUCT_IMAGE_MAX_SIDE = 6000;
+const PRODUCT_IMAGE_MAX_BYTES = 30 * 1024 * 1024;
+const PRODUCT_IMAGE_MAX_PIXELS = 50_000_000;
 const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp"]);
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
@@ -15,7 +15,7 @@ export function productImageIntakeCopy(imageCount) {
   if (count === 0) {
     return {
       title: "拖入图片或选择文件",
-      note: "可一次选择多张；JPG / PNG / WEBP，单张不超过 5 MB",
+      note: "JPG / PNG / WEBP，源文件单张不超过 30 MB；保存后自动转为 WebP",
     };
   }
   if (count === PRODUCT_IMAGE_LIMIT) {
@@ -54,7 +54,7 @@ const basicImageValidationError = (file) => {
     return "仅支持 JPG、PNG、WEBP 图片。";
   }
   if (file.size === 0) return "图片文件为空。";
-  if (file.size > PRODUCT_IMAGE_MAX_BYTES) return "单张产品图片不能超过 5 MB。";
+  if (file.size > PRODUCT_IMAGE_MAX_BYTES) return "单张产品图片源文件不能超过 30 MB。";
   return "";
 };
 
@@ -68,8 +68,8 @@ const dimensionsValidationError = async (file) => {
       image.onerror = () => resolve(null);
       image.src = source;
     });
-    if (dimensions && Math.max(dimensions.width, dimensions.height) > PRODUCT_IMAGE_MAX_SIDE) {
-      return "图片任一边不能超过 6000 像素。";
+    if (dimensions && dimensions.width * dimensions.height > PRODUCT_IMAGE_MAX_PIXELS) {
+      return "产品图片总像素不能超过 5000 万。";
     }
   } finally {
     URL.revokeObjectURL(source);
@@ -224,7 +224,7 @@ function mountProductMediaUploader(root) {
     if (errors.length) {
       setStatus(`${added ? `已添加 ${added} 张。` : ""}${errors[0]}${skipped ? ` 其余 ${skipped} 张超过剩余位置。` : ""}`, true);
     } else if (added) {
-      setStatus(`已添加 ${added} 张图片${skipped ? `；其余 ${skipped} 张超过剩余位置，未添加。` : ""}`);
+      setStatus(`已添加 ${added} 张图片；保存后将自动生成 500 KB 以内的大图和缩略图${skipped ? `；其余 ${skipped} 张超过剩余位置，未添加。` : ""}`);
     }
   };
 

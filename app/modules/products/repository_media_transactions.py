@@ -12,11 +12,11 @@ from app.config import (
     DRAWING_PDF_DIR,
     PRODUCT_IMAGE_ARCHIVE_DIR,
     PRODUCT_IMAGE_DIR,
-    PRODUCT_IMAGE_THUMB_DIR,
 )
 from app.drawings import drawing_storage_name, product_drawing_path, safe_filename_part
 from app.product_media import (
     PRODUCT_IMAGE_DATA_PREFIX,
+    PRODUCT_IMAGE_OUTPUT_SUFFIX,
     image_slot_field,
     product_image_storage_name,
     product_image_thumb_path,
@@ -57,8 +57,8 @@ class NewProductMediaTransaction:
         targets: set[Path] = set()
         target_bld_no = self.target["bld_no"]
 
-        def add_image_target(slot: int, suffix: str) -> None:
-            path = PRODUCT_IMAGE_DIR / product_image_storage_name(target_bld_no, suffix, slot)
+        def add_image_target(slot: int) -> None:
+            path = PRODUCT_IMAGE_DIR / product_image_storage_name(target_bld_no, PRODUCT_IMAGE_OUTPUT_SUFFIX, slot)
             targets.add(path)
             thumbnail = product_image_thumb_path(path.name)
             if thumbnail is not None:
@@ -69,11 +69,10 @@ class NewProductMediaTransaction:
             reference = str(self.source[field] or "") if field in self.source.keys() else ""
             source_path = resolve_product_image_path(reference.rsplit("/", 1)[-1])
             if source_path is not None:
-                add_image_target(slot, source_path.suffix)
+                add_image_target(slot)
         for slot, file in self.image_files:
-            suffix = Path(str(getattr(file, "filename", "") or "")).suffix.lower()
-            if suffix:
-                add_image_target(slot, suffix)
+            if Path(str(getattr(file, "filename", "") or "")).suffix:
+                add_image_target(slot)
         return targets
 
     def begin(self) -> None:
@@ -160,8 +159,9 @@ class ProductRenameMediaTransaction:
             moves.append((source, target))
             thumb_source = product_image_thumb_path(source.name)
             if thumb_source is not None and thumb_source.exists():
-                thumb_target = PRODUCT_IMAGE_THUMB_DIR / target_name
-                moves.append((thumb_source, thumb_target))
+                thumb_target = product_image_thumb_path(target_name)
+                if thumb_target is not None:
+                    moves.append((thumb_source, thumb_target))
 
         source_drawing = product_drawing_path(self.product_row)
         if source_drawing is not None:

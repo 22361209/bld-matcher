@@ -38,7 +38,7 @@
       {% set image_gallery = product_image_urls(product) %}
       {% if image_gallery %}
         <a class="image-link" href="{{ image_gallery[0].url }}" target="_blank" rel="noopener" title="打开 {{ product.bld_no }} 产品图片" data-gallery='{{ image_gallery|tojson }}' data-caption="{{ product.bld_no }}">
-          <img class="product-thumb" src="{{ image_gallery[0].thumb or image_gallery[0].url }}" alt="{{ product.bld_no }} 产品图片" loading="lazy" decoding="async">
+          <img class="product-thumb" src="{{ image_gallery[0].thumb }}" alt="{{ product.bld_no }} 产品图片" loading="lazy" decoding="async">
         </a>
       {% else %}
         <span class="note">无图</span>

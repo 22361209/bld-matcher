@@ -173,8 +173,13 @@ class ProductInquiryModuleTest(unittest.TestCase):
         self.assertEqual(product["price_cny"], 68.5)
         self.assertEqual(product["series"], "TOYOTA\nHYUNDAI")
         self.assertEqual(product["product_status"], "1 个球头")
-        self.assertEqual(product["image_path"], "data_product_images/K-IMPORT-001.png")
-        self.assertTrue((image_dir / "K-IMPORT-001.png").is_file())
+        self.assertEqual(product["image_path"], "data_product_images/K-IMPORT-001.webp")
+        saved_image = self.root / "data" / "product_images" / "K-IMPORT-001.webp"
+        saved_thumb = self.root / "data" / "product_images" / "thumbs" / "K-IMPORT-001.webp"
+        self.assertTrue(saved_image.exists())
+        self.assertTrue(saved_thumb.exists())
+        self.assertLessEqual(saved_image.stat().st_size, 500 * 1024)
+        self.assertTrue((image_dir / "K-IMPORT-001.webp").is_file())
 
     def test_catalog_import_rejects_missing_required_value_before_writing(self) -> None:
         self.add_catalog_import_choices()

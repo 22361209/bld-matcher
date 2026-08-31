@@ -57,7 +57,7 @@ def _data_product_image_name(bld_no: str, slot: int) -> str:
     if not bld_no:
         return ""
     slot_suffix = "" if slot == 1 else f"-{slot}"
-    for suffix in (".jpg", ".jpeg", ".png", ".webp"):
+    for suffix in (".webp", ".jpg", ".jpeg", ".png"):
         name = f"{bld_no}{slot_suffix}{suffix}"
         if (PRODUCT_IMAGE_DIR / name).is_file():
             return name
@@ -105,7 +105,12 @@ def product_image_thumb_url(product, slot: int = 1) -> str:
     if explicit:
         if explicit.startswith(PRODUCT_IMAGE_DATA_PREFIX):
             return url_for("product_image_thumb_data", name=explicit[len(PRODUCT_IMAGE_DATA_PREFIX) :])
-        return product_image_url(product, slot)
+        if explicit.startswith("/static/product_images/"):
+            source_name = Path(explicit).name
+            thumb_relative = f"product_images/thumbs/{Path(source_name).stem}.webp"
+            if (BASE_DIR / "static" / thumb_relative).is_file():
+                return url_for("static", filename=thumb_relative)
+        return url_for("product_image_thumb_data", name=f"missing-{slot}.webp")
 
     bld_no = product["bld_no"] if "bld_no" in product.keys() else ""
     data_name = _data_product_image_name(bld_no, slot)
@@ -113,8 +118,10 @@ def product_image_thumb_url(product, slot: int = 1) -> str:
         return url_for("product_image_thumb_data", name=data_name)
     if slot != 1:
         return ""
-    relative = _default_product_thumb_relative(bld_no) or _default_product_image_relative(bld_no)
-    return url_for("static", filename=relative) if relative else ""
+    relative = _default_product_thumb_relative(bld_no)
+    if relative:
+        return url_for("static", filename=relative)
+    return url_for("product_image_thumb_data", name=f"missing-{slot}.webp") if product_image_url(product, slot) else ""
 
 
 def product_image_urls(product) -> list[dict[str, str]]:
@@ -128,7 +135,7 @@ def product_image_urls(product) -> list[dict[str, str]]:
                 "slot": str(slot),
                 "label": f"图片 {slot}",
                 "url": url,
-                "thumb": product_image_thumb_url(product, slot) or url,
+                "thumb": product_image_thumb_url(product, slot),
             }
         )
     return images

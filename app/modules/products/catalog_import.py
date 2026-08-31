@@ -16,6 +16,7 @@ from werkzeug.datastructures import FileStorage
 
 from app.matcher import compact_text, find_catalog_header_row
 from app.product_media import product_image_storage_name, validate_product_image_file
+from app.product_image_processing import PRODUCT_IMAGE_OUTPUT_SUFFIX, process_product_image
 
 from .domain import ProductRecord
 
@@ -353,23 +354,48 @@ class CatalogImportFileTransaction:
         self.changes.append((target, backup))
         self._atomic_copy(source, target)
 
-    def apply_images(self, rows: Iterable[CatalogImportRow]) -> dict[str, str]:
+    def _remove(self, target: Path) -> None:
+        if not target.exists():
+            return
+        bucket = "images" if target.parent == self.image_dir else "thumbs"
+        backup = self.backup_dir / bucket / target.name
+        self._atomic_copy(target, backup)
+        self.changes.append((target, backup))
+        target.unlink()
+
+    def apply_images(
+        self,
+        rows: Iterable[CatalogImportRow],
+        *,
+        existing_references: dict[str, str] | None = None,
+    ) -> dict[str, str]:
         image_paths: dict[str, str] = {}
+        existing_references = existing_references or {}
         for row in rows:
             if not row.image:
                 continue
-            filename = product_image_storage_name(row.bld_no, row.image.suffix)
+            processed = process_product_image(BytesIO(row.image.data))
+            filename = product_image_storage_name(row.bld_no, PRODUCT_IMAGE_OUTPUT_SUFFIX)
             staging = self.backup_dir / "staged" / filename
+            staged_thumb = self.backup_dir / "staged-thumbs" / filename
             staging.parent.mkdir(parents=True, exist_ok=True)
-            staging.write_bytes(row.image.data)
+            staged_thumb.parent.mkdir(parents=True, exist_ok=True)
+            staging.write_bytes(processed.large)
+            staged_thumb.write_bytes(processed.thumbnail)
             target = self.image_dir / filename
             self._replace(staging, target)
-            thumb = self.thumb_dir / target.name
-            if thumb.exists():
-                thumb_backup = self.backup_dir / "thumbs" / thumb.name
-                self._atomic_copy(thumb, thumb_backup)
-                self.changes.append((thumb, thumb_backup))
-                thumb.unlink()
+            thumb = self.thumb_dir / filename
+            self._replace(staged_thumb, thumb)
+
+            existing = existing_references.get(row.bld_no, "")
+            if existing.startswith("data_product_images/"):
+                old_name = Path(existing.removeprefix("data_product_images/")).name
+                old_path = self.image_dir / old_name
+                if old_path != target:
+                    self._remove(old_path)
+                legacy_thumb = self.thumb_dir / old_name
+                if legacy_thumb != thumb:
+                    self._remove(legacy_thumb)
             image_paths[row.bld_no] = f"data_product_images/{target.name}"
         return image_paths
 

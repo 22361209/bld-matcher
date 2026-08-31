@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 import re
 from collections.abc import Iterable
+from io import BytesIO
 from pathlib import Path
 from uuid import uuid4
 
@@ -10,8 +11,10 @@ from openpyxl import Workbook
 from openpyxl.drawing.image import Image as ExcelImage
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
+from PIL import Image as PillowImage
 
 from app.config import BASE_DIR, PRODUCT_IMAGE_DATA_PREFIX, PRODUCT_IMAGE_DIR
+from app.product_media import resolve_product_image_thumb_path
 from app.product_status import format_product_status
 
 
@@ -21,7 +24,6 @@ CHINESE_RE = re.compile(r"[\u4e00-\u9fff]")
 IMAGE_MAX_WIDTH = 112
 IMAGE_MAX_HEIGHT = 72
 IMAGE_ROW_HEIGHT = 62
-IMAGE_EXTENSIONS = ("jpg", "jpeg", "png", "webp")
 
 
 def _font_for(value, *, bold: bool = False) -> Font:
@@ -67,19 +69,37 @@ def _existing_path(path: Path) -> Path | None:
     return resolved if resolved.is_file() else None
 
 
+def _thumbnail_for_source(path: Path) -> Path | None:
+    try:
+        resolved = path.resolve()
+        image_root = PRODUCT_IMAGE_DIR.resolve()
+    except OSError:
+        return None
+    if resolved.parent == image_root:
+        return resolve_product_image_thumb_path(resolved.name)
+    static_image_root = (BASE_DIR / "static" / "product_images").resolve()
+    if resolved.parent == static_image_root:
+        for suffix in ("webp", "png", "jpg", "jpeg"):
+            thumbnail = _existing_path(static_image_root / "thumbs" / f"{resolved.stem}.{suffix}")
+            if thumbnail:
+                return thumbnail
+    return None
+
+
 def _path_from_explicit_image(value: str) -> Path | None:
     explicit = value.strip()
     if not explicit or explicit.startswith(("http://", "https://")):
         return None
 
     if explicit.startswith(PRODUCT_IMAGE_DATA_PREFIX):
-        return _existing_path(PRODUCT_IMAGE_DIR / Path(explicit[len(PRODUCT_IMAGE_DATA_PREFIX) :]).name)
+        return resolve_product_image_thumb_path(Path(explicit[len(PRODUCT_IMAGE_DATA_PREFIX) :]).name)
 
     if explicit.startswith("/product-images/"):
-        return _existing_path(PRODUCT_IMAGE_DIR / Path(explicit.removeprefix("/product-images/")).name)
+        return resolve_product_image_thumb_path(Path(explicit.removeprefix("/product-images/")).name)
 
     if explicit.startswith("/static/"):
-        return _existing_path(BASE_DIR / "static" / explicit.removeprefix("/static/"))
+        source = _existing_path(BASE_DIR / "static" / explicit.removeprefix("/static/"))
+        return _thumbnail_for_source(source) if source else None
 
     relative = explicit.lstrip("/")
     for candidate in (
@@ -89,7 +109,7 @@ def _path_from_explicit_image(value: str) -> Path | None:
     ):
         path = _existing_path(candidate)
         if path:
-            return path
+            return _thumbnail_for_source(path)
     return None
 
 
@@ -103,20 +123,26 @@ def _image_path(row) -> Path | None:
     bld_no = str(row["bld_no"] or "").strip()
     if not bld_no:
         return None
-    for suffix in IMAGE_EXTENSIONS:
+    for suffix in ("webp", "jpg", "jpeg", "png"):
         for candidate in (
             PRODUCT_IMAGE_DIR / f"{bld_no}.{suffix}",
             BASE_DIR / "static" / "product_images" / f"{bld_no}.{suffix}",
         ):
             path = _existing_path(candidate)
             if path:
-                return path
+                thumbnail = _thumbnail_for_source(path)
+                if thumbnail:
+                    return thumbnail
     return None
 
 
 def _build_excel_image(path: Path) -> ExcelImage | None:
     try:
-        image = ExcelImage(str(path))
+        buffer = BytesIO()
+        with PillowImage.open(path) as source:
+            source.save(buffer, format="PNG", optimize=True)
+        buffer.seek(0)
+        image = ExcelImage(buffer)
     except Exception:
         return None
 
@@ -148,6 +174,7 @@ def export_products_xlsx(
 ) -> Path:
     workbook = Workbook()
     sheet = workbook.active
+    assert sheet is not None
     sheet.title = "产品目录"
 
     if product_rows is None:

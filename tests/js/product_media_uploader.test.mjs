@@ -18,7 +18,7 @@ test("multi-image intake fills empty persisted slots before adding more", () => 
 test("intake copy makes the single-image path primary and exposes remaining capacity", () => {
   assert.deepEqual(productImageIntakeCopy(0), {
     title: "拖入图片或选择文件",
-    note: "可一次选择多张；JPG / PNG / WEBP，单张不超过 5 MB",
+    note: "JPG / PNG / WEBP，源文件单张不超过 30 MB；保存后自动转为 WebP",
   });
   assert.match(productImageIntakeCopy(1).title, /添加更多图片/);
   assert.match(productImageIntakeCopy(1).note, /还可添加 4 张/);

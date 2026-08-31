@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import zipfile
 from html import unescape
 
 from tests.web_app_test_base import (
@@ -721,7 +722,7 @@ with connect(database_path) as conn:
         self.assertFalse(list((self.root / "outputs").glob("**/catalog-export-bld-editor-export-*.xlsx")))
         self.client.post("/logout")
 
-    def test_product_export_embeds_main_image(self):
+    def test_product_export_embeds_generated_thumbnail_instead_of_main_image(self):
         from openpyxl import load_workbook
         from PIL import Image
 
@@ -730,7 +731,7 @@ with connect(database_path) as conn:
         image_dir = self.root / "data" / "product_images"
         image_dir.mkdir(parents=True, exist_ok=True)
         image_path = image_dir / "K-EXPORT-IMG.png"
-        Image.new("RGB", (80, 40), "white").save(image_path)
+        Image.new("RGB", (1600, 1200), "white").save(image_path)
 
         with self.web.connect(self.web.DB_PATH) as conn:
             upsert_product(
@@ -759,6 +760,13 @@ with connect(database_path) as conn:
         self.assertGreaterEqual(len(sheet._images), 1)
         self.assertGreaterEqual(sheet.row_dimensions[row_index].height, 62)
         workbook.close()
+        with zipfile.ZipFile(io.BytesIO(response.data)) as archive:
+            embedded_names = [name for name in archive.namelist() if name.startswith("xl/media/")]
+            self.assertTrue(embedded_names)
+            with Image.open(io.BytesIO(archive.read(embedded_names[0]))) as embedded:
+                self.assertLessEqual(embedded.width, 320)
+                self.assertLessEqual(embedded.height, 240)
+        self.assertTrue((image_dir / "thumbs" / "K-EXPORT-IMG.webp").exists())
         response.close()
 
     def test_catalog_export_uses_bld_natural_order(self):

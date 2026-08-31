@@ -111,7 +111,7 @@ def build_catalog_import_template(choices: CatalogImportChoices) -> BytesIO:
     instructions.append(["SERIES 多选", "从 SERIES、SERIES 2 至 SERIES 6 依次选择；系统会合并为同一产品的多品牌 SERIES。每个格都只能从下拉选项选择。"])
     instructions.append(["ITEM", "只能从下拉选项选择。"])
     instructions.append(["可选字段", "OE NO.2 和图片。图片请插入到“图片”列对应行。"])
-    instructions.append(["图片上限", "JPG、PNG、WebP；单张不超过 5 MB，任一边不超过 6000 像素，建议长边不超过 2000 像素。"])
+    instructions.append(["图片处理", "JPG、PNG、WebP；源文件单张不超过 30 MB、总像素不超过 5000 万，导入后自动转为 500 KB 以内的 WebP 大图并生成缩略图。"])
     instructions.append(["BLD NO. 冲突", "上传后逐条预览。与产品库相同的 BLD NO. 默认保留，只有勾选后才会更新。"])
     for cell in instructions[1]:
         cell.fill = header_fill

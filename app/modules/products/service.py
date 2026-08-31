@@ -369,6 +369,11 @@ class ProductService:
         selected_rows = [*preview.new_rows]
         selected_rows.extend(conflict.row for conflict in preview.conflicts if conflict.row.bld_no in update_bld_nos)
         existing_bld_nos = {conflict.row.bld_no: conflict.product.bld_no for conflict in preview.conflicts}
+        existing_image_references = {
+            conflict.row.bld_no: conflict.product.image_path
+            for conflict in preview.conflicts
+            if conflict.row.bld_no in update_bld_nos
+        }
         storage = self.catalog_import_storage
         transaction = CatalogImportFileTransaction(
             catalog_path=storage.catalog_path,
@@ -378,7 +383,10 @@ class ProductService:
         source_path = storage.catalog_path.parent / f".catalog-import-{uuid4().hex}.xlsx"
         try:
             with self.unit_of_work_factory() as unit_of_work:
-                image_paths = transaction.apply_images(selected_rows)
+                image_paths = transaction.apply_images(
+                    selected_rows,
+                    existing_references=existing_image_references,
+                )
                 for row in selected_rows:
                     data = row.values()
                     data["bld_no"] = existing_bld_nos.get(row.bld_no, row.bld_no)

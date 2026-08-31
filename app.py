@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Flask, abort, flash, g, jsonify, redirect, request, session, url_for
+from flask import Flask, Response, abort, flash, g, jsonify, redirect, request, session, url_for
 from werkzeug.exceptions import RequestEntityTooLarge
 
-from app.config import APP_DEBUG, APP_HOST, APP_PORT, DB_PATH, MAX_CONTENT_LENGTH, MAX_UPLOAD_MB, PERMANENT_SESSION_LIFETIME, PRODUCT_SYNC_MAX_UPLOAD_MB, SECRET_KEY, assert_production_secrets
+from app.config import APP_DEBUG, APP_HOST, APP_PORT, DB_PATH, MAX_CONTENT_LENGTH, MAX_UPLOAD_MB, PERMANENT_SESSION_LIFETIME, PRODUCT_IMAGE_MIGRATION_MARKER, PRODUCT_IMAGE_REQUEST_MAX_UPLOAD_MB, PRODUCT_SYNC_MAX_UPLOAD_MB, SECRET_KEY, assert_production_secrets
 from app.database import connect
 from app.helpers import download_name, product_image_thumb_url, product_image_url, product_image_urls, product_item_display_lines
 from app.modules.admin.factory import get_admin_service
@@ -21,9 +21,12 @@ from app.security import ROLE_LABELS, can, can_any, csrf_field, safe_referrer, v
 
 # 同步类数据包（产品数据同步、业务数据同步）上传走更大的限额。
 LARGE_UPLOAD_ENDPOINTS = {"preview_product_data_package", "preview_business_data_sync"}
+PRODUCT_IMAGE_UPLOAD_ENDPOINTS = {"save_product", "upload_catalog"}
 
 
 def _upload_limit_mb(endpoint: str | None) -> int:
+    if endpoint in PRODUCT_IMAGE_UPLOAD_ENDPOINTS:
+        return PRODUCT_IMAGE_REQUEST_MAX_UPLOAD_MB
     return PRODUCT_SYNC_MAX_UPLOAD_MB if endpoint in LARGE_UPLOAD_ENDPOINTS else MAX_UPLOAD_MB
 
 
@@ -64,6 +67,11 @@ def create_app() -> Flask:
 
     @web_app.before_request
     def load_current_user():
+        if PRODUCT_IMAGE_MIGRATION_MARKER.exists() and request.endpoint != "health_live":
+            message = "产品图片正在升级，请稍后刷新页面。"
+            if is_machine_api_path() or wants_json_response():
+                return jsonify({"ok": False, "error": message}), 503
+            return Response(message, status=503, mimetype="text/plain")
         if request.method == "POST" and request.content_length:
             limit_mb = _upload_limit_mb(request.endpoint)
             if request.content_length > limit_mb * 1024 * 1024:

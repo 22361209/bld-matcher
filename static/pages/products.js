@@ -471,7 +471,7 @@ if (document.body.dataset.page === "products.list") {
       button.className = `image-modal-thumb${index === imageGalleryIndex ? " active" : ""}`;
       button.setAttribute("aria-label", item.label || `图片 ${index + 1}`);
       const img = document.createElement("img");
-      img.src = item.thumb || item.url;
+      img.src = item.thumb;
       img.alt = item.label || "";
       button.appendChild(img);
       button.addEventListener("click", () => {
@@ -487,7 +487,7 @@ if (document.body.dataset.page === "products.list") {
     } catch (_error) {
       imageGallery = [];
     }
-    if (!imageGallery.length) imageGallery = [{ url: link.href, thumb: link.href, label: "" }];
+    if (!imageGallery.length) return;
     imageGalleryIndex = 0;
     imageModalCaption.dataset.baseCaption = link.dataset.caption || link.title.replace("打开 ", "").replace(" 原图", "");
     renderImageModal();

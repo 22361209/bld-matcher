@@ -1,7 +1,21 @@
 services:
+  bld-image-migrate:
+    build: .
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    environment:
+      - TZ=Asia/Shanghai
+    command: ["python", "tools/migrate_product_images.py", "--apply", "--allow-failures"]
+    restart: "no"
+
   bld-matcher:
     build: .
     container_name: bld-matcher
+    depends_on:
+      bld-image-migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
     ports:
       - "5055:8000"

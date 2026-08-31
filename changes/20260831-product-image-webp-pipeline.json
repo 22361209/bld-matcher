@@ -1,0 +1,15 @@
+{
+  "date": "2026-08-31",
+  "version": "unreleased",
+  "title": "产品图片自动压缩与缩略图导出",
+  "entries": [
+    "产品图片上传支持最大 30 MB 的 JPG、PNG 和 WebP 源文件，保存时自动纠正方向并转换为长边不超过 1920 像素、单张严格不超过 500 KB 的 WebP 大图；源文件不再保留。",
+    "产品目录在桌面端和手机端只加载第一张主图的 WebP 缩略图，点击图片后才加载大图；目录 Excel 导出也只嵌入生成后的缩略图。",
+    "部署重建会先幂等迁移现有产品图片并写入迁移报告；成功转换后更新图片引用并清除被替换的活动源图片，失败图片保留原文件并记录原因。"
+  ],
+  "impact": {
+    "data": "existing-product-images-converted-to-webp-with-source-files-removed-after-success",
+    "api": "compatible",
+    "operations": "rebuild-runs-product-image-migration-before-web-start"
+  }
+}
