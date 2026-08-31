@@ -172,7 +172,7 @@ class ProductRenameTests(WebAppTestBase):
 
         image_dir = self.root / "data" / "product_images"
         self.assertFalse((image_dir / "K-RENAME-OLD.png").exists())
-        self.assertTrue((image_dir / "K-RENAME-NEW.png").exists())
+        self.assertTrue((image_dir / "K-RENAME-NEW_1.png").exists())
 
         drawing_dir = self.root / "data" / "drawings" / "pdf"
         self.assertFalse((drawing_dir / "K-RENAME-OLD.pdf").exists())

@@ -122,7 +122,7 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 
 产品目录：
 
-- 具有 `import_catalog` 权限的账号将鼠标悬停在“导入目录”即可选择“下载模板”或“上传文件”。模板按当前产品库生成；必填列为 `BLD NO.`、`SERIES`、`ITEM`、`OE NO.1`、`Models`、`产品状态`、`导入单价`，`OE NO.2` 和`图片`可选。`SERIES` 通过 `SERIES` 至 `SERIES 6` 的多个下拉选择位实现多选，导入时合并为多品牌；`ITEM` 为单选下拉。导入会拒绝下拉选项之外的 SERIES 或 ITEM。上传后先预览新增、无变化和逐条 BLD NO. 冲突；冲突默认完整保留现有资料，只有明确勾选后才使用 Excel 更新。Excel 内部重复 BLD NO. 或任一必填项缺失都会阻断导入。确认失败时目录文件、产品资料和图片会一起恢复。图片支持 JPG、PNG、WEBP，源文件单张不超过 30 MB、总像素不超过 5000 万；保存时统一转为长边不超过 1920 像素且严格不超过 500 KB 的 WebP 大图，同时生成最大 320×240 的 WebP 缩略图，上传源文件不保留。
+- 具有 `import_catalog` 权限的账号将鼠标悬停在“导入目录”即可选择“下载模板”或“上传文件”。模板按当前产品库生成；必填列为 `BLD NO.`、`SERIES`、`ITEM`、`OE NO.1`、`Models`、`产品状态`、`导入单价`，`OE NO.2` 和`图片`可选。`SERIES` 通过 `SERIES` 至 `SERIES 6` 的多个下拉选择位实现多选，导入时合并为多品牌；`ITEM` 为单选下拉。导入会拒绝下拉选项之外的 SERIES 或 ITEM。上传后先预览新增、无变化和逐条 BLD NO. 冲突；冲突默认完整保留现有资料，只有明确勾选后才使用 Excel 更新。Excel 内部重复 BLD NO. 或任一必填项缺失都会阻断导入。确认失败时目录文件、产品资料和图片会一起恢复。图片支持 JPG、PNG、WEBP，源文件单张不超过 30 MB、总像素不超过 5000 万；保存时统一转为长边不超过 1920 像素且严格不超过 500 KB 的 WebP 大图，同时生成最大 320×240 的 WebP 缩略图，文件名统一为 `<BLD型号>_1.webp` 至 `<BLD型号>_5.webp`，上传源文件不保留。
 - 主搜索框同时按 BLD 号、品牌、车型搜索；OE 号有独立标准化搜索框。
 - 产品目录每页 50 条，避免大量产品和图片导致滚动卡顿。
 - 除固定在最右侧的操作列外，业务列可从列头文字区域拖动换序；顺序按当前浏览器登录用户保存。“重置列表”统一恢复可排序列的默认顺序、默认列宽并清除列头筛选，主搜索和启停状态保持不变。
@@ -247,7 +247,7 @@ ssh -i ~/.ssh/bld_matcher_deploy deploy@192.168.110.93 'cd /volume1/docker/bld-m
 
 NAS `deploy` 用户已配置受限免密 sudo wrapper：`/usr/local/sbin/rebuild-bld-matcher`。常规重建和状态检查必须优先用 `sudo -n` 调用该 wrapper；只有 wrapper 缺失或不足以完成任务时，才打开可见 Terminal 让用户输入 sudo 密码。
 
-部署重建会先运行幂等的产品图片迁移服务，把历史目录图片转换为受限 WebP 大图并生成缩略图；结果写入 `data/product_image_migration_report.json`。也可以手工检查或执行：
+部署重建会先运行幂等的产品图片迁移服务，把历史目录图片转换为受限 WebP 大图、统一迁移到 `_1` 至 `_5` 图片位文件名并生成缩略图；已合规 WebP 大图保留原始字节。结果写入 `data/product_image_migration_report.json`。也可以手工检查或执行：
 
 ```bash
 python tools/migrate_product_images.py

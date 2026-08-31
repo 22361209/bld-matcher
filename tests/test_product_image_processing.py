@@ -15,9 +15,22 @@ from app.product_image_processing import (
     process_product_image,
     process_synced_product_image,
 )
+from app.product_media import product_image_storage_name
 
 
 class ProductImageProcessingTests(unittest.TestCase):
+    def test_product_image_slots_use_underscore_numbering(self) -> None:
+        self.assertEqual(
+            [product_image_storage_name("K8080LA-2", ".WEBP", slot) for slot in range(1, 6)],
+            [
+                "K8080LA-2_1.webp",
+                "K8080LA-2_2.webp",
+                "K8080LA-2_3.webp",
+                "K8080LA-2_4.webp",
+                "K8080LA-2_5.webp",
+            ],
+        )
+
     def test_large_photo_is_webp_with_hard_size_and_dimension_caps(self) -> None:
         source = io.BytesIO()
         Image.effect_noise((2400, 1800), 100).convert("RGB").save(source, format="PNG")
@@ -111,8 +124,8 @@ class ProductImageMigrationTests(unittest.TestCase):
             apply=True,
         )
 
-        target = self.images / "K-MIGRATE-001.webp"
-        thumbnail = self.thumbs / "K-MIGRATE-001.webp"
+        target = self.images / "K-MIGRATE-001_1.webp"
+        thumbnail = self.thumbs / "K-MIGRATE-001_1.webp"
         self.assertEqual(report["converted"], 1)
         self.assertEqual(report["failed"], 0)
         self.assertFalse((self.images / "K-MIGRATE-001.jpg").exists())
@@ -124,7 +137,7 @@ class ProductImageMigrationTests(unittest.TestCase):
             reference = connection.execute("SELECT image_path FROM products WHERE id = 1").fetchone()[0]
         finally:
             connection.close()
-        self.assertEqual(reference, "data_product_images/K-MIGRATE-001.webp")
+        self.assertEqual(reference, "data_product_images/K-MIGRATE-001_1.webp")
 
         check = migrate_product_images(
             self.database,
@@ -134,6 +147,66 @@ class ProductImageMigrationTests(unittest.TestCase):
         )
         self.assertEqual(check["compliant"], 1)
         self.assertEqual(check["needs_conversion"], 0)
+
+    def test_migration_renames_compliant_webp_without_recompressing_large_image(self) -> None:
+        source = self.images / "K-MIGRATE-001.webp"
+        buffer = io.BytesIO()
+        Image.new("RGB", (960, 720), "teal").save(buffer, format="WEBP", quality=82)
+        payload = buffer.getvalue()
+        source.write_bytes(payload)
+        (self.images / "K-MIGRATE-001.jpg").unlink()
+        connection = sqlite3.connect(self.database)
+        connection.execute(
+            "UPDATE products SET image_path = ? WHERE id = 1",
+            ("data_product_images/K-MIGRATE-001.webp",),
+        )
+        connection.commit()
+        connection.close()
+
+        report = migrate_product_images(self.database, self.images, self.thumbs, apply=True)
+
+        target = self.images / "K-MIGRATE-001_1.webp"
+        self.assertEqual(target.read_bytes(), payload)
+        self.assertFalse(source.exists())
+        self.assertTrue((self.thumbs / target.name).is_file())
+        self.assertEqual(report["failed"], 0)
+
+    def test_migration_splits_shared_dash_name_into_distinct_underscore_slots(self) -> None:
+        shared_source = self.images / "K8080LA-2.webp"
+        buffer = io.BytesIO()
+        Image.new("RGB", (960, 720), "navy").save(buffer, format="WEBP", quality=82)
+        payload = buffer.getvalue()
+        shared_source.write_bytes(payload)
+        (self.images / "K-MIGRATE-001.jpg").unlink()
+        connection = sqlite3.connect(self.database)
+        connection.execute("DELETE FROM products")
+        connection.execute(
+            "INSERT INTO products (id, bld_no, image_path_2) VALUES (1, 'K8080LA', ?)",
+            ("data_product_images/K8080LA-2.webp",),
+        )
+        connection.execute(
+            "INSERT INTO products (id, bld_no, image_path) VALUES (2, 'K8080LA-2', ?)",
+            ("data_product_images/K8080LA-2.webp",),
+        )
+        connection.commit()
+        connection.close()
+
+        report = migrate_product_images(self.database, self.images, self.thumbs, apply=True)
+
+        first_target = self.images / "K8080LA_2.webp"
+        second_target = self.images / "K8080LA-2_1.webp"
+        self.assertEqual(first_target.read_bytes(), payload)
+        self.assertEqual(second_target.read_bytes(), payload)
+        self.assertFalse(shared_source.exists())
+        self.assertEqual(report["removed_source_files"], 1)
+        self.assertEqual(report["failed"], 0)
+        connection = sqlite3.connect(self.database)
+        references = connection.execute(
+            "SELECT bld_no, image_path, image_path_2 FROM products ORDER BY id"
+        ).fetchall()
+        connection.close()
+        self.assertEqual(references[0][2], "data_product_images/K8080LA_2.webp")
+        self.assertEqual(references[1][1], "data_product_images/K8080LA-2_1.webp")
 
 
 if __name__ == "__main__":

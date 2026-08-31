@@ -772,10 +772,10 @@ class BusinessSyncServiceTest(unittest.TestCase):
         (source_drawings / "SYNC-PRODUCT.pdf").write_bytes(b"source-drawing")
         source_image = self._webp_bytes()
         source_image_2 = self._webp_bytes("#225588")
-        (source_images / "SYNC-PRODUCT.webp").write_bytes(source_image)
-        (source_images / "SYNC-PRODUCT-2.webp").write_bytes(source_image_2)
+        (source_images / "SYNC-PRODUCT_1.webp").write_bytes(source_image)
+        (source_images / "SYNC-PRODUCT_2.webp").write_bytes(source_image_2)
         (source_images / "thumbs").mkdir()
-        (source_images / "thumbs" / "SYNC-PRODUCT.webp").write_bytes(b"source-thumbnail-is-not-exported")
+        (source_images / "thumbs" / "SYNC-PRODUCT_1.webp").write_bytes(b"source-thumbnail-is-not-exported")
         (source_images / "archive").mkdir()
         (source_images / "archive" / "orphan.webp").write_bytes(b"archived-image-is-not-exported")
         (source_images / "UNREFERENCED.webp").write_bytes(self._webp_bytes("#993355"))
@@ -784,8 +784,8 @@ class BusinessSyncServiceTest(unittest.TestCase):
             connection.execute(
                 "UPDATE products SET image_path = ?, image_path_2 = ? WHERE bld_no = 'SYNC-PRODUCT'",
                 (
-                    "data_product_images/SYNC-PRODUCT.webp",
-                    "data_product_images/SYNC-PRODUCT-2.webp",
+                    "data_product_images/SYNC-PRODUCT_1.webp",
+                    "data_product_images/SYNC-PRODUCT_2.webp",
                 ),
             )
             connection.commit()
@@ -828,8 +828,8 @@ class BusinessSyncServiceTest(unittest.TestCase):
         self.assertEqual(
             product_media,
             [
-                "data/product_images/SYNC-PRODUCT-2.webp",
-                "data/product_images/SYNC-PRODUCT.webp",
+                "data/product_images/SYNC-PRODUCT_1.webp",
+                "data/product_images/SYNC-PRODUCT_2.webp",
             ],
         )
         self.assertEqual(
@@ -838,13 +838,13 @@ class BusinessSyncServiceTest(unittest.TestCase):
                 {
                     "bld_no": "SYNC-PRODUCT",
                     "slot": 1,
-                    "file": "SYNC-PRODUCT.webp",
+                    "file": "SYNC-PRODUCT_1.webp",
                     "sha256": hashlib.sha256(source_image).hexdigest(),
                 },
                 {
                     "bld_no": "SYNC-PRODUCT",
                     "slot": 2,
-                    "file": "SYNC-PRODUCT-2.webp",
+                    "file": "SYNC-PRODUCT_2.webp",
                     "sha256": hashlib.sha256(source_image_2).hexdigest(),
                 }
             ],
@@ -874,17 +874,17 @@ class BusinessSyncServiceTest(unittest.TestCase):
         self.assertEqual(read_modes.count("r:gz"), 3)
         self.assertEqual(result["products"]["deactivated"], 1)
         self.assertEqual((target_drawings / "SYNC-PRODUCT.pdf").read_bytes(), b"source-drawing")
-        self.assertEqual((target_images / "SYNC-PRODUCT.webp").read_bytes(), source_image)
-        self.assertEqual((target_images / "SYNC-PRODUCT-2.webp").read_bytes(), source_image_2)
+        self.assertEqual((target_images / "SYNC-PRODUCT_1.webp").read_bytes(), source_image)
+        self.assertEqual((target_images / "SYNC-PRODUCT_2.webp").read_bytes(), source_image_2)
         self.assertFalse((target_images / "LOCAL-OLD.webp").exists())
         self.assertFalse((target_images / "thumbs" / "LOCAL-OLD.webp").exists())
-        generated_thumb = target_images / "thumbs" / "SYNC-PRODUCT.webp"
+        generated_thumb = target_images / "thumbs" / "SYNC-PRODUCT_1.webp"
         self.assertTrue(generated_thumb.is_file())
         with Image.open(generated_thumb) as thumbnail:
             self.assertEqual(thumbnail.format, "WEBP")
             self.assertLessEqual(thumbnail.width, 320)
             self.assertLessEqual(thumbnail.height, 240)
-        self.assertTrue((target_images / "thumbs" / "SYNC-PRODUCT-2.webp").is_file())
+        self.assertTrue((target_images / "thumbs" / "SYNC-PRODUCT_2.webp").is_file())
         with connect(self.target) as connection:
             self.assertEqual(
                 connection.execute("SELECT active FROM products WHERE bld_no = 'LOCAL-ONLY'").fetchone()[0], 0
@@ -896,8 +896,8 @@ class BusinessSyncServiceTest(unittest.TestCase):
                     ).fetchone()
                 ),
                 (
-                    "data_product_images/SYNC-PRODUCT.webp",
-                    "data_product_images/SYNC-PRODUCT-2.webp",
+                    "data_product_images/SYNC-PRODUCT_1.webp",
+                    "data_product_images/SYNC-PRODUCT_2.webp",
                 ),
             )
 
@@ -910,14 +910,14 @@ class BusinessSyncServiceTest(unittest.TestCase):
         incoming = self._webp_bytes("#2266aa")
         old_large = self._webp_bytes("#aa6622")
         old_thumb = self._webp_bytes("#cccccc")
-        (source_images / "SYNC-PRODUCT.webp").write_bytes(incoming)
+        (source_images / "SYNC-PRODUCT_1.webp").write_bytes(incoming)
         (target_images / "LOCAL-ROLLBACK.webp").write_bytes(old_large)
         (target_images / "thumbs" / "LOCAL-ROLLBACK.webp").write_bytes(old_thumb)
         with connect(self.source) as connection:
             self._seed(connection)
             connection.execute(
                 "UPDATE products SET image_path = ? WHERE bld_no = 'SYNC-PRODUCT'",
-                ("data_product_images/SYNC-PRODUCT.webp",),
+                ("data_product_images/SYNC-PRODUCT_1.webp",),
             )
             connection.commit()
         with connect(self.target) as connection:
@@ -960,8 +960,8 @@ class BusinessSyncServiceTest(unittest.TestCase):
             (target_images / "thumbs" / "LOCAL-ROLLBACK.webp").read_bytes(),
             old_thumb,
         )
-        self.assertFalse((target_images / "SYNC-PRODUCT.webp").exists())
-        self.assertFalse((target_images / "thumbs" / "SYNC-PRODUCT.webp").exists())
+        self.assertFalse((target_images / "SYNC-PRODUCT_1.webp").exists())
+        self.assertFalse((target_images / "thumbs" / "SYNC-PRODUCT_1.webp").exists())
         with connect(self.target) as connection:
             reference = connection.execute("SELECT image_path FROM products WHERE bld_no = 'SYNC-PRODUCT'").fetchone()[
                 0
@@ -977,14 +977,14 @@ class BusinessSyncServiceTest(unittest.TestCase):
         incoming = self._webp_bytes("#336699")
         shared_large = self._webp_bytes("#993333")
         shared_thumb = self._webp_bytes("#bbbbbb")
-        (source_images / "SYNC-PRODUCT.webp").write_bytes(incoming)
+        (source_images / "SYNC-PRODUCT_1.webp").write_bytes(incoming)
         (target_images / "SHARED.webp").write_bytes(shared_large)
         (target_images / "thumbs" / "SHARED.webp").write_bytes(shared_thumb)
         with connect(self.source) as connection:
             self._seed(connection)
             connection.execute(
                 "UPDATE products SET image_path = ? WHERE bld_no = 'SYNC-PRODUCT'",
-                ("data_product_images/SYNC-PRODUCT.webp",),
+                ("data_product_images/SYNC-PRODUCT_1.webp",),
             )
             connection.commit()
         with connect(self.target) as connection:
@@ -1019,11 +1019,97 @@ class BusinessSyncServiceTest(unittest.TestCase):
 
         self.assertEqual((target_images / "SHARED.webp").read_bytes(), shared_large)
         self.assertEqual((target_images / "thumbs" / "SHARED.webp").read_bytes(), shared_thumb)
-        self.assertEqual((target_images / "SYNC-PRODUCT.webp").read_bytes(), incoming)
+        self.assertEqual((target_images / "SYNC-PRODUCT_1.webp").read_bytes(), incoming)
         with connect(self.target) as connection:
             references = dict(connection.execute("SELECT bld_no, image_path FROM products").fetchall())
-        self.assertEqual(references["SYNC-PRODUCT"], "data_product_images/SYNC-PRODUCT.webp")
+        self.assertEqual(references["SYNC-PRODUCT"], "data_product_images/SYNC-PRODUCT_1.webp")
         self.assertEqual(references["OTHER-PRODUCT"], "data_product_images/SHARED.webp")
+
+    def test_shared_legacy_source_exports_once_and_rolls_back_distinct_slot_targets(self) -> None:
+        source_images = self.root / "source-images-colliding-slots"
+        target_images = self.root / "target-images-colliding-slots"
+        source_images.mkdir()
+        target_images.mkdir()
+        (target_images / "thumbs").mkdir()
+        incoming = self._webp_bytes("#336699")
+        old_large = self._webp_bytes("#993333")
+        old_thumb = self._webp_bytes("#bbbbbb")
+        shared_name = "K8080LA-2.webp"
+        shared_reference = f"data_product_images/{shared_name}"
+        (source_images / shared_name).write_bytes(incoming)
+        (target_images / shared_name).write_bytes(old_large)
+        (target_images / "thumbs" / shared_name).write_bytes(old_thumb)
+        for database in (self.source, self.target):
+            with connect(database) as connection:
+                connection.execute(
+                    """
+                    INSERT INTO products (bld_no, image_path_2, active, created_at, updated_at)
+                    VALUES ('K8080LA', ?, 1, '2026-07-17 10:00:00', '2026-07-17 10:00:00')
+                    """,
+                    (shared_reference,),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO products (bld_no, image_path, active, created_at, updated_at)
+                    VALUES ('K8080LA-2', ?, 1, '2026-07-17 10:00:00', '2026-07-17 10:00:00')
+                    """,
+                    (shared_reference,),
+                )
+                connection.commit()
+
+        package = self.root / "business-product-image-colliding-slots.tar.gz"
+        source_repository = BusinessSyncRepository(self.source, image_dir=source_images)
+        source_repository.export(
+            output_path=package,
+            selected=("products",),
+            include_images=True,
+            actor="test",
+        )
+        with tarfile.open(package, "r:gz") as archive:
+            manifest_file = archive.extractfile("manifest.json")
+            assert manifest_file is not None
+            manifest = json.loads(manifest_file.read().decode("utf-8"))
+            self.assertEqual(manifest["media"]["files"]["product_images"], 1)
+            self.assertEqual(
+                [
+                    (entry["bld_no"], entry["slot"], entry["file"])
+                    for entry in manifest["media"]["product_image_slots"]
+                ],
+                [
+                    ("K8080LA", 2, shared_name),
+                    ("K8080LA-2", 1, shared_name),
+                ],
+            )
+
+        target_repository = BusinessSyncRepository(self.target, image_dir=target_images)
+        preview = target_repository.preview(package)
+
+        def fail_audit(*_args, **_kwargs):
+            raise RuntimeError("forced audit failure")
+
+        with patch.dict(database_apply.apply_package.__globals__, {"log_event": fail_audit}):
+            with self.assertRaisesRegex(RuntimeError, "forced audit failure"):
+                target_repository.apply(
+                    package,
+                    backup_path=self.root / "product-image-colliding-slots.sqlite3",
+                    actor="test",
+                    expected_token=cast(str, preview["token"]),
+                    selected_conflicts={},
+                    include_images=True,
+                )
+
+        self.assertEqual((target_images / shared_name).read_bytes(), old_large)
+        self.assertEqual((target_images / "thumbs" / shared_name).read_bytes(), old_thumb)
+        self.assertFalse((target_images / "K8080LA_2.webp").exists())
+        self.assertFalse((target_images / "K8080LA-2_1.webp").exists())
+        self.assertFalse((target_images / "thumbs" / "K8080LA_2.webp").exists())
+        self.assertFalse((target_images / "thumbs" / "K8080LA-2_1.webp").exists())
+        with connect(self.target) as connection:
+            references = connection.execute(
+                "SELECT bld_no, image_path, image_path_2 FROM products ORDER BY bld_no"
+            ).fetchall()
+        self.assertEqual(references[0]["image_path_2"], shared_reference)
+        self.assertEqual(references[1]["image_path"], shared_reference)
 
     def test_v4_product_images_are_not_imported_without_explicit_selection(self) -> None:
         source_images = self.root / "source-images-not-selected"
@@ -1032,13 +1118,13 @@ class BusinessSyncServiceTest(unittest.TestCase):
         target_images.mkdir()
         incoming = self._webp_bytes("#334477")
         local = self._webp_bytes("#774433")
-        (source_images / "SYNC-PRODUCT.webp").write_bytes(incoming)
+        (source_images / "SYNC-PRODUCT_1.webp").write_bytes(incoming)
         (target_images / "LOCAL-KEEP.webp").write_bytes(local)
         with connect(self.source) as connection:
             self._seed(connection)
             connection.execute(
                 "UPDATE products SET image_path = ? WHERE bld_no = 'SYNC-PRODUCT'",
-                ("data_product_images/SYNC-PRODUCT.webp",),
+                ("data_product_images/SYNC-PRODUCT_1.webp",),
             )
             connection.commit()
         with connect(self.target) as connection:
@@ -1071,7 +1157,7 @@ class BusinessSyncServiceTest(unittest.TestCase):
         )
 
         self.assertEqual((target_images / "LOCAL-KEEP.webp").read_bytes(), local)
-        self.assertFalse((target_images / "SYNC-PRODUCT.webp").exists())
+        self.assertFalse((target_images / "SYNC-PRODUCT_1.webp").exists())
         with connect(self.target) as connection:
             reference = connection.execute(
                 "SELECT image_path FROM products WHERE bld_no = 'SYNC-PRODUCT'"
@@ -1138,14 +1224,14 @@ class BusinessSyncServiceTest(unittest.TestCase):
                         {
                             "bld_no": "SYNC-PRODUCT",
                             "slot": 1,
-                            "file": "SYNC-PRODUCT.webp",
+                            "file": "SYNC-PRODUCT_1.webp",
                             "sha256": "0" * 64,
                         }
                     ],
                 },
             },
             payload={"products": [{"bld_no": "SYNC-PRODUCT", "active": 1}]},
-            media={"data/product_images/SYNC-PRODUCT.webp": image_payload},
+            media={"data/product_images/SYNC-PRODUCT_1.webp": image_payload},
         )
         with self.assertRaisesRegex(ValueError, "校验值不一致"):
             BusinessSyncRepository.read(package)

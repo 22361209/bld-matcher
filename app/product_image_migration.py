@@ -9,7 +9,6 @@ from pathlib import Path
 
 from PIL import Image, UnidentifiedImageError
 
-from app.drawings import safe_filename_part
 from app.product_image_processing import (
     PRODUCT_IMAGE_LARGE_MAX_BYTES,
     PRODUCT_IMAGE_LARGE_MAX_SIZE,
@@ -18,8 +17,14 @@ from app.product_image_processing import (
     PRODUCT_IMAGE_THUMB_SIZE,
     atomic_write_bytes,
     process_product_image,
+    process_synced_product_image,
 )
-from app.product_media import IMAGE_SLOT_FIELDS, PRODUCT_IMAGE_DATA_PREFIX, product_image_storage_name
+from app.product_media import (
+    IMAGE_SLOT_FIELDS,
+    PRODUCT_IMAGE_DATA_PREFIX,
+    product_image_storage_candidates,
+    product_image_storage_name,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,12 +46,11 @@ def _local_source(image_dir: Path, bld_no: str, slot: int, reference: str) -> Pa
         return candidate if candidate.is_file() else None
     if reference:
         return None
-    slot_suffix = "" if slot == 1 else f"-{slot}"
-    safe_bld = safe_filename_part(bld_no, "product")
     for suffix in (PRODUCT_IMAGE_OUTPUT_SUFFIX, ".jpg", ".jpeg", ".png"):
-        candidate = image_dir / f"{safe_bld}{slot_suffix}{suffix}"
-        if candidate.is_file():
-            return candidate
+        for name in product_image_storage_candidates(bld_no, suffix, slot):
+            candidate = image_dir / name
+            if candidate.is_file():
+                return candidate
     return None
 
 
@@ -165,11 +169,12 @@ def migrate_product_images(
         errors = list(missing)
 
         for job in jobs:
-            large_ok = _is_compliant_image(
+            source_is_compliant = _is_compliant_image(
                 job.source,
                 max_bytes=PRODUCT_IMAGE_LARGE_MAX_BYTES,
                 bounds=PRODUCT_IMAGE_LARGE_MAX_SIZE,
-            ) and job.source.resolve() == job.target.resolve()
+            )
+            large_ok = source_is_compliant and job.source.resolve() == job.target.resolve()
             thumb_ok = _is_compliant_image(
                 job.thumbnail,
                 max_bytes=PRODUCT_IMAGE_THUMB_MAX_BYTES,
@@ -197,7 +202,11 @@ def migrate_product_images(
                     _increment(report, "relinked")
                     continue
 
-                processed = process_product_image(job.source)
+                processed = (
+                    process_synced_product_image(job.source.read_bytes())
+                    if source_is_compliant
+                    else process_product_image(job.source)
+                )
                 atomic_write_bytes(job.target, processed.large)
                 atomic_write_bytes(job.thumbnail, processed.thumbnail)
                 protected_thumbnails.add(job.thumbnail.resolve())

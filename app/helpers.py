@@ -9,6 +9,8 @@ from pathlib import Path
 from flask import g, url_for
 from werkzeug.utils import secure_filename
 
+from .product_media import product_image_storage_candidates
+
 from .config import (
     BASE_DIR,
     CATALOG_PATH,
@@ -56,11 +58,10 @@ def _data_product_image_name(bld_no: str, slot: int) -> str:
     """Probe data/product_images for a synced/uploaded image named by BLD number."""
     if not bld_no:
         return ""
-    slot_suffix = "" if slot == 1 else f"-{slot}"
     for suffix in (".webp", ".jpg", ".jpeg", ".png"):
-        name = f"{bld_no}{slot_suffix}{suffix}"
-        if (PRODUCT_IMAGE_DIR / name).is_file():
-            return name
+        for name in product_image_storage_candidates(bld_no, suffix, slot):
+            if (PRODUCT_IMAGE_DIR / name).is_file():
+                return name
     return ""
 
 

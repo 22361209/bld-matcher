@@ -32,8 +32,15 @@ def image_slot_field(slot: int) -> str:
 
 
 def product_image_storage_name(bld_no: object, suffix: str, slot: int = 1) -> str:
-    suffix_text = "" if slot == 1 else f"-{slot}"
-    return f"{safe_filename_part(bld_no, 'product')}{suffix_text}{suffix.lower()}"
+    return f"{safe_filename_part(bld_no, 'product')}_{slot}{suffix.lower()}"
+
+
+def product_image_storage_candidates(bld_no: object, suffix: str, slot: int = 1) -> tuple[str, ...]:
+    safe_bld = safe_filename_part(bld_no, "product")
+    normalized_suffix = suffix.lower()
+    canonical = product_image_storage_name(safe_bld, normalized_suffix, slot)
+    legacy_suffixes = ("", "-1") if slot == 1 else (f"-{slot}",)
+    return (canonical, *(f"{safe_bld}{slot_suffix}{normalized_suffix}" for slot_suffix in legacy_suffixes))
 
 
 def _header_matches_image_suffix(header: bytes, suffix: str) -> bool:
@@ -158,12 +165,11 @@ def resolve_product_image_thumb_path(name: str) -> Path | None:
 
 
 def _fallback_product_image_path(bld_no: object, slot: int) -> Path | None:
-    slot_suffix = "" if slot == 1 else f"-{slot}"
-    safe_bld_no = safe_filename_part(bld_no, "product")
     for suffix in (PRODUCT_IMAGE_OUTPUT_SUFFIX, ".jpg", ".jpeg", ".png"):
-        candidate = resolve_product_image_path(f"{safe_bld_no}{slot_suffix}{suffix}")
-        if candidate is not None:
-            return candidate
+        for name in product_image_storage_candidates(bld_no, suffix, slot):
+            candidate = resolve_product_image_path(name)
+            if candidate is not None:
+                return candidate
     return None
 
 

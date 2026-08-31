@@ -144,14 +144,14 @@ class TestWebProductMedia(WebAppTestBase):
         with self.web.connect(self.web.DB_PATH) as conn:
             updated = conn.execute("SELECT * FROM products WHERE bld_no = ?", ("K-DRAW-001",)).fetchone()
         drawing_path = self.root / "data" / updated["drawing_path"]
-        image_path = self.root / "data" / "product_images" / "K-DRAW-001.webp"
-        image_path_2 = self.root / "data" / "product_images" / "K-DRAW-001-2.webp"
+        image_path = self.root / "data" / "product_images" / "K-DRAW-001_1.webp"
+        image_path_2 = self.root / "data" / "product_images" / "K-DRAW-001_2.webp"
         self.assertTrue(drawing_path.exists())
         self.assertTrue(image_path.exists())
         self.assertTrue(image_path_2.exists())
         self.assertEqual(updated["drawing_original_name"], "K-DRAW-001.pdf")
-        self.assertEqual(updated["image_path"], "data_product_images/K-DRAW-001.webp")
-        self.assertEqual(updated["image_path_2"], "data_product_images/K-DRAW-001-2.webp")
+        self.assertEqual(updated["image_path"], "data_product_images/K-DRAW-001_1.webp")
+        self.assertEqual(updated["image_path_2"], "data_product_images/K-DRAW-001_2.webp")
         self.assertLessEqual(image_path.stat().st_size, 500 * 1024)
         with Image.open(image_path) as generated:
             self.assertEqual(generated.format, "WEBP")
@@ -161,9 +161,9 @@ class TestWebProductMedia(WebAppTestBase):
         html = response.get_data(as_text=True)
         self.assertIn(f'href="/products/{product["id"]}/drawing"', html)
         self.assertNotIn("替换图纸", html)
-        self.assertIn("/product-image-thumbs/K-DRAW-001.webp", html)
-        self.assertIn("/product-images/K-DRAW-001.webp", html)
-        self.assertIn("/product-images/K-DRAW-001-2.webp", html)
+        self.assertIn("/product-image-thumbs/K-DRAW-001_1.webp", html)
+        self.assertIn("/product-images/K-DRAW-001_1.webp", html)
+        self.assertIn("/product-images/K-DRAW-001_2.webp", html)
 
         copied = self.client.post(
             "/products/save",
@@ -190,11 +190,11 @@ class TestWebProductMedia(WebAppTestBase):
         self.assertIsNotNone(copied_product)
         self.assertEqual(copied_product["series"], "TEST")
         self.assertEqual(copied_product["item"], "DRAWING PART")
-        self.assertEqual(copied_product["image_path"], "data_product_images/K-DRAW-COPY-001.webp")
-        self.assertEqual(copied_product["image_path_2"], "data_product_images/K-DRAW-COPY-001-2.webp")
+        self.assertEqual(copied_product["image_path"], "data_product_images/K-DRAW-COPY-001_1.webp")
+        self.assertEqual(copied_product["image_path_2"], "data_product_images/K-DRAW-COPY-001_2.webp")
         self.assertEqual(copied_product["drawing_path"], "drawings/pdf/K-DRAW-COPY-001.pdf")
-        self.assertTrue((self.root / "data" / "product_images" / "K-DRAW-COPY-001-2.webp").exists())
-        with Image.open(self.root / "data" / "product_images" / "K-DRAW-COPY-001.webp") as copied_image:
+        self.assertTrue((self.root / "data" / "product_images" / "K-DRAW-COPY-001_2.webp").exists())
+        with Image.open(self.root / "data" / "product_images" / "K-DRAW-COPY-001_1.webp") as copied_image:
             self.assertEqual(copied_image.format, "WEBP")
         self.assertEqual(
             (self.root / "data" / "drawings" / "pdf" / "K-DRAW-COPY-001.pdf").read_bytes(),
@@ -211,7 +211,7 @@ class TestWebProductMedia(WebAppTestBase):
             unchanged_copy = conn.execute("SELECT * FROM products WHERE bld_no = ?", ("K-DRAW-COPY-001",)).fetchone()
         self.assertEqual(unchanged_copy["item"], "DRAWING PART")
 
-        image = self.client.get("/product-images/K-DRAW-001.webp")
+        image = self.client.get("/product-images/K-DRAW-001_1.webp")
         self.assertEqual(image.status_code, 200)
         self.assertTrue(image.get_data().startswith(b"RIFF"))
         image.close()
@@ -356,11 +356,11 @@ class TestWebProductMedia(WebAppTestBase):
             follow_redirects=False,
         )
         self.assertEqual(upload.status_code, 302)
-        image_2_path = self.root / "data" / "product_images" / "K-DELMEDIA-001-2.webp"
+        image_2_path = self.root / "data" / "product_images" / "K-DELMEDIA-001_2.webp"
         drawing_path = self.root / "data" / "drawings" / "pdf" / "K-DELMEDIA-001.pdf"
         self.assertTrue(image_2_path.exists())
         self.assertTrue(drawing_path.exists())
-        thumb_2_path = self.root / "data" / "product_images" / "thumbs" / "K-DELMEDIA-001-2.webp"
+        thumb_2_path = self.root / "data" / "product_images" / "thumbs" / "K-DELMEDIA-001_2.webp"
 
         edit_html = self.client.get(f"/products/{product_id}/edit").get_data(as_text=True)
         self.assertIn(f'formaction="/products/{product_id}/images/1/delete"', edit_html)
@@ -382,15 +382,15 @@ class TestWebProductMedia(WebAppTestBase):
         with self.web.connect(self.web.DB_PATH) as conn:
             updated = conn.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone()
         self.assertEqual(updated["image_path_2"], "")
-        self.assertEqual(updated["image_path"], "data_product_images/K-DELMEDIA-001.webp")
+        self.assertEqual(updated["image_path"], "data_product_images/K-DELMEDIA-001_1.webp")
         self.assertFalse(image_2_path.exists())
         self.assertFalse(thumb_2_path.exists())
         image_archive = self.root / "data" / "product_images" / "archive" / "K-DELMEDIA-001"
-        archived_images = list(image_archive.glob("*K-DELMEDIA-001-2.webp"))
+        archived_images = list(image_archive.glob("*K-DELMEDIA-001_2.webp"))
         self.assertEqual(len(archived_images), 1)
         with Image.open(archived_images[0]) as archived_image:
             self.assertEqual(archived_image.format, "WEBP")
-        self.assertTrue((self.root / "data" / "product_images" / "K-DELMEDIA-001.webp").exists())
+        self.assertTrue((self.root / "data" / "product_images" / "K-DELMEDIA-001_1.webp").exists())
         with self.web.connect(self.web.DB_PATH) as conn:
             image_audit = conn.execute(
                 "SELECT * FROM audit_logs WHERE action = ? AND target_key = ? ORDER BY id DESC LIMIT 1",
@@ -442,7 +442,7 @@ class TestWebProductMedia(WebAppTestBase):
         self.assertEqual(forbidden.status_code, 403)
         with self.web.connect(self.web.DB_PATH) as conn:
             unchanged = conn.execute("SELECT image_path FROM products WHERE id = ?", (product_id,)).fetchone()
-        self.assertEqual(unchanged["image_path"], "data_product_images/K-DELMEDIA-001.webp")
+        self.assertEqual(unchanged["image_path"], "data_product_images/K-DELMEDIA-001_1.webp")
         self.client.post("/logout")
         self.login()
 
@@ -489,9 +489,11 @@ class TestWebProductMedia(WebAppTestBase):
         with self.web.connect(self.web.DB_PATH) as conn:
             target = conn.execute("SELECT * FROM products WHERE bld_no = ?", ("K-DRAW-ROLLBACK-COPY",)).fetchone()
         self.assertIsNone(target)
-        self.assertTrue((self.root / "data" / "product_images" / "K-DRAW-ROLLBACK-SOURCE.webp").exists())
-        self.assertFalse((self.root / "data" / "product_images" / "K-DRAW-ROLLBACK-COPY.webp").exists())
-        self.assertFalse((self.root / "data" / "product_images" / "thumbs" / "K-DRAW-ROLLBACK-COPY.webp").exists())
+        self.assertTrue((self.root / "data" / "product_images" / "K-DRAW-ROLLBACK-SOURCE_1.webp").exists())
+        self.assertFalse((self.root / "data" / "product_images" / "K-DRAW-ROLLBACK-COPY_1.webp").exists())
+        self.assertFalse(
+            (self.root / "data" / "product_images" / "thumbs" / "K-DRAW-ROLLBACK-COPY_1.webp").exists()
+        )
         self.assertFalse((self.root / "data" / "product_images" / "archive" / "K-DRAW-ROLLBACK-COPY").exists())
         self.assertFalse((self.root / "data" / "drawings" / "pdf" / "K-DRAW-ROLLBACK-COPY.pdf").exists())
         self.assertFalse((self.root / "data" / "drawings" / "archive" / "K-DRAW-ROLLBACK-COPY").exists())
@@ -520,7 +522,7 @@ class TestWebProductMedia(WebAppTestBase):
                 "SELECT * FROM products WHERE bld_no = ?", ("K-DRAW-MISSING-IMAGE-SOURCE",)
             ).fetchone()
         self.assertIsNotNone(image_source)
-        (self.root / "data" / "product_images" / "K-DRAW-MISSING-IMAGE-SOURCE.webp").unlink()
+        (self.root / "data" / "product_images" / "K-DRAW-MISSING-IMAGE-SOURCE_1.webp").unlink()
 
         missing_image_copy = self.client.post(
             "/products/save",

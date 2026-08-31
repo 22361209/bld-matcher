@@ -15,7 +15,12 @@ from app.product_image_processing import (
     process_synced_product_image,
     validate_synced_product_image,
 )
-from app.product_media import IMAGE_SLOT_FIELDS, image_slot_field, product_image_storage_name
+from app.product_media import (
+    IMAGE_SLOT_FIELDS,
+    image_slot_field,
+    product_image_storage_candidates,
+    product_image_storage_name,
+)
 
 from ._media_transaction import atomic_copy, normalized_media_target, safe_media_target
 
@@ -63,7 +68,9 @@ def _source_for_slot(image_dir: Path, row: dict[str, object], field: str, slot: 
         if name is None:
             raise ValueError("产品图片引用路径无效，不能导出业务数据包。")
     elif not reference:
-        name = product_image_storage_name(row.get("bld_no"), PRODUCT_IMAGE_OUTPUT_SUFFIX, slot)
+        for candidate in product_image_storage_candidates(row.get("bld_no"), PRODUCT_IMAGE_OUTPUT_SUFFIX, slot):
+            if (image_dir / candidate).is_file():
+                return image_dir / candidate
     if name is None:
         return None
     source = image_dir / name
@@ -231,9 +238,9 @@ def _existing_image_name(row: sqlite3.Row, field: str, slot: int, image_dir: Pat
     if reference:
         return None
     for suffix in (PRODUCT_IMAGE_OUTPUT_SUFFIX, ".jpg", ".jpeg", ".png"):
-        candidate = product_image_storage_name(row["bld_no"], suffix, slot)
-        if (image_dir / candidate).is_file():
-            return candidate
+        for candidate in product_image_storage_candidates(row["bld_no"], suffix, slot):
+            if (image_dir / candidate).is_file():
+                return candidate
     return None
 
 

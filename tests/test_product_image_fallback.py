@@ -33,19 +33,19 @@ class DataDirProductImageFallbackTest(unittest.TestCase):
                 )
 
     def test_empty_image_path_falls_back_to_synced_data_dir_file(self) -> None:
-        (self.image_dir / "K6001B.png").write_bytes(b"png")
+        (self.image_dir / "K6001B_1.png").write_bytes(b"png")
         url, thumb = self._urls({"bld_no": "K6001B", "image_path": ""})
-        self.assertEqual(url, "/product-images/K6001B.png")
-        self.assertEqual(thumb, "/product-image-thumbs/K6001B.png")
+        self.assertEqual(url, "/product-images/K6001B_1.png")
+        self.assertEqual(thumb, "/product-image-thumbs/K6001B_1.png")
 
     def test_data_dir_fallback_supports_extra_slots(self) -> None:
-        (self.image_dir / "K6001B.png").write_bytes(b"png")
-        (self.image_dir / "K6001B-2.webp").write_bytes(b"webp")
-        self.assertEqual(self._urls({"bld_no": "K6001B"}, slot=2)[0], "/product-images/K6001B-2.webp")
+        (self.image_dir / "K6001B_1.png").write_bytes(b"png")
+        (self.image_dir / "K6001B_2.webp").write_bytes(b"webp")
+        self.assertEqual(self._urls({"bld_no": "K6001B"}, slot=2)[0], "/product-images/K6001B_2.webp")
         self.assertEqual(self._urls({"bld_no": "K6001B"}, slot=3), ("", ""))
 
     def test_explicit_image_path_still_wins_over_data_dir_file(self) -> None:
-        (self.image_dir / "K6001B.png").write_bytes(b"png")
+        (self.image_dir / "K6001B_1.png").write_bytes(b"png")
         url, _ = self._urls({"bld_no": "K6001B", "image_path": "product_images/legacy.jpg"})
         self.assertEqual(url, "/static/product_images/legacy.jpg")
 
@@ -54,8 +54,14 @@ class DataDirProductImageFallbackTest(unittest.TestCase):
 
     def test_cache_clear_picks_up_files_added_after_a_previous_probe(self) -> None:
         self.assertEqual(self._urls({"bld_no": "K6001B"})[0], "")
+        (self.image_dir / "K6001B_1.png").write_bytes(b"png")
+        self.assertEqual(self._urls({"bld_no": "K6001B"})[0], "/product-images/K6001B_1.png")
+
+    def test_legacy_unnumbered_and_dash_slot_names_remain_readable(self) -> None:
         (self.image_dir / "K6001B.png").write_bytes(b"png")
+        (self.image_dir / "K6001B-2.webp").write_bytes(b"webp")
         self.assertEqual(self._urls({"bld_no": "K6001B"})[0], "/product-images/K6001B.png")
+        self.assertEqual(self._urls({"bld_no": "K6001B"}, slot=2)[0], "/product-images/K6001B-2.webp")
 
 
 class BusinessSyncImageCacheClearTest(unittest.TestCase):
