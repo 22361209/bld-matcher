@@ -36,3 +36,4 @@ ADR 用于记录难以撤销或会影响多个领域的决定。新增框架、�
 - [ADR 0028: Customer Identity And Recent Capability Permission Catalog](0028-customer-identity-and-permission-catalog.md)
 - [ADR 0029: Hotspot Decomposition](0029-hotspot-decomposition.md)
 - [ADR 0030: Product Image WebP Pipeline And Deployment Migration](0030-product-image-webp-and-deployment-migration.md)
+- [ADR 0031: Business Sync Product Image Package V4](0031-business-sync-product-image-v4.md)

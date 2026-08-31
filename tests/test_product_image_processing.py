@@ -13,6 +13,7 @@ from app.product_image_processing import (
     PRODUCT_IMAGE_LARGE_MAX_BYTES,
     PRODUCT_IMAGE_THUMB_MAX_BYTES,
     process_product_image,
+    process_synced_product_image,
 )
 
 
@@ -44,6 +45,26 @@ class ProductImageProcessingTests(unittest.TestCase):
         with Image.open(io.BytesIO(processed.large)) as large:
             self.assertEqual(large.mode, "RGBA")
             self.assertEqual(large.getchannel("A").getextrema(), (0, 255))
+
+    def test_synced_webp_keeps_large_bytes_and_regenerates_thumbnail(self) -> None:
+        source = io.BytesIO()
+        Image.new("RGB", (960, 720), "teal").save(source, format="WEBP", quality=82)
+        payload = source.getvalue()
+
+        processed = process_synced_product_image(payload)
+
+        self.assertEqual(processed.large, payload)
+        self.assertLessEqual(processed.thumbnail_size[0], 320)
+        self.assertLessEqual(processed.thumbnail_size[1], 240)
+        with Image.open(io.BytesIO(processed.thumbnail)) as thumbnail:
+            self.assertEqual(thumbnail.format, "WEBP")
+
+    def test_synced_product_image_rejects_non_webp_payload(self) -> None:
+        source = io.BytesIO()
+        Image.new("RGB", (320, 240), "navy").save(source, format="PNG")
+
+        with self.assertRaisesRegex(ValueError, "必须是 WebP"):
+            process_synced_product_image(source.getvalue())
 
 
 class ProductImageMigrationTests(unittest.TestCase):

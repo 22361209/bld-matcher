@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
@@ -11,6 +12,7 @@ from typing import cast
 from unittest.mock import Mock, patch
 
 from openpyxl import Workbook
+from PIL import Image
 
 from app.database import connect
 from app.modules.business_sync import _database_apply as database_apply
@@ -32,6 +34,12 @@ class BusinessSyncServiceTest(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
+
+    @staticmethod
+    def _webp_bytes(color: str = "#3578a8") -> bytes:
+        buffer = io.BytesIO()
+        Image.new("RGB", (960, 720), color).save(buffer, format="WEBP", quality=82)
+        return buffer.getvalue()
 
     @staticmethod
     def _seed(connection, *, updated_at: str = "2026-07-17 10:00:00", quote_remark: str = "source") -> None:
@@ -762,11 +770,38 @@ class BusinessSyncServiceTest(unittest.TestCase):
         source_drawings.mkdir()
         source_images.mkdir()
         (source_drawings / "SYNC-PRODUCT.pdf").write_bytes(b"source-drawing")
-        (source_images / "SYNC-PRODUCT.png").write_bytes(b"source-image")
+        source_image = self._webp_bytes()
+        source_image_2 = self._webp_bytes("#225588")
+        (source_images / "SYNC-PRODUCT.webp").write_bytes(source_image)
+        (source_images / "SYNC-PRODUCT-2.webp").write_bytes(source_image_2)
+        (source_images / "thumbs").mkdir()
+        (source_images / "thumbs" / "SYNC-PRODUCT.webp").write_bytes(b"source-thumbnail-is-not-exported")
+        (source_images / "archive").mkdir()
+        (source_images / "archive" / "orphan.webp").write_bytes(b"archived-image-is-not-exported")
+        (source_images / "UNREFERENCED.webp").write_bytes(self._webp_bytes("#993355"))
         with connect(self.source) as connection:
             self._seed(connection)
+            connection.execute(
+                "UPDATE products SET image_path = ?, image_path_2 = ? WHERE bld_no = 'SYNC-PRODUCT'",
+                (
+                    "data_product_images/SYNC-PRODUCT.webp",
+                    "data_product_images/SYNC-PRODUCT-2.webp",
+                ),
+            )
             connection.commit()
+        target_images.mkdir()
+        (target_images / "thumbs").mkdir()
+        local_old = self._webp_bytes("#aa5522")
+        (target_images / "LOCAL-OLD.webp").write_bytes(local_old)
+        (target_images / "thumbs" / "LOCAL-OLD.webp").write_bytes(self._webp_bytes("#dddddd"))
         with connect(self.target) as connection:
+            connection.execute(
+                """
+                INSERT INTO products (bld_no, image_path, active, created_at, updated_at)
+                VALUES ('SYNC-PRODUCT', 'data_product_images/LOCAL-OLD.webp', 1,
+                        '2026-07-17 10:00:00', '2026-07-17 10:00:00')
+                """
+            )
             connection.execute(
                 "INSERT INTO products (bld_no, active, created_at, updated_at) VALUES ('LOCAL-ONLY', 1, '2026-07-17 10:00:00', '2026-07-17 10:00:00')"
             )
@@ -785,13 +820,42 @@ class BusinessSyncServiceTest(unittest.TestCase):
             include_images=True,
             actor="test",
         )
+        with tarfile.open(package, "r:gz") as archive:
+            product_media = [name for name in archive.getnames() if name.startswith("data/product_images/")]
+            manifest_file = archive.extractfile("manifest.json")
+            assert manifest_file is not None
+            manifest = json.loads(manifest_file.read().decode("utf-8"))
+        self.assertEqual(
+            product_media,
+            [
+                "data/product_images/SYNC-PRODUCT-2.webp",
+                "data/product_images/SYNC-PRODUCT.webp",
+            ],
+        )
+        self.assertEqual(
+            manifest["media"]["product_image_slots"],
+            [
+                {
+                    "bld_no": "SYNC-PRODUCT",
+                    "slot": 1,
+                    "file": "SYNC-PRODUCT.webp",
+                    "sha256": hashlib.sha256(source_image).hexdigest(),
+                },
+                {
+                    "bld_no": "SYNC-PRODUCT",
+                    "slot": 2,
+                    "file": "SYNC-PRODUCT-2.webp",
+                    "sha256": hashlib.sha256(source_image_2).hexdigest(),
+                }
+            ],
+        )
         target_service = BusinessSyncService(
             BusinessSyncRepository(self.target, drawing_dir=target_drawings, image_dir=target_images)
         )
         preview = target_service.preview(package)
         self.assertEqual(
             preview["media"]["files"],
-            {"drawings": 1, "product_images": 1, "material_drawings": 0},
+            {"drawings": 1, "product_images": 2, "material_drawings": 0},
         )
         summary = cast(dict[str, dict[str, object]], preview["summary"])
         self.assertEqual(cast(dict[str, int], summary["products"]["counts"])["local_only"], 1)
@@ -807,12 +871,306 @@ class BusinessSyncServiceTest(unittest.TestCase):
                 deactivate_local_only=True,
             )
         read_modes = [call.args[1] for call in archive_open.call_args_list]
-        self.assertEqual(read_modes.count("r:gz"), 2)
+        self.assertEqual(read_modes.count("r:gz"), 3)
         self.assertEqual(result["products"]["deactivated"], 1)
         self.assertEqual((target_drawings / "SYNC-PRODUCT.pdf").read_bytes(), b"source-drawing")
-        self.assertEqual((target_images / "SYNC-PRODUCT.png").read_bytes(), b"source-image")
+        self.assertEqual((target_images / "SYNC-PRODUCT.webp").read_bytes(), source_image)
+        self.assertEqual((target_images / "SYNC-PRODUCT-2.webp").read_bytes(), source_image_2)
+        self.assertFalse((target_images / "LOCAL-OLD.webp").exists())
+        self.assertFalse((target_images / "thumbs" / "LOCAL-OLD.webp").exists())
+        generated_thumb = target_images / "thumbs" / "SYNC-PRODUCT.webp"
+        self.assertTrue(generated_thumb.is_file())
+        with Image.open(generated_thumb) as thumbnail:
+            self.assertEqual(thumbnail.format, "WEBP")
+            self.assertLessEqual(thumbnail.width, 320)
+            self.assertLessEqual(thumbnail.height, 240)
+        self.assertTrue((target_images / "thumbs" / "SYNC-PRODUCT-2.webp").is_file())
         with connect(self.target) as connection:
-            self.assertEqual(connection.execute("SELECT active FROM products WHERE bld_no = 'LOCAL-ONLY'").fetchone()[0], 0)
+            self.assertEqual(
+                connection.execute("SELECT active FROM products WHERE bld_no = 'LOCAL-ONLY'").fetchone()[0], 0
+            )
+            self.assertEqual(
+                tuple(
+                    connection.execute(
+                        "SELECT image_path, image_path_2 FROM products WHERE bld_no = 'SYNC-PRODUCT'"
+                    ).fetchone()
+                ),
+                (
+                    "data_product_images/SYNC-PRODUCT.webp",
+                    "data_product_images/SYNC-PRODUCT-2.webp",
+                ),
+            )
+
+    def test_product_image_import_restores_files_and_reference_when_later_apply_fails(self) -> None:
+        source_images = self.root / "source-images-rollback"
+        target_images = self.root / "target-images-rollback"
+        source_images.mkdir()
+        target_images.mkdir()
+        (target_images / "thumbs").mkdir()
+        incoming = self._webp_bytes("#2266aa")
+        old_large = self._webp_bytes("#aa6622")
+        old_thumb = self._webp_bytes("#cccccc")
+        (source_images / "SYNC-PRODUCT.webp").write_bytes(incoming)
+        (target_images / "LOCAL-ROLLBACK.webp").write_bytes(old_large)
+        (target_images / "thumbs" / "LOCAL-ROLLBACK.webp").write_bytes(old_thumb)
+        with connect(self.source) as connection:
+            self._seed(connection)
+            connection.execute(
+                "UPDATE products SET image_path = ? WHERE bld_no = 'SYNC-PRODUCT'",
+                ("data_product_images/SYNC-PRODUCT.webp",),
+            )
+            connection.commit()
+        with connect(self.target) as connection:
+            connection.execute(
+                """
+                INSERT INTO products (bld_no, image_path, active, created_at, updated_at)
+                VALUES ('SYNC-PRODUCT', 'data_product_images/LOCAL-ROLLBACK.webp', 1,
+                        '2026-07-17 10:00:00', '2026-07-17 10:00:00')
+                """
+            )
+            connection.commit()
+
+        package = self.root / "business-product-image-rollback.tar.gz"
+        source_repository = BusinessSyncRepository(self.source, image_dir=source_images)
+        source_repository.export(
+            output_path=package,
+            selected=("products",),
+            include_images=True,
+            actor="test",
+        )
+        target_repository = BusinessSyncRepository(self.target, image_dir=target_images)
+        preview = target_repository.preview(package)
+
+        def fail_audit(*_args, **_kwargs):
+            raise RuntimeError("forced audit failure")
+
+        with patch.dict(database_apply.apply_package.__globals__, {"log_event": fail_audit}):
+            with self.assertRaisesRegex(RuntimeError, "forced audit failure"):
+                target_repository.apply(
+                    package,
+                    backup_path=self.root / "product-image-rollback.sqlite3",
+                    actor="test",
+                    expected_token=cast(str, preview["token"]),
+                    selected_conflicts={},
+                    include_images=True,
+                )
+
+        self.assertEqual((target_images / "LOCAL-ROLLBACK.webp").read_bytes(), old_large)
+        self.assertEqual(
+            (target_images / "thumbs" / "LOCAL-ROLLBACK.webp").read_bytes(),
+            old_thumb,
+        )
+        self.assertFalse((target_images / "SYNC-PRODUCT.webp").exists())
+        self.assertFalse((target_images / "thumbs" / "SYNC-PRODUCT.webp").exists())
+        with connect(self.target) as connection:
+            reference = connection.execute("SELECT image_path FROM products WHERE bld_no = 'SYNC-PRODUCT'").fetchone()[
+                0
+            ]
+        self.assertEqual(reference, "data_product_images/LOCAL-ROLLBACK.webp")
+
+    def test_product_image_import_keeps_old_file_still_referenced_by_another_product(self) -> None:
+        source_images = self.root / "source-images-shared"
+        target_images = self.root / "target-images-shared"
+        source_images.mkdir()
+        target_images.mkdir()
+        (target_images / "thumbs").mkdir()
+        incoming = self._webp_bytes("#336699")
+        shared_large = self._webp_bytes("#993333")
+        shared_thumb = self._webp_bytes("#bbbbbb")
+        (source_images / "SYNC-PRODUCT.webp").write_bytes(incoming)
+        (target_images / "SHARED.webp").write_bytes(shared_large)
+        (target_images / "thumbs" / "SHARED.webp").write_bytes(shared_thumb)
+        with connect(self.source) as connection:
+            self._seed(connection)
+            connection.execute(
+                "UPDATE products SET image_path = ? WHERE bld_no = 'SYNC-PRODUCT'",
+                ("data_product_images/SYNC-PRODUCT.webp",),
+            )
+            connection.commit()
+        with connect(self.target) as connection:
+            connection.executemany(
+                """
+                INSERT INTO products (bld_no, image_path, active, created_at, updated_at)
+                VALUES (?, 'data_product_images/SHARED.webp', 1,
+                        '2026-07-17 10:00:00', '2026-07-17 10:00:00')
+                """,
+                (("SYNC-PRODUCT",), ("OTHER-PRODUCT",)),
+            )
+            connection.commit()
+
+        package = self.root / "business-product-image-shared.tar.gz"
+        source_repository = BusinessSyncRepository(self.source, image_dir=source_images)
+        source_repository.export(
+            output_path=package,
+            selected=("products",),
+            include_images=True,
+            actor="test",
+        )
+        target_repository = BusinessSyncRepository(self.target, image_dir=target_images)
+        preview = target_repository.preview(package)
+        target_repository.apply(
+            package,
+            backup_path=self.root / "product-image-shared.sqlite3",
+            actor="test",
+            expected_token=cast(str, preview["token"]),
+            selected_conflicts={},
+            include_images=True,
+        )
+
+        self.assertEqual((target_images / "SHARED.webp").read_bytes(), shared_large)
+        self.assertEqual((target_images / "thumbs" / "SHARED.webp").read_bytes(), shared_thumb)
+        self.assertEqual((target_images / "SYNC-PRODUCT.webp").read_bytes(), incoming)
+        with connect(self.target) as connection:
+            references = dict(connection.execute("SELECT bld_no, image_path FROM products").fetchall())
+        self.assertEqual(references["SYNC-PRODUCT"], "data_product_images/SYNC-PRODUCT.webp")
+        self.assertEqual(references["OTHER-PRODUCT"], "data_product_images/SHARED.webp")
+
+    def test_v4_product_images_are_not_imported_without_explicit_selection(self) -> None:
+        source_images = self.root / "source-images-not-selected"
+        target_images = self.root / "target-images-not-selected"
+        source_images.mkdir()
+        target_images.mkdir()
+        incoming = self._webp_bytes("#334477")
+        local = self._webp_bytes("#774433")
+        (source_images / "SYNC-PRODUCT.webp").write_bytes(incoming)
+        (target_images / "LOCAL-KEEP.webp").write_bytes(local)
+        with connect(self.source) as connection:
+            self._seed(connection)
+            connection.execute(
+                "UPDATE products SET image_path = ? WHERE bld_no = 'SYNC-PRODUCT'",
+                ("data_product_images/SYNC-PRODUCT.webp",),
+            )
+            connection.commit()
+        with connect(self.target) as connection:
+            connection.execute(
+                """
+                INSERT INTO products (bld_no, image_path, active, created_at, updated_at)
+                VALUES ('SYNC-PRODUCT', 'data_product_images/LOCAL-KEEP.webp', 1,
+                        '2026-07-17 10:00:00', '2026-07-17 10:00:00')
+                """
+            )
+            connection.commit()
+
+        package = self.root / "business-product-images-not-selected.tar.gz"
+        source_repository = BusinessSyncRepository(self.source, image_dir=source_images)
+        source_repository.export(
+            output_path=package,
+            selected=("products",),
+            include_images=True,
+            actor="test",
+        )
+        target_repository = BusinessSyncRepository(self.target, image_dir=target_images)
+        preview = target_repository.preview(package)
+        target_repository.apply(
+            package,
+            backup_path=self.root / "product-images-not-selected.sqlite3",
+            actor="test",
+            expected_token=cast(str, preview["token"]),
+            selected_conflicts={},
+            include_images=False,
+        )
+
+        self.assertEqual((target_images / "LOCAL-KEEP.webp").read_bytes(), local)
+        self.assertFalse((target_images / "SYNC-PRODUCT.webp").exists())
+        with connect(self.target) as connection:
+            reference = connection.execute(
+                "SELECT image_path FROM products WHERE bld_no = 'SYNC-PRODUCT'"
+            ).fetchone()[0]
+        self.assertEqual(reference, "data_product_images/LOCAL-KEEP.webp")
+
+    def test_legacy_v3_product_images_keep_copy_only_compatibility(self) -> None:
+        target_images = self.root / "legacy-v3-target-images"
+        target_images.mkdir()
+        with connect(self.source) as connection:
+            self._seed(connection)
+            legacy_product = dict(
+                connection.execute("SELECT * FROM products WHERE bld_no = 'SYNC-PRODUCT'").fetchone()
+            )
+            legacy_product.pop("id")
+            connection.commit()
+        package = self._write_raw_package(
+            name="legacy-v3-product-image.tar.gz",
+            manifest={
+                "package_type": "bld_business_data",
+                "version": 3,
+                "datasets": ["products"],
+                "media": {
+                    "drawings": False,
+                    "product_images": True,
+                    "material_drawings": False,
+                    "files": {"drawings": 0, "product_images": 1, "material_drawings": 0},
+                },
+            },
+            payload={"products": [legacy_product]},
+            media={"data/product_images/LEGACY-PRODUCT.png": b"legacy-copy-only-image"},
+        )
+        repository = BusinessSyncRepository(self.target, image_dir=target_images)
+        preview = repository.preview(package)
+        repository.apply(
+            package,
+            backup_path=self.root / "legacy-v3-product-image.sqlite3",
+            actor="test",
+            expected_token=cast(str, preview["token"]),
+            selected_conflicts={},
+            include_images=True,
+        )
+
+        self.assertEqual(
+            (target_images / "LEGACY-PRODUCT.png").read_bytes(),
+            b"legacy-copy-only-image",
+        )
+        self.assertFalse((target_images / "thumbs" / "LEGACY-PRODUCT.webp").exists())
+
+    def test_v4_product_image_mapping_rejects_hash_mismatch(self) -> None:
+        image_payload = self._webp_bytes()
+        package = self._write_raw_package(
+            name="invalid-product-image-hash.tar.gz",
+            manifest={
+                "package_type": "bld_business_data",
+                "version": 4,
+                "datasets": ["products"],
+                "media": {
+                    "drawings": False,
+                    "product_images": True,
+                    "material_drawings": False,
+                    "files": {"drawings": 0, "product_images": 1, "material_drawings": 0},
+                    "product_image_slots": [
+                        {
+                            "bld_no": "SYNC-PRODUCT",
+                            "slot": 1,
+                            "file": "SYNC-PRODUCT.webp",
+                            "sha256": "0" * 64,
+                        }
+                    ],
+                },
+            },
+            payload={"products": [{"bld_no": "SYNC-PRODUCT", "active": 1}]},
+            media={"data/product_images/SYNC-PRODUCT.webp": image_payload},
+        )
+        with self.assertRaisesRegex(ValueError, "校验值不一致"):
+            BusinessSyncRepository.read(package)
+
+    def test_v4_export_rejects_missing_referenced_product_image(self) -> None:
+        image_dir = self.root / "missing-referenced-image"
+        image_dir.mkdir()
+        with connect(self.source) as connection:
+            self._seed(connection)
+            connection.execute(
+                "UPDATE products SET image_path = ? WHERE bld_no = 'SYNC-PRODUCT'",
+                ("data_product_images/MISSING.webp",),
+            )
+            connection.commit()
+
+        package = self.root / "missing-referenced-image.tar.gz"
+        repository = BusinessSyncRepository(self.source, image_dir=image_dir)
+        with self.assertRaisesRegex(ValueError, "图片 MISSING.webp 缺失"):
+            repository.export(
+                output_path=package,
+                selected=("products",),
+                include_images=True,
+                actor="test",
+            )
+        self.assertFalse(package.exists())
 
     def test_material_drawings_follow_materials_export_preview_and_explicit_import(self) -> None:
         source_material_drawings = self.root / "source-material-drawings"
@@ -1113,7 +1471,7 @@ class BusinessSyncServiceTest(unittest.TestCase):
             name="future-business-package.tar.gz",
             manifest={
                 "package_type": "bld_business_data",
-                "version": 4,
+                "version": 5,
                 "datasets": ["materials"],
             },
             payload={"materials": [{"sync_id": "future-material"}]},

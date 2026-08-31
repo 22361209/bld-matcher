@@ -50,7 +50,7 @@ class TestWebProductImportAndSync(WebAppTestBase):
                     manifest = json.loads(manifest_file.read().decode("utf-8"))
             finally:
                 response.close()
-            self.assertEqual(manifest["version"], 3)
+            self.assertEqual(manifest["version"], 4)
             self.assertTrue(manifest["media"]["material_drawings"])
             self.assertEqual(manifest["media"]["files"]["material_drawings"], 1)
 

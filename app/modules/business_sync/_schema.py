@@ -3,8 +3,8 @@ from __future__ import annotations
 
 PACKAGE_SUFFIX = ".tar.gz"
 PACKAGE_TYPE = "bld_business_data"
-PACKAGE_VERSION = 3
-SUPPORTED_PACKAGE_VERSIONS = frozenset({1, 2, 3})
+PACKAGE_VERSION = 4
+SUPPORTED_PACKAGE_VERSIONS = frozenset({1, 2, 3, 4})
 
 MAX_MEDIA_FILE_SIZE = 512 * 1024 * 1024
 MAX_PACKAGE_METADATA_SIZE = 64 * 1024 * 1024

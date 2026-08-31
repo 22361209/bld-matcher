@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tarfile
@@ -11,9 +12,17 @@ from pathlib import Path, PurePosixPath
 
 from app.database import connect
 from app.platform.audit_store import log_event
+from app.product_image_processing import PRODUCT_IMAGE_LARGE_MAX_BYTES, validate_synced_product_image
 
 from ._comparison import columns
 from ._media_transaction import media_relative_path, normalized_media_target
+from ._product_image_transfer import (
+    PRODUCT_IMAGE_MEMBER_PREFIX,
+    PRODUCT_IMAGE_SLOTS_FIELD,
+    add_product_images,
+    collect_product_image_exports,
+    validate_product_image_manifest,
+)
 from ._schema import (
     DATASETS,
     LOCAL_MEDIA_COLUMNS,
@@ -74,6 +83,7 @@ def add_media_directory(
 
 
 def read_package(package_path: Path) -> tuple[Manifest, Payload]:
+    product_members: dict[str, tuple[int, str]] = {}
     try:
         with tarfile.open(package_path, "r:gz") as archive:
             raw_members = archive.getmembers()
@@ -102,6 +112,19 @@ def read_package(package_path: Path) -> tuple[Manifest, Payload]:
                 raise ValueError("业务数据包内容不完整。")
             manifest = json.loads(manifest_file.read().decode("utf-8"))
             payload = json.loads(data_file.read().decode("utf-8"))
+            if isinstance(manifest, dict) and manifest.get("version") == 4:
+                for member in raw_members:
+                    if not member.name.startswith(PRODUCT_IMAGE_MEMBER_PREFIX):
+                        continue
+                    relative = member.name[len(PRODUCT_IMAGE_MEMBER_PREFIX) :]
+                    if member.size > PRODUCT_IMAGE_LARGE_MAX_BYTES:
+                        raise ValueError("业务数据包产品大图必须严格小于等于 500 KB。")
+                    image_file = archive.extractfile(member)
+                    if image_file is None:
+                        raise ValueError("业务数据包产品图片无法读取。")
+                    image_payload = image_file.read()
+                    validate_synced_product_image(image_payload)
+                    product_members[relative] = (member.size, hashlib.sha256(image_payload).hexdigest())
     except (OSError, tarfile.TarError, json.JSONDecodeError) as exc:
         raise ValueError("业务数据包无法读取。") from exc
     if not isinstance(manifest, dict) or manifest.get("package_type") != PACKAGE_TYPE or not isinstance(payload, dict):
@@ -122,7 +145,7 @@ def read_package(package_path: Path) -> tuple[Manifest, Payload]:
     media = manifest.get("media", {})
     if not isinstance(media, dict):
         raise ValueError("业务数据包媒体信息无效。")
-    known_media_fields = set(MEDIA_DIRECTORIES) | {"files"}
+    known_media_fields = set(MEDIA_DIRECTORIES) | {"files", PRODUCT_IMAGE_SLOTS_FIELD}
     if any(key not in known_media_fields for key in media):
         raise ValueError("业务数据包媒体信息无效。")
     if any(key in media and type(media[key]) is not bool for key in MEDIA_DIRECTORIES):
@@ -172,6 +195,7 @@ def read_package(package_path: Path) -> tuple[Manifest, Payload]:
         if duplicates:
             raise ValueError(f"{DATASETS[key][2]}包含重复编号：{'、'.join(duplicates[:10])}")
         typed_payload[key] = rows
+    validate_product_image_manifest(version, media, typed_payload, product_members)
     return manifest, typed_payload
 
 
@@ -184,10 +208,12 @@ def export_package(
     include_drawings: bool,
     include_images: bool,
     include_material_drawings: bool,
+    product_image_dir: Path | None,
     add_media_directory_fn: MediaAdder,
     read_package_fn: PackageReader,
 ) -> Path:
     payload: Payload = {}
+    product_rows: list[dict[str, object]] = []
     with connect(database_path) as connection:
         for key in selected:
             table, _identity, _label = DATASETS[key]
@@ -199,6 +225,8 @@ def export_package(
                     f"SELECT {', '.join(record_columns)} FROM {table}{where_clause}"
                 ).fetchall()
             ]
+            if key == "products":
+                product_rows = [dict(row) for row in rows]
             for row in rows:
                 for column in LOCAL_MEDIA_COLUMNS.get(key, set()):
                     row[column] = ""
@@ -208,12 +236,19 @@ def export_package(
         "product_images": bool("products" in selected and include_images),
         "material_drawings": bool("materials" in selected and include_material_drawings),
     }
+    product_image_entries, product_image_sources = (
+        collect_product_image_exports(product_rows, product_image_dir) if includes["product_images"] else ([], {})
+    )
     manifest: Manifest = {
         "package_type": PACKAGE_TYPE,
         "version": PACKAGE_VERSION,
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "datasets": list(selected),
-        "media": {**includes, "files": {key: 0 for key in MEDIA_DIRECTORIES}},
+        "media": {
+            **includes,
+            "files": {key: 0 for key in MEDIA_DIRECTORIES},
+            PRODUCT_IMAGE_SLOTS_FIELD: product_image_entries,
+        },
     }
     output_path.parent.mkdir(parents=True, exist_ok=True)
     temporary = output_path.with_name(f".{output_path.name}.{uuid.uuid4().hex}.tmp")
@@ -233,7 +268,11 @@ def export_package(
                     raise RuntimeError("Business package media manifest is invalid.")
                 for key, include in includes.items():
                     if include:
-                        files[key] = add_media_directory_fn(archive, key)
+                        files[key] = (
+                            add_product_images(archive, product_image_sources)
+                            if key == "product_images"
+                            else add_media_directory_fn(archive, key)
+                        )
                 (root / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
                 archive.add(root / "manifest.json", arcname="manifest.json")
         read_package_fn(temporary)

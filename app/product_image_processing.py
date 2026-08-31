@@ -35,7 +35,7 @@ def _rewind(source: IO[bytes]) -> None:
 
 
 def _normalized_image(source: str | Path | IO[bytes]) -> Image.Image:
-    if hasattr(source, "seek"):
+    if not isinstance(source, (str, Path)):
         _rewind(source)
     try:
         with Image.open(source) as opened:
@@ -57,7 +57,7 @@ def _normalized_image(source: str | Path | IO[bytes]) -> Image.Image:
     except (Image.DecompressionBombError, OSError, UnidentifiedImageError) as exc:
         raise ValueError("文件内容不是有效的产品图片。") from exc
     finally:
-        if hasattr(source, "seek"):
+        if not isinstance(source, (str, Path)):
             _rewind(source)
 
 
@@ -147,6 +147,44 @@ def _processed_thumbnail(image: Image.Image) -> tuple[bytes, tuple[int, int]]:
 
 def process_product_thumbnail(source: str | Path | IO[bytes]) -> tuple[bytes, tuple[int, int]]:
     return _processed_thumbnail(_normalized_image(source))
+
+
+def validate_synced_product_image(payload: bytes) -> tuple[int, int]:
+    if not payload or len(payload) > PRODUCT_IMAGE_LARGE_MAX_BYTES:
+        raise ValueError("业务数据包产品大图必须严格小于等于 500 KB。")
+    try:
+        with Image.open(BytesIO(payload)) as opened:
+            if opened.format != "WEBP":
+                raise ValueError("业务数据包产品图片必须是 WebP 大图。")
+            width, height = opened.size
+            if (
+                width <= 0
+                or height <= 0
+                or width > PRODUCT_IMAGE_LARGE_MAX_SIZE[0]
+                or height > PRODUCT_IMAGE_LARGE_MAX_SIZE[1]
+            ):
+                raise ValueError("业务数据包产品大图尺寸不能超过 1920×1920。")
+            if width * height > PRODUCT_IMAGE_MAX_PIXELS:
+                raise ValueError("产品图片总像素不能超过 5000 万。")
+            if int(getattr(opened, "n_frames", 1) or 1) > 1:
+                raise ValueError("产品图片不支持动画格式。")
+            opened.verify()
+            return width, height
+    except ValueError:
+        raise
+    except (Image.DecompressionBombError, OSError, UnidentifiedImageError) as exc:
+        raise ValueError("业务数据包产品图片不是有效的 WebP 大图。") from exc
+
+
+def process_synced_product_image(payload: bytes) -> ProcessedProductImage:
+    large_size = validate_synced_product_image(payload)
+    thumbnail, thumbnail_size = process_product_thumbnail(BytesIO(payload))
+    return ProcessedProductImage(
+        large=payload,
+        thumbnail=thumbnail,
+        large_size=large_size,
+        thumbnail_size=thumbnail_size,
+    )
 
 
 def atomic_write_bytes(path: Path, payload: bytes) -> None:

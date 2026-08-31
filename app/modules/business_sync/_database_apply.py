@@ -28,6 +28,10 @@ MediaCopy = Callable[
     None,
 ]
 MediaRestore = Callable[[list[tuple[Path, Path | None]]], None]
+ProductImageApply = Callable[
+    [sqlite3.Connection, Path, dict[str, object], Path, list[tuple[Path, Path | None]]],
+    int,
+]
 QuoteCustomerResolver = Callable[
     [sqlite3.Connection, dict[str, list[dict[str, object]]], dict[str, str | None]],
     None,
@@ -178,6 +182,7 @@ def apply_package(
     normalized_incoming_fn: IncomingNormalizer = normalized_incoming,
     media_copy_fn: MediaCopy,
     media_restore_fn: MediaRestore,
+    product_image_apply_fn: ProductImageApply,
     resolve_quote_customers_fn: QuoteCustomerResolver = resolve_quote_customers,
 ) -> dict[str, dict[str, int]]:
     manifest, payload = read_package_fn(package_path)
@@ -207,7 +212,11 @@ def apply_package(
             for key, requested in media_requests.items()
             if MEDIA_DATASETS[key] in payload
         }
-        media_copy_fn(package_path, manifest, requested_media, media_backup_root, media_changes)
+        structured_product_images = manifest.get("version") == 4 and requested_media.get("product_images") is True
+        legacy_media_requests = dict(requested_media)
+        if structured_product_images:
+            legacy_media_requests["product_images"] = False
+        media_copy_fn(package_path, manifest, legacy_media_requests, media_backup_root, media_changes)
         preexisting_quote_ids = {
             int(row["id"])
             for row in connection.execute("SELECT id FROM quote_records").fetchall()
@@ -287,6 +296,8 @@ def apply_package(
                         raise RuntimeError("Imported quote could not be reloaded.")
                     imported_quote_ids.add(int(imported["id"]))
             result[key] = counts
+        if structured_product_images:
+            product_image_apply_fn(connection, package_path, manifest, media_backup_root, media_changes)
         if deactivate_local_only and "products" in payload:
             syncable_products, _ignored_inactive = syncable_incoming_rows("products", payload["products"])
             incoming_bld = {str(row["bld_no"]) for row in syncable_products}

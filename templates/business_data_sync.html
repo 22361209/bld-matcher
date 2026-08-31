@@ -17,7 +17,7 @@
           <label class="sync-option"><input type="checkbox" name="dataset" value="{{ key }}" checked><span><strong>{{ value[2] }}</strong><small>{{ value[0] }}</small></span></label>
         {% endfor %}
         <label class="sync-option"><input type="checkbox" name="include_drawings" value="1"><span><strong>产品图纸</strong><small>随产品目录打包 data/drawings</small></span></label>
-        <label class="sync-option"><input type="checkbox" name="include_images" value="1"><span><strong>产品图片</strong><small>随产品目录打包 data/product_images</small></span></label>
+        <label class="sync-option"><input type="checkbox" name="include_images" value="1"><span><strong>产品图片</strong><small>仅打包已引用大图，导入端生成缩略图</small></span></label>
         <label class="sync-option"><input type="checkbox" name="include_material_drawings" value="1"><span><strong>物料图纸</strong><small>随材料明细打包 data/material_drawings</small></span></label>
       </div>
     </div>

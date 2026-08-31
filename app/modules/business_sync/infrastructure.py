@@ -15,6 +15,7 @@ from ._media_transaction import (
 )
 from ._package_archive import add_media_directory, export_package, read_package
 from ._preview import preview_package
+from ._product_image_transfer import apply_product_images
 from ._schema import DATASETS, PACKAGE_SUFFIX
 from app.helpers import clear_product_image_caches
 
@@ -58,6 +59,7 @@ class BusinessSyncRepository:
             include_drawings=include_drawings,
             include_images=include_images,
             include_material_drawings=include_material_drawings,
+            product_image_dir=self.media_dirs["product_images"],
             add_media_directory_fn=self._add_media_directory,
             read_package_fn=self.read,
         )
@@ -124,6 +126,7 @@ class BusinessSyncRepository:
             normalized_incoming_fn=self._normalized_incoming,
             media_copy_fn=self._copy_requested_media,
             media_restore_fn=self._restore_media,
+            product_image_apply_fn=self._apply_product_images,
             resolve_quote_customers_fn=self._resolve_quote_customers,
         )
 
@@ -149,6 +152,21 @@ class BusinessSyncRepository:
         if requests.get("product_images"):
             clear_product_image_caches()
 
+    def _apply_product_images(
+        self,
+        connection: sqlite3.Connection,
+        package_path: Path,
+        manifest: dict[str, object],
+        backup_root: Path,
+        changes: list[tuple[Path, Path | None]],
+    ) -> int:
+        image_dir = self.media_dirs["product_images"]
+        if image_dir is None:
+            raise ValueError("当前系统未配置产品图片目录。")
+        count = apply_product_images(connection, package_path, manifest, image_dir, backup_root, changes)
+        clear_product_image_caches()
+        return count
+
     @staticmethod
     def _atomic_copy(source: Path, target: Path) -> None:
         atomic_copy(source, target)
@@ -159,3 +177,4 @@ class BusinessSyncRepository:
 
     def _restore_media(self, changes: list[tuple[Path, Path | None]]) -> None:
         restore_media(changes, atomic_copy_fn=self._atomic_copy)
+        clear_product_image_caches()
