@@ -20,7 +20,7 @@ from app.modules.products.domain import (
 )
 from app.modules.products.factory import get_product_service
 from app.modules.products.presentation import product_web_payload
-from app.security import actor_name, can, can_any, login_required, permission_required
+from app.security import actor_name, can, can_any, permission_required
 
 
 PRODUCT_PAGE_SIZE = 50
@@ -119,10 +119,7 @@ def _product_pagination(filters: ProductFilters, page: int, total: int) -> dict[
 
 
 def _product_list_payload(record, *, include_price: bool) -> dict[str, Any]:
-    payload = product_web_payload(record)
-    if not include_price:
-        payload.pop("price_cny", None)
-    return payload
+    return product_web_payload(record, include_price=include_price, include_drawing=can("view_product_drawings"))
 
 
 def _product_list_context(*, include_admin_preview: bool) -> dict[str, Any]:
@@ -266,7 +263,7 @@ def register(app) -> None:
         return redirect(url_for("products"))
 
     @app.get("/products")
-    @login_required
+    @permission_required("view_products")
     def products():
         try:
             context = _product_list_context(include_admin_preview=True)
@@ -275,7 +272,7 @@ def register(app) -> None:
         return render_template("products.html", **context)
 
     @app.get("/products/fragment")
-    @login_required
+    @permission_required("view_products")
     def products_fragment():
         try:
             context = _product_list_context(include_admin_preview=False)
@@ -286,12 +283,14 @@ def register(app) -> None:
         return response
 
     @app.get("/products/export")
+    @permission_required("view_products")
     @permission_required("export_catalog")
     def export_products_options():
         status = request.args.get("status", "all")
         return render_template("export_catalog.html", status=status)
 
     @app.post("/products/export")
+    @permission_required("view_products")
     @permission_required("export_catalog")
     def export_products():
         try:

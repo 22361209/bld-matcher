@@ -4,10 +4,12 @@
       <details class="bld-action-menu" data-bld-action-menu>
         <summary class="bld-action-trigger" title="查看 {{ product.bld_no }} 操作">{{ product.bld_no }}</summary>
         <div class="bld-action-popover" role="group" aria-label="{{ product.bld_no }} 操作">
-          {% if product.drawing_available %}
+          {% if can("view_product_drawings") and product.drawing_available %}
             <a class="linear-button subtle" href="{{ url_for('product_drawing', product_id=product.id) }}" target="_blank" rel="noopener">查看图纸</a>
-          {% else %}
+          {% elif can("view_product_drawings") %}
             <button class="linear-button subtle" type="button" data-product-drawing-unavailable data-product-bld-no="{{ product.bld_no }}">查看图纸</button>
+          {% else %}
+            <span class="note">无图纸查看权限</span>
           {% endif %}
           {% if can("edit_products") %}
             <button class="linear-button primary" type="button" data-copy-product-action data-copy-product='{{ product|tojson }}'>复制信息</button>

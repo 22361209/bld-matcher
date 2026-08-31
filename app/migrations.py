@@ -1238,6 +1238,32 @@ def _add_product_option_value_sort_order(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE product_option_values ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0")
 
 
+def _add_product_view_permissions(conn: sqlite3.Connection) -> None:
+    # 产品目录、图片和产品图纸此前对所有已登录账号开放。仅向升级时已存在
+    # 的非管理员角色补齐读取权限，新的角色仍需由管理员显式授予。
+    timestamp = conn.execute("SELECT datetime('now','localtime')").fetchone()[0]
+    for permission in ("view_products", "view_product_drawings"):
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO role_permissions (role_key, permission, created_at)
+            SELECT role_key, ?, ? FROM roles WHERE role_key != ?
+            """,
+            (permission, timestamp, ADMIN_ROLE_KEY),
+        )
+
+
+def _add_user_default_page(conn: sqlite3.Connection) -> None:
+    user_columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
+    if user_columns and "default_page" not in user_columns:
+        conn.execute("ALTER TABLE users ADD COLUMN default_page TEXT NOT NULL DEFAULT ''")
+
+
+def _add_user_mobile_default_page(conn: sqlite3.Connection) -> None:
+    user_columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
+    if user_columns and "default_mobile_page" not in user_columns:
+        conn.execute("ALTER TABLE users ADD COLUMN default_mobile_page TEXT NOT NULL DEFAULT ''")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -1277,6 +1303,9 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("036_customer_products", _rebuild_customer_drawing_groups),
     ("037_customer_identity_and_material_drawing_permissions", _add_customer_identity_and_material_drawing_permissions),
     ("038_product_option_value_sort_order", _add_product_option_value_sort_order),
+    ("039_product_view_permissions", _add_product_view_permissions),
+    ("040_user_default_page", _add_user_default_page),
+    ("041_user_mobile_default_page", _add_user_mobile_default_page),
 )
 
 

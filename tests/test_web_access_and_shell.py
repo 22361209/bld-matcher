@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 from tests.web_app_test_base import (
     WebAppTestBase,
     Path,
@@ -11,6 +13,9 @@ class TestWebAccessAndShell(WebAppTestBase):
     def test_login_and_homepage(self):
         response = self.client.get("/login")
         self.assertEqual(response.status_code, 200)
+        login_html = response.get_data(as_text=True)
+        self.assertIn('name="client_mode"', login_html)
+        self.assertIn("pages/login.js", login_html)
 
         response = self.login()
         self.assertEqual(response.status_code, 302)
@@ -41,6 +46,84 @@ class TestWebAccessAndShell(WebAppTestBase):
         )
         self.assertIn('href="/contracts" role="menuitem">采购合同</a>', html)
         self.assertIn('href="/contracts/sales" role="menuitem">销售合同</a>', html)
+
+    def test_account_can_choose_default_landing_page_and_login_session_lasts_seven_days(self):
+        def restore_default_page():
+            self.client.post("/logout")
+            with self.web.connect(self.web.DB_PATH) as connection:
+                connection.execute(
+                    """
+                    UPDATE users
+                    SET default_page = '', default_mobile_page = ''
+                    WHERE username = '007'
+                    """
+                )
+                connection.commit()
+
+        self.addCleanup(restore_default_page)
+        self.login()
+        settings = self.client.get("/account/password")
+        settings_html = settings.get_data(as_text=True)
+        self.assertEqual(settings.status_code, 200)
+        self.assertIn("桌面端登录后默认页面", settings_html)
+        self.assertIn("移动端登录后默认页面", settings_html)
+        self.assertIn('<option value="quotes">报价记录</option>', settings_html)
+        self.assertIn("登录状态最长保留 7 天", settings_html)
+
+        saved = self.client.post(
+            "/account/default-page",
+            data={"default_page": "quotes", "default_mobile_page": "products"},
+            follow_redirects=False,
+        )
+        self.assertEqual(saved.status_code, 302)
+        with self.web.connect(self.web.DB_PATH) as connection:
+            default_pages = connection.execute(
+                "SELECT default_page, default_mobile_page FROM users WHERE username = '007'"
+            ).fetchone()
+        self.assertEqual(default_pages["default_page"], "quotes")
+        self.assertEqual(default_pages["default_mobile_page"], "products")
+
+        self.client.post("/logout")
+        login = self.client.post(
+            "/login",
+            data={"username": "007", "password": "test-admin-pw", "client_mode": "desktop"},
+            follow_redirects=False,
+        )
+        self.assertEqual(login.location, "/quotes")
+        self.assertEqual(self.web.app.permanent_session_lifetime, timedelta(days=7))
+        self.assertIn("Expires=", login.headers.get("Set-Cookie", ""))
+        with self.client.session_transaction() as current_session:
+            self.assertTrue(current_session.permanent)
+
+        self.client.post("/logout")
+        mobile_login = self.client.post(
+            "/login",
+            data={"username": "007", "password": "test-admin-pw", "client_mode": "mobile"},
+            follow_redirects=False,
+        )
+        self.assertEqual(mobile_login.location, "/products")
+
+        self.client.post("/logout")
+        mobile_fallback = self.client.post(
+            "/login",
+            data={"username": "007", "password": "test-admin-pw"},
+            headers={"User-Agent": "Mozilla/5.0 (iPhone; Mobile)"},
+            follow_redirects=False,
+        )
+        self.assertEqual(mobile_fallback.location, "/products")
+
+        rejected = self.client.post(
+            "/account/default-page",
+            data={"default_page": "not-a-real-page", "default_mobile_page": "products"},
+            follow_redirects=True,
+        )
+        self.assertIn("该页面不存在或当前账号没有访问权限", rejected.get_data(as_text=True))
+        with self.web.connect(self.web.DB_PATH) as connection:
+            stored_after_rejection = connection.execute(
+                "SELECT default_page, default_mobile_page FROM users WHERE username = '007'"
+            ).fetchone()
+        self.assertEqual(stored_after_rejection["default_page"], "quotes")
+        self.assertEqual(stored_after_rejection["default_mobile_page"], "products")
 
     def test_admin_can_manage_roles_and_account_permission_overrides(self):
         role_name = "WEB 询价专员"
@@ -178,7 +261,7 @@ class TestWebAccessAndShell(WebAppTestBase):
             follow_redirects=False,
         )
         self.assertEqual(login.status_code, 302)
-        homepage = self.client.get("/").get_data(as_text=True)
+        homepage = self.client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertIn(f"{username} · {role_name}", homepage)
         self.assertIn("报价记录", homepage)
         self.assertIn("业务数据同步", homepage)
@@ -191,10 +274,10 @@ class TestWebAccessAndShell(WebAppTestBase):
             follow_redirects=False,
         )
         self.assertEqual(denied_match.status_code, 302)
-        self.assertTrue(denied_match.headers["Location"].endswith("/"))
+        self.assertTrue(denied_match.headers["Location"].endswith("/quotes"))
         denied_admin = self.client.get("/users", follow_redirects=False)
         self.assertEqual(denied_admin.status_code, 302)
-        self.assertTrue(denied_admin.headers["Location"].endswith("/"))
+        self.assertTrue(denied_admin.headers["Location"].endswith("/quotes"))
 
         with self.web.connect(self.web.DB_PATH) as connection:
             actions = {
@@ -253,7 +336,7 @@ class TestWebAccessAndShell(WebAppTestBase):
 
         homepage = self.client.get("/").get_data(as_text=True)
         self.assertIn('href="/account/password"', homepage)
-        self.assertIn("修改密码", homepage)
+        self.assertIn("账号设置", homepage)
 
         form_page = self.client.get("/account/password")
         form_html = form_page.get_data(as_text=True)

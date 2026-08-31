@@ -119,11 +119,13 @@ def register(app) -> None:
         return redirect(url_for("products"))
 
     @app.get("/products/new")
+    @permission_required("view_products")
     @permission_required("edit_products")
     def new_product():
         return render_template("product_form.html", product=None)
 
     @app.get("/products/<int:product_id>/edit")
+    @permission_required("view_products")
     @permission_required("edit_products")
     def edit_product(product_id: int):
         try:
@@ -221,6 +223,7 @@ def register(app) -> None:
         return redirect(url_for("products"))
 
     @app.get("/products/<bld_no>/rename")
+    @permission_required("view_products")
     @permission_required("rename_products")
     def rename_product_form(bld_no: str):
         product = get_product_service().find_by_bld(bld_no, active_only=False)
@@ -230,6 +233,7 @@ def register(app) -> None:
         return render_template("product_rename.html", product=product)
 
     @app.post("/products/<bld_no>/rename")
+    @permission_required("view_products")
     @permission_required("rename_products")
     def rename_product(bld_no: str):
         new_bld_no = request.form.get("new_bld_no", "").strip()

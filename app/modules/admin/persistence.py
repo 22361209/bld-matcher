@@ -347,6 +347,46 @@ def change_password(
         connection.commit()
 
 
+def update_default_pages(
+    connection: sqlite3.Connection,
+    user_id: int,
+    default_page: object,
+    default_mobile_page: object,
+    actor: str = "",
+    *,
+    commit: bool = True,
+) -> None:
+    user = get_user(connection, user_id)
+    if not user:
+        raise ValueError("账号不存在。")
+    normalized_desktop = str(default_page or "").strip()
+    normalized_mobile = str(default_mobile_page or "").strip()
+    if len(normalized_desktop) > 64 or len(normalized_mobile) > 64:
+        raise ValueError("默认页面设置无效。")
+    timestamp = now_text()
+    connection.execute(
+        """
+        UPDATE users
+        SET default_page = ?, default_mobile_page = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        (normalized_desktop, normalized_mobile, timestamp, user_id),
+    )
+    log_event(
+        connection,
+        "修改登录默认页面",
+        "user",
+        str(user["username"]),
+        (
+            f"桌面端默认页面: {normalized_desktop or '自动选择'}\n"
+            f"移动端默认页面: {normalized_mobile or '自动选择'}"
+        ),
+        actor=actor,
+    )
+    if commit:
+        connection.commit()
+
+
 def update_user_overrides(
     connection: sqlite3.Connection,
     user_id: int,

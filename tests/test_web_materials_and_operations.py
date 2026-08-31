@@ -583,6 +583,9 @@ class TestWebMaterialsAndOperations(WebAppTestBase):
                 "036_customer_products",
                 "037_customer_identity_and_material_drawing_permissions",
                 "038_product_option_value_sort_order",
+                "039_product_view_permissions",
+                "040_user_default_page",
+                "041_user_mobile_default_page",
             ],
         )
 
@@ -714,7 +717,7 @@ with connect(database_path) as conn:
 
         response = self.client.post("/products/export", data={"status": "active", "export_format": "bld"})
         self.assertEqual(response.status_code, 302)
-        self.assertTrue(response.headers["Location"].endswith("/"))
+        self.assertTrue(response.headers["Location"].endswith("/products"))
         self.assertFalse(list((self.root / "outputs").glob("**/catalog-export-bld-editor-export-*.xlsx")))
         self.client.post("/logout")
 

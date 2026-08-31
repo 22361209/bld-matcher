@@ -126,6 +126,12 @@
 {% endblock %}
 
 {% block page_modals %}
+      <dialog class="product-detail-dialog" data-product-detail-dialog aria-labelledby="product-detail-title">
+        <div class="product-detail-dialog-panel">
+          <div class="modal-heading"><h2 id="product-detail-title">产品详细信息</h2><button class="image-modal-close" type="button" data-close-product-detail-dialog aria-label="关闭产品详细信息">×</button></div>
+          <div data-product-detail-content></div>
+        </div>
+      </dialog>
 {% if can("edit_products") %}
       <div class="editor-modal" id="product-modal" aria-hidden="true">
         <div class="editor-modal-backdrop" data-close-product-modal></div>

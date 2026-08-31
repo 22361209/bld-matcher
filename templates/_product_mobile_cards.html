@@ -18,21 +18,25 @@
           <details class="bld-action-menu" data-bld-action-menu>
             <summary class="bld-action-trigger" title="查看 {{ product.bld_no }} 操作">{{ product.bld_no }}</summary>
             <div class="bld-action-popover" role="group" aria-label="{{ product.bld_no }} 操作">
-              {% if product.drawing_available %}
+              {% if can("view_product_drawings") and product.drawing_available %}
                 <a class="linear-button subtle" href="{{ url_for('product_drawing', product_id=product.id) }}" target="_blank" rel="noopener">查看图纸</a>
-              {% else %}
+              {% elif can("view_product_drawings") %}
                 <button class="linear-button subtle" type="button" data-product-drawing-unavailable data-product-bld-no="{{ product.bld_no }}">查看图纸</button>
+              {% else %}
+                <span class="note">无图纸查看权限</span>
               {% endif %}
             </div>
           </details>
           <span class="product-mobile-card-status">{{ format_product_status(product.product_status if "product_status" in product.keys() else "", "en") }}</span>
         </div>
-        <p class="product-mobile-card-item" title="{{ product.item }}">{{ product.item or "未填写产品名称" }}</p>
-        {% if product.series %}<p class="product-mobile-card-brand" title="{{ product.series }}">{{ product.series }}</p>{% endif %}
-        <p class="product-mobile-card-summary" title="{{ primary_oe or primary_model }}">
-          {% if primary_oe %}<span>OE</span>{{ primary_oe }}{% elif primary_model %}<span>车型</span>{{ primary_model }}{% else %}未填写 OE / 车型{% endif %}
-        </p>
-        {% if primary_oe and primary_model %}<p class="product-mobile-card-model" title="{{ primary_model }}">车型 · {{ primary_model }}</p>{% endif %}
+        <button class="product-mobile-card-detail-trigger" type="button" data-product-detail-trigger aria-haspopup="dialog">
+          <span class="product-mobile-card-item" title="{{ product.item }}">{{ product.item or "未填写产品名称" }}</span>
+          {% if product.series %}<span class="product-mobile-card-brand" title="{{ product.series }}">{{ product.series }}</span>{% endif %}
+          <span class="product-mobile-card-summary" title="{{ primary_oe or primary_model }}">
+            {% if primary_oe %}<span>OE</span>{{ primary_oe }}{% elif primary_model %}<span>车型</span>{{ primary_model }}{% else %}未填写 OE / 车型{% endif %}
+          </span>
+          {% if primary_oe and primary_model %}<span class="product-mobile-card-model" title="{{ primary_model }}">车型 · {{ primary_model }}</span>{% endif %}
+        </button>
       </div>
       {% if can_any("add_customer_prices", "edit_customer_prices", "delete_customer_prices") %}
         <div class="product-mobile-card-price" data-product-mobile-price>
@@ -40,6 +44,21 @@
           <strong>{% if product.price_cny is not none %}¥{{ "%.2f"|format(product.price_cny) }}{% else %}—{% endif %}</strong>
         </div>
       {% endif %}
+      <template data-product-detail-template>
+        <dl class="product-detail-list">
+          <div><dt>BLD 号</dt><dd>{{ product.bld_no }}</dd></div>
+          <div><dt>品牌</dt><dd>{{ product.series or "未填写" }}</dd></div>
+          <div><dt>产品名称</dt><dd>{{ product.item or "未填写" }}</dd></div>
+          <div><dt>OE NO.1</dt><dd>{{ product.oe_no_1 or "未填写" }}</dd></div>
+          <div><dt>品牌号码 / OE NO.2</dt><dd>{{ product.oe_no_2 or "未填写" }}</dd></div>
+          <div><dt>车型</dt><dd>{{ product.models or "未填写" }}</dd></div>
+          <div><dt>产品状态</dt><dd>{{ format_product_status(product.product_status if "product_status" in product.keys() else "", "zh") }}</dd></div>
+          <div><dt>启停状态</dt><dd>{{ "启用" if product.active else "已停用" }}</dd></div>
+          <div><dt>产品图片</dt><dd>{{ product_image_urls(product)|length }} 张</dd></div>
+          <div><dt>PDF 图纸</dt><dd>{% if can("view_product_drawings") and product.drawing_available %}<a href="{{ url_for('product_drawing', product_id=product.id) }}" target="_blank" rel="noopener">查看图纸</a>{% elif can("view_product_drawings") %}暂无图纸{% else %}无图纸查看权限{% endif %}</dd></div>
+          {% if can_any("add_customer_prices", "edit_customer_prices", "delete_customer_prices") %}<div><dt>含税单价</dt><dd>{% if product.price_cny is not none %}¥{{ "%.2f"|format(product.price_cny) }}{% else %}—{% endif %}</dd></div>{% endif %}
+        </dl>
+      </template>
     </article>
   {% else %}
     <p class="empty-message product-mobile-empty">没有符合条件的产品。</p>

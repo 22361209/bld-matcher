@@ -118,7 +118,7 @@ class TestWebProductCatalog(WebAppTestBase):
             role_key = save_role(
                 connection,
                 {"name": role_name, "description": "移动产品目录权限回归测试"},
-                ["generate_match"],
+                ["view_products"],
                 actor="tester",
             )
             save_user(
@@ -164,6 +164,108 @@ class TestWebProductCatalog(WebAppTestBase):
             self.assertNotIn("data-open-product-modal", html)
             self.assertNotIn("data-open-edit-product-modal", html)
             self.assertNotIn("data-copy-product-action", html)
+
+    def test_product_only_role_lands_in_catalog_and_cannot_read_drawings_or_other_pages(self):
+        from app.modules.admin.persistence import save_role, save_user
+        from app.modules.products.persistence import upsert_product
+
+        username = "product-only-viewer"
+        role_name = "产品目录查看员回归"
+        bld_no = "K-PRODUCT-ONLY-001"
+
+        def cleanup_access_records():
+            self.client.post("/logout")
+            with self.web.connect(self.web.DB_PATH) as connection:
+                user = connection.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+                if user:
+                    connection.execute("DELETE FROM user_permission_overrides WHERE user_id = ?", (user["id"],))
+                    connection.execute("DELETE FROM users WHERE id = ?", (user["id"],))
+                role = connection.execute("SELECT role_key FROM roles WHERE name = ?", (role_name,)).fetchone()
+                if role:
+                    connection.execute("DELETE FROM role_permissions WHERE role_key = ?", (role["role_key"],))
+                    connection.execute("DELETE FROM roles WHERE role_key = ?", (role["role_key"],))
+                connection.execute("DELETE FROM products WHERE bld_no = ?", (bld_no,))
+                connection.commit()
+
+        self.addCleanup(cleanup_access_records)
+        self.login()
+        with self.web.connect(self.web.DB_PATH) as connection:
+            role_key = save_role(
+                connection,
+                {"name": role_name, "description": "仅产品目录查看"},
+                ["view_products"],
+                actor="tester",
+            )
+            save_user(
+                connection,
+                {"username": username, "password": "product-only-pw", "role": role_key, "active": "1"},
+                actor="tester",
+            )
+            upsert_product(
+                connection,
+                {"bld_no": bld_no, "item": "Product Only Arm", "price_cny": "77.88", "active": "1"},
+                actor="tester",
+            )
+            product = connection.execute("SELECT id FROM products WHERE bld_no = ?", (bld_no,)).fetchone()
+            drawing_name = f"{bld_no}.pdf"
+            drawing_path = self.root / "data" / "drawings" / "pdf" / drawing_name
+            drawing_path.parent.mkdir(parents=True, exist_ok=True)
+            drawing_path.write_bytes(b"%PDF-1.4\nproduct-only drawing\n%%EOF")
+            connection.execute(
+                "UPDATE products SET drawing_path = ?, drawing_original_name = ? WHERE id = ?",
+                (f"drawings/pdf/{drawing_name}", drawing_name, product["id"]),
+            )
+            connection.commit()
+
+        self.client.post("/logout")
+        login = self.client.post(
+            "/login",
+            data={"username": username, "password": "product-only-pw"},
+            follow_redirects=False,
+        )
+        self.assertEqual(login.location, "/products")
+        page = self.client.get("/products", query_string={"bld": bld_no})
+        self.assertEqual(page.status_code, 200)
+        html = page.get_data(as_text=True)
+        self.assertIn("data-product-detail-template", html)
+        self.assertIn("data-product-detail-trigger", html)
+        self.assertIn("data-product-detail-dialog", html)
+        self.assertIn("无图纸查看权限", html)
+        self.assertNotIn("77.88", html)
+        self.assertNotIn(f"/products/{product['id']}/drawing", html)
+        self.assertNotIn(drawing_name, html)
+        self.assertNotIn("data-open-edit-product-modal", html)
+        self.assertNotIn('href="/tubes">管件资料</a>', html)
+        self.assertNotIn('href="/">询价处理</a>', html)
+
+        account_settings = self.client.get("/account/password").get_data(as_text=True)
+        self.assertIn('<option value="products">产品目录</option>', account_settings)
+        self.assertNotIn('<option value="index">询价处理</option>', account_settings)
+        rejected_default = self.client.post(
+            "/account/default-page",
+            data={"default_page": "index"},
+            follow_redirects=True,
+        )
+        self.assertIn("该页面不存在或当前账号没有访问权限", rejected_default.get_data(as_text=True))
+        with self.web.connect(self.web.DB_PATH) as connection:
+            stored_default = connection.execute(
+                "SELECT default_page FROM users WHERE username = ?", (username,)
+            ).fetchone()[0]
+        self.assertEqual(stored_default, "")
+
+        denied_page = self.client.get("/tubes", follow_redirects=False)
+        self.assertEqual(denied_page.location, "/products")
+        denied_json = self.client.get("/inquiry/quick-search", headers={"Accept": "application/json"})
+        self.assertEqual(denied_json.status_code, 403)
+        self.assertEqual(denied_json.get_json()["ok"], False)
+        drawing = self.client.get(f"/products/{product['id']}/drawing", headers={"Accept": "application/json"})
+        self.assertEqual(drawing.status_code, 403)
+        self.assertEqual(drawing.get_json()["ok"], False)
+        self.assertEqual(self.client.get("/products/lookup").status_code, 200)
+
+        products_js = (PROJECT_ROOT / "static" / "pages" / "products.js").read_text(encoding="utf-8")
+        self.assertIn("productDetailDialog.showModal()", products_js)
+        self.assertIn("productDetailTrigger?.focus()", products_js)
 
     def test_product_lookup_returns_matching_products(self):
         from app.modules.products.persistence import upsert_product

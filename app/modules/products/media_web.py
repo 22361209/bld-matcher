@@ -9,7 +9,7 @@ from app.drawings import product_drawing_path
 from app.modules.products.factory import get_product_service
 from app.modules.products.service import ProductNotFoundError
 from app.product_media import resolve_product_image_path, resolve_product_image_thumb_path
-from app.security import actor_name, login_required, permission_required
+from app.security import actor_name, permission_required
 
 
 logger = logging.getLogger(__name__)
@@ -19,12 +19,14 @@ _MISSING_THUMBNAIL_SVG = b"""<svg xmlns="http://www.w3.org/2000/svg" width="160"
 
 def register(app) -> None:
     @app.get("/products/drawings/batch")
+    @permission_required("view_products")
+    @permission_required("view_product_drawings")
     @permission_required("edit_products")
     def batch_drawings():
         return render_template("drawing_batch_placeholder.html")
 
     @app.get("/product-images/<path:name>")
-    @login_required
+    @permission_required("view_products")
     def product_image_data(name: str):
         path = resolve_product_image_path(name)
         if not path:
@@ -33,7 +35,7 @@ def register(app) -> None:
         return send_file(path)
 
     @app.get("/product-image-thumbs/<path:name>")
-    @login_required
+    @permission_required("view_products")
     def product_image_thumb_data(name: str):
         path = resolve_product_image_thumb_path(name)
         if not path:
@@ -44,6 +46,8 @@ def register(app) -> None:
         return send_file(path)
 
     @app.post("/products/<int:product_id>/drawing")
+    @permission_required("view_products")
+    @permission_required("view_product_drawings")
     @permission_required("edit_products")
     def upload_product_drawing(product_id: int):
         file = request.files.get("drawing")
@@ -71,7 +75,7 @@ def register(app) -> None:
         return redirect(url_for("products", bld=product["bld_no"]) + "#products-results")
 
     @app.get("/products/<int:product_id>/drawing")
-    @login_required
+    @permission_required("view_product_drawings")
     def product_drawing(product_id: int):
         try:
             product = get_product_service().get(product_id).web_payload()
@@ -96,6 +100,7 @@ def register(app) -> None:
         return url_for("edit_product", product_id=product_id)
 
     @app.post("/products/<int:product_id>/images/<int:slot>/delete")
+    @permission_required("view_products")
     @permission_required("edit_products")
     def delete_product_image(product_id: int, slot: int):
         if not 1 <= slot <= 5:
@@ -115,6 +120,8 @@ def register(app) -> None:
         return redirect(target)
 
     @app.post("/products/<int:product_id>/drawing/delete")
+    @permission_required("view_products")
+    @permission_required("view_product_drawings")
     @permission_required("edit_products")
     def delete_product_drawing(product_id: int):
         embedded = request.form.get("embedded") == "1"

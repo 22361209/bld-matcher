@@ -71,6 +71,8 @@ CREATE TABLE IF NOT EXISTS users (
   display_name TEXT DEFAULT '',
   password_hash TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'viewer',
+  default_page TEXT NOT NULL DEFAULT '',
+  default_mobile_page TEXT NOT NULL DEFAULT '',
   active INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL

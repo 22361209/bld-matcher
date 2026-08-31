@@ -1,0 +1,14 @@
+{
+  "date": "2026-08-31",
+  "version": "unreleased",
+  "title": "账号默认页面与七天登录会话",
+  "entries": [
+    "每个账号可在账号设置中分别选择桌面端和移动端有权访问的登录默认页面，权限变化后会自动回退到仍可访问的页面。",
+    "网页登录状态最长保留七天并随使用滚动续期，主动退出仍会立即清除会话。"
+  ],
+  "impact": {
+    "data": "migrations-040-and-041-add-desktop-and-mobile-user-default-pages",
+    "api": "compatible",
+    "operations": "restart-required"
+  }
+}

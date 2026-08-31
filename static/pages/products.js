@@ -247,6 +247,9 @@ if (document.body.dataset.page === "products.list") {
   const productModalNote = productModal?.querySelector("[data-product-modal-note]");
   const drawingUnavailableModal = document.querySelector("[data-drawing-unavailable-modal]");
   const drawingUnavailableMessage = drawingUnavailableModal?.querySelector("[data-drawing-unavailable-message]");
+  const productDetailDialog = document.querySelector("[data-product-detail-dialog]");
+  const productDetailContent = productDetailDialog?.querySelector("[data-product-detail-content]");
+  let productDetailTrigger = null;
   const productEditModal = document.querySelector("#product-edit-modal");
   const productEditFrame = document.querySelector("#product-edit-frame");
   const resetModalPosition = (modal) => {
@@ -334,6 +337,19 @@ if (document.body.dataset.page === "products.list") {
     drawingUnavailableModal?.setAttribute("aria-hidden", "true");
     document.body.classList.remove("modal-open");
   };
+  const closeProductDetailDialog = () => {
+    if (!(productDetailDialog instanceof HTMLDialogElement)) return;
+    if (productDetailDialog.open) productDetailDialog.close();
+  };
+  const openProductDetailDialog = (trigger) => {
+    if (!(productDetailDialog instanceof HTMLDialogElement) || !(productDetailContent instanceof HTMLElement)) return;
+    const template = trigger.closest("[data-product-mobile-card]")?.querySelector("[data-product-detail-template]");
+    if (!(template instanceof HTMLTemplateElement)) return;
+    productDetailTrigger = trigger;
+    productDetailContent.replaceChildren(template.content.cloneNode(true));
+    productDetailDialog.showModal();
+    productDetailDialog.querySelector("[data-close-product-detail-dialog]")?.focus();
+  };
   const openProductEditModal = (url) => {
     if (!productEditModal || !productEditFrame) return;
     resetModalPosition(productEditModal);
@@ -361,6 +377,14 @@ if (document.body.dataset.page === "products.list") {
   });
   document.querySelectorAll("[data-close-drawing-unavailable-modal]").forEach((element) => {
     element.addEventListener("click", closeDrawingUnavailableModal);
+  });
+  document.querySelectorAll("[data-close-product-detail-dialog]").forEach((element) => {
+    element.addEventListener("click", closeProductDetailDialog);
+  });
+  productDetailDialog?.addEventListener("close", () => {
+    productDetailTrigger?.focus();
+    productDetailTrigger = null;
+    productDetailContent?.replaceChildren();
   });
   document.querySelectorAll("[data-close-product-edit-modal]").forEach((element) => {
     element.addEventListener("click", closeProductEditModal);
@@ -519,6 +543,12 @@ if (document.body.dataset.page === "products.list") {
       event.preventDefault();
       drawingUnavailable.closest("[data-bld-action-menu]")?.removeAttribute("open");
       openDrawingUnavailableModal(drawingUnavailable.dataset.productBldNo);
+      return;
+    }
+    const detailTrigger = event.target.closest("[data-product-detail-trigger]");
+    if (detailTrigger instanceof HTMLButtonElement) {
+      event.preventDefault();
+      openProductDetailDialog(detailTrigger);
       return;
     }
     const imageLink = event.target.closest(".image-link");

@@ -256,7 +256,7 @@ def dynamic_route():
                 "pages/home.js",
             ),
             "internal_api_key.html": ("pages/api_keys.css",),
-            "login.html": ("pages/login.css",),
+            "login.html": ("pages/login.css", "pages/login.js"),
             "material_drawings.html": ("pages/material_drawings.css", "pages/material_drawings.js"),
             "materials.html": ("pages/materials.css", "pages/history.css"),
             "product_form.html": ("pages/products.css",),

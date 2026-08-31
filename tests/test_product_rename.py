@@ -192,14 +192,14 @@ class ProductRenameTests(WebAppTestBase):
 
         response = self.client.get("/products/K-RENAME-EDITOR/rename")
         self.assertEqual(response.status_code, 302)
-        self.assertTrue(response.headers["Location"].endswith("/"))
+        self.assertTrue(response.headers["Location"].endswith("/products"))
 
         response = self.client.post(
             "/products/K-RENAME-EDITOR/rename",
             data={"new_bld_no": "K-RENAME-EDITOR-NEW"},
         )
         self.assertEqual(response.status_code, 302)
-        self.assertTrue(response.headers["Location"].endswith("/"))
+        self.assertTrue(response.headers["Location"].endswith("/products"))
         self.assertTrue(self._bld_exists("K-RENAME-EDITOR"))
         self.assertFalse(self._bld_exists("K-RENAME-EDITOR-NEW"))
 

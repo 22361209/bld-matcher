@@ -150,6 +150,24 @@ class AdminService:
             unit_of_work.repository.change_password(user_id, new_password, actor=actor)
             unit_of_work.commit()
 
+    def update_default_pages(
+        self,
+        user_id: int,
+        default_page: object,
+        default_mobile_page: object,
+        *,
+        actor: str,
+    ) -> None:
+        with self.unit_of_work_factory() as unit_of_work:
+            unit_of_work.repository.begin_write()
+            unit_of_work.repository.update_default_pages(
+                user_id,
+                default_page,
+                default_mobile_page,
+                actor=actor,
+            )
+            unit_of_work.commit()
+
     def update_user_overrides(self, user_id: int, overrides: object, *, actor: str) -> None:
         with self.unit_of_work_factory() as unit_of_work:
             unit_of_work.repository.begin_write()

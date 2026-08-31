@@ -5,7 +5,7 @@ from dataclasses import replace
 
 from flask import flash, jsonify, redirect, render_template, request, url_for
 
-from app.security import actor_name, can, login_required, permission_required, wants_json_response
+from app.security import actor_name, can, permission_required, wants_json_response
 
 from .domain import CustomerValidationError
 from .factory import get_customer_service
@@ -151,7 +151,7 @@ def register(app) -> None:
         )
 
     @app.get("/customers/lookup")
-    @login_required
+    @permission_required("view_customers")
     def customer_lookup():
         query = request.args.get("q", "")
         limit_text = request.args.get("limit", "").strip()

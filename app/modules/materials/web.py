@@ -14,7 +14,7 @@ from app.helpers import (
     user_recent_outputs,
     user_upload_path,
 )
-from app.security import actor_name, can, login_required, permission_required
+from app.security import actor_name, can, permission_required
 
 from .factory import get_material_service
 from .infrastructure import MaterialImportBusyError
@@ -35,7 +35,7 @@ def _request_page() -> int:
 
 def register(app) -> None:
     @app.get("/materials")
-    @login_required
+    @permission_required("generate_material_sheet")
     def materials():
         service = get_material_service()
         material_history_query = request.args.get("material_history_q", "").strip()
@@ -54,7 +54,7 @@ def register(app) -> None:
         )
 
     @app.get("/materials/items")
-    @login_required
+    @permission_required("manage_material_items")
     def material_items():
         service = get_material_service()
         query = request.args.get("q", "")
@@ -108,7 +108,7 @@ def register(app) -> None:
         )
 
     @app.get("/materials/template")
-    @login_required
+    @permission_required("manage_material_items")
     def download_material_template():
         path = get_material_service().create_template()
         return send_file(path, as_attachment=True, download_name="生产计划模板.xlsx")

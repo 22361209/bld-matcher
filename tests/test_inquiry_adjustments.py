@@ -290,7 +290,7 @@ class ProductLookupAdjustmentTest(unittest.TestCase):
 
         @app.before_request
         def load_test_user() -> None:
-            g.user = {"username": "tester", "role": "viewer", "permissions": {"add_customer_prices"}}
+            g.user = {"username": "tester", "role": "viewer", "permissions": {"add_customer_prices", "view_products"}}
 
         options_web.register(app)
         records = [

@@ -78,7 +78,7 @@
         <p>可选附件，不影响产品图片上传。</p>
       </div>
     </div>
-    {% if product and product.drawing_available %}
+    {% if product and product.drawing_available and can("view_product_drawings") %}
       <div class="product-media-drawing-card">
         <a class="product-media-drawing-preview" href="{{ url_for('product_drawing', product_id=product.id) }}" target="_blank" rel="noopener" data-product-media-drawing-preview>
           <span class="product-media-drawing-filetype" aria-hidden="true">PDF</span>
@@ -92,6 +92,8 @@
           data-confirm="确认删除 {{ product.bld_no }} 的 PDF 图纸？文件会移入归档目录保留。"
           aria-label="删除 {{ product.bld_no }} 的 PDF 图纸">×</button>
       </div>
+    {% elif product and product.drawing_available %}
+      <p class="note">无图纸查看权限。</p>
     {% else %}
       <input class="product-media-drawing-input" type="file" name="drawing" accept="application/pdf,.pdf" data-product-media-drawing-input tabindex="-1" aria-hidden="true">
       <div class="product-media-intake product-media-drawing-intake" data-product-media-drawing-intake tabindex="0">

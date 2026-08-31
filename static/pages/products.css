@@ -129,6 +129,64 @@
   display: none;
 }
 
+.product-detail-dialog {
+  --linear-surface: var(--precision-paper);
+  --linear-line: var(--precision-line);
+  --linear-text: var(--precision-ink);
+  --linear-muted: var(--precision-muted);
+  --linear-focus: rgba(32, 93, 132, 0.2);
+  width: min(560px, calc(100vw - 28px));
+  max-height: calc(100vh - 28px);
+  padding: 0;
+  border: 1px solid var(--linear-line);
+  border-radius: 8px;
+  background: var(--linear-surface);
+  color: var(--linear-text);
+  box-shadow: 0 22px 56px rgb(14 24 35 / 28%);
+}
+
+.product-detail-dialog::backdrop {
+  background: rgb(11 18 26 / 56%);
+}
+
+.product-detail-dialog-panel {
+  max-height: calc(100vh - 28px);
+  overflow: auto;
+  padding: 16px;
+}
+
+.product-detail-dialog .modal-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.product-detail-list {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0 0;
+}
+
+.product-detail-list div {
+  display: grid;
+  gap: 3px;
+  padding-top: 10px;
+  border-top: 1px solid var(--linear-line);
+}
+
+.product-detail-list dt {
+  color: var(--linear-muted);
+  font-size: 12px;
+  font-weight: 720;
+}
+
+.product-detail-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 @media (max-width: 760px) {
   .products-command .search-form {
     display: grid;
@@ -224,6 +282,23 @@
     min-width: 0;
   }
 
+  .product-mobile-card-detail-trigger {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .product-mobile-card-detail-trigger:focus-visible {
+    outline: 2px solid var(--linear-focus);
+    outline-offset: 3px;
+  }
+
   .product-mobile-card-heading {
     display: flex;
     align-items: start;
@@ -252,6 +327,7 @@
   .product-mobile-card-brand,
   .product-mobile-card-summary,
   .product-mobile-card-model {
+    display: block;
     margin: 0;
     overflow: hidden;
     text-overflow: ellipsis;

@@ -12,7 +12,7 @@ from app.modules.products.domain import (
 )
 from app.modules.products.factory import get_product_service
 from app.product_status import format_product_status
-from app.security import actor_name, can_any, login_required, permission_required
+from app.security import actor_name, can_any, permission_required
 
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 def register(app) -> None:
     @app.get("/products/options")
-    @login_required
+    @permission_required("view_products")
     def product_options():
         values = get_product_service().option_values()
         response = jsonify(
@@ -38,7 +38,7 @@ def register(app) -> None:
         return response
 
     @app.get("/products/lookup")
-    @login_required
+    @permission_required("view_products")
     def product_lookup():
         active_only = request.args.get("active_only") == "1"
         try:

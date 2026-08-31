@@ -1,0 +1,15 @@
+{
+  "date": "2026-08-31",
+  "version": "unreleased",
+  "title": "产品目录查看权限与移动端详情",
+  "entries": [
+    "产品目录、图片和 PDF 图纸改为独立查看权限；现有角色升级后保留原有访问，新建角色需由管理员明确授权。",
+    "只有产品目录查看权限的账号登录后直接进入产品目录；无权访问其他业务页面会提示后返回可访问页面，接口请求仍返回 403 JSON。",
+    "手机端产品卡片新增只读详情弹窗，价格和图纸入口继续按账号权限显示。"
+  ],
+  "impact": {
+    "data": "migration-039-adds-product-view-permissions",
+    "api": "compatible",
+    "operations": "restart-required"
+  }
+}

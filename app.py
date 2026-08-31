@@ -5,7 +5,7 @@ from pathlib import Path
 from flask import Flask, abort, flash, g, jsonify, redirect, request, session, url_for
 from werkzeug.exceptions import RequestEntityTooLarge
 
-from app.config import APP_DEBUG, APP_HOST, APP_PORT, DB_PATH, MAX_CONTENT_LENGTH, MAX_UPLOAD_MB, PRODUCT_SYNC_MAX_UPLOAD_MB, SECRET_KEY, assert_production_secrets
+from app.config import APP_DEBUG, APP_HOST, APP_PORT, DB_PATH, MAX_CONTENT_LENGTH, MAX_UPLOAD_MB, PERMANENT_SESSION_LIFETIME, PRODUCT_SYNC_MAX_UPLOAD_MB, SECRET_KEY, assert_production_secrets
 from app.database import connect
 from app.helpers import download_name, product_image_thumb_url, product_image_url, product_image_urls, product_item_display_lines
 from app.modules.admin.factory import get_admin_service
@@ -33,6 +33,10 @@ def create_app() -> Flask:
     web_app = Flask(__name__)
     web_app.secret_key = SECRET_KEY
     web_app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
+    web_app.config["PERMANENT_SESSION_LIFETIME"] = PERMANENT_SESSION_LIFETIME
+    web_app.config["SESSION_REFRESH_EACH_REQUEST"] = True
+    web_app.config["SESSION_COOKIE_HTTPONLY"] = True
+    web_app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
     register_request_context(web_app)
     web_app.jinja_env.globals["can"] = can
     web_app.jinja_env.globals["can_any"] = can_any

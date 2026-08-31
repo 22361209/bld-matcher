@@ -11,6 +11,9 @@ from app.migrations import (
     MIGRATIONS,
     _add_customer_identity_and_material_drawing_permissions,
     _add_editable_roles_and_user_permission_overrides,
+    _add_product_view_permissions,
+    _add_user_default_page,
+    _add_user_mobile_default_page,
     _grant_view_product_prices_to_existing_roles,
     _revoke_view_product_prices_permission,
     _split_granular_permissions,
@@ -144,7 +147,7 @@ class AdminPermissionTest(unittest.TestCase):
         self.assertEqual(roles[ADMIN_ROLE_KEY]["is_system"], 1)
         self.assertEqual(roles["editor"]["is_system"], 0)
         self.assertIsNotNone(migration)
-        self.assertEqual(MIGRATIONS[-1][0], "038_product_option_value_sort_order")
+        self.assertEqual(MIGRATIONS[-1][0], "041_user_mobile_default_page")
 
     def test_migration_seeds_unknown_historical_roles_idempotently(self) -> None:
         historical_path = Path(self.temporary.name) / "historical.sqlite3"
@@ -356,6 +359,94 @@ class AdminPermissionTest(unittest.TestCase):
         self.assertIn("change_customer_identity", ASSIGNABLE_PERMISSION_KEYS)
         self.assertIn("view_material_drawings", ASSIGNABLE_PERMISSION_KEYS)
 
+    def test_migration_039_preserves_existing_product_reads_without_granting_future_roles(self) -> None:
+        historical_path = Path(self.temporary.name) / "historical-039.sqlite3"
+        connection = sqlite3.connect(historical_path)
+        connection.row_factory = sqlite3.Row
+        _add_editable_roles_and_user_permission_overrides(connection)
+        connection.execute("DELETE FROM role_permissions WHERE permission IN ('view_products', 'view_product_drawings')")
+        connection.execute(
+            """
+            INSERT INTO roles (role_key, name, description, is_system, created_at, updated_at)
+            VALUES ('existing-role', '既有角色', '', 0, '2026-01-01', '2026-01-01')
+            """
+        )
+
+        _add_product_view_permissions(connection)
+        _add_product_view_permissions(connection)
+        connection.execute(
+            """
+            INSERT INTO roles (role_key, name, description, is_system, created_at, updated_at)
+            VALUES ('future-role', '后建角色', '', 0, '2026-01-01', '2026-01-01')
+            """
+        )
+        existing_permissions = {
+            row["permission"]
+            for row in connection.execute(
+                "SELECT permission FROM role_permissions WHERE role_key = 'existing-role'"
+            ).fetchall()
+        }
+        future_permissions = {
+            row["permission"]
+            for row in connection.execute(
+                "SELECT permission FROM role_permissions WHERE role_key = 'future-role'"
+            ).fetchall()
+        }
+        connection.close()
+
+        self.assertEqual(existing_permissions, {"view_products", "view_product_drawings"})
+        self.assertEqual(future_permissions, set())
+
+    def test_migration_040_adds_user_default_page_idempotently(self) -> None:
+        historical_path = Path(self.temporary.name) / "historical-040.sqlite3"
+        connection = sqlite3.connect(historical_path)
+        connection.row_factory = sqlite3.Row
+        connection.executescript(
+            """
+            CREATE TABLE users (
+              id INTEGER PRIMARY KEY,
+              username TEXT NOT NULL
+            );
+            INSERT INTO users (id, username) VALUES (1, 'legacy');
+            """
+        )
+
+        _add_user_default_page(connection)
+        _add_user_default_page(connection)
+        columns = {row["name"] for row in connection.execute("PRAGMA table_info(users)").fetchall()}
+        default_page = connection.execute("SELECT default_page FROM users WHERE id = 1").fetchone()[0]
+        connection.close()
+
+        self.assertIn("default_page", columns)
+        self.assertEqual(default_page, "")
+
+    def test_migration_041_adds_mobile_default_page_idempotently(self) -> None:
+        historical_path = Path(self.temporary.name) / "historical-041.sqlite3"
+        connection = sqlite3.connect(historical_path)
+        connection.row_factory = sqlite3.Row
+        connection.executescript(
+            """
+            CREATE TABLE users (
+              id INTEGER PRIMARY KEY,
+              username TEXT NOT NULL,
+              default_page TEXT NOT NULL DEFAULT ''
+            );
+            INSERT INTO users (id, username, default_page) VALUES (1, 'legacy', 'products');
+            """
+        )
+
+        _add_user_mobile_default_page(connection)
+        _add_user_mobile_default_page(connection)
+        columns = {row["name"] for row in connection.execute("PRAGMA table_info(users)").fetchall()}
+        pages = connection.execute(
+            "SELECT default_page, default_mobile_page FROM users WHERE id = 1"
+        ).fetchone()
+        connection.close()
+
+        self.assertIn("default_mobile_page", columns)
+        self.assertEqual(pages["default_page"], "products")
+        self.assertEqual(pages["default_mobile_page"], "")
+
     def test_role_changes_and_user_overrides_recalculate_immediately(self) -> None:
         role_key = self.service.save_role(
             {"name": "询价专员", "description": "处理询价"},
@@ -399,7 +490,10 @@ class AdminPermissionTest(unittest.TestCase):
         with connect(self.database_path) as connection:
             user = get_user(connection, user_id)
         assert user is not None
-        self.assertEqual(set(user["permissions"]), {"view_customer_prices", "view_material_drawings"})
+        self.assertEqual(
+            set(user["permissions"]),
+            {"view_customer_prices", "view_material_drawings", "view_products", "view_product_drawings"},
+        )
         self.assertEqual(
             user["permission_overrides"],
             {"manage_aliases": "deny", "view_customer_prices": "allow"},

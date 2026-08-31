@@ -24,7 +24,7 @@ class NavigationIdentityTest(unittest.TestCase):
             template,
         )
         self.assertIn("url_for('change_password')", template)
-        self.assertIn("修改密码", template)
+        self.assertIn("账号设置", template)
         self.assertIn('{% if can("manage_users") %}', template)
         self.assertIn('{% if can("view_logs") %}', template)
         self.assertIn('{% if can("sync_product_data") %}', template)
@@ -39,6 +39,7 @@ class NavigationIdentityTest(unittest.TestCase):
         self.assertIn('class="nav-links" id="mobile-workspace-nav" data-mobile-workspace-menu', template)
         self.assertIn('{% if active_page == \'match\' %}', template)
         self.assertIn('{% if active_page == \'products\' %}', template)
+        self.assertIn('{% if can("view_products") %}\n    <a class="nav-mobile-core', template)
         self.assertIn('{% if can("view_customers") %}\n      <a class="nav-mobile-secondary', template)
         self.assertIn('{% if can("view_customer_prices") %}\n      <a class="nav-mobile-secondary', template)
         self.assertIn('{% if can("view_contracts") %}\n      <div class="nav-menu contract-nav-menu nav-mobile-secondary"', template)

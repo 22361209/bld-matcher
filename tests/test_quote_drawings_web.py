@@ -116,7 +116,7 @@ class QuoteDrawingRouteTest(unittest.TestCase):
         with patch.object(quotes_drawings_web_module, "get_quote_service", return_value=service):
             response = app.test_client().post("/quotes/7/drawings/link", data={"drawing_file_id": "11"})
         self.assertEqual(response.status_code, 302)
-        self.assertTrue(response.headers["Location"].endswith("/"))
+        self.assertTrue(response.headers["Location"].endswith("/quotes"))
         self.assertEqual(calls, [])
 
     def test_link_calls_service_and_redirects_back(self) -> None:
@@ -141,7 +141,7 @@ class QuoteDrawingRouteTest(unittest.TestCase):
         with patch.object(quotes_drawings_web_module, "get_quote_service", return_value=service):
             response = app.test_client().post("/quotes/7/drawings/21/unlink")
         self.assertEqual(response.status_code, 302)
-        self.assertTrue(response.headers["Location"].endswith("/"))
+        self.assertTrue(response.headers["Location"].endswith("/quotes"))
         self.assertEqual(calls, [])
 
     def test_unlink_calls_service_and_redirects_back(self) -> None:

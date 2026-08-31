@@ -47,7 +47,7 @@ class TestWebQuotesContractsCustomers(WebAppTestBase):
             role_key = save_role(
                 conn,
                 {"name": role_name, "description": "看不到产品单价但可以维护产品的角色"},
-                ["generate_match", "export_catalog", "generate_contract", "edit_products"],
+                ["view_products", "generate_match", "export_catalog", "generate_contract", "edit_products"],
                 actor="tester",
             )
             save_user(
@@ -386,19 +386,19 @@ class TestWebQuotesContractsCustomers(WebAppTestBase):
             with self.subTest(path=path):
                 response = self.client.get(path, follow_redirects=False)
                 self.assertEqual(response.status_code, 302)
-                self.assertTrue(response.headers["Location"].endswith("/"))
+                self.assertTrue(response.headers["Location"].endswith("/products"))
 
         response = self.client.get(
             "/purchase-contracts/product-lookup", query_string={"bld": "K-OUT-001"}, follow_redirects=False
         )
         self.assertEqual(response.status_code, 302)
-        self.assertTrue(response.headers["Location"].endswith("/"))
+        self.assertTrue(response.headers["Location"].endswith("/products"))
 
         for path in ["/purchase-contracts/generate", "/sales-contracts/generate"]:
             with self.subTest(path=path):
                 response = self.client.post(path, follow_redirects=False)
                 self.assertEqual(response.status_code, 302)
-                self.assertTrue(response.headers["Location"].endswith("/"))
+                self.assertTrue(response.headers["Location"].endswith("/products"))
         self.client.post("/logout")
 
     def test_quote_and_tube_result_fragments_keep_list_state_without_a_document_shell(self):
@@ -1033,5 +1033,5 @@ class TestWebQuotesContractsCustomers(WebAppTestBase):
         self.assertNotIn("报价记录", editor_page)
         response = self.client.get("/quotes", follow_redirects=False)
         self.assertEqual(response.status_code, 302)
-        self.assertTrue(response.headers["Location"].endswith("/"))
+        self.assertTrue(response.headers["Location"].endswith("/products"))
         self.client.post("/logout")

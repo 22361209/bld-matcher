@@ -32,6 +32,7 @@
         <form action="{{ url_for('do_login') }}" method="post" class="form vertical">
           {{ csrf_field() }}
           <input type="hidden" name="next" value="{{ next }}">
+          <input type="hidden" name="client_mode" value="" data-login-client-mode>
           <label>
             登录名
             <input name="username" autocomplete="username" required autofocus>
@@ -44,4 +45,8 @@
         </form>
         </div>
       </section>
+{% endblock %}
+
+{% block page_scripts %}
+  <script type="module" src="{{ url_for('static', filename='pages/login.js', v=static_version('pages/login.js')) }}"></script>
 {% endblock %}

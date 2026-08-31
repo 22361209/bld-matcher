@@ -6,7 +6,7 @@ from math import ceil
 
 from flask import flash, redirect, render_template, request, url_for
 
-from app.security import actor_name, login_required, permission_required
+from app.security import actor_name, permission_required
 
 from .domain import TUBE_TYPES, spec_display_lines, tolerance_only
 from .factory import get_tube_service
@@ -132,12 +132,12 @@ def _tube_list_context() -> dict[str, object]:
 
 def register(app) -> None:
     @app.get("/tubes")
-    @login_required
+    @permission_required("manage_tube_items")
     def tube_items():
         return render_template("tubes.html", **_tube_list_context())
 
     @app.get("/tubes/fragment")
-    @login_required
+    @permission_required("manage_tube_items")
     def tube_items_fragment():
         response = app.make_response(render_template("_tube_results.html", **_tube_list_context()))
         response.headers["Cache-Control"] = "no-store"

@@ -8,6 +8,13 @@
       "rule": "/"
     },
     {
+      "endpoint": "save_default_page",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/account/default-page"
+    },
+    {
       "endpoint": "change_password",
       "methods": [
         "GET"

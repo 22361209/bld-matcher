@@ -18,6 +18,7 @@ from app.modules.admin.persistence import (
     list_users,
     save_role,
     save_user,
+    update_default_pages,
     update_role_permissions,
     update_user_overrides,
 )
@@ -86,6 +87,23 @@ class SQLiteAdminRepository:
 
     def change_password(self, user_id: int, new_password: str, *, actor: str) -> None:
         change_password(self.connection, user_id, new_password, actor=actor, commit=False)
+
+    def update_default_pages(
+        self,
+        user_id: int,
+        default_page: object,
+        default_mobile_page: object,
+        *,
+        actor: str,
+    ) -> None:
+        update_default_pages(
+            self.connection,
+            user_id,
+            default_page,
+            default_mobile_page,
+            actor=actor,
+            commit=False,
+        )
 
     def update_user_overrides(self, user_id: int, overrides: object, *, actor: str) -> None:
         update_user_overrides(self.connection, user_id, overrides, actor=actor, commit=False)

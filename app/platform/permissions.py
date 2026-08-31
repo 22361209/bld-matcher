@@ -25,6 +25,8 @@ PERMISSION_DEFINITIONS: tuple[PermissionDefinition, ...] = (
         assignable=False,
     ),
     PermissionDefinition("view_logs", "查看操作日志", "查看操作日志和系统更新记录。", "系统与审计"),
+    PermissionDefinition("view_products", "查看产品目录", "查看产品目录、产品详情和产品图片。", "产品目录"),
+    PermissionDefinition("view_product_drawings", "查看产品图纸", "查看、预览和下载产品 PDF 图纸。", "产品目录"),
     PermissionDefinition("import_catalog", "导入产品目录", "下载目录模板并预览、确认目录导入。", "产品目录"),
     PermissionDefinition("export_catalog", "导出产品目录", "按当前筛选条件导出完整产品目录。", "产品目录"),
     PermissionDefinition("edit_products", "维护产品资料", "新增、编辑、停用产品及维护图片和图纸。", "产品目录"),
@@ -120,6 +122,8 @@ LEGACY_ROLE_DESCRIPTIONS = {
 LEGACY_ROLE_PERMISSIONS = {
     ADMIN_ROLE_KEY: set(ALL_PERMISSION_KEYS),
     "editor": {
+        "view_products",
+        "view_product_drawings",
         "edit_products",
         "manage_aliases",
         "generate_match",
@@ -128,11 +132,13 @@ LEGACY_ROLE_PERMISSIONS = {
         "view_material_drawings",
     },
     "user": {
+        "view_products",
+        "view_product_drawings",
         "generate_match",
         "generate_material_sheet",
         "view_material_drawings",
     },
-    "viewer": {"view_material_drawings"},
+    "viewer": {"view_products", "view_product_drawings", "view_material_drawings"},
 }
 
 

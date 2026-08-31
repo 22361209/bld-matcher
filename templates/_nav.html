@@ -6,7 +6,9 @@
   <button class="mobile-workspace-trigger" type="button" aria-expanded="false" aria-controls="mobile-workspace-nav" data-mobile-workspace-trigger>BLD 工作台<span aria-hidden="true">⌄</span></button>
   <div class="nav-primary">
     <div class="nav-links" id="mobile-workspace-nav" data-mobile-workspace-menu>
+    {% if can("generate_match") %}
     <a class="nav-mobile-core {% if active_page == 'match' %}active{% endif %}" href="{{ url_for('index') }}">询价处理</a>
+    {% endif %}
     {% if can("view_customers") %}
       <a class="nav-mobile-secondary {% if active_page == 'customers' %}active{% endif %}" href="{{ url_for('customers') }}">客户信息</a>
     {% endif %}
@@ -22,14 +24,22 @@
         </div>
       </div>
     {% endif %}
+    {% if can("view_products") %}
     <a class="nav-mobile-core {% if active_page == 'products' %}active{% endif %}" href="{{ url_for('products') }}">产品目录</a>
+    {% endif %}
+    {% if can("manage_tube_items") %}
     <a class="nav-mobile-secondary {% if active_page == 'tubes' %}active{% endif %}" href="{{ url_for('tube_items') }}">管件资料</a>
+    {% endif %}
+    {% if can("generate_material_sheet") %}
     <div class="nav-menu nav-mobile-secondary">
       <a class="{% if active_page in ['materials', 'material_items'] %}active{% endif %}" href="{{ url_for('materials') }}">生产料单</a>
+      {% if can("manage_material_items") %}
       <div class="nav-menu-panel">
         <a class="{% if active_page == 'material_items' %}active{% endif %}" href="{{ url_for('material_items') }}">材料明细</a>
       </div>
+      {% endif %}
     </div>
+    {% endif %}
     {% if can("view_material_drawings") %}
       <a class="nav-mobile-secondary {% if active_page == 'material_drawings' %}active{% endif %}" href="{{ url_for('material_drawings') }}">物料图纸</a>
     {% endif %}
@@ -42,7 +52,7 @@
         <span class="nav-user-copy"><strong>{{ g.user.display_name or g.user.username }}</strong><small>{{ g.user.username }} · {{ g.user.role_name or ROLE_LABELS.get(g.user.role, g.user.role) }}</small></span>
       </summary>
       <div class="admin-menu-panel">
-        <a class="{% if active_page == 'account_password' %}active{% endif %}" href="{{ url_for('change_password') }}">修改密码</a>
+        <a class="{% if active_page == 'account_password' %}active{% endif %}" href="{{ url_for('change_password') }}">账号设置</a>
         {% if can("manage_users") %}
           <a class="{% if active_page == 'users' %}active{% endif %}" href="{{ url_for('users') }}">账号管理</a>
           <a class="{% if active_page == 'internal_api_key' %}active{% endif %}" href="{{ url_for('internal_api_key') }}">内部 API Key</a>

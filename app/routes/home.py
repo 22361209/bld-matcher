@@ -10,7 +10,7 @@ from app.helpers import all_recent_outputs, download_name, user_output_dir, user
 from app.matcher import ProductCatalog, catalog_summary
 from app.modules.inquiry.factory import get_inquiry_service
 from app.modules.products.factory import get_product_service
-from app.security import can, login_required, permission_required
+from app.security import can, permission_required
 
 
 QUICK_FILTER_LABELS = {
@@ -93,7 +93,7 @@ def _history_payload(query: str) -> dict:
 
 def register(app) -> None:
     @app.get("/")
-    @login_required
+    @permission_required("generate_match")
     def index():
         history_query = request.args.get("history_q", "").strip()
         quick_oe = request.args.get("quick_oe", "").strip()
@@ -136,13 +136,13 @@ def register(app) -> None:
         )
 
     @app.get("/history-files")
-    @login_required
+    @permission_required("generate_match")
     def inquiry_history_files():
         query = request.args.get("history_q", "").strip()
         return jsonify(_history_payload(query))
 
     @app.get("/download/<path:name>")
-    @login_required
+    @permission_required("generate_match")
     def download(name: str):
         candidates = []
         if "/" not in name:
