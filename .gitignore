@@ -48,3 +48,6 @@ tools/icon_build/
 
 # Temporary UI mockups not part of the application baseline
 tmp_login_mockup/
+
+# Local Playwright CLI scratch output
+.playwright-cli/

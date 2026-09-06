@@ -1,0 +1,15 @@
+{
+  "date": "2026-09-05",
+  "version": "unreleased",
+  "title": "例行依赖升级到最新稳定版本",
+  "entries": [
+    "Flask 3.0.3 升级到 3.1.3，gunicorn 22.0.0 升级到 26.2.0，Pillow 11.3.0 升级到 12.3.0，pillow-heif 1.1.1 升级到 1.6.0，reportlab 4.4.3 升级到 5.0.1，pydantic、ruff 等同步升级到最新兼容版本。",
+    "openpyxl、xlrd、xlwt、xlutils 已是最新版本，本次保持不变。",
+    "本次升级不改变任何页面、接口和数据格式，只更新依赖版本。"
+  ],
+  "impact": {
+    "data": "none",
+    "api": "compatible",
+    "operations": "restart-required"
+  }
+}
