@@ -13,6 +13,7 @@ TYPECHECK_PATHS = (
     "app/modules/admin",
     "app/modules/business_sync",
     "app/modules/contracts",
+    "app/modules/development",
     "app/modules/inquiry/alias_web.py",
     "app/modules/inquiry/download_web.py",
     "app/modules/inquiry/excel",
@@ -57,6 +58,8 @@ def main() -> int:
     run([sys.executable, "scripts/openapi_snapshot.py", "--check"])
     if not args.quick:
         run([sys.executable, "-m", "unittest", "discover", "-v"])
+        run([sys.executable, "-m", "pytest", "-q", "tests/test_development_core.py",
+             "tests/test_development_files.py", "tests/test_development_grid.py", "tests/test_development_lookup.py"])
     print("verification: ok")
     return 0
 

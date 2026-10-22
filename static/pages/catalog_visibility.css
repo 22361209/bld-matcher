@@ -1,0 +1,26 @@
+.catalog-visibility-controls {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.catalog-visibility-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.catalog-visibility-choices .check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+}
+
+.product-mobile-card > .catalog-visibility-controls {
+  grid-column: 1 / -1;
+}
+
+.catalog-visibility-controls [data-catalog-visibility-status]:empty {
+  display: none;
+}

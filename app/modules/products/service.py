@@ -58,6 +58,11 @@ class ProductVersionConflictError(RuntimeError):
         self.current_updated_at = current_updated_at
 
 
+class ProductCatalogVisibilityConflictError(RuntimeError):
+    def __init__(self) -> None:
+        super().__init__("产品已被其他操作更新，请刷新目录后重试。")
+
+
 class ProductService:
     def __init__(
         self,
@@ -416,6 +421,7 @@ class ProductService:
         filters: Mapping[str, object] | ProductFilters,
         export_format: str,
         actor: str,
+        language: str | None = None,
         include_price: bool = True,
     ) -> int:
         self.bootstrap_port()
@@ -426,6 +432,7 @@ class ProductService:
                     path,
                     filters=normalized,
                     export_format=export_format,
+                    language=language,
                     actor=actor,
                     include_price=include_price,
                 )
@@ -460,6 +467,27 @@ class ProductService:
                 if latest is None:
                     raise ProductNotFoundError(product_id)
                 raise ProductVersionConflictError(product_id, latest.updated_at)
+            unit_of_work.commit()
+        self.invalidate_catalog()
+        return product
+
+    def update_catalog_visibility(
+        self, product_id: int, *, language: str, visible: bool,
+        expected_visible: bool, expected_updated_at: str, actor: str,
+    ) -> ProductRecord:
+        if language not in {"en", "zh"} or not isinstance(visible, bool) or not isinstance(expected_visible, bool):
+            raise ValueError("目录可见设置无效。")
+        if not expected_updated_at or len(expected_updated_at) > 64:
+            raise ValueError("缺少产品版本，请刷新目录后重试。")
+        with self.unit_of_work_factory() as unit_of_work:
+            if unit_of_work.repository.get(product_id) is None:
+                raise ProductNotFoundError(product_id)
+            product = unit_of_work.repository.update_catalog_visibility(
+                product_id, language=language, visible=visible, expected_visible=expected_visible,
+                expected_updated_at=expected_updated_at, actor=actor,
+            )
+            if product is None:
+                raise ProductCatalogVisibilityConflictError()
             unit_of_work.commit()
         self.invalidate_catalog()
         return product

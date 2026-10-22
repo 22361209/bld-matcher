@@ -587,6 +587,8 @@ class TestWebMaterialsAndOperations(WebAppTestBase):
                 "039_product_view_permissions",
                 "040_user_default_page",
                 "041_user_mobile_default_page",
+                "042_bilingual_catalog",
+                "043_product_development_register",
             ],
         )
 

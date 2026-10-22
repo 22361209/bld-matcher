@@ -2,11 +2,16 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+import shutil
+import tempfile
 
 from app.database import connect
 
+from app.modules.products.catalog_language import CATALOG_FIELDS
+
 from ._comparison import (
     all_comparison_fields,
+    package_digest,
     columns,
     comparison_fields,
     incoming_status,
@@ -19,29 +24,40 @@ from ._comparison import (
 )
 from ._package_archive import PackageReader
 from ._schema import DATASETS
+from ._development import preview_aggregates
 
 
 IncomingNormalizer = Callable[[str, object], dict[str, object]]
 MediaSummarizer = Callable[[dict[str, object]], dict[str, object]]
 
 
-def preview_package(
+def _preview_package(
     database_path: Path,
     package_path: Path,
     *,
     read_package_fn: PackageReader,
     normalized_incoming_fn: IncomingNormalizer = normalized_incoming,
     media_summary_fn: MediaSummarizer = media_summary,
+    development_file_dir: Path | None = None,
+    allow_development: bool = True,
 ) -> dict[str, object]:
     manifest, payload = read_package_fn(package_path)
+    if "development" in payload and not allow_development:
+        raise ValueError("没有开发资料及文件访问权限。")
     summary: dict[str, dict[str, object]] = {}
     with connect(database_path) as connection:
+        if "development" in payload:
+            connection.execute("BEGIN")
         for key, incoming_rows in payload.items():
+            if key == "development":
+                summary[key] = preview_aggregates(connection, incoming_rows, development_file_dir)
+                continue
             table, identity, label = DATASETS[key]
             syncable_rows, ignored_inactive = syncable_incoming_rows(key, incoming_rows)
             record_columns = columns(connection, table)
             if any(
-                identity not in row or any(column not in row for column in record_columns)
+                identity not in row or any(column not in row for column in record_columns
+                                          if key != "products" or column not in CATALOG_FIELDS)
                 for row in incoming_rows
                 if isinstance(row, dict)
             ):
@@ -100,7 +116,7 @@ def preview_package(
                     if bool(row["active"]) and str(row[identity]) not in incoming_ids
                 )
             summary[key] = {"label": label, "counts": counts, "rows": rows, "conflicts": conflicts}
-        token = state_token(connection, package_path, tuple(payload))
+        token = state_token(connection, package_path, tuple(payload), development_file_dir=development_file_dir, development_rows=payload.get("development", []))
         missing_customers = unresolved_customers(connection, payload)
         customer_options = (
             [
@@ -118,3 +134,16 @@ def preview_package(
         "customer_options": customer_options,
         "media": media_summary_fn(manifest),
     }
+
+
+def preview_package(database_path: Path, package_path: Path, *, read_package_fn: PackageReader, **kwargs) -> dict[str, object]:
+    manifest, payload = read_package_fn(package_path)
+    if "development" not in payload:
+        return _preview_package(database_path, package_path, read_package_fn=lambda _path: (manifest, payload), **kwargs)
+    with tempfile.TemporaryDirectory(prefix="bld-development-preview-") as directory:
+        snapshot = Path(directory) / package_path.name
+        shutil.copyfile(package_path, snapshot)
+        result = _preview_package(database_path, snapshot, read_package_fn=read_package_fn, **kwargs)
+        if package_digest(snapshot) != package_digest(package_path):
+            raise ValueError("预览时数据包已变化，请重新上传预览。")
+        return result

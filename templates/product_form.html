@@ -33,9 +33,10 @@
             <textarea name="oe_no_2" rows="9" placeholder="补充 OE，每行一个">{{ product.oe_no_2 if product else '' }}</textarea>
           </label>
           <label class="full">
-            车型 / Models
+            英文车型 / Models
             <textarea name="models" rows="5" placeholder="可写多个车型">{{ product.models if product else '' }}</textarea>
           </label>
+          {{ product_option_fields.catalog_fields(product, 5) }}
           {% if can_any("add_customer_prices", "edit_customer_prices", "delete_customer_prices") %}
           <label>
             含税单价（人民币）

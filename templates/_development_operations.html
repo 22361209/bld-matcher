@@ -1,0 +1,20 @@
+<section class="development-operations"><strong>有序工艺路线</strong>
+  {% set task_operations = operations|selectattr('task_id', 'equalto', selected_component.task_id)|sort(attribute='sequence')|list %}
+  {% for operation in task_operations %}
+    {% set operation_key = 'operation-' ~ operation.id %}
+    <details class="development-disclosure"{% if form_key == operation_key %} open{% endif %}><summary>{{ operation.sequence }}. {{ operation.name }} · {{ operation.executor or '执行方待定' }} · {{ labels.get(operation.status, operation.status) }}</summary>
+      <form class="development-form" method="post" action="{{ url_for('development_update_operation', project_id=project.id, operation_id=operation.id) }}" data-development-form>
+        {{ hidden(operation_key) }}<input type="hidden" name="task_id" value="{{ selected_component.task_id }}"><fieldset{% if not can_edit %} disabled{% endif %}><legend>工序资料</legend><div class="development-field-grid">
+          {{ input(operation_key, 'sequence', '顺序号', operation, type='number', required=true) }}{{ input(operation_key, 'name', '工序名称', operation, required=true) }}{{ input(operation_key, 'executor', '执行方', operation) }}
+          {{ dates(operation_key, operation) }}{{ select(operation_key, 'status', '工序进度', [('not_started','未开始'),('in_progress','进行中'),('completed','已完成')], operation) }}{{ notes(operation_key, item=operation) }}
+        </div></fieldset>{{ actions('保存工序') }}
+      </form>
+    </details>
+  {% else %}<div class="empty-state">尚未登记工序。按顺序添加执行方、计划及完成情况。</div>{% endfor %}
+  {% if can_edit %}<details class="development-disclosure"{% if form_key == 'new-operation' %} open{% endif %}><summary>添加工序</summary><form class="development-form" method="post" action="{{ url_for('development_add_operation', project_id=project.id) }}" data-development-form>
+    {{ hidden('new-operation') }}<input name="task_id" value="{{ selected_component.task_id }}" type="hidden"><div class="development-field-grid">
+      {{ input('new-operation', 'sequence', '顺序号', default=(task_operations|length + 1)|string, type='number', required=true) }}{{ input('new-operation', 'name', '工序名称', required=true) }}{{ input('new-operation', 'executor', '执行方') }}
+      {{ dates('new-operation') }}{{ select('new-operation', 'status', '工序进度', [('not_started','未开始'),('in_progress','进行中'),('completed','已完成')], default='not_started') }}{{ notes('new-operation') }}
+    </div>{{ actions('添加工序') }}
+  </form></details>{% endif %}
+</section>

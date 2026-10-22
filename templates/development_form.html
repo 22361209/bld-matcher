@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% set active_page = "development" %}
+{% block page_title %}新建开发单{% endblock %}
+{% block page_id %}development.create{% endblock %}
+{% block page_type %}edit{% endblock %}
+{% block page_head %}<link rel="stylesheet" href="{{ url_for('static', filename='pages/development.css', v=static_version('pages/development.css')) }}">{% endblock %}
+{% block page_content %}
+  {% from '_development_fields.html' import input, notes with context %}
+  <section class="data-section development-panel">
+    <div class="workspace-command"><strong>登记新产品开发</strong><div class="command-actions"><a class="linear-button subtle" href="{{ url_for('development_list') }}">返回列表</a></div></div>
+    {% include '_development_errors.html' %}
+    <form method="post" action="{{ url_for('development_create') }}" class="development-form" data-development-form>
+      {{ csrf_field() }}<input name="form_key" value="project" type="hidden">
+      <div class="development-field-grid">
+        {{ input('project', 'core_number', '4 位核心系列', required=true, hint='例如 8461，仅用于归组') }}
+        {{ input('project', 'title', '开发单名称', required=true) }}
+        {{ input('project', 'owner_username', '负责人账号', default=g.user.username) }}
+        {{ input('project', 'planned_date', '计划完成日期', type='date') }}
+        {{ notes('project') }}
+      </div>
+      <p class="development-help">创建后登记 K8461LA、K8461RA 或单侧成品，再添加臂体、衬套、球头及子件。完整编码由你填写。</p>
+      <div class="form-actions"><button class="linear-button subtle" type="submit">创建开发单</button><a class="linear-button subtle" href="{{ url_for('development_list') }}">取消</a><span aria-live="polite" data-development-submit-status></span></div>
+    </form>
+  </section>
+{% endblock %}
+{% block page_scripts %}<script type="module" src="{{ url_for('static', filename='pages/development.js', v=static_version('pages/development.js')) }}"></script>{% endblock %}

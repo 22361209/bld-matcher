@@ -22,6 +22,7 @@ from .domain import (
     compact,
 )
 from .repository_context import ProductRepositoryContext
+from .catalog_brands import catalog_brand_label
 
 
 def _record(row: sqlite3.Row | None) -> ProductRecord | None:
@@ -36,6 +37,10 @@ def _record(row: sqlite3.Row | None) -> ProductRecord | None:
         oe_no_1=str(row["oe_no_1"] or ""),
         oe_no_2=str(row["oe_no_2"] or ""),
         models=str(row["models"] or ""),
+        item_zh=str(row["item_zh"] or "") if "item_zh" in keys else "",
+        models_zh=str(row["models_zh"] or "") if "models_zh" in keys else "",
+        catalog_visible_en=bool(row["catalog_visible_en"]) if "catalog_visible_en" in keys else True,
+        catalog_visible_zh=bool(row["catalog_visible_zh"]) if "catalog_visible_zh" in keys else True,
         price_cny=float(row["price_cny"]) if row["price_cny"] is not None else None,
         product_status=str(row["product_status"] or "") if "product_status" in keys else "",
         image_path=str(row["image_path"] or ""),
@@ -80,6 +85,7 @@ def _option_values(
     row: sqlite3.Row,
     *,
     field: str,
+    language: str = "en",
 ) -> list[tuple[str, str]]:
     values: list[tuple[str, str]] = []
     if field == "brand":
@@ -91,15 +97,15 @@ def _option_values(
             if not token or key in seen_tokens:
                 continue
             seen_tokens.add(key)
-            values.append((token, token))
+            values.append((token, catalog_brand_label(token, language)))
     elif field == "item":
         item = str(row["item"] or "").strip()
         if item:
-            values.append((item, item))
+            values.append((item, (str(row["item_zh"] or "") or "未填写中文名称") if language == "zh" else item))
     else:
         status = canonical_product_status(row["product_status"])
         if status:
-            values.append((status, format_product_status(status, "en", multiline=False)))
+            values.append((status, format_product_status(status, language, multiline=False)))
     return values or [("", "（空白）")]
 
 
@@ -109,6 +115,7 @@ def _finalize_options(
     field: str,
     selected: tuple[str, ...],
     blank_selected: bool,
+    language: str = "en",
 ) -> tuple[ProductFilterOption, ...]:
     selected_values = (*selected, "") if blank_selected else selected
     for value in selected_values:
@@ -121,6 +128,8 @@ def _finalize_options(
             label = "（空白）"
         elif field == "product_status":
             label = format_product_status(value, "en", multiline=False)
+        elif field == "brand":
+            label = catalog_brand_label(value, language)
         else:
             label = value
         buckets[key] = ProductFilterOption(value=value, label=label, count=0)
@@ -162,6 +171,8 @@ class ProductQueryRepositoryMixin(ProductRepositoryContext):
             brand_blank=filters.brand_blank,
             item_blank=filters.item_blank,
             product_status_blank=filters.product_status_blank,
+            language=filters.language,
+            visibility=filters.visibility,
             limit=limit,
             offset=offset,
             sort_by=sort_by,
@@ -191,6 +202,8 @@ class ProductQueryRepositoryMixin(ProductRepositoryContext):
             brand_blank=filters.brand_blank,
             item_blank=filters.item_blank,
             product_status_blank=filters.product_status_blank,
+            language=filters.language,
+            visibility=filters.visibility,
         )
 
     def filter_options(self, filters: ProductFilters) -> ProductFilterOptions:
@@ -215,7 +228,7 @@ class ProductQueryRepositoryMixin(ProductRepositoryContext):
             for field, include_column in include_columns.items():
                 if not row[include_column]:
                     continue
-                for value, label in _option_values(row, field=field):
+                for value, label in _option_values(row, field=field, language=filters.language):
                     _add_option_count(
                         buckets[field],
                         value=value,
@@ -229,6 +242,7 @@ class ProductQueryRepositoryMixin(ProductRepositoryContext):
                 field="brand",
                 selected=filters.brands,
                 blank_selected=filters.brand_blank,
+                language=filters.language,
             ),
             item=_finalize_options(
                 buckets["item"],

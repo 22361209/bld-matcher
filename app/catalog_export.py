@@ -16,6 +16,8 @@ from PIL import Image as PillowImage
 from app.config import BASE_DIR, PRODUCT_IMAGE_DATA_PREFIX, PRODUCT_IMAGE_DIR
 from app.product_media import resolve_product_image_thumb_path
 from app.product_status import format_product_status
+from app.modules.products.catalog_language import CATALOG_IMPORT_HEADERS
+from app.modules.products.catalog_brands import format_catalog_brands
 
 
 BLD_HEADERS = ["BLD NO.", "品牌", "产品名称", "OE Reference", "Other Reference", "车型", "Product Image", "Unit Price", "产品状态", "启用状态", "更新时间"]
@@ -171,7 +173,11 @@ def export_products_xlsx(
     *,
     product_rows: Iterable[sqlite3.Row] | None = None,
     include_price: bool = True,
+    language: str | None = None,
+    include_source_fields: bool = False,
 ) -> Path:
+    if language is not None and language not in {"en", "zh"}:
+        raise ValueError("导出语言无效。")
     workbook = Workbook()
     sheet = workbook.active
     assert sheet is not None
@@ -191,34 +197,54 @@ def export_products_xlsx(
         headers = BRAND_HEADERS
     else:
         headers = BLD_HEADERS
+    if language == "en":
+        headers = [
+            {"品牌": "Brand", "产品名称": "ITEM", "车型": "Models", "产品状态": "Product Status",
+             "启用状态": "Active", "更新时间": "Updated At"}.get(header, header) for header in headers
+        ]
+    elif language == "zh":
+        headers = [
+            {"NO.": "序号", "SERIES": "品牌", "ITEM": "中文产品名称", "产品名称": "中文产品名称",
+             "Models": "中文车型", "车型": "中文车型", "OE Reference": "OE 号",
+             "Other Reference": "品牌号码", "Product Image": "产品图片", "Unit Price": "含税单价"}.get(header, header)
+            for header in headers
+        ]
     if not include_price:
-        headers = [header for header in headers if header != "Unit Price"]
+        headers = [header for header in headers if header not in {"Unit Price", "含税单价"}]
+    if include_source_fields:
+        headers = [*headers, *CATALOG_IMPORT_HEADERS.values()]
     _setup_sheet(sheet, headers)
 
     image_col = 8 if export_format == "brand" else 7
     image_refs: list[tuple[int, int, Path]] = []
     image_rows: set[int] = set()
 
+    missing_chinese_models = missing_chinese_names = 0
     for number, row in enumerate(product_rows, start=1):
+        series = format_catalog_brands(row["series"], language or "en")
+        item = row["item_zh"] if language == "zh" else row["item"]
+        models = row["models_zh"] if language == "zh" else row["models"]
+        missing_chinese_models += int(language == "zh" and not str(models or "").strip())
+        missing_chinese_names += int(language == "zh" and not str(item or "").strip())
         image_path = _image_path(row)
         price_values = [row["price_cny"]] if include_price else []
         if export_format == "brand":
             sheet.append(
                 [
                     number,
-                    row["series"],
+                    series,
                     row["bld_no"],
-                    row["item"],
+                    item,
                     row["oe_no_1"],
                     row["oe_no_2"],
-                    row["models"],
+                    models,
                     "",
                     *price_values,
                     format_product_status(
                         row["product_status"] if "product_status" in row.keys() else "",
-                        "zh",
+                        language or "zh",
                     ),
-                    "启用" if row["active"] else "停用",
+                    ("Active" if row["active"] else "Inactive") if language == "en" else ("启用" if row["active"] else "停用"),
                     row["updated_at"],
                 ]
             )
@@ -226,21 +252,24 @@ def export_products_xlsx(
             sheet.append(
                 [
                     row["bld_no"],
-                    row["series"],
-                    row["item"],
+                    series,
+                    item,
                     row["oe_no_1"],
                     row["oe_no_2"],
-                    row["models"],
+                    models,
                     "",
                     *price_values,
                     format_product_status(
                         row["product_status"] if "product_status" in row.keys() else "",
-                        "zh",
+                        language or "zh",
                     ),
-                    "启用" if row["active"] else "停用",
+                    ("Active" if row["active"] else "Inactive") if language == "en" else ("启用" if row["active"] else "停用"),
                     row["updated_at"],
                 ]
             )
+        if include_source_fields:
+            for offset, field in enumerate(CATALOG_IMPORT_HEADERS, start=1):
+                sheet.cell(sheet.max_row, len(headers) - len(CATALOG_IMPORT_HEADERS) + offset, row[field])
         if image_path:
             image_refs.append((sheet.max_row, image_col, image_path))
             image_rows.add(sheet.max_row)
@@ -248,6 +277,8 @@ def export_products_xlsx(
     widths = [10, 18, 16, 28, 34, 28, 34, 22, 12, 14, 10, 20] if export_format == "brand" else [14, 18, 28, 34, 28, 34, 22, 12, 14, 10, 20]
     if not include_price:
         del widths[(9 if export_format == "brand" else 8) - 1]
+    if include_source_fields:
+        widths.extend([28, 34, 16, 16])
     _finish_sheet(sheet, widths, image_rows)
     _add_sheet_images(sheet, image_refs)
     if include_price:
@@ -256,6 +287,15 @@ def export_products_xlsx(
             for item in cell:
                 item.number_format = '¥#,##0.00'
 
+    if language is not None:
+        info = workbook.create_sheet("目录说明")
+        info.append(["目录类型", "bld-catalog-display-v1"])
+        info.append(["目录语言", language])
+        info.append(["导出数量", sheet.max_row - 1])
+        info.append(["中文车型未填写数量", missing_chinese_models])
+        info.append(["中文名称未填写数量", missing_chinese_names])
+        info.append(["说明", "中文空值保留为空；中文展示目录不可用于英文主数据导入。"])
+        _finish_sheet(info, [26, 82])
     temporary_path = output_path.with_name(f".{output_path.name}.{uuid4().hex}.tmp")
     try:
         output_path.parent.mkdir(parents=True, exist_ok=True)

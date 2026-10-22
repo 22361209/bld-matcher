@@ -1,3 +1,4 @@
+{% import '_catalog_visibility.html' as catalog_visibility %}
 {% for product in products %}
   <tr class="{% if not product.active %}muted-row{% endif %}">
     <td class="bld-cell" data-col="bld">
@@ -17,9 +18,9 @@
         </div>
       </details>
     </td>
-    <td class="preline" data-col="series">{{ product.series }}</td>
+    <td class="preline" data-col="series">{{ product.display_series }}</td>
     <td class="product-item-cell" data-col="item">
-      {% for line in product_item_display_lines(product.item) %}
+      {% for line in product_item_display_lines(product.display_item or "未填写") %}
         <span{% if loop.index > 1 %} class="product-item-tail"{% endif %}>{{ line }}</span>
       {% endfor %}
     </td>
@@ -33,7 +34,7 @@
         <span>{{ code }}</span>{% if not loop.last %}<br>{% endif %}
       {% endfor %}
     </td>
-    <td class="preline" data-col="models">{{ product.models }}</td>
+    <td class="preline" data-col="models">{{ product.display_models or "未填写" }}</td>
     <td data-col="image">
       {% set image_gallery = product_image_urls(product) %}
       {% if image_gallery %}
@@ -45,7 +46,8 @@
       {% endif %}
     </td>
     {% if can_any("add_customer_prices", "edit_customer_prices", "delete_customer_prices") %}<td class="money-cell" data-col="price">{% if product.price_cny is not none %}¥{{ "%.2f"|format(product.price_cny) }}{% endif %}</td>{% endif %}
-    <td class="product-status-cell" data-col="product-status">{{ format_product_status(product.product_status if "product_status" in product.keys() else "", "en") }}</td>
+    <td class="product-status-cell" data-col="product-status">{{ format_product_status(product.product_status if "product_status" in product.keys() else "", catalog_language) }}</td>
+    <td data-col="catalog-visibility">{{ catalog_visibility.controls(product) }}</td>
     <td class="row-actions sticky-actions" data-col="actions">
       {% if can("edit_products") %}
         <a href="{{ url_for('edit_product', product_id=product.id) }}" data-open-edit-product-modal>编辑</a>

@@ -14,6 +14,8 @@ from app.database import connect
 from app.platform.audit_store import log_event
 from app.product_image_processing import PRODUCT_IMAGE_LARGE_MAX_BYTES, validate_synced_product_image
 
+from ._development import export_aggregates, validate_aggregate
+from ._development_files import MEMBER_PREFIX, add_archive_files, validate_archive_files
 from ._comparison import columns
 from ._media_transaction import media_relative_path, normalized_media_target
 from ._product_image_transfer import (
@@ -112,7 +114,7 @@ def read_package(package_path: Path) -> tuple[Manifest, Payload]:
                 raise ValueError("业务数据包内容不完整。")
             manifest = json.loads(manifest_file.read().decode("utf-8"))
             payload = json.loads(data_file.read().decode("utf-8"))
-            if isinstance(manifest, dict) and manifest.get("version") == 4:
+            if isinstance(manifest, dict) and manifest.get("version") in {4, 5}:
                 for member in raw_members:
                     if not member.name.startswith(PRODUCT_IMAGE_MEMBER_PREFIX):
                         continue
@@ -142,6 +144,8 @@ def read_package(package_path: Path) -> tuple[Manifest, Payload]:
     selected = tuple(raw_datasets)
     if not selected or set(payload) != set(selected) or any(not isinstance(payload.get(key), list) for key in selected):
         raise ValueError("业务数据包缺少可导入的数据集。")
+    if "development" in selected and version < 5:
+        raise ValueError("旧版业务数据包不支持开发资料。")
     media = manifest.get("media", {})
     if not isinstance(media, dict):
         raise ValueError("业务数据包媒体信息无效。")
@@ -162,6 +166,8 @@ def read_package(package_path: Path) -> tuple[Manifest, Payload]:
     normalized_targets = {key: set() for key in MEDIA_DIRECTORIES}
     for member in raw_members:
         if member.name in {"manifest.json", "data.json"}:
+            continue
+        if version == 5 and "development" in selected and member.name.startswith(MEMBER_PREFIX):
             continue
         media_key = next(
             (key for key, directory in MEDIA_DIRECTORIES.items() if member.name.startswith(f"{directory}/")),
@@ -195,6 +201,11 @@ def read_package(package_path: Path) -> tuple[Manifest, Payload]:
         if duplicates:
             raise ValueError(f"{DATASETS[key][2]}包含重复编号：{'、'.join(duplicates[:10])}")
         typed_payload[key] = rows
+    for aggregate in typed_payload.get("development", []):
+        validate_aggregate(aggregate)
+    if "development" in typed_payload:
+        with tarfile.open(package_path, "r:gz") as archive:
+            validate_archive_files(archive, typed_payload["development"])
     validate_product_image_manifest(version, media, typed_payload, product_members)
     return manifest, typed_payload
 
@@ -209,13 +220,19 @@ def export_package(
     include_images: bool,
     include_material_drawings: bool,
     product_image_dir: Path | None,
+    development_file_dir: Path | None = None,
     add_media_directory_fn: MediaAdder,
     read_package_fn: PackageReader,
 ) -> Path:
     payload: Payload = {}
     product_rows: list[dict[str, object]] = []
     with connect(database_path) as connection:
+        if "development" in selected:
+            connection.execute("BEGIN")
         for key in selected:
+            if key == "development":
+                payload[key] = export_aggregates(connection)
+                continue
             table, _identity, _label = DATASETS[key]
             record_columns = columns(connection, table)
             where_clause = " WHERE active = 1" if key == "products" else ""
@@ -260,6 +277,7 @@ def export_package(
             (root / "data.json").write_text(json.dumps(payload, ensure_ascii=False, default=str), encoding="utf-8")
             with tarfile.open(temporary, "w:gz") as archive:
                 archive.add(root / "data.json", arcname="data.json")
+                add_archive_files(archive, development_file_dir, payload.get("development", []))
                 media = manifest["media"]
                 if not isinstance(media, dict):
                     raise RuntimeError("Business package manifest is invalid.")

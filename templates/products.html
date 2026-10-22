@@ -12,6 +12,7 @@
 {% block page_class %}shell wide app-surface{% endblock %}
 {% block page_head %}
   <link rel="stylesheet" href="{{ url_for('static', filename='pages/products.css', v=static_version('pages/products.css')) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='pages/catalog_visibility.css', v=static_version('pages/catalog_visibility.css')) }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='pages/product_media_uploader.css', v=static_version('pages/product_media_uploader.css')) }}">
 {% endblock %}
 
@@ -32,6 +33,21 @@
           {% for value in selected_brand_filters %}<input type="hidden" name="brand" value="{{ value }}" data-products-filter-param>{% endfor %}
           {% for value in selected_item_filters %}<input type="hidden" name="item" value="{{ value }}" data-products-filter-param>{% endfor %}
           {% for value in selected_product_status_filters %}<input type="hidden" name="product_status" value="{{ value }}" data-products-filter-param>{% endfor %}
+          <label>
+            目录语言
+            <select name="lang" data-catalog-language>
+              <option value="en" {% if catalog_language == 'en' %}selected{% endif %}>英文</option>
+              <option value="zh" {% if catalog_language == 'zh' %}selected{% endif %}>中文</option>
+            </select>
+          </label>
+          <label>
+            可见范围
+            <select name="visibility" data-catalog-visibility>
+              <option value="visible" {% if catalog_visibility == 'visible' %}selected{% endif %}>当前目录可见</option>
+              <option value="all" {% if catalog_visibility == 'all' %}selected{% endif %}>全部产品（管理）</option>
+              <option value="neither" {% if catalog_visibility == 'neither' %}selected{% endif %}>两种目录均不可见</option>
+            </select>
+          </label>
           <button class="linear-button primary" type="submit">搜索</button>
           <details class="toolbar-popover linear-popover status-popover">
             <summary data-products-status-label>{{ status_label }}</summary>
@@ -106,12 +122,23 @@
                     <option value="brand">按汽车品牌格式</option>
                   </select>
                 </label>
+                <input type="hidden" name="lang" value="{{ catalog_language }}">
+                <input type="hidden" name="visibility" value="{{ catalog_visibility }}">
+                <label>
+                  导出语言
+                  <select name="export_language">
+                    <option value="en" {% if catalog_language == 'en' %}selected{% endif %}>英文</option>
+                    <option value="zh" {% if catalog_language == 'zh' %}selected{% endif %}>中文</option>
+                  </select>
+                </label>
+                <p class="note">仅导出对应语言可见的产品；中文空字段留空，缺失数量见“目录说明”工作表。</p>
                 <button class="linear-button primary" type="submit">导出 Excel</button>
                 <p class="submit-wait-message" data-submit-wait-message aria-live="polite"></p>
               </form>
             </details>
           {% endif %}
         </div>
+      <p class="note">目录可见勾选会自动保存，当前行保留供继续设置；重新筛选后按可见范围显示。两项均关闭的产品可在“全部产品（管理）”中找回。</p>
       </section>
 
       <div
@@ -159,9 +186,10 @@
               <textarea name="oe_no_2" rows="5" placeholder="补充 OE，每行一个"></textarea>
             </label>
             <label class="full">
-              车型 / Models
+              英文车型 / Models
               <textarea name="models" rows="3" placeholder="可写多个车型"></textarea>
             </label>
+            {{ product_option_fields.catalog_fields(none) }}
             {% if can_any("add_customer_prices", "edit_customer_prices", "delete_customer_prices") %}
             <label>
               含税单价（人民币）

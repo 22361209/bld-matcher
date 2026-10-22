@@ -147,7 +147,7 @@ class AdminPermissionTest(unittest.TestCase):
         self.assertEqual(roles[ADMIN_ROLE_KEY]["is_system"], 1)
         self.assertEqual(roles["editor"]["is_system"], 0)
         self.assertIsNotNone(migration)
-        self.assertEqual(MIGRATIONS[-1][0], "041_user_mobile_default_page")
+        self.assertEqual(MIGRATIONS[-1][0], "043_product_development_register")
 
     def test_migration_seeds_unknown_historical_roles_idempotently(self) -> None:
         historical_path = Path(self.temporary.name) / "historical.sqlite3"
@@ -635,7 +635,7 @@ class AdminPermissionTest(unittest.TestCase):
         positions = [header.group(1).index(heading) for heading in headings]
         self.assertEqual(positions, sorted(positions))
 
-        self.assertEqual(len(permission_groups()), 5)
+        self.assertEqual(len(permission_groups()), 6)
         self.assertIn("{% set group_index = loop.index %}", account_table.group(1))
         self.assertIn('id="account-permission-group-{{ group_index }}"', template)
         self.assertIn('href="#account-permission-group-{{ loop.index }}"', template)

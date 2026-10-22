@@ -12,6 +12,8 @@ export const productCatalogState = (href) => {
     bld: url.searchParams.get("bld") || url.searchParams.get("q") || "",
     oe: url.searchParams.get("oe") || "",
     status: url.searchParams.get("status") || "active",
+    language: url.searchParams.get("lang") || "en",
+    visibility: url.searchParams.get("visibility") || "visible",
     page: Math.max(1, Number.parseInt(url.searchParams.get("page") || "1", 10) || 1),
     filters: {
       brand: url.searchParams.getAll("brand"),
@@ -25,6 +27,14 @@ export const productCatalogHistoryUrl = (href) => {
   const url = new URL(href);
   url.hash = "products-results";
   return `${url.pathname}${url.search}${url.hash}`;
+};
+
+export const productCatalogMutationUrl = (targetHref, currentHref) => {
+  const target = new URL(targetHref || currentHref, currentHref);
+  const current = productCatalogState(currentHref);
+  target.searchParams.set("lang", current.language);
+  target.searchParams.set("visibility", current.visibility);
+  return target.toString();
 };
 
 export const productCatalogRequiresFullNavigation = (

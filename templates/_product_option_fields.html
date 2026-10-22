@@ -14,12 +14,34 @@
 
 {% macro item_picker(product) %}
             <label class="full">
-              产品名称 / ITEM
+              产品名称（英文） / ITEM
               <div class="product-option-picker" data-option-picker data-picker-mode="single" data-picker-field="item">
                 <input name="item" data-picker-input autocomplete="off" value="{{ product.item if product else "" }}" placeholder="Front Left Lower Control Arm">
                 <div class="product-option-picker-dropdown" data-picker-dropdown hidden></div>
               </div>
             </label>
+            <label class="full">
+              产品名称（中文）
+              <input name="item_zh" value="{{ product.item_zh if product else '' }}" data-item-zh placeholder="核对对应中文名称，未确认可留空">
+            </label>
+{% endmacro %}
+
+{% macro catalog_fields(product, rows=3) %}
+            <label class="full">
+              中文车型描述
+              <textarea name="models_zh" rows="{{ rows }}" placeholder="独立录入中文车型及年份，可留空">{{ product.models_zh if product else "" }}</textarea>
+            </label>
+            <label class="check">
+              <input type="hidden" name="catalog_visible_en" value="0">
+              <input type="checkbox" name="catalog_visible_en" value="1" {% if not product or product.catalog_visible_en %}checked{% endif %}>
+              英文目录可见
+            </label>
+            <label class="check">
+              <input type="hidden" name="catalog_visible_zh" value="0">
+              <input type="checkbox" name="catalog_visible_zh" value="1" {% if not product or product.catalog_visible_zh %}checked{% endif %}>
+              中文目录可见
+            </label>
+            <p class="note full">两种目录均不可见时，产品仍可在“全部产品（管理）”中维护。</p>
 {% endmacro %}
 
 {% macro status_picker(product) %}

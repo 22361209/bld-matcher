@@ -5,7 +5,7 @@ import json
 import os
 import shutil
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dataclass_field
 from decimal import Decimal, InvalidOperation
 from io import BytesIO
 from pathlib import Path
@@ -19,6 +19,7 @@ from app.product_media import product_image_storage_name, validate_product_image
 from app.product_image_processing import PRODUCT_IMAGE_OUTPUT_SUFFIX, process_product_image
 
 from .domain import ProductRecord
+from .catalog_language import CATALOG_IMPORT_HEADERS, catalog_values
 
 
 REQUIRED_FIELDS = ("BLD NO.", "SERIES", "ITEM", "OE NO.1", "Models", "产品状态", "导入单价")
@@ -29,6 +30,7 @@ FIELD_LABELS = {
     "oe_no_1": "OE NO.1",
     "oe_no_2": "OE NO.2",
     "models": "Models",
+    **CATALOG_IMPORT_HEADERS,
     "product_status": "产品状态",
     "price_cny": "导入单价",
 }
@@ -72,9 +74,10 @@ class CatalogImportRow:
     product_status: str
     price_cny: float
     image: CatalogImage | None
+    catalog_data: dict[str, object] = dataclass_field(default_factory=dict)
 
     def values(self) -> dict[str, object]:
-        return {
+        return {**self.catalog_data,
             "bld_no": self.bld_no,
             "series": self.series,
             "item": self.item,
@@ -209,6 +212,8 @@ def _validate_controlled_values(
 def read_catalog_import(path: Path, *, choices: CatalogImportChoices) -> tuple[CatalogImportRow, ...]:
     workbook = load_workbook(path, data_only=True)
     try:
+        if "目录说明" in workbook.sheetnames and workbook["目录说明"]["B2"].value == "zh":
+            raise ValueError("中文展示目录不能作为英文主数据导入，请使用产品目录导入模板。")
         sheet = workbook.active
         if sheet is None:
             raise ValueError("产品目录没有可读取的工作表。")
@@ -252,6 +257,10 @@ def read_catalog_import(path: Path, *, choices: CatalogImportChoices) -> tuple[C
             seen[key] = row_number
             try:
                 price_cny = _price(source["导入单价"], row_number=row_number)
+                optional = {field: source[header] for field, header in CATALOG_IMPORT_HEADERS.items()
+                            if header in source and source[header] is not None}
+                normalized_optional = catalog_values(optional, {})
+                optional = {field: normalized_optional[field] for field in optional}
             except ValueError as exc:
                 errors.append(str(exc))
                 continue
@@ -267,6 +276,7 @@ def read_catalog_import(path: Path, *, choices: CatalogImportChoices) -> tuple[C
                     product_status=compact_text(source["产品状态"]),
                     price_cny=price_cny,
                     image=images.get(row_number),
+                    catalog_data=optional,
                 )
             )
         if errors:
@@ -283,8 +293,10 @@ def _field_differences(row: CatalogImportRow, product: ProductRecord) -> tuple[t
     fields: list[dict[str, object]] = []
     all_fields: list[dict[str, object]] = []
     for field, label in FIELD_LABELS.items():
+        if field in CATALOG_IMPORT_HEADERS and field not in row.catalog_data:
+            continue
         before = getattr(product, field)
-        after = getattr(row, field)
+        after = row.catalog_data[field] if field in CATALOG_IMPORT_HEADERS else getattr(row, field)
         all_fields.append({"label": label, "before": before if before is not None else "", "after": after, "changed": before != after})
         if before != after:
             fields.append({"label": label, "before": before if before is not None else "", "after": after})

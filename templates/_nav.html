@@ -27,6 +27,9 @@
     {% if can("view_products") %}
     <a class="nav-mobile-core {% if active_page == 'products' %}active{% endif %}" href="{{ url_for('products') }}">产品目录</a>
     {% endif %}
+    {% if can("view_development") %}
+    <a class="nav-mobile-secondary {% if active_page == 'development' %}active{% endif %}" href="{{ url_for('development_list') }}">产品开发</a>
+    {% endif %}
     {% if can("manage_tube_items") %}
     <a class="nav-mobile-secondary {% if active_page == 'tubes' %}active{% endif %}" href="{{ url_for('tube_items') }}">管件资料</a>
     {% endif %}

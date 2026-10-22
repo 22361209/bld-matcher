@@ -1,0 +1,46 @@
+.development-copy-command {
+  flex-wrap: wrap;
+}
+
+.development-copy-scroll {
+  max-width: 100%;
+  max-height: 32rem;
+  overflow: auto;
+}
+
+.development-copy-table {
+  min-width: 780px;
+}
+
+.development-copy-table input[type="text"],
+.development-copy-table select {
+  width: 100%;
+  min-width: 150px;
+  box-sizing: border-box;
+}
+
+.development-copy-source {
+  display: flex;
+  align-items: center;
+  min-width: 190px;
+}
+
+.development-copy-source > span:last-child {
+  overflow-wrap: anywhere;
+}
+
+.development-copy-source small {
+  display: block;
+  font-weight: normal;
+  color: var(--linear-muted);
+}
+
+.development-copy-indent {
+  flex: 0 0 1rem;
+  color: var(--linear-muted);
+}
+
+.development-copy-table th:first-child,
+.development-copy-table td:first-child {
+  width: 48px;
+}

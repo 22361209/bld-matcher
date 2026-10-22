@@ -21,7 +21,7 @@
         <label class="sync-option"><input type="checkbox" name="include_material_drawings" value="1"><span><strong>物料图纸</strong><small>随材料明细打包 data/material_drawings</small></span></label>
       </div>
     </div>
-    <div class="sync-panel-foot"><p>产品目录只同步启用型号；产品媒体随“产品目录”同步，物料图纸随“材料明细”同步；账号、权限、API Key 和操作日志不会导出。</p><button class="linear-button primary" type="submit">导出数据包</button></div>
+    <div class="sync-panel-foot"><p>开发单连同图纸与工艺文件的全部不可变修订一起打包；产品目录只同步启用型号；产品媒体随“产品目录”同步，物料图纸随“材料明细”同步；账号、权限、API Key 和操作日志不会导出。</p><button class="linear-button primary" type="submit">导出数据包</button></div>
   </form>
   <form action="{{ url_for('preview_business_data_sync') }}" method="post" enctype="multipart/form-data" class="sync-panel">
     {{ csrf_field() }}
@@ -45,7 +45,7 @@
   <section class="workspace-command">
     <div>
       <h2>导入预览</h2>
-      <p>新增和较新的数据会直接导入。冲突默认保留当前端；勾选后才使用数据包完整覆盖当前记录。</p>
+      <p>原有业务数据中的新增和较新记录会直接导入。开发单任何差异均按整单冲突确认，不按时间覆盖；仅所选开发单的文件会导入，未出现的记录和历史修订保留。冲突默认保留当前端；勾选后才采用数据包记录。</p>
     </div>
     <div class="command-actions">
       <button class="linear-button primary" type="submit">确认按所选规则导入</button>
@@ -131,7 +131,7 @@
               <tbody>
                 {% for row in info.rows %}
                   <tr class="import-preview-row" data-search-text="{{ row.key }} {{ row.label }}">
-                    <td>{% if row.status == "new" %}新增{% else %}更新{% endif %}</td>
+                    <td>{% if row.status == "new" %}新增{% elif row.status == "conflict" %}待确认冲突{% else %}更新{% endif %}</td>
                     <td>{{ row.label }}</td>
                     <td>数据包：{{ row.incoming_updated_at or "—" }}<br>当前端：{{ row.local_updated_at or "—" }}</td>
                   </tr>
@@ -145,7 +145,7 @@
       {% if info.conflicts %}
         <div class="import-preview-conflicts">
           <h3>冲突处理（{{ info.conflicts|length }}）</h3>
-          <p class="note">未勾选时完整保留当前端记录；勾选后以数据包记录完整覆盖。</p>
+          <p class="note">未勾选时保留当前端记录；勾选后采用数据包记录。开发单未出现的行和历史修订仍保留。</p>
           <div class="workspace-table-wrap">
             <table class="workspace-table">
               <thead>

@@ -156,6 +156,9 @@ def register(app) -> None:
                 "image_path": request.form.get("image_path", ""),
                 "active": request.form.get("active", "0"),
             }
+            for field in ("item_zh", "models_zh", "catalog_visible_en", "catalog_visible_zh"):
+                if field in request.form:
+                    data[field] = request.form.getlist(field)[-1]
             copy_source_product_id = request.form.get("copy_source_product_id", "").strip()
             if copy_source_product_id:
                 try:

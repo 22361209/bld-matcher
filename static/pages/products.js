@@ -1,18 +1,22 @@
+import { syncCatalogControls, setupCatalogControlChanges } from "./catalog_controls.js?v=20261002-1";
+import { setupCatalogVisibility } from "./catalog_visibility.js?v=20261002-1";
 import {
   createProductCatalogRequestGate,
   productCatalogFragmentUrl,
   productCatalogHistoryUrl,
+  productCatalogMutationUrl,
   productCatalogRequiresFullNavigation,
   productCatalogState,
-} from "./product_catalog_navigation.js?v=20260808-1";
+} from "./product_catalog_navigation.js?v=20261002-1";
 import { scrollDataGridToTop } from "./inline_results_navigation.js?v=20260729-3";
 import {
   invalidateProductOptionCache,
   setProductOptionPickerValue,
-} from "./product_option_picker.js?v=20260725-2";
+} from "./product_option_picker.js?v=20261002-1";
 import { setupDataGridControls } from "../components/data_grid_controls.js?v=20260729-2";
 
 if (document.body.dataset.page === "products.list") {
+  setupCatalogVisibility(document.body);
   const searchForm = document.querySelector("[data-products-search-form]");
   const bldSearch = searchForm?.querySelector("#bld-search");
   const oeSearch = searchForm?.querySelector("#oe-search");
@@ -55,6 +59,7 @@ if (document.body.dataset.page === "products.list") {
 
   const syncControls = (href) => {
     const state = productCatalogState(href);
+    syncCatalogControls(searchForm, exportForm, state);
     if (bldSearch instanceof HTMLInputElement) bldSearch.value = state.bld;
     if (oeSearch instanceof HTMLInputElement) oeSearch.value = state.oe;
     if (statusInput instanceof HTMLInputElement) statusInput.value = state.status;
@@ -81,6 +86,7 @@ if (document.body.dataset.page === "products.list") {
     }
   };
 
+  setupCatalogControlChanges(searchForm);
   const searchTargetUrl = () => {
     const target = new URL(searchForm.action, window.location.href);
     target.search = "";
@@ -295,7 +301,7 @@ if (document.body.dataset.page === "products.list") {
       return;
     }
     productForm.reset();
-    const fields = ["oe_no_1", "oe_no_2", "models", "price_cny"];
+    const fields = ["oe_no_1", "oe_no_2", "models", "models_zh", "item_zh", "price_cny"];
     fields.forEach((name) => {
       const input = productForm.elements.namedItem(name);
       if (input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) {
@@ -407,7 +413,7 @@ if (document.body.dataset.page === "products.list") {
       if (!response.ok || !payload.ok) throw new Error(payload.error || "保存失败，请稍后重试。");
       invalidateProductOptionCache();
       closeProductModal();
-      await loadProducts(payload.redirect_url || window.location.href, {
+      await loadProducts(productCatalogMutationUrl(payload.redirect_url, window.location.href), {
         history: "push",
       });
     } catch (error) {

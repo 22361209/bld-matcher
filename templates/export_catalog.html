@@ -18,6 +18,16 @@
             </select>
           </label>
           <p class="note">按汽车品牌格式会使用类似原始目录的列：NO.、SERIES、BLD NO.、ITEM、OE NO.、品牌号码、Models。</p>
+                <input type="hidden" name="lang" value="{{ catalog_language }}">
+                <input type="hidden" name="visibility" value="{{ catalog_visibility }}">
+                <label>
+                  导出语言
+                  <select name="export_language">
+                    <option value="en" {% if catalog_language == 'en' %}selected{% endif %}>英文</option>
+                    <option value="zh" {% if catalog_language == 'zh' %}selected{% endif %}>中文</option>
+                  </select>
+                </label>
+                <p class="note">仅导出对应语言可见的产品；中文空字段留空，缺失数量见“目录说明”工作表。</p>
           <button class="linear-button primary" type="submit">导出 Excel</button>
         </form>
       </section>

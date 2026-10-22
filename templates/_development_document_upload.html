@@ -1,0 +1,15 @@
+<details class="development-disclosure"{% if form_key == upload_key %} open{% endif %}><summary>{{ '上传 ' ~ upload_document.number ~ ' 的新修订' if upload_document else '上传新图纸 / 工艺文件' }}</summary>
+  <form class="development-form" method="post" action="{{ url_for('development_upload_document', project_id=project.id) }}" enctype="multipart/form-data" data-development-form>
+    {{ hidden(upload_key) }}<div class="development-field-grid">
+      {% if upload_document %}<input type="hidden" name="document_id" value="{{ upload_document.id }}">
+      {% else %}{{ select(upload_key, 'kind', '资料类型', [('drawing','图纸'),('process','工艺文件')], default='drawing') }}{{ input(upload_key, 'number', '资料编号', default=selected_component.code if selected_component else selected_branch.code if selected_branch else '', required=true) }}{{ input(upload_key, 'title', '资料名称', default=selected_component.name if selected_component else selected_branch.name if selected_branch else '', required=true) }}{% endif %}
+      {{ input(upload_key, 'label', '修订版本', default='A' if not upload_document else '', required=true) }}
+      {{ select(upload_key, 'state', '资料状态', [('draft','草稿'),('released','发布'),('obsolete','作废')], default='draft') }}
+      <label class="development-field development-field-wide"><span>文件 *</span><input type="file" name="file" accept=".pdf,.dwg,.dxf,.step,.stp,.iges,.igs,.sldprt,.sldasm,.slddrw,.docx,.xlsx,.txt,.csv" required><small>图纸支持 PDF 与 CAD 源文件；工艺文件另支持 DOCX / XLSX / TXT / CSV。文件提交失败后需重新选择。</small></label>
+      {{ notes(upload_key, 'change_note', '变更说明（必填）', required=true) }}
+      {% if not upload_document %}{{ target_selector(upload_key, true) }}{% endif %}
+    </div>
+    {% if upload_document %}<p class="development-help">上传后已有采用版本保持不变；需要升级时，在新修订下选择对象并点击“采用此修订”。</p>{% endif %}
+    {{ actions('上传修订') }}
+  </form>
+</details>

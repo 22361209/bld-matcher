@@ -30,7 +30,7 @@ class TestWebProductImportAndSync(WebAppTestBase):
             self.assertIn("<strong>物料图纸</strong>", html)
             self.assertNotIn("包含物料图纸", html)
             self.assertEqual(html.count('class="sync-option-grid sync-option-grid-unified"'), 1)
-            self.assertEqual(html.count('class="sync-option"'), 8)
+            self.assertEqual(html.count('class="sync-option"'), 9)
             for media_field in ("include_drawings", "include_images", "include_material_drawings"):
                 media_input = re.search(rf'<input\b[^>]*name="{media_field}"[^>]*>', html)
                 self.assertIsNotNone(media_input)
@@ -50,7 +50,7 @@ class TestWebProductImportAndSync(WebAppTestBase):
                     manifest = json.loads(manifest_file.read().decode("utf-8"))
             finally:
                 response.close()
-            self.assertEqual(manifest["version"], 4)
+            self.assertEqual(manifest["version"], 5)
             self.assertTrue(manifest["media"]["material_drawings"])
             self.assertEqual(manifest["media"]["files"]["material_drawings"], 1)
 
@@ -118,7 +118,7 @@ class TestWebProductImportAndSync(WebAppTestBase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["Cache-Control"], "no-store")
-        self.assertEqual(sorted(payload.keys()), ["brands", "items", "statuses"])
+        self.assertEqual(sorted(payload.keys()), ["brands", "item_translations", "items", "statuses"])
         self.assertEqual(payload["brands"].count("OPTIONBRAND"), 1)
         self.assertIn("OPTIONSECOND", payload["brands"])
         self.assertEqual(payload["items"].count("Option Arm"), 1)

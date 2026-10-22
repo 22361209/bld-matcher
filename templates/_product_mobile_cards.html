@@ -1,7 +1,8 @@
+{% import '_catalog_visibility.html' as catalog_visibility %}
 <div class="product-mobile-cards" data-products-mobile-cards>
   {% for product in products %}
     {% set primary_oe = product.oe_no_1.splitlines()[0] if product.oe_no_1 else "" %}
-    {% set primary_model = product.models.splitlines()[0] if product.models else "" %}
+    {% set primary_model = product.display_models.splitlines()[0] if product.display_models else "" %}
     <article class="product-mobile-card{% if not product.active %} muted-row{% endif %}" data-product-mobile-card>
       <div class="product-mobile-card-image">
         {% set image_gallery = product_image_urls(product) %}
@@ -27,15 +28,15 @@
               {% endif %}
             </div>
           </details>
-          <span class="product-mobile-card-status">{{ format_product_status(product.product_status if "product_status" in product.keys() else "", "en") }}</span>
+          <span class="product-mobile-card-status">{{ format_product_status(product.product_status if "product_status" in product.keys() else "", catalog_language) }}</span>
         </div>
         <button class="product-mobile-card-detail-trigger" type="button" data-product-detail-trigger aria-haspopup="dialog">
-          <span class="product-mobile-card-item" title="{{ product.item }}">{{ product.item or "未填写产品名称" }}</span>
-          {% if product.series %}<span class="product-mobile-card-brand" title="{{ product.series }}">{{ product.series }}</span>{% endif %}
+          <span class="product-mobile-card-item" title="{{ product.display_item }}">{{ product.display_item or "未填写" }}</span>
+          {% if product.display_series %}<span class="product-mobile-card-brand" title="{{ product.display_series }}">{{ product.display_series }}</span>{% endif %}
           <span class="product-mobile-card-summary" title="{{ primary_oe or primary_model }}">
             {% if primary_oe %}<span>OE</span>{{ primary_oe }}{% elif primary_model %}<span>车型</span>{{ primary_model }}{% else %}未填写 OE / 车型{% endif %}
           </span>
-          {% if primary_oe and primary_model %}<span class="product-mobile-card-model" title="{{ primary_model }}">车型 · {{ primary_model }}</span>{% endif %}
+          {% if primary_oe and (primary_model or catalog_language == "zh") %}<span class="product-mobile-card-model" title="{{ primary_model or '未填写' }}">车型 · {{ primary_model or "未填写" }}</span>{% endif %}
         </button>
       </div>
       {% if can_any("add_customer_prices", "edit_customer_prices", "delete_customer_prices") %}
@@ -44,15 +45,16 @@
           <strong>{% if product.price_cny is not none %}¥{{ "%.2f"|format(product.price_cny) }}{% else %}—{% endif %}</strong>
         </div>
       {% endif %}
+      {{ catalog_visibility.controls(product) }}
       <template data-product-detail-template>
         <dl class="product-detail-list">
           <div><dt>BLD 号</dt><dd>{{ product.bld_no }}</dd></div>
-          <div><dt>品牌</dt><dd>{{ product.series or "未填写" }}</dd></div>
-          <div><dt>产品名称</dt><dd>{{ product.item or "未填写" }}</dd></div>
+          <div><dt>品牌</dt><dd>{{ product.display_series or "未填写" }}</dd></div>
+          <div><dt>产品名称</dt><dd>{{ product.display_item or "未填写" }}</dd></div>
           <div><dt>OE NO.1</dt><dd>{{ product.oe_no_1 or "未填写" }}</dd></div>
           <div><dt>品牌号码 / OE NO.2</dt><dd>{{ product.oe_no_2 or "未填写" }}</dd></div>
-          <div><dt>车型</dt><dd>{{ product.models or "未填写" }}</dd></div>
-          <div><dt>产品状态</dt><dd>{{ format_product_status(product.product_status if "product_status" in product.keys() else "", "zh") }}</dd></div>
+          <div><dt>车型</dt><dd>{{ product.display_models or "未填写" }}</dd></div>
+          <div><dt>产品状态</dt><dd>{{ format_product_status(product.product_status if "product_status" in product.keys() else "", catalog_language) }}</dd></div>
           <div><dt>启停状态</dt><dd>{{ "启用" if product.active else "已停用" }}</dd></div>
           <div><dt>产品图片</dt><dd>{{ product_image_urls(product)|length }} 张</dd></div>
           <div><dt>PDF 图纸</dt><dd>{% if can("view_product_drawings") and product.drawing_available %}<a href="{{ url_for('product_drawing', product_id=product.id) }}" target="_blank" rel="noopener">查看图纸</a>{% elif can("view_product_drawings") %}暂无图纸{% else %}无图纸查看权限{% endif %}</dd></div>

@@ -1,0 +1,33 @@
+{% set component_key = 'component-' ~ selected_component.id %}
+<div class="development-branch-heading"><div><strong>{{ selected_component.code or '编码待定' }} · {{ selected_component.name }}</strong><p>借用编号：{{ selected_component.borrowed_code or '无' }}</p></div><span class="status-badge">{{ labels.get(selected_component.task.status, selected_component.task.status) }}</span></div>
+{% if selected_component.shared_count > 1 %}<p class="message info">此开发任务被 {{ selected_component.shared_count }} 处共用。修改任务进度、工序和任务图纸会同步到所有引用处；本型号编码及借用关系在本处单独保存。</p>{% endif %}
+<details class="development-disclosure"{% if form_key == component_key %} open{% endif %}><summary>本处编码与层级</summary>
+  <form class="development-form" method="post" action="{{ url_for('development_update_component', project_id=project.id, component_id=selected_component.id) }}" data-development-form>
+    {{ hidden(component_key) }}<fieldset{% if not can_edit %} disabled{% endif %}><legend>组件信息</legend><div class="development-field-grid">
+      {{ input(component_key, 'code', '本型号编码', selected_component, hint='例如 QD8461') }}{{ input(component_key, 'borrowed_code', '借用编号', selected_component, hint='例如 QD8070') }}
+      {{ borrowing_source(component_key, selected_component) }}
+      {{ input(component_key, 'name', '零件名称', selected_component, required=true) }}{{ input(component_key, 'quantity', '数量', selected_component, type='number', required=true) }}{{ input(component_key, 'position', '位置', selected_component) }}
+      <label class="development-field"><span>所属层级</span><select name="parent_id"><option value="">成品直属组件</option>{% for item in branch_components if item.id != selected_component.id %}<option value="{{ item.id }}"{% if value(component_key, 'parent_id', selected_component)|trim == item.id %} selected{% endif %}>{{ item.code }} · {{ item.name }}</option>{% endfor %}</select></label>
+      {{ notes(component_key, item=selected_component) }}
+    </div></fieldset>{{ actions('保存本处编码与结构') }}
+  </form>
+</details>
+<details class="development-disclosure" open><summary>开发任务与材料</summary>
+  <form class="development-form" method="post" action="{{ url_for('development_update_task', project_id=project.id, task_id=selected_component.task_id) }}" data-development-form>
+    {% set task_key = 'task-' ~ selected_component.task_id %}{{ hidden(task_key) }}
+    <fieldset{% if not can_edit %} disabled{% endif %}><legend>任务资料</legend>{% set task_record = selected_component.task %}{% set task_prefix = '' %}{% include '_development_task_fields.html' %}</fieldset>
+    <p class="development-help">需图任务完成前必须采用具体的已发布图纸修订；外购 / 委外任务须指定供应商。重新打开共用任务会同步两侧状态。</p>
+    {{ actions('保存开发任务') }}
+  </form>
+</details>
+{% if can('view_development_files') %}
+<section class="development-adopted-documents"><strong>此任务采用的固定修订</strong>
+  {% set linked = namespace(count=0) %}
+  {% for document in documents %}{% for link in document.links if link.target_type == 'task' and link.target_id == selected_component.task_id %}{% set linked.count = linked.count + 1 %}
+    {% for revision in document.revisions if revision.id == link.revision_id %}<p>{{ document.number }} · {{ document.title }} · {{ revision.label }} <span class="status-badge">{{ labels.get(revision.state, revision.state) }}</span>{% if link.has_newer_revision %} <strong>有新修订，尚未采用</strong>{% endif %} <a href="{{ url_for('development_download_document', project_id=project.id, revision_id=revision.id) }}">下载</a>{% if revision.previewable %} <a href="{{ url_for('development_preview_document', project_id=project.id, revision_id=revision.id) }}" target="_blank" rel="noopener">预览 PDF</a>{% endif %}</p>{% endfor %}
+  {% endfor %}{% endfor %}
+  {% if not linked.count %}<p class="development-help">尚未采用图纸或工艺文件修订。</p>{% endif %}
+  <a class="linear-button subtle" href="{{ url_for('development_detail', project_id=project.id, view='documents', branch=selected_branch.id, component=selected_component.id) }}">管理图纸与文件修订</a>
+</section>{% endif %}
+{% include '_development_operations.html' %}
+{% if can_edit %}<details class="development-disclosure"{% if form_key == 'supplier' %} open{% endif %}><summary>登记供应商</summary><form class="development-form" method="post" action="{{ url_for('development_save_supplier', project_id=project.id) }}" data-development-form>{{ hidden('supplier') }}<div class="development-field-grid">{{ input('supplier', 'name', '供应商名称', required=true) }}{{ input('supplier', 'contact', '联系人') }}{{ input('supplier', 'phone', '电话') }}{{ notes('supplier') }}</div>{{ actions('登记供应商') }}</form></details>{% endif %}

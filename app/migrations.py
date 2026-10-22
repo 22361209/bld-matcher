@@ -1264,6 +1264,36 @@ def _add_user_mobile_default_page(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE users ADD COLUMN default_mobile_page TEXT NOT NULL DEFAULT ''")
 
 
+def _add_bilingual_catalog(conn: sqlite3.Connection) -> None:
+    from .modules.products.catalog_language import ITEM_TRANSLATIONS
+
+    product_columns = _columns(conn, "products")
+    if not product_columns:
+        return
+    fields = {
+        "item_zh": "TEXT NOT NULL DEFAULT ''",
+        "models_zh": "TEXT NOT NULL DEFAULT ''",
+        "catalog_visible_en": "INTEGER NOT NULL DEFAULT 1 CHECK(catalog_visible_en IN (0, 1))",
+        "catalog_visible_zh": "INTEGER NOT NULL DEFAULT 1 CHECK(catalog_visible_zh IN (0, 1))",
+    }
+    for field, definition in fields.items():
+        if field not in product_columns:
+            conn.execute(f"ALTER TABLE products ADD COLUMN {field} {definition}")
+    for english, chinese in ITEM_TRANSLATIONS.items():
+        conn.execute(
+            "UPDATE products SET item_zh = ? WHERE TRIM(item) = ? AND TRIM(COALESCE(item_zh, '')) = ''",
+            (chinese, english),
+        )
+
+
+def _add_product_development_register(conn: sqlite3.Connection) -> None:
+    from .modules.development.document_schema import create_schema
+    from .modules.development.schema import install_schema
+
+    install_schema(conn)
+    create_schema(conn)
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -1306,6 +1336,8 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("039_product_view_permissions", _add_product_view_permissions),
     ("040_user_default_page", _add_user_default_page),
     ("041_user_mobile_default_page", _add_user_mobile_default_page),
+    ("042_bilingual_catalog", _add_bilingual_catalog),
+    ("043_product_development_register", _add_product_development_register),
 )
 
 

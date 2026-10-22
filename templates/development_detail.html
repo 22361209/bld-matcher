@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% set active_page = "development" %}
+{% block page_title %}{{ project.core_number }} · {{ project.title }} · 新产品开发{% endblock %}
+{% block page_id %}development.detail{% endblock %}
+{% block page_type %}workbench{% endblock %}
+{% block page_head %}<link rel="stylesheet" href="{{ url_for('static', filename='pages/development.css', v=static_version('pages/development.css')) }}"><link rel="stylesheet" href="{{ url_for('static', filename='pages/development_grid.css', v=static_version('pages/development_grid.css')) }}"><link rel="stylesheet" href="{{ url_for('static', filename='pages/development_copy.css', v=static_version('pages/development_copy.css')) }}">{% endblock %}
+{% block page_content %}
+  {% from '_development_fields.html' import input, notes, select, hidden, actions, dates, value, borrowing_source with context %}
+  <datalist id="development-material-categories">{% for category in ('冲压', '铸铁', '锻铁', '铸铝', '锻铝', '复合材料') %}<option value="{{ category }}"></option>{% endfor %}</datalist>
+  <section class="data-section development-panel">
+    <div class="workspace-command development-context"><div><strong>{{ project.core_number }} · {{ project.title }}</strong> <span class="status-badge" data-development-project-status>{{ labels.get(project.status, project.status) }}</span>{% if project.archived %} <span class="status-badge">已归档</span>{% endif %}</div><div class="command-actions"><a class="linear-button subtle" href="{{ url_for('development_list') }}">返回列表</a></div></div>
+    <nav class="development-tabs" aria-label="开发单视图">
+      {% for key, label in [('overview', '成品与计划'), ('components', '分支组件树'), ('documents', '图纸与工艺文件')] %}
+        {% if key != 'documents' or can('view_development_files') %}<a class="linear-button subtle" href="{{ url_for('development_detail', project_id=project.id, view=key, branch=selected_branch.id if selected_branch else '', component=selected_component.id if selected_component else '') }}"{% if active_view == key %} aria-current="page"{% endif %}>{{ label }}</a>{% endif %}
+      {% endfor %}
+    </nav>
+    <div class="development-summary" aria-label="待处理汇总">{% for key, label in [('missing_drawings', '缺图'), ('missing_suppliers', '供应商未定'), ('overdue', '延期'), ('unfinished', '未完成')] %}<span>{{ label }} <strong data-development-summary="{{ key }}">{{ summary.get(key, 0) }}</strong></span>{% endfor %}</div>
+    {% if not can_edit %}<p class="development-help" data-development-readonly>{{ '此开发单已归档，历史与引用保留。' if project.archived else '当前账号为只读，可查看进度和已授权资料。' }}</p>{% endif %}
+    {% include '_development_errors.html' %}
+  </section>
+  {% if active_view == 'overview' %}{% include '_development_overview.html' %}
+  {% elif active_view == 'components' %}{% include '_development_components.html' %}
+  {% elif active_view == 'documents' %}{% include '_development_documents.html' %}{% endif %}
+{% endblock %}
+{% block page_scripts %}<script type="module" src="{{ url_for('static', filename='pages/development.js', v=static_version('pages/development.js')) }}"></script>{% endblock %}

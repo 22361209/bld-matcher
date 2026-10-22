@@ -1,0 +1,49 @@
+{% if branches %}
+<section class="data-section development-panel development-grid-workspace" data-development-grid
+  data-project-id="{{ project.id }}" data-branch-id="{{ selected_branch.id }}" data-user-id="{{ g.user.id }}"
+  data-editable="{{ 'true' if can_edit else 'false' }}" data-files-allowed="{{ 'true' if can('view_development_files') else 'false' }}"
+  data-detail-url="{{ url_for('development_detail', project_id=project.id) }}"
+  data-source-url="{{ url_for('development_lookup_sources', project_id=project.id) }}"
+  data-initial="{{ {'project':project,'branches':branches,'components':all_components,'tasks':tasks,'suppliers':suppliers}|tojson|forceescape }}">
+  {{ csrf_field() }}
+  <nav class="development-tabs" aria-label="完整成品分支">{% for branch in branches %}<a class="linear-button subtle" data-grid-branch-link href="{{ url_for('development_detail', project_id=project.id, view='components', branch=branch.id) }}"{% if selected_branch.id == branch.id %} aria-current="page"{% endif %}>{{ branch.code }} · {{ labels.get(branch.side, branch.side) }}</a>{% endfor %}</nav>
+  <div class="workspace-command development-grid-command">
+    <div class="command-actions">
+      {% if can_edit %}<button class="linear-button primary" type="button" data-grid-action="save">保存本侧修改</button><button class="linear-button subtle" type="button" data-grid-action="sibling">加同级</button><button class="linear-button subtle" type="button" data-grid-action="child">加子件</button><button class="linear-button subtle" type="button" data-grid-action="structure">常用结构草稿</button>{% endif %}
+      <button class="linear-button subtle" type="button" data-grid-action="inspector">行资料</button><button class="linear-button subtle" type="button" data-grid-action="expand">全部展开</button><button class="linear-button subtle" type="button" data-grid-action="collapse">全部收起</button>
+    </div>
+    <p class="development-help">直接在表格中输入，Tab 连续换格。新增行负责人默认 {{ selected_branch.owner_username or project.owner_username or '待填写' }}；目标日期默认 {{ selected_branch.planned_date or project.planned_date or '待填写' }}。</p>
+  </div>
+  <div class="development-grid-status" role="status" aria-live="polite" data-grid-status>正在载入组件表…</div>
+  <div class="message error" role="alert" data-grid-error hidden></div>
+  <p class="development-help" data-grid-stale-forms hidden>主表已保存。下方完整资料和复制核对表需重新打开后才能提交，避免旧值覆盖新内容。<a href="{{ url_for('development_detail', project_id=project.id, view='components', branch=selected_branch.id, component=selected_component.id if selected_component else '', detail='1') }}">重新打开当前资料</a></p>
+  {% if can_edit %}<details class="development-disclosure development-grid-bulk"><summary>批量赋值（仅勾选行）</summary><div class="development-grid-bulk-controls">
+    <label><span>字段</span><select data-grid-bulk-field><option value="task.drawing_status">图纸状态</option><option value="task.development_mode">借用状态</option><option value="task.status">开发状态</option><option value="task.supplier_id">责任单位</option><option value="task.planned_date">目标日期</option></select></label>
+    <label><span>赋值内容</span><select data-grid-bulk-choice></select><input type="date" data-grid-bulk-date hidden></label>
+    <button class="linear-button subtle" type="button" data-grid-action="bulk">应用到勾选行</button><button class="linear-button subtle" type="button" data-grid-action="select-all">勾选本侧全部</button><button class="linear-button subtle" type="button" data-grid-action="clear-selection">清除勾选</button>
+  </div></details>{% endif %}
+  <div class="data-grid" data-resizable-grid data-grid-key="development-tree-{{ selected_branch.id }}">
+    <div class="data-table-scroll" data-grid-scroll tabindex="0" aria-label="开发组件表，可横向滚动">
+      <table class="data-table data-grid-table development-tree-table" data-grid-table data-column-storage-scope="{{ g.user.id }}">
+        <colgroup>{% for key in ('code','name','drawing','borrowing','borrowed-code','status','supplier','date') %}<col data-col="{{ key }}" class="development-tree-col-{{ key }}">{% endfor %}</colgroup>
+        <thead><tr>{% for key, title in [('code','产品编码'),('name','产品名称'),('drawing','图纸状态'),('borrowing','借用状态'),('borrowed-code','借用编码'),('status','开发状态'),('supplier','责任单位'),('date','目标日期')] %}<th data-col="{{ key }}"><span class="data-grid-static-column-label">{{ title }}</span></th>{% endfor %}</tr></thead>
+        <tbody data-development-grid-body><tr><td colspan="8"><div class="empty-state">正在载入可编辑组件树。<noscript>请启用 JavaScript 使用连续录入；已有资料可从成品与计划查看。</noscript></div></td></tr></tbody>
+      </table>
+    </div>
+    <footer class="data-grid-footer"><span data-grid-row-count>0 个组件</span><span data-grid-selection-label>点击单元格选中行</span><span data-grid-dirty-count>尚未修改</span></footer>
+  </div>
+  <details class="development-disclosure" data-grid-inspector><summary>所选行低频资料 · <span data-grid-inspector-name>尚未选中</span></summary>
+    <div class="development-form"><p class="development-help">这里的改动与主表一起保存。完成状态需要负责人和实际日期；需图仍须采用真实已发布修订。</p>
+      <div class="development-field-grid" data-grid-inspector-fields>
+        {% for field,label,type in [('task.owner_username','负责人账号','text'),('task.actual_date','实际完成日期','date'),('quantity','数量','number'),('position','位置','text'),('task.drawing_reason','不需图原因','text')] %}<label class="development-field"><span>{{ label }}</span><input type="{{ type }}" data-inspector-field="{{ field }}"{% if type == 'number' %} min="0.001" step="any"{% endif %}{% if not can_edit %} disabled{% endif %}></label>{% endfor %}
+        <label class="development-field"><span>获取方式</span><select data-inspector-field="task.procurement_mode"{% if not can_edit %} disabled{% endif %}><option value="made">自制</option><option value="purchased">外购</option><option value="subcontracted">委外</option></select></label>
+      </div>
+      <div class="form-actions"><button class="linear-button subtle" type="button" data-grid-action="full-detail">更多资料与工序</button>{% if can_edit %}<button class="linear-button subtle" type="button" data-grid-action="remove-draft">移除未保存行</button>{% endif %}</div>
+    </div>
+  </details>
+  {% if can_edit %}<form data-grid-discard-form class="development-grid-recovery"><button class="linear-button subtle" type="submit" data-confirm="丢弃 {{ project.core_number }} · {{ project.title }} 所有分支尚未保存的草稿，并载入服务器版本？已保存资料不受影响。">丢弃草稿并重新载入</button></form>{% endif %}
+  {% include '_development_grid_dialogs.html' %}
+</section>
+{% if selected_component %}<details class="data-section development-panel development-disclosure"{% if request.args.get('detail') == '1' or form_key %} open{% endif %}><summary>{{ selected_component.code }} · {{ selected_component.name }} 完整资料 / 图纸 / 工序</summary><section class="development-component-detail">{% include '_development_component_detail.html' %}</section></details>{% endif %}
+{% if can_edit and branch_components %}{% include '_development_copy.html' %}{% endif %}
+{% else %}<section class="data-section"><div class="empty-state">先在“成品与计划”中添加完整成品。</div></section>{% endif %}

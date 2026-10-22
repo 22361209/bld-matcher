@@ -1,0 +1,15 @@
+<div class="development-field-grid">
+  {% if not task_prefix %}{{ input(task_key, 'name', '任务名称', task_record, required=true) }}{% endif %}
+  {{ select(task_key, task_prefix ~ 'development_mode', '开发方式', [('new','新开发'),('borrowed','借用'),('selected','现成选型')], task_record, 'new') }}
+  {{ select(task_key, task_prefix ~ 'procurement_mode', '获取方式', [('made','自制'),('purchased','外购'),('subcontracted','委外')], task_record, 'made') }}
+  {{ input(task_key, task_prefix ~ 'owner_username', '任务负责人账号', task_record) }}
+  {{ input(task_key, task_prefix ~ 'planned_date', '计划完成日期', task_record, type='date') }}
+  {% if not task_prefix %}{{ input(task_key, 'actual_date', '实际完成日期', task_record, type='date') }}{{ select(task_key, 'status', '任务进度', [('not_started','未开始'),('in_progress','进行中'),('completed','已完成')], task_record, 'not_started') }}{% endif %}
+  <label class="development-field"><span>供应商</span><select name="{{ task_prefix }}supplier_id"><option value="">尚未指定</option>{% for supplier in suppliers %}<option value="{{ supplier.id }}"{% if value(task_key, task_prefix ~ 'supplier_id', task_record)|trim == supplier.id %} selected{% endif %}>{{ supplier.name }}</option>{% endfor %}</select></label>
+  <label class="development-field"><span>臂体 / 材料类别</span><input name="{{ task_prefix }}material_category" value="{{ value(task_key, task_prefix ~ 'material_category', task_record) }}" list="development-material-categories" maxlength="200" placeholder="可快捷选用，也可自填"></label>
+  {{ input(task_key, task_prefix ~ 'material_grade', '材料牌号', task_record) }}{{ input(task_key, task_prefix ~ 'forming_process', '成形工艺', task_record) }}
+  {{ select(task_key, task_prefix ~ 'drawing_required', '图纸需求', [('1','需图'),('0','不需图')], task_record, '1') }}
+  {{ input(task_key, task_prefix ~ 'drawing_reason', '不需图原因', task_record) }}
+  {{ select(task_key, task_prefix ~ 'drawing_status', '出图状态', [('not_started','未开始'),('in_progress','出图中'),('ready','已出图')], task_record, 'not_started') }}
+  {{ notes(task_key, task_prefix ~ 'notes', '开发任务备注', task_record) }}
+</div>

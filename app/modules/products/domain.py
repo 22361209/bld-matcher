@@ -30,6 +30,8 @@ class ProductFilters:
     brand_blank: bool = False
     item_blank: bool = False
     product_status_blank: bool = False
+    language: str = "en"
+    visibility: str = "all"
 
     @property
     def include_inactive(self) -> bool:
@@ -63,6 +65,10 @@ class ProductRecord:
     source: str
     created_at: str
     updated_at: str
+    item_zh: str = ""
+    models_zh: str = ""
+    catalog_visible_en: bool = True
+    catalog_visible_zh: bool = True
 
     def web_payload(self) -> dict[str, object]:
         return {
@@ -73,6 +79,10 @@ class ProductRecord:
             "oe_no_1": self.oe_no_1,
             "oe_no_2": self.oe_no_2,
             "models": self.models,
+            "item_zh": self.item_zh,
+            "models_zh": self.models_zh,
+            "catalog_visible_en": self.catalog_visible_en,
+            "catalog_visible_zh": self.catalog_visible_zh,
             "price_cny": self.price_cny,
             "product_status": self.product_status,
             "image_path": self.image_path,
@@ -246,12 +256,18 @@ def build_product_filters(values: Mapping[str, object] | ProductFilters) -> Prod
             "brand_blank": values.brand_blank,
             "item_blank": values.item_blank,
             "product_status_blank": values.product_status_blank,
+            "language": values.language,
+            "visibility": values.visibility,
         }
     else:
         source = values
     status = compact(source.get("status") or "active").lower()
     if status not in PRODUCT_STATUSES:
         status = "active"
+    language = compact(source.get("language") or source.get("lang") or "en")
+    visibility = compact(source.get("visibility") or "all")
+    if language not in {"en", "zh"} or visibility not in {"visible", "all", "neither"}:
+        raise ProductFilterValidationError("目录语言或可见筛选无效。")
     query = compact(source.get("query") or source.get("q"))
     bld_query = compact(source.get("bld_query") or source.get("bld"))
     oe_query = compact(source.get("oe_query") or source.get("oe"))
@@ -279,6 +295,8 @@ def build_product_filters(values: Mapping[str, object] | ProductFilters) -> Prod
         series_query=compact(source.get("series_query") or source.get("series")),
         model_query=compact(source.get("model_query") or source.get("model")),
         status=status,
+        language=language,
+        visibility=visibility,
         brands=brands,
         items=items,
         product_statuses=product_statuses,

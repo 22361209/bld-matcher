@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import replace
 from pathlib import Path
 from uuid import uuid4
 
@@ -19,7 +20,7 @@ from .repository_context import ProductRepositoryContext
 
 class ProductCatalogRepositoryMixin(ProductRepositoryContext):
     def export_catalog_source(self, path: Path) -> None:
-        export_products_xlsx(self.connection, path, export_format="bld")
+        export_products_xlsx(self.connection, path, export_format="bld", include_source_fields=True)
 
     def import_catalog(self, path: Path, *, actor: str) -> int:
         return import_catalog(self.connection, path, replace=False, actor=actor, commit=False)
@@ -31,13 +32,19 @@ class ProductCatalogRepositoryMixin(ProductRepositoryContext):
         filters: ProductFilters,
         export_format: str,
         actor: str,
+        language: str | None = None,
         include_price: bool = True,
     ) -> int:
+        if language is not None:
+            filters = replace(filters, language=language)
         rows = self._rows(
             filters,
             limit=None,
             sort_by="series" if export_format == "brand" else "bld",
         )
+        if language is not None:
+            visible_field = "catalog_visible_zh" if language == "zh" else "catalog_visible_en"
+            rows = [row for row in rows if row[visible_field]]
         if not rows:
             return 0
         export_products_xlsx(
@@ -46,6 +53,7 @@ class ProductCatalogRepositoryMixin(ProductRepositoryContext):
             export_format=export_format,
             product_rows=rows,
             include_price=include_price,
+            language=language,
         )
         status_label = {
             "active": "仅启用产品",
@@ -58,7 +66,7 @@ class ProductCatalogRepositoryMixin(ProductRepositoryContext):
             "catalog",
             path.name,
             ("按汽车品牌格式；" if export_format == "brand" else "按 BLD 号格式；")
-            + f"{status_label}；按当前筛选导出 {len(rows)} 条",
+            + f"{status_label}；按当前筛选导出 {len(rows)} 条；语言 {language or 'legacy'}",
             actor=actor,
         )
         return len(rows)

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from math import ceil
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -14,112 +13,22 @@ from app.locks import ImportLockError, import_lock
 from app.modules.products.catalog_import import CatalogImportPreviewChangedError
 from app.modules.products.catalog_template import build_catalog_import_template
 from app.modules.products.domain import (
-    ProductFilters,
     ProductFilterValidationError,
-    build_product_filters,
 )
 from app.modules.products.factory import get_product_service
+from app.modules.products.catalog_navigation import (
+    PRODUCT_PAGE_SIZE, _product_filters, _product_query_args, _request_page,
+    _product_page_url, _product_brand_preview_url, _product_pagination,
+)
 from app.modules.products.presentation import product_web_payload
 from app.security import actor_name, can, can_any, permission_required
 
 
-PRODUCT_PAGE_SIZE = 50
 logger = logging.getLogger(__name__)
 
 
-def _product_filters(values: Any, *, default_status: str) -> ProductFilters:
-    return build_product_filters(
-        {
-            "q": values.get("q", ""),
-            "bld": values.get("bld", ""),
-            "oe": values.get("oe", ""),
-            "status": values.get("status", default_status),
-            "brand": values.getlist("brand"),
-            "item": values.getlist("item"),
-            "product_status": values.getlist("product_status"),
-        }
-    )
-
-
-def _product_query_args() -> ProductFilters:
-    return _product_filters(request.args, default_status="active")
-
-
-def _request_page() -> int:
-    try:
-        return max(1, int(request.args.get("page", "1") or 1))
-    except ValueError:
-        return 1
-
-
-def _product_page_params(filters: ProductFilters, page: int) -> dict[str, Any]:
-    params: dict[str, Any] = {}
-    if filters.oe_query:
-        params["oe"] = filters.oe_query
-    elif filters.bld_query:
-        params["bld"] = filters.bld_query
-    elif filters.query:
-        params["q"] = filters.query
-    if filters.status != "active":
-        params["status"] = filters.status
-    brand_values = [*filters.brands, *(("",) if filters.brand_blank else ())]
-    item_values = [*filters.items, *(("",) if filters.item_blank else ())]
-    product_status_values = [
-        *filters.product_statuses,
-        *(("",) if filters.product_status_blank else ()),
-    ]
-    if brand_values:
-        params["brand"] = brand_values
-    if item_values:
-        params["item"] = item_values
-    if product_status_values:
-        params["product_status"] = product_status_values
-    if page > 1:
-        params["page"] = page
-    return params
-
-
-def _product_page_url(filters: ProductFilters, page: int) -> str:
-    params = _product_page_params(filters, page)
-    return f"{url_for('products', **params)}#products-results"
-
-
-def _product_brand_preview_url(filters: ProductFilters, page: int) -> str:
-    params = _product_page_params(filters, page)
-    params["brand_preview"] = "1"
-    return f"{url_for('products', **params)}#products-results"
-
-
-def _product_pagination(filters: ProductFilters, page: int, total: int) -> dict[str, Any]:
-    total_pages = max(1, ceil(total / PRODUCT_PAGE_SIZE))
-    page = min(max(1, page), total_pages)
-    start = ((page - 1) * PRODUCT_PAGE_SIZE) + 1 if total else 0
-    end = min(total, page * PRODUCT_PAGE_SIZE)
-    window = {1, total_pages, page - 1, page, page + 1}
-    pages = sorted(item for item in window if 1 <= item <= total_pages)
-    links = []
-    previous_page = 0
-    for item in pages:
-        if previous_page and item - previous_page > 1:
-            links.append({"gap": True})
-        links.append({"page": item, "url": _product_page_url(filters, item), "current": item == page})
-        previous_page = item
-    return {
-        "page": page,
-        "total_pages": total_pages,
-        "start": start,
-        "end": end,
-        "has_prev": page > 1,
-        "has_next": page < total_pages,
-        "prev_url": _product_page_url(filters, page - 1) if page > 1 else "",
-        "next_url": _product_page_url(filters, page + 1) if page < total_pages else "",
-        "jump_url": _product_page_url(filters, 1),
-        "links": links,
-    }
-
-
-def _product_list_payload(record, *, include_price: bool) -> dict[str, Any]:
-    return product_web_payload(record, include_price=include_price, include_drawing=can("view_product_drawings"))
+def _product_list_payload(record, *, include_price: bool, language: str) -> dict[str, Any]:
+    return product_web_payload(record, include_price=include_price, include_drawing=can("view_product_drawings"), language=language)
 
 
 def _product_list_context(*, include_admin_preview: bool) -> dict[str, Any]:
@@ -141,13 +50,15 @@ def _product_list_context(*, include_admin_preview: bool) -> dict[str, Any]:
         )
     context: dict[str, Any] = {
         "products": [
-            _product_list_payload(record, include_price=can_any("add_customer_prices", "edit_customer_prices", "delete_customer_prices"))
+            _product_list_payload(record, language=filters.language, include_price=can_any("add_customer_prices", "edit_customer_prices", "delete_customer_prices"))
             for record in page.records
         ],
         "total_products": page.total,
         "product_page_size": PRODUCT_PAGE_SIZE,
         "pagination": pagination,
         "product_canonical_url": _product_page_url(filters, current_page),
+        "catalog_language": filters.language,
+        "catalog_visibility": filters.visibility,
         "query": filters.query,
         "bld_query": filters.bld_query or filters.query,
         "oe_query": filters.oe_query,
@@ -286,8 +197,12 @@ def register(app) -> None:
     @permission_required("view_products")
     @permission_required("export_catalog")
     def export_products_options():
-        status = request.args.get("status", "all")
-        return render_template("export_catalog.html", status=status)
+        try:
+            filters = _product_filters(request.args, default_status="all")
+        except ProductFilterValidationError as exc:
+            return f"筛选条件无效：{exc}", 400, {"Content-Type": "text/plain; charset=utf-8"}
+        return render_template("export_catalog.html", status=filters.status,
+                               catalog_language=filters.language, catalog_visibility=filters.visibility)
 
     @app.post("/products/export")
     @permission_required("view_products")
@@ -297,6 +212,9 @@ def register(app) -> None:
             filters = _product_filters(request.form, default_status="all")
         except ProductFilterValidationError as exc:
             return f"筛选条件无效：{exc}", 400, {"Content-Type": "text/plain; charset=utf-8"}
+        language = request.form.get("export_language") or request.form.get("lang") or None
+        if language is not None and language not in {"en", "zh"}:
+            return "导出语言无效。", 400
         export_format = request.form.get("export_format", "bld")
         if export_format not in {"bld", "brand"}:
             export_format = "bld"
@@ -309,6 +227,7 @@ def register(app) -> None:
             output_path,
             filters=filters,
             export_format=export_format,
+            language=language,
             actor=actor_name(),
             include_price=can_any("add_customer_prices", "edit_customer_prices", "delete_customer_prices"),
         )

@@ -3,8 +3,8 @@ from __future__ import annotations
 
 PACKAGE_SUFFIX = ".tar.gz"
 PACKAGE_TYPE = "bld_business_data"
-PACKAGE_VERSION = 4
-SUPPORTED_PACKAGE_VERSIONS = frozenset({1, 2, 3, 4})
+PACKAGE_VERSION = 5
+SUPPORTED_PACKAGE_VERSIONS = frozenset({1, 2, 3, 4, 5})
 
 MAX_MEDIA_FILE_SIZE = 512 * 1024 * 1024
 MAX_PACKAGE_METADATA_SIZE = 64 * 1024 * 1024
@@ -22,6 +22,7 @@ MEDIA_DATASETS = {
     "material_drawings": "materials",
 }
 DATASETS = {
+    "development": ("development_projects", "id", "新产品开发"),
     "customers": ("customers", "sync_id", "客户"),
     "products": ("products", "bld_no", "产品目录"),
     "quotes": ("quote_records", "sync_id", "报价记录"),
@@ -46,6 +47,10 @@ FIELD_LABELS = {
     "length": "长度",
     "model": "母件编码",
     "models": "适用车型",
+    "item_zh": "中文产品名称",
+    "models_zh": "中文车型",
+    "catalog_visible_en": "英文目录可见",
+    "catalog_visible_zh": "中文目录可见",
     "moq": "起订量",
     "name": "客户名称",
     "note": "备注",

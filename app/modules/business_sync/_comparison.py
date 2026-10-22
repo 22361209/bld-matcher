@@ -6,6 +6,7 @@ import sqlite3
 from pathlib import Path
 
 from app.modules.products.brand_normalization import canonicalize_brands
+from app.modules.products.catalog_language import catalog_values
 from app.platform.sync_identity import material_match_key, quote_match_key
 
 from ._schema import COMPARISON_EXCLUDED_COLUMNS, DATASETS, FIELD_LABELS, LOCAL_MEDIA_COLUMNS, MEDIA_DIRECTORIES
@@ -70,9 +71,13 @@ def package_digest(package_path: Path) -> str:
     return digest.hexdigest()
 
 
-def state_token(connection: sqlite3.Connection, package_path: Path, datasets: tuple[str, ...]) -> str:
-    state: dict[str, list[list[object]]] = {}
+def state_token(connection: sqlite3.Connection, package_path: Path, datasets: tuple[str, ...], *, development_file_dir: Path | None = None, development_rows: list[dict] | None = None) -> str:
+    state: dict[str, object] = {}
     for key in datasets:
+        if key == "development":
+            from ._development import development_state
+            state[key] = development_state(connection, development_rows or [], development_file_dir)
+            continue
         table, identity, _label = DATASETS[key]
         record_columns = columns(connection, table)
         rows = connection.execute(
@@ -114,6 +119,8 @@ def incoming_status(
 ) -> tuple[str, sqlite3.Row | None, bool]:
     identity = DATASETS[key][1]
     local_row = local.get(str(incoming[identity]))
+    if key == "products":
+        incoming.update(catalog_values(incoming, dict(local_row) if local_row else {}))
     if local_row is not None:
         return status(key, local_row, incoming, record_columns), local_row, False
     if key not in {"quotes", "materials"}:

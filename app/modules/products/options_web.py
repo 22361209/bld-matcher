@@ -11,6 +11,7 @@ from app.modules.products.domain import (
     build_product_filters,
 )
 from app.modules.products.factory import get_product_service
+from app.modules.products.catalog_language import ITEM_TRANSLATIONS
 from app.product_status import format_product_status
 from app.security import actor_name, can_any, permission_required
 
@@ -27,6 +28,7 @@ def register(app) -> None:
             {
                 "brands": [option.value for option in values if option.kind == "brand"],
                 "items": [option.value for option in values if option.kind == "item"],
+                "item_translations": ITEM_TRANSLATIONS,
                 "statuses": [
                     format_product_status(option.value, "zh", multiline=False)
                     for option in values

@@ -261,6 +261,8 @@ class ProductCatalog:
     def from_excel(cls, path: Path, manual_map: dict[str, str] | None = None) -> "ProductCatalog":
         workbook = load_workbook(path, read_only=True, data_only=True)
         try:
+            if "目录说明" in workbook.sheetnames and workbook["目录说明"]["B2"].value == "zh":
+                raise ValueError("中文展示目录不能作为英文主数据导入，请使用产品目录导入模板。")
             worksheet = workbook.active
             raw_rows = list(worksheet.iter_rows(values_only=True))
             header_index, headers = find_catalog_header_row(raw_rows)

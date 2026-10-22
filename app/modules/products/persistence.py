@@ -14,6 +14,7 @@ from app.platform.clock import now_text
 from app.product_media import PRODUCT_IMAGE_DATA_PREFIX, image_slot_field, product_image_storage_name
 
 from .brand_normalization import canonicalize_brands
+from .catalog_language import CATALOG_IMPORT_HEADERS, catalog_values
 from .domain import ProductFilters
 from .option_values import register_product_option_values
 
@@ -58,6 +59,10 @@ def _field_changes(before: sqlite3.Row | None, after: dict[str, object]) -> list
         "oe_no_1": "OE 号",
         "oe_no_2": "品牌号码",
         "models": "车型",
+        "item_zh": "中文名称",
+        "models_zh": "中文车型",
+        "catalog_visible_en": "英文目录可见",
+        "catalog_visible_zh": "中文目录可见",
         "price_cny": "含税单价",
         "product_status": "产品状态",
         "image_path": "产品图片",
@@ -104,6 +109,7 @@ def upsert_product(
         "updated_at": timestamp,
     }
     before = connection.execute("SELECT * FROM products WHERE bld_no = ?", (bld_no,)).fetchone()
+    values.update(catalog_values(data, dict(before) if before else {}))
     price_assignment = (
         "price_cny=COALESCE(excluded.price_cny, products.price_cny)"
         if preserve_blank_price
@@ -113,14 +119,18 @@ def upsert_product(
         f"""
         INSERT INTO products
           (bld_no, series, item, oe_no_1, oe_no_2, models, price_cny, product_status,
-           image_path, active, source, created_at, updated_at)
+           image_path, active, source, created_at, updated_at,
+           item_zh, models_zh, catalog_visible_en, catalog_visible_zh)
         VALUES
           (:bld_no, :series, :item, :oe_no_1, :oe_no_2, :models, :price_cny,
-           :product_status, :image_path, :active, :source, :created_at, :updated_at)
+           :product_status, :image_path, :active, :source, :created_at, :updated_at,
+           :item_zh, :models_zh, :catalog_visible_en, :catalog_visible_zh)
         ON CONFLICT(bld_no) DO UPDATE SET
           series=excluded.series, item=excluded.item, oe_no_1=excluded.oe_no_1,
           oe_no_2=excluded.oe_no_2, models=excluded.models, {price_assignment},
           product_status=excluded.product_status,
+          item_zh=excluded.item_zh, models_zh=excluded.models_zh,
+          catalog_visible_en=excluded.catalog_visible_en, catalog_visible_zh=excluded.catalog_visible_zh,
           image_path=CASE WHEN excluded.image_path != '' THEN excluded.image_path ELSE products.image_path END,
           active=excluded.active, source=excluded.source, updated_at=excluded.updated_at
         """,
@@ -263,6 +273,8 @@ def import_catalog(
                 "price_cny": None,
                 "product_status": "",
                 "image_path": "",
+                **{field: rows[0].get(header) for field, header in CATALOG_IMPORT_HEADERS.items()
+                   if header in rows[0] and rows[0].get(header) is not None},
             },
             source=catalog_path.name,
             audit=False,
@@ -374,9 +386,15 @@ def _product_filter_clauses(
     brand_blank: bool = False,
     item_blank: bool = False,
     product_status_blank: bool = False,
+    language: str = "en",
+    visibility: str = "all",
 ) -> tuple[list[str], list[object]]:
     params: list[object] = []
     clauses: list[str] = []
+    if visibility == "visible":
+        clauses.append("catalog_visible_zh = 1" if language == "zh" else "catalog_visible_en = 1")
+    elif visibility == "neither":
+        clauses.append("catalog_visible_en = 0 AND catalog_visible_zh = 0")
     if only_inactive:
         clauses.append("active = 0")
     elif not include_inactive:
@@ -385,8 +403,9 @@ def _product_filter_clauses(
         bld_query = query
     if bld_query.strip():
         key = f"%{bld_query.strip().upper()}%"
-        clauses.append("(UPPER(bld_no) LIKE ? OR UPPER(series) LIKE ? OR UPPER(models) LIKE ?)")
-        params.extend((key, key, key))
+        clauses.append("(UPPER(bld_no) LIKE ? OR UPPER(series) LIKE ? OR UPPER(models) LIKE ? "
+                       "OR item LIKE ? OR item_zh LIKE ? OR models_zh LIKE ?)")
+        params.extend((key, key, key, key, key, key))
     if oe_query.strip():
         psa_probe = psa_352x_key(oe_query)
         key = f"%{psa_probe[0] if psa_probe else normalize_code(oe_query)}%"
@@ -434,6 +453,8 @@ def list_products(
     brand_blank: bool = False,
     item_blank: bool = False,
     product_status_blank: bool = False,
+    language: str = "en",
+    visibility: str = "all",
     sort_by: str = "bld",
 ) -> list[sqlite3.Row]:
     sql = "SELECT * FROM products"
@@ -451,6 +472,8 @@ def list_products(
         brand_blank,
         item_blank,
         product_status_blank,
+        language,
+        visibility,
     )
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)
@@ -479,6 +502,8 @@ def count_products(
     brand_blank: bool = False,
     item_blank: bool = False,
     product_status_blank: bool = False,
+    language: str = "en",
+    visibility: str = "all",
 ) -> int:
     sql = "SELECT COUNT(*) FROM products"
     clauses, params = _product_filter_clauses(
@@ -495,6 +520,8 @@ def count_products(
         brand_blank,
         item_blank,
         product_status_blank,
+        language,
+        visibility,
     )
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)
@@ -520,6 +547,8 @@ def product_filter_option_rows(
         oe_query=filters.oe_query,
         series_query=filters.series_query,
         model_query=filters.model_query,
+        language=filters.language,
+        visibility=filters.visibility,
     )
 
     def inclusion_expression(
@@ -575,6 +604,7 @@ def product_filter_option_rows(
           bld_no,
           series,
           item,
+          item_zh,
           product_status,
           CASE WHEN ({brand_expression}) THEN 1 ELSE 0 END AS include_brand,
           CASE WHEN ({item_expression}) THEN 1 ELSE 0 END AS include_item,

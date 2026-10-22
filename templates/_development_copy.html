@@ -1,0 +1,57 @@
+{% set copy_ready = request.args.get('copy') == '1' or form_key == 'copy-branch' %}
+{% set copy_url = url_for('development_detail', project_id=project.id, view='components', branch=selected_branch.id, copy='1') %}
+<section class="data-section development-panel development-copy-panel">
+  <details class="development-disclosure" data-development-copy-disclosure data-copy-ready="{{ 'true' if copy_ready else 'false' }}"{% if copy_ready %} open{% endif %}>
+    <summary><a href="{{ copy_url }}" data-development-copy-open>复制 {{ selected_branch.code }} 为另一侧 · 核对零件与编码</a></summary>
+    <form class="development-form" method="post" action="{{ url_for('development_copy_branch', project_id=project.id, branch_id=selected_branch.id) }}" data-development-form data-development-copy>
+      {{ hidden('copy-branch', view='components') }}
+      <div class="development-field-grid">
+        {{ input('copy-branch', 'code', '新成品完整编码', required=true, hint='手工填写完整编码，不自动猜前后缀') }}
+        {{ input('copy-branch', 'name', '新成品名称', default=selected_branch.name) }}
+        {{ select('copy-branch', 'side', '新成品侧别', [('left', '左'),('right','右'),('single','单侧')], default='right' if selected_branch.side == 'left' else 'left') }}
+        {{ input('copy-branch', 'owner_username', '负责人账号', default=selected_branch.owner_username) }}
+        {{ input('copy-branch', 'planned_date', '计划完成日期', type='date', default=selected_branch.planned_date) }}
+        {{ select('copy-branch', 'drawing_required', '新成品图纸需求', [('1','需图'),('0','不需图')], default='1') }}
+        {{ input('copy-branch', 'drawing_reason', '不需图原因') }}
+        <input name="drawing_status" type="hidden" value="not_started">
+      </div>
+      <p class="development-help">按来源层级逐项核对。目标编码先沿用已保存的录入值，可在本次复制中修改；本型号编码与借用编号分别保存。每项默认独立，选为共用才关联同一开发任务。</p>
+      <div class="workspace-command development-copy-command">
+        <label class="development-check"><input type="checkbox" data-copy-select-all>全选核对项</label>
+        <span role="status" aria-live="polite" data-copy-selection-status>已选 0 项</span>
+        <div class="command-actions">
+          <button type="button" class="linear-button subtle" data-copy-set-mode="shared" disabled>选中项共用</button>
+          <button type="button" class="linear-button subtle" data-copy-set-mode="independent" disabled>选中项独立</button>
+        </div>
+      </div>
+      <div class="workspace-table-wrap data-table-scroll development-copy-scroll" tabindex="0" role="region" aria-label="另一侧复制核对表">
+        <table class="workspace-table development-copy-table">
+          <thead><tr><th scope="col">选择</th><th scope="col">来源零件与层级</th><th scope="col">目标本型号编码</th><th scope="col">目标借用编号</th><th scope="col">开发任务</th></tr></thead>
+          <tbody>
+            {% macro copy_rows(parent_id=none, depth=0) %}
+              {% for item in branch_components|sort(attribute='sort_order') if not item.archived and (item.parent_id == parent_id or (not parent_id and not item.parent_id)) %}
+                <tr data-copy-row data-source-id="{{ item.id }}" data-copy-depth="{{ depth }}">
+                  <td><input type="checkbox" name="copy_selected" value="{{ item.id }}" data-copy-selected aria-label="选择 {{ item.name }}"{% if form_key == 'copy-branch' and item.id in form_values.getlist('copy_selected') %} checked{% endif %}></td>
+                  <th scope="row"><div class="development-copy-source">
+                    {% for level in range(depth) %}<span class="development-copy-indent" aria-hidden="true">│</span>{% endfor %}
+                    <span><strong>{{ item.code or '编码待定' }}</strong> · {{ item.name }}<small>第 {{ depth + 1 }} 层 · ×{{ item.quantity }}{% if item.borrowed_code %} · 借用 {{ item.borrowed_code }}{% endif %}</small></span>
+                  </div></th>
+                  <td><input name="code_{{ item.id }}" type="text" maxlength="200" value="{{ value('copy-branch', 'code_' ~ item.id, default=item.code) }}" aria-label="{{ item.name }}的目标本型号编码"></td>
+                  <td><input name="borrowed_code_{{ item.id }}" type="text" maxlength="200" value="{{ value('copy-branch', 'borrowed_code_' ~ item.id, default=item.borrowed_code) }}" aria-label="{{ item.name }}的目标借用编号"></td>
+                  <td><select name="mode_{{ item.id }}" data-copy-mode aria-label="{{ item.name }}的开发任务方式"><option value="independent"{% if value('copy-branch', 'mode_' ~ item.id, default='independent')|trim == 'independent' %} selected{% endif %}>独立开发</option><option value="shared"{% if value('copy-branch', 'mode_' ~ item.id)|trim == 'shared' %} selected{% endif %}>共用开发任务</option></select></td>
+                </tr>
+                {{ copy_rows(item.id, depth + 1) }}
+              {% endfor %}
+            {% endmacro %}
+            {{ copy_rows() }}
+          </tbody>
+        </table>
+      </div>
+      {% if can('view_development_files') %}<label class="development-check"><input type="checkbox" name="copy_drawings" value="1"{% if form_key == 'copy-branch' and form_values.get('copy_drawings') == '1' %} checked{% endif %}>另行确认：新成品、独立任务及其工序采用来源当前的具体文件修订</label>{% endif %}
+      <p class="development-help">共用任务的状态和共享资料两侧同步，各处编码及借用关系独立保留。独立任务重置完成状态、实际日期与完成确认；文件默认不复制，不按相似编码自动共用。</p>
+      <p class="development-help" role="status" aria-live="polite" data-copy-status></p>
+      <p class="development-help" data-copy-refresh hidden>来源结构已更新，请先保存主表，再<a href="{{ copy_url }}" data-development-copy-open>重新打开复制核对表</a>。</p>
+      {{ actions('确认复制为另一侧') }}
+    </form>
+  </details>
+</section>

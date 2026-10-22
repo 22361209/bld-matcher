@@ -7,6 +7,12 @@ def register_routes(app) -> None:
     from app.modules.business_sync import register as register_business_sync
     from app.modules.contracts import register as register_contracts
     from app.modules.customers import register as register_customers
+    from app.modules.development.web import register as register_development
+    from app.modules.development.web_structure import register as register_development_structure
+    from app.modules.development.web_tasks import register as register_development_tasks
+    from app.modules.development.web_documents import register as register_development_documents
+    from app.modules.development.web_lookup import register as register_development_lookup
+    from app.modules.development.web_grid import register as register_development_grid
     from app.modules.inquiry import register as register_inquiry_api
     from app.modules.materials import register as register_materials
     from app.modules.tubes import register as register_tubes
@@ -21,6 +27,12 @@ def register_routes(app) -> None:
     home.register(app)
     register_materials(app)
     register_tubes(app)
+    register_development(app)
+    register_development_structure(app)
+    register_development_tasks(app)
+    register_development_documents(app)
+    register_development_lookup(app)
+    register_development_grid(app)
     register_contracts(app)
     register_customers(app)
     register_quotes(app)

@@ -12,6 +12,7 @@ from app.platform.sync_identity import stable_sync_id
 
 from ._comparison import (
     columns,
+    package_digest,
     incoming_status,
     normalized_incoming,
     state_token,
@@ -20,6 +21,8 @@ from ._comparison import (
 )
 from ._package_archive import PackageReader
 from ._schema import DATASETS, LOCAL_MEDIA_COLUMNS, MEDIA_DATASETS
+from ._development import apply_aggregates, verify_applied_files
+from ._development_files import restore_development_files
 
 
 IncomingNormalizer = Callable[[str, object], dict[str, object]]
@@ -184,8 +187,14 @@ def apply_package(
     media_restore_fn: MediaRestore,
     product_image_apply_fn: ProductImageApply,
     resolve_quote_customers_fn: QuoteCustomerResolver = resolve_quote_customers,
+    development_file_dir: Path | None = None,
+    original_package_path: Path | None = None,
+    allow_development: bool = True,
 ) -> dict[str, dict[str, int]]:
+    initial_digest = package_digest(package_path)
     manifest, payload = read_package_fn(package_path)
+    if "development" in payload and not allow_development:
+        raise ValueError("没有开发资料编辑及文件访问权限。")
     backup_path.parent.mkdir(parents=True, exist_ok=True)
     backup = sqlite3.connect(backup_path)
     try:
@@ -196,11 +205,12 @@ def apply_package(
         backup.close()
     result: dict[str, dict[str, int]] = {}
     media_changes: list[tuple[Path, Path | None]] = []
+    development_changes, development_verification = [], None
     media_backup_root = backup_path.with_name(f"{backup_path.name}.media")
     connection = connect(database_path)
     try:
         connection.execute("BEGIN IMMEDIATE")
-        if state_token(connection, package_path, tuple(payload)) != expected_token:
+        if state_token(connection, package_path, tuple(payload), development_file_dir=development_file_dir, development_rows=payload.get("development", [])) != expected_token:
             raise ValueError("预览后数据包或本机数据已变化，请重新上传预览。")
         media_requests = {
             "drawings": include_drawings,
@@ -212,7 +222,7 @@ def apply_package(
             for key, requested in media_requests.items()
             if MEDIA_DATASETS[key] in payload
         }
-        structured_product_images = manifest.get("version") == 4 and requested_media.get("product_images") is True
+        structured_product_images = manifest.get("version") in {4, 5} and requested_media.get("product_images") is True
         legacy_media_requests = dict(requested_media)
         if structured_product_images:
             legacy_media_requests["product_images"] = False
@@ -224,6 +234,9 @@ def apply_package(
         imported_quote_ids: set[int] = set()
         resolve_quote_customers_fn(connection, payload, customer_mappings)
         for key, incoming_rows in payload.items():
+            if key == "development":
+                result[key], development_verification = apply_aggregates(connection, package_path, incoming_rows, development_file_dir, selected_conflicts.get(key, set()), development_changes)
+                continue
             table, identity, _label = DATASETS[key]
             syncable_rows, ignored_inactive = syncable_incoming_rows(key, incoming_rows)
             record_columns = columns(connection, table)
@@ -325,10 +338,17 @@ def apply_package(
             ),
             actor=actor,
         )
+        if development_verification is not None:
+            verify_applied_files(development_file_dir, development_verification)
+            if package_digest(original_package_path or package_path) != initial_digest:
+                raise ValueError("提交前数据包已变化，请重新预览。")
         connection.commit()
     except Exception:
         connection.rollback()
-        media_restore_fn(media_changes)
+        try:
+            restore_development_files(development_changes)
+        finally:
+            media_restore_fn(media_changes)
         raise
     finally:
         connection.close()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime
 from pathlib import Path
 
 from app.matcher import compact_text
@@ -168,3 +169,25 @@ class ProductWriteRepositoryMixin(ProductRepositoryContext):
             actor=actor,
         )
         return updated
+
+    def update_catalog_visibility(
+        self, product_id: int, *, language: str, visible: bool,
+        expected_visible: bool, expected_updated_at: str, actor: str,
+    ) -> ProductRecord | None:
+        field = {"en": "catalog_visible_en", "zh": "catalog_visible_zh"}[language]
+        product = self.get(product_id)
+        if product is None:
+            return None
+        # Keep the existing timestamp revision contract, with sufficient precision
+        # to reject stale toggles even when two writes happen within one second.
+        timestamp = datetime.now().isoformat(sep=" ", timespec="microseconds")
+        cursor = self.connection.execute(
+            f"UPDATE products SET {field} = ?, updated_at = ? "
+            f"WHERE id = ? AND updated_at = ? AND {field} = ?",
+            (int(visible), timestamp, product_id, expected_updated_at, int(expected_visible)),
+        )
+        if cursor.rowcount != 1:
+            return None
+        self._log_event(self.connection, "修改目录可见性", "product", product.bld_no,
+                        f"{'英文' if language == 'en' else '中文'}目录可见: {int(expected_visible)} -> {int(visible)}", actor=actor)
+        return self.get(product_id)

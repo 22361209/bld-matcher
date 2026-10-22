@@ -1557,7 +1557,7 @@ class BusinessSyncServiceTest(unittest.TestCase):
             name="future-business-package.tar.gz",
             manifest={
                 "package_type": "bld_business_data",
-                "version": 5,
+                "version": 6,
                 "datasets": ["materials"],
             },
             payload={"materials": [{"sync_id": "future-material"}]},

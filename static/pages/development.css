@@ -1,0 +1,242 @@
+.development-panel {
+  min-width: 0;
+  margin-bottom: 16px;
+}
+
+.data-grid .data-table.development-list-table {
+  min-width: 960px;
+}
+
+.development-list-table th:first-child {
+  width: 280px;
+}
+
+.development-context,
+.development-branch-heading,
+.development-summary,
+.development-tabs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.development-context,
+.development-branch-heading {
+  justify-content: space-between;
+}
+
+.development-context > div,
+.development-branch-heading > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.development-tabs,
+.development-summary {
+  padding: 12px 16px;
+}
+
+.development-tabs [aria-current="page"],
+.development-tree [aria-current="page"] {
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.development-summary {
+  border-top: 1px solid var(--linear-border);
+  gap: 12px 24px;
+}
+
+.development-help,
+.development-field small {
+  color: var(--linear-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.development-panel > .development-help {
+  padding: 0 16px 12px;
+}
+
+.development-form,
+.development-revision-body {
+  padding: 12px 16px;
+  min-width: 0;
+}
+
+.development-form fieldset {
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0 0 12px;
+}
+
+.development-form legend {
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.development-field-grid,
+.development-copy-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 16px;
+}
+
+.development-field {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.development-field > input,
+.development-field > select,
+.development-field > textarea {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.development-field-wide {
+  grid-column: 1 / -1;
+}
+
+.development-form .form-actions {
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.development-check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0;
+  overflow-wrap: anywhere;
+}
+
+.development-check input {
+  flex: 0 0 auto;
+  width: auto;
+}
+
+.development-disclosure {
+  border-top: 1px solid var(--linear-border);
+  min-width: 0;
+}
+
+.development-disclosure > summary {
+  cursor: pointer;
+  padding: 14px 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.development-branch,
+.development-document {
+  padding: 16px;
+  border-top: 1px solid var(--linear-border);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.development-branch-heading p {
+  margin: 6px 0;
+}
+
+.development-component-workspace {
+  display: grid;
+  grid-template-columns: minmax(230px, 28%) minmax(0, 1fr);
+  border-top: 1px solid var(--linear-border);
+  min-width: 0;
+}
+
+.development-tree-panel {
+  padding: 16px;
+  min-width: 0;
+  border-right: 1px solid var(--linear-border);
+}
+
+.development-tree {
+  padding-left: 12px;
+  list-style: none;
+  margin: 8px 0;
+}
+
+.development-tree-panel > .development-tree {
+  padding-left: 0;
+}
+
+.development-tree a {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 0;
+  overflow-wrap: anywhere;
+}
+
+.development-tree small {
+  color: var(--linear-muted);
+}
+
+.development-component-detail {
+  padding: 16px;
+  min-width: 0;
+}
+
+.development-copy-options {
+  margin: 16px 0;
+}
+
+.development-adopted-documents,
+.development-operations {
+  padding: 16px 0;
+  border-top: 1px solid var(--linear-border);
+  overflow-wrap: anywhere;
+}
+
+.development-file-hash {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.development-errors {
+  margin: 12px 16px;
+}
+
+.development-revision-body .development-form {
+  padding-inline: 0;
+}
+
+@media (max-width: 1000px) {
+  .development-field-grid,
+  .development-copy-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .development-component-workspace,
+  .development-field-grid,
+  .development-copy-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .development-tree-panel {
+    border-right: 0;
+    border-bottom: 1px solid var(--linear-border);
+  }
+
+  .development-form,
+  .development-component-detail,
+  .development-branch,
+  .development-document,
+  .development-revision-body {
+    padding: 12px;
+  }
+}

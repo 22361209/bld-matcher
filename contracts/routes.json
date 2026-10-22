@@ -421,6 +421,188 @@
       "rule": "/customers/save"
     },
     {
+      "endpoint": "development_list",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/development"
+    },
+    {
+      "endpoint": "development_detail",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/development/<project_id>"
+    },
+    {
+      "endpoint": "development_archive",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/development/<project_id>/archive"
+    },
+    {
+      "endpoint": "development_confirm_branch",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/development/<project_id>/branches/<branch_id>/confirm"
+    },
+    {
+      "endpoint": "development_copy_branch",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/development/<project_id>/branches/<branch_id>/copy"
+    },
+    {
+      "endpoint": "development_save_grid",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/development/<project_id>/branches/<branch_id>/grid/save"
+    },
+    {
+      "endpoint": "development_update_branch",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/development/<project_id>/branches/<branch_id>/update"
+    },
+    {
+      "endpoint": "development_add_branch",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/development/<project_id>/branches/add"
+    },
+    {
+      "endpoint": "development_update_component",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/development/<project_id>/components/<component_id>/update"
+    },
+    {
+      "endpoint": "development_add_component",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/development/<project_id>/components/add"
+    },
+    {
+      "endpoint": "development_archive_document",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/development/<project_id>/documents/<document_id>/archive"
+    },
+    {
+      "endpoint": "development_adopt_document",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/development/<project_id>/documents/<revision_id>/adopt"
+    },
+    {
+      "endpoint": "development_download_document",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/development/<project_id>/documents/<revision_id>/download"
+    },
+    {
+      "endpoint": "development_preview_document",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/development/<project_id>/documents/<revision_id>/preview"
+    },
+    {
+      "endpoint": "development_document_state",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/development/<project_id>/documents/<revision_id>/state"
+    },
+    {
+      "endpoint": "development_snapshot_document",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/development/<project_id>/documents/snapshot"
+    },
+    {
+      "endpoint": "development_upload_document",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/development/<project_id>/documents/upload"
+    },
+    {
+      "endpoint": "development_lookup_component_context",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/development/<project_id>/lookup/components/<component_id>"
+    },
+    {
+      "endpoint": "development_lookup_sources",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/development/<project_id>/lookup/sources"
+    },
+    {
+      "endpoint": "development_update_operation",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/development/<project_id>/operations/<operation_id>/update"
+    },
+    {
+      "endpoint": "development_add_operation",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/development/<project_id>/operations/add"
+    },
+    {
+      "endpoint": "development_save_supplier",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/development/<project_id>/suppliers/save"
+    },
+    {
+      "endpoint": "development_update_task",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/development/<project_id>/tasks/<task_id>/update"
+    },
+    {
+      "endpoint": "development_update",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/development/<project_id>/update"
+    },
+    {
+      "endpoint": "development_create",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/development/create"
+    },
+    {
+      "endpoint": "development_new",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/development/new"
+    },
+    {
       "endpoint": "download",
       "methods": [
         "GET"
@@ -727,6 +909,13 @@
         "POST"
       ],
       "rule": "/products/<bld_no>/rename"
+    },
+    {
+      "endpoint": "update_product_catalog_visibility",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/products/<int:product_id>/catalog-visibility"
     },
     {
       "endpoint": "stop_product",

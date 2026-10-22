@@ -1,0 +1,57 @@
+{% macro target_selector(key, optional=false) %}
+<label class="development-field development-field-wide"><span>关联对象（选择具体采用位置）</span><select name="target"{% if not optional %} required{% endif %}>
+  {% if optional %}<option value="">暂不采用，仅保存修订</option>{% endif %}
+  {% set current_target = value(key, 'target', default=('task|' ~ selected_component.task_id) if selected_component else ('branch|' ~ selected_branch.id) if selected_branch else ('project|' ~ project.id))|trim %}
+  <option value="project|{{ project.id }}"{% if current_target == 'project|' ~ project.id %} selected{% endif %}>开发单 · {{ project.title }}</option>
+  <optgroup label="完整成品">{% for branch in branches %}<option value="branch|{{ branch.id }}"{% if current_target == 'branch|' ~ branch.id %} selected{% endif %}>{{ branch.code }} · {{ branch.name }}</option>{% endfor %}</optgroup>
+  <optgroup label="组件开发任务（共用任务两侧同步）">{% for task in tasks %}<option value="task|{{ task.id }}"{% if current_target == 'task|' ~ task.id %} selected{% endif %}>{{ task.name }} · {% for component in all_components if component.task_id == task.id %}{{ component.code or component.name }}{% if not loop.last %} / {% endif %}{% endfor %}</option>{% endfor %}</optgroup>
+  <optgroup label="工序">{% for operation in operations %}<option value="operation|{{ operation.id }}"{% if current_target == 'operation|' ~ operation.id %} selected{% endif %}>{{ operation.sequence }}. {{ operation.name }}</option>{% endfor %}</optgroup>
+</select></label>
+{% endmacro %}
+<section class="data-section development-panel">
+  <div class="workspace-command"><strong>图纸与工艺文件</strong><span class="development-help">采用具体修订；新版本提示后人工升级。发布 / 作废产生新修订，历史文件保留。</span></div>
+  {% if can_edit %}
+    {% set upload_document = none %}{% set upload_key = 'new-document' %}{% include '_development_document_upload.html' %}
+    {% if can('view_product_drawings') or can('view_material_drawings') %}<details class="development-disclosure"{% if form_key == 'legacy-snapshot' %} open{% endif %}><summary>从已有产品 / 物料图纸保存固定快照</summary>
+      <form class="development-form" method="post" action="{{ url_for('development_snapshot_document', project_id=project.id) }}" data-development-form>
+        {{ hidden('legacy-snapshot') }}<input type="hidden" name="kind" value="drawing"><div class="development-field-grid">
+          <label class="development-field"><span>已有图纸位置</span><select name="source_kind">{% if can('view_product_drawings') %}<option value="product">产品图纸</option>{% endif %}{% if can('view_material_drawings') %}<option value="material"{% if value('legacy-snapshot', 'source_kind')|trim == 'material' %} selected{% endif %}>物料图纸</option>{% endif %}</select></label>
+          {{ input('legacy-snapshot', 'relative_name', '已有图纸文件名', required=true, hint='仅填写目录中的文件名，例如 QD8070.pdf') }}
+          {{ input('legacy-snapshot', 'number', '资料编号', required=true) }}{{ input('legacy-snapshot', 'title', '资料名称', required=true) }}{{ input('legacy-snapshot', 'label', '修订版本', default='A', required=true) }}
+          {{ select('legacy-snapshot', 'state', '资料状态', [('draft','草稿'),('released','发布')], default='draft') }}
+          {{ notes('legacy-snapshot', 'change_note', '快照说明', required=true) }}{{ target_selector('legacy-snapshot', true) }}
+        </div>{{ actions('保存固定快照') }}
+      </form>
+    </details>{% endif %}
+  {% endif %}
+  {% for document in documents %}
+    <article class="development-document">
+      <div class="development-branch-heading"><div><strong>{{ document.number }} · {{ document.title }}</strong> <span class="status-badge">{{ labels.get(document.kind, document.kind) }}</span>{% if document.archived %} <span class="status-badge">已归档</span>{% endif %}</div></div>
+      <div class="development-document-links">{% for link in document.links %}
+        <p>已采用：{% if link.target_type == 'project' %}开发单 {{ project.title }}{% elif link.target_type == 'branch' %}{% for item in branches if item.id == link.target_id %}成品 {{ item.code }}{% endfor %}{% elif link.target_type == 'task' %}{% for item in tasks if item.id == link.target_id %}任务 {{ item.name }}{% endfor %}{% elif link.target_type == 'operation' %}{% for item in operations if item.id == link.target_id %}工序 {{ item.name }}{% endfor %}{% endif %}
+          {% for revision in document.revisions if revision.id == link.revision_id %} · {{ revision.label }}（{{ labels.get(revision.state, revision.state) }}）{% endfor %}
+          {% if link.has_newer_revision %}<strong>有新修订，尚未采用</strong>{% endif %}
+        </p>{% else %}<p class="development-help">此文档尚未被采用。</p>{% endfor %}</div>
+      {% for revision in document.revisions %}
+        <details class="development-disclosure"{% if loop.first or form_key in ['adopt-' ~ revision.id, 'state-' ~ revision.id] %} open{% endif %}>
+          <summary>修订 {{ revision.revision_no }} · {{ revision.label }} · {{ labels.get(revision.state, revision.state) }} · {{ revision.original_name }}</summary>
+          <div class="development-revision-body">
+            <p>{{ revision.change_note }}</p><p class="development-help">{{ revision.created_by }} · {{ revision.created_at }} · {{ revision.size_bytes }} 字节</p>
+            <p class="development-file-hash">SHA-256 <code>{{ revision.sha256 }}</code></p>
+            <div class="command-actions"><a class="linear-button subtle" href="{{ url_for('development_download_document', project_id=project.id, revision_id=revision.id) }}">下载此修订</a>{% if revision.previewable %}<a class="linear-button subtle" href="{{ url_for('development_preview_document', project_id=project.id, revision_id=revision.id) }}" target="_blank" rel="noopener">预览 PDF</a>{% else %}<span class="development-help">源文件下载后打开</span>{% endif %}</div>
+            {% if can_edit and not document.archived %}
+              <form class="development-form" method="post" action="{{ url_for('development_adopt_document', project_id=project.id, revision_id=revision.id) }}" data-development-form>{{ hidden('adopt-' ~ revision.id) }}{{ target_selector('adopt-' ~ revision.id) }}<div class="form-actions"><button class="linear-button subtle" type="submit" data-confirm="确认所选对象采用 {{ document.number }} 的修订 {{ revision.label }}（{{ labels.get(revision.state, revision.state) }}）？已有采用版本将由本次明确选择替换，历史修订继续保留。">采用此修订</button><span data-development-submit-status aria-live="polite"></span></div></form>
+              <details class="development-disclosure"{% if form_key == 'state-' ~ revision.id %} open{% endif %}><summary>记录发布 / 作废等状态修订</summary><form class="development-form" method="post" action="{{ url_for('development_document_state', project_id=project.id, revision_id=revision.id) }}" data-development-form>
+                {{ hidden('state-' ~ revision.id) }}<div class="development-field-grid">{{ select('state-' ~ revision.id, 'state', '新状态', [('draft','草稿'),('released','发布'),('obsolete','作废')], default=revision.state) }}{{ notes('state-' ~ revision.id, 'change_note', '状态变更说明', required=true) }}</div>{{ actions('记录新状态修订') }}
+              </form></details>
+            {% endif %}
+          </div>
+        </details>
+      {% endfor %}
+      {% if can_edit and not document.archived %}
+        {% set upload_document = document %}{% set upload_key = 'upload-' ~ document.id %}{% include '_development_document_upload.html' %}
+        <form class="development-form" method="post" action="{{ url_for('development_archive_document', project_id=project.id, document_id=document.id) }}" data-development-form>{{ hidden('archive-' ~ document.id) }}<div class="form-actions"><button class="linear-button danger" type="submit" data-confirm="归档文档 {{ document.number }} · {{ document.title }}？将停止新修订，已采用的修订和文件历史保留。">归档文档</button><span data-development-submit-status aria-live="polite"></span></div></form>
+      {% endif %}
+    </article>
+  {% else %}<div class="empty-state">尚未上传开发资料。上传 PDF 图纸或白名单源文件，选择明确的采用位置；工艺文件支持草稿、发布及作废修订。</div>{% endfor %}
+</section>

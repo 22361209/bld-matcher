@@ -1,0 +1,21 @@
+{% macro controls(product) %}
+<div class="catalog-visibility-controls" data-catalog-visibility-controls
+     data-product-id="{{ product.id }}" data-version="{{ product.updated_at }}"
+     data-visible-en="{{ 1 if product.catalog_visible_en else 0 }}"
+     data-visible-zh="{{ 1 if product.catalog_visible_zh else 0 }}"
+     data-can-edit="{{ 1 if can('edit_products') else 0 }}"
+     data-save-url="{{ url_for('update_product_catalog_visibility', product_id=product.id) }}">
+  {% if can('edit_products') %}{{ csrf_field() }}{% endif %}
+  <div class="catalog-visibility-choices">
+    {% for language, label, visible in [('en', '英文', product.catalog_visible_en), ('zh', '中文', product.catalog_visible_zh)] %}
+    <label class="check">
+      <input type="checkbox" data-catalog-visibility-toggle data-language="{{ language }}"
+             aria-label="{{ label }}目录可见 · {{ product.bld_no }}"
+             {% if visible %}checked{% endif %} {% if not can('edit_products') %}disabled{% endif %}>
+      {{ label }}
+    </label>
+    {% endfor %}
+  </div>
+  <span class="note" data-catalog-visibility-status aria-live="polite">{% if not can('edit_products') %}只读{% endif %}</span>
+</div>
+{% endmacro %}

@@ -1,0 +1,50 @@
+{% macro value(key, field, item={}, default='') -%}
+  {%- set result = form_values.get(field, default) if form_key == key else item.get(field, default) -%}
+  {{- result if result is not none else '' -}}
+{%- endmacro %}
+
+{% macro input(key, field, label, item={}, default='', type='text', required=false, hint='') -%}
+<label class="development-field"><span>{{ label }}{% if required %} <span aria-hidden="true">*</span>{% endif %}</span>
+  <input name="{{ field }}" type="{{ type }}" value="{{ value(key, field, item, default) }}"{% if required %} required{% endif %}{% if form_key == key and error_field == field %} aria-invalid="true"{% endif %}{% if type == 'number' %} step="any" min="0.001"{% elif type == 'text' %} maxlength="200"{% endif %}>
+  {% if form_key == key and error_field == field %}<small class="field-error">{{ errors[0] }}</small>{% endif %}
+  {% if hint %}<small>{{ hint }}</small>{% endif %}
+</label>
+{%- endmacro %}
+
+{% macro select(key, field, label, options, item={}, default='') -%}
+<label class="development-field"><span>{{ label }}</span><select name="{{ field }}"{% if form_key == key and error_field == field %} aria-invalid="true"{% endif %}>
+  {% set selected_value = value(key, field, item, default)|trim %}
+  {% for option, text in options %}<option value="{{ option }}"{% if selected_value == option|string %} selected{% endif %}>{{ text }}</option>{% endfor %}
+</select>{% if form_key == key and error_field == field %}<small class="field-error">{{ errors[0] }}</small>{% endif %}</label>
+{%- endmacro %}
+
+{% macro notes(key, field='notes', label='备注', item={}, required=false) -%}
+<label class="development-field development-field-wide"><span>{{ label }}</span><textarea name="{{ field }}" rows="2" maxlength="4000"{% if required %} required{% endif %}{% if form_key == key and error_field == field %} aria-invalid="true"{% endif %}>{{ value(key, field, item) }}</textarea>{% if form_key == key and error_field == field %}<small class="field-error">{{ errors[0] }}</small>{% endif %}</label>
+{%- endmacro %}
+
+{% macro hidden(key, view=active_view, branch_id='', component_id='') -%}
+{{ csrf_field() }}
+<input type="hidden" name="form_key" value="{{ key }}">
+<input type="hidden" name="expected_version" value="{{ form_values.get('expected_version', project.version) if form_key == key else project.version }}">
+<input type="hidden" name="view" value="{{ view }}">
+<input type="hidden" name="branch" value="{{ branch_id or (selected_branch.id if selected_branch else '') }}">
+<input type="hidden" name="component" value="{{ component_id or (selected_component.id if selected_component else '') }}">
+{%- endmacro %}
+
+{% macro actions(label='保存') -%}
+<div class="form-actions"><button class="linear-button subtle" type="submit"{% if not can_edit %} disabled{% endif %}>{{ label }}</button><span class="development-submit-status" aria-live="polite" data-development-submit-status></span></div>
+{%- endmacro %}
+
+{% macro dates(key, item={}) -%}
+{{ input(key, 'owner_username', '负责人账号', item, hint='成品完成由此账号确认') }}
+{{ input(key, 'planned_date', '计划完成日期', item, type='date') }}
+{{ input(key, 'actual_date', '实际完成日期', item, type='date') }}
+{%- endmacro %}
+
+{% macro borrowing_source(key, item={}) -%}
+<label class="development-field"><span>借用来源</span><select name="borrowed_source_id" data-development-borrowing-source>
+  <option value="">按借用编号单独登记来源</option>
+  {% set current_source = value(key, 'borrowed_source_id', item)|trim %}
+  {% for source in borrowing_sources %}<option value="{{ source.id }}" data-source-code="{{ source.code }}"{% if current_source == source.id %} selected{% endif %}>{{ source.code }} · {{ source.name }}{% if borrowing_sources|selectattr('code', 'equalto', source.code)|list|length > 1 %} · {{ source.id[-8:] }}{% endif %}</option>{% endfor %}
+</select><small>可明确选用已有来源；相同编号不会自动合并。修改借用编号时先选择单独登记。</small></label>
+{%- endmacro %}

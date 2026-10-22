@@ -23,6 +23,7 @@ LANDING_PAGE_DEFINITIONS: tuple[tuple[str, str, str, str], ...] = (
     ("quotes", "报价记录", "view_customer_prices", "quote_web.quotes"),
     ("contracts", "合同管理", "view_contracts", "contracts"),
     ("products", "产品目录", "view_products", "products"),
+    ("development", "产品开发", "view_development", "development_list"),
     ("tubes", "管件资料", "manage_tube_items", "tube_items"),
     ("materials", "生产料单", "generate_material_sheet", "materials"),
     ("material_drawings", "物料图纸", "view_material_drawings", "material_drawings"),
@@ -42,6 +43,7 @@ LANDING_PAGE_FALLBACK_ORDER = (
     "users",
     "logs",
     "business_data_sync",
+    "development",
 )
 
 

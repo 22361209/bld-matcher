@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import IO
 
 from ._comparison import media_summary, normalized_incoming
-from ._database_apply import apply_package, resolve_quote_customers
+from ._database_apply import resolve_quote_customers
+from ._apply_snapshot import apply_package
 from ._media_transaction import (
     atomic_copy,
     atomic_copy_stream,
@@ -33,8 +34,12 @@ class BusinessSyncRepository:
         drawing_dir: Path | None = None,
         image_dir: Path | None = None,
         material_drawing_dir: Path | None = None,
+        development_file_dir: Path | None = None,
+        allow_development: bool = True,
     ) -> None:
         self.database_path = database_path
+        self.development_file_dir = development_file_dir
+        self.allow_development = allow_development
         self.media_dirs = {
             "drawings": drawing_dir,
             "product_images": image_dir,
@@ -51,6 +56,8 @@ class BusinessSyncRepository:
         include_images: bool = False,
         include_material_drawings: bool = False,
     ) -> Path:
+        if "development" in selected and not self.allow_development:
+            raise ValueError("没有开发资料及文件访问权限。")
         return export_package(
             self.database_path,
             output_path=output_path,
@@ -60,6 +67,7 @@ class BusinessSyncRepository:
             include_images=include_images,
             include_material_drawings=include_material_drawings,
             product_image_dir=self.media_dirs["product_images"],
+            development_file_dir=self.development_file_dir,
             add_media_directory_fn=self._add_media_directory,
             read_package_fn=self.read,
         )
@@ -78,6 +86,8 @@ class BusinessSyncRepository:
             read_package_fn=self.read,
             normalized_incoming_fn=self._normalized_incoming,
             media_summary_fn=self._media_summary,
+            development_file_dir=self.development_file_dir,
+            allow_development=self.allow_development,
         )
 
     @staticmethod
@@ -128,6 +138,8 @@ class BusinessSyncRepository:
             media_restore_fn=self._restore_media,
             product_image_apply_fn=self._apply_product_images,
             resolve_quote_customers_fn=self._resolve_quote_customers,
+            development_file_dir=self.development_file_dir,
+            allow_development=self.allow_development,
         )
 
     def _copy_requested_media(

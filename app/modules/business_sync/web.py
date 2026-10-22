@@ -5,12 +5,13 @@ from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
-from flask import flash, redirect, render_template, request, send_file, url_for
+from flask import abort, flash, redirect, render_template, request, send_file, url_for
+from werkzeug.exceptions import HTTPException
 
 from app.config import DATA_DIR
 from app.helpers import user_file_label, user_output_dir, user_upload_dir, user_upload_path
 from app.locks import ImportLockError, import_lock
-from app.security import actor_name, permission_required
+from app.security import actor_name, can, permission_required
 
 from .infrastructure import DATASETS, PACKAGE_SUFFIX, BusinessSyncRepository
 from .service import BusinessSyncService
@@ -19,7 +20,7 @@ from .service import BusinessSyncService
 logger = logging.getLogger(__name__)
 
 
-def _service() -> BusinessSyncService:
+def _service(*, write: bool = False) -> BusinessSyncService:
     from app.config import DB_PATH, DRAWING_DIR, MATERIAL_DRAWING_DIR, PRODUCT_IMAGE_DIR
     return BusinessSyncService(
         BusinessSyncRepository(
@@ -27,8 +28,25 @@ def _service() -> BusinessSyncService:
             drawing_dir=DRAWING_DIR,
             image_dir=PRODUCT_IMAGE_DIR,
             material_drawing_dir=MATERIAL_DRAWING_DIR,
+            development_file_dir=DATA_DIR / "development_files",
+            allow_development=_development_access(write=write),
         )
     )
+
+
+def _development_access(*, write: bool = False) -> bool:
+    return can("view_development") and can("view_development_files") and (not write or can("edit_development"))
+
+
+def _datasets() -> dict:
+    return {key: value for key, value in DATASETS.items() if key != "development" or _development_access()}
+
+
+def _authorize_package(path: Path, *, write: bool = False) -> None:
+    manifest, _payload = BusinessSyncRepository.read(path)
+    datasets = manifest.get("datasets", [])
+    if isinstance(datasets, list) and "development" in datasets and not _development_access(write=write):
+        abort(403)
 
 
 def _selected() -> tuple[str, ...]:
@@ -68,12 +86,14 @@ def register(app) -> None:
     @app.get("/business-data-sync")
     @permission_required("sync_product_data")
     def business_data_sync():
-        return render_template("business_data_sync.html", datasets=DATASETS, preview=None)
+        return render_template("business_data_sync.html", datasets=_datasets(), preview=None)
 
     @app.post("/business-data-sync/export")
     @permission_required("sync_product_data")
     def export_business_data_sync():
         selected = _selected()
+        if "development" in selected and not _development_access():
+            abort(403)
         if not selected:
             flash("请至少选择一类业务数据。", "error")
             return redirect(url_for("business_data_sync"))
@@ -106,7 +126,10 @@ def register(app) -> None:
         path = user_upload_path(file.filename, prefix="business-data")
         file.save(path)
         try:
+            _authorize_package(path)
             preview = _service().preview(path)
+        except HTTPException:
+            raise
         except ValueError as exc:
             flash(str(exc), "error")
             return redirect(url_for("business_data_sync"))
@@ -114,7 +137,7 @@ def register(app) -> None:
             logger.exception("Business data package preview failed")
             flash("业务数据包读取失败，请检查文件后重试。", "error")
             return redirect(url_for("business_data_sync"))
-        return render_template("business_data_sync.html", datasets=DATASETS, preview={**preview, "package_path": str(path)})
+        return render_template("business_data_sync.html", datasets=_datasets(), preview={**preview, "package_path": str(path)})
 
     @app.post("/business-data-sync/apply")
     @permission_required("sync_product_data")
@@ -124,9 +147,10 @@ def register(app) -> None:
             flash("数据包路径无效，请重新上传预览。", "error")
             return redirect(url_for("business_data_sync"))
         try:
+            _authorize_package(path, write=True)
             actor = actor_name()
             with import_lock(actor, "业务数据包导入"):
-                result = _service().apply(
+                result = _service(write=True).apply(
                     path,
                     backup_path=DATA_DIR / "local-backups" / f"before-business-sync-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.sqlite3",
                     actor=actor,
@@ -141,6 +165,8 @@ def register(app) -> None:
         except ImportLockError as exc:
             flash(str(exc), "error")
             return redirect(url_for("business_data_sync"))
+        except HTTPException:
+            raise
         except ValueError as exc:
             flash(str(exc), "error")
             return redirect(url_for("business_data_sync"))

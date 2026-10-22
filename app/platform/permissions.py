@@ -90,6 +90,9 @@ PERMISSION_DEFINITIONS: tuple[PermissionDefinition, ...] = (
     ),
     PermissionDefinition("view_material_drawings", "查看物料图纸", "查看、预览和下载物料图纸。", "合同与生产"),
     PermissionDefinition("manage_tube_items", "维护管件资料", "新增、编辑管件资料。", "合同与生产"),
+    PermissionDefinition("view_development", "查看产品开发", "查看开发单、成品分支、组件、任务和工序。", "产品开发"),
+    PermissionDefinition("edit_development", "维护产品开发", "维护开发单、组件、任务、供应商和工程文件，按负责人确认量产完成。", "产品开发"),
+    PermissionDefinition("view_development_files", "查看开发文件", "查看开发图纸与工艺文件的修订历史、预览和下载。", "产品开发"),
     PermissionDefinition(
         "sync_product_data",
         "业务数据同步",

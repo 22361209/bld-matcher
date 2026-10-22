@@ -1,0 +1,49 @@
+<section class="data-section development-panel">
+  <details class="development-disclosure"{% if form_key == 'project' %} open{% endif %}>
+    <summary>开发单计划 · {{ project.owner_username or '负责人待指定' }} · {{ project.planned_date or '计划日期待定' }}</summary>
+    <form class="development-form" method="post" action="{{ url_for('development_update', project_id=project.id) }}" data-development-form>
+      {{ hidden('project') }}<fieldset{% if not can_edit %} disabled{% endif %}><legend>开发单信息</legend><div class="development-field-grid">
+        {{ input('project', 'core_number', '4 位核心系列', project, required=true) }}{{ input('project', 'title', '开发单名称', project, required=true) }}
+        {{ dates('project', project) }}{{ notes('project', item=project) }}
+      </div></fieldset>{{ actions() }}
+    </form>
+  </details>
+</section>
+<section class="data-section development-panel">
+  <div class="workspace-command"><strong>完整成品</strong><span class="development-help">量产条件具备、组件任务完成后，由成品负责人确认。</span></div>
+  {% for branch in branches %}
+  <article class="development-branch">
+    <div class="development-branch-heading"><div><strong>{{ branch.code }}</strong> · {{ labels.get(branch.side, branch.side) }} <span class="status-badge">{{ labels.get(branch.status, branch.status) }}</span><p>{{ branch.name or '未填写成品名称' }}</p></div><a class="linear-button subtle" href="{{ url_for('development_detail', project_id=project.id, view='components', branch=branch.id) }}">打开组件树</a></div>
+    <p class="development-help">负责人 {{ branch.owner_username or '待指定' }} · 计划 {{ branch.planned_date or '待计划' }} · 实际 {{ branch.actual_date or '待完成' }}{% if branch.confirmed_by %} · 已由 {{ branch.confirmed_by }} 于 {{ branch.confirmed_at }} 确认{% endif %}</p>
+    {% set branch_key = 'branch-' ~ branch.id %}
+    <details class="development-disclosure"{% if form_key == branch_key %} open{% endif %}><summary>成品资料与量产条件</summary>
+      <form class="development-form" method="post" action="{{ url_for('development_update_branch', project_id=project.id, branch_id=branch.id) }}" data-development-form>
+        {{ hidden(branch_key, branch_id=branch.id) }}<fieldset{% if not can_edit %} disabled{% endif %}><legend>成品信息</legend><div class="development-field-grid">
+          {{ input(branch_key, 'code', '完整成品编码', branch, required=true) }}{{ input(branch_key, 'name', '成品名称', branch) }}
+          {{ select(branch_key, 'side', '左右 / 单侧', [('left','左'),('right','右'),('single','单侧')], branch) }}
+          {{ input(branch_key, 'owner_username', '负责人账号', branch) }}{{ input(branch_key, 'planned_date', '计划完成日期', branch, type='date') }}
+          {{ input(branch_key, 'actual_date', '实际完成日期', branch, type='date') }}
+          {{ select(branch_key, 'drawing_required', '成品图纸需求', [('1','需图'),('0','不需图')], branch, '1') }}{{ input(branch_key, 'drawing_reason', '不需图原因', branch) }}
+          {{ select(branch_key, 'drawing_status', '成品出图状态', [('not_started','未开始'),('in_progress','出图中'),('ready','已出图')], branch, 'not_started') }}
+          {{ select(branch_key, 'production_ready', '量产条件', [('0', '尚未具备'), ('1','已具备')], branch, '0') }}{{ notes(branch_key, item=branch) }}
+        </div></fieldset>{{ actions('保存成品资料') }}
+      </form>
+    </details>
+    {% if can_edit and not branch.confirmed_by %}<form method="post" action="{{ url_for('development_confirm_branch', project_id=project.id, branch_id=branch.id) }}" class="development-confirm" data-development-form>
+      {{ hidden('confirm-' ~ branch.id, branch_id=branch.id) }}<div class="form-actions"><button class="linear-button subtle" type="submit" data-confirm="确认 {{ branch.code }} 已具备量产条件并完成全部开发任务？系统将记录当前负责人的确认及完成时间。">负责人确认完成</button><span data-development-submit-status aria-live="polite"></span></div>
+    </form>{% endif %}
+  </article>
+  {% else %}<div class="empty-state">尚无完整成品。添加左、右或单侧成品后，可登记其组件结构。</div>{% endfor %}
+  {% if can_edit %}<details class="development-disclosure"{% if not branches or form_key == 'new-branch' %} open{% endif %}><summary>添加完整成品</summary>
+    <form class="development-form" method="post" action="{{ url_for('development_add_branch', project_id=project.id) }}" data-development-form>
+      {{ hidden('new-branch') }}<div class="development-field-grid">
+        {{ input('new-branch', 'code', '完整成品编码', required=true, hint='例如 K8461LA；不会自动生造前后缀') }}{{ input('new-branch', 'name', '成品名称') }}
+        {{ select('new-branch', 'side', '左右 / 单侧', [('left','左'),('right','右'),('single','单侧')], default='single') }}
+        {{ input('new-branch', 'owner_username', '负责人账号', default=project.owner_username) }}{{ input('new-branch', 'planned_date', '计划完成日期', type='date') }}{{ notes('new-branch') }}
+        {{ select('new-branch', 'drawing_required', '成品图纸需求', [('1','需图'),('0','不需图')], default='1') }}{{ input('new-branch', 'drawing_reason', '不需图原因') }}
+        {{ select('new-branch', 'drawing_status', '成品出图状态', [('not_started','未开始'),('in_progress','出图中'),('ready','已出图')], default='not_started') }}
+      </div>{{ actions('添加成品') }}
+    </form>
+  </details>{% endif %}
+</section>
+{% if can_edit %}<section class="data-section development-panel"><details class="development-disclosure"><summary>归档开发单</summary><p class="development-help">归档后停止编辑，已采用图纸、共用关系与历史仍然保留，可从列表勾选“包含已归档”查看。</p><form class="development-form" method="post" action="{{ url_for('development_archive', project_id=project.id) }}" data-development-form>{{ hidden('archive') }}<div class="form-actions"><button class="linear-button danger" type="submit" data-confirm="归档 {{ project.core_number }} · {{ project.title }}？归档后停止编辑，文件与引用历史保留。">归档此开发单</button><span data-development-submit-status aria-live="polite"></span></div></form></details></section>{% endif %}

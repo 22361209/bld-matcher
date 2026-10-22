@@ -8,6 +8,7 @@ from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from .catalog_import import CatalogImportChoices, SERIES_SELECTION_HEADERS
+from .catalog_language import CATALOG_IMPORT_HEADERS
 
 
 CATALOG_HEADERS = (
@@ -20,6 +21,7 @@ CATALOG_HEADERS = (
     "导入单价",
     "OE NO.2",
     "图片",
+    *CATALOG_IMPORT_HEADERS.values(),
 )
 TEMPLATE_DATA_ROWS = 500
 
@@ -111,6 +113,7 @@ def build_catalog_import_template(choices: CatalogImportChoices) -> BytesIO:
     instructions.append(["SERIES 多选", "从 SERIES、SERIES 2 至 SERIES 6 依次选择；系统会合并为同一产品的多品牌 SERIES。每个格都只能从下拉选项选择。"])
     instructions.append(["ITEM", "只能从下拉选项选择。"])
     instructions.append(["可选字段", "OE NO.2 和图片。图片请插入到“图片”列对应行。"])
+    instructions.append(["中英文目录", "中文名称、中文车型独立填写；空白保留已有值。两种可见标志填 0 或 1，空白保留已有设置，新型号默认均为 1。"])
     instructions.append(["图片处理", "JPG、PNG、WebP；源文件单张不超过 30 MB、总像素不超过 5000 万，导入后自动转为 500 KB 以内的 WebP 大图并生成缩略图。"])
     instructions.append(["BLD NO. 冲突", "上传后逐条预览。与产品库相同的 BLD NO. 默认保留，只有勾选后才会更新。"])
     for cell in instructions[1]:

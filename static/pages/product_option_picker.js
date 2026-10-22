@@ -101,6 +101,7 @@ const fetchPickerOptions = () => {
         cachedOptions = {
           brands: Array.isArray(payload?.brands) ? payload.brands : [],
           items: Array.isArray(payload?.items) ? payload.items : [],
+          itemTranslations: payload?.item_translations || {},
           statuses: Array.isArray(payload?.statuses) ? payload.statuses : [],
         };
         return cachedOptions;
@@ -141,6 +142,17 @@ export function setupProductOptionPicker(container) {
 
   const state = createOptionPickerState(mode, valueField.value);
 
+  const chineseName = container.closest("form")?.querySelector("[data-item-zh]");
+  let automaticName = "";
+  const syncChineseName = () => {
+    if (field !== "item" || !chineseName) return;
+    const translated = cachedOptions?.itemTranslations?.[input.value.trim()] || "";
+    if (!chineseName.value || chineseName.value === automaticName) {
+      chineseName.value = translated;
+      automaticName = translated;
+    }
+  };
+  input.addEventListener("change", syncChineseName);
   const syncValueField = () => {
     if (valueField !== input) valueField.value = state.serialized();
   };
@@ -187,6 +199,7 @@ export function setupProductOptionPicker(container) {
     if (mode === "single") {
       input.value = String(value || "");
       state.set(input.value);
+      syncChineseName();
       closeDropdown();
       return;
     }
@@ -201,7 +214,10 @@ export function setupProductOptionPicker(container) {
     const source = (cachedOptions && cachedOptions[FIELD_SOURCE_KEYS[field]]) || [];
     const selectedKeys = new Set(state.values.map((value) => value.toLowerCase()));
     const available = mode === "multi" ? source.filter((option) => !selectedKeys.has(option.toLowerCase())) : source;
-    const matches = filterPickerOptions(available, filterText);
+    const matches = field === "item"
+      ? available.filter((value) => (value + " " + (cachedOptions?.itemTranslations?.[value] || ""))
+          .toLowerCase().includes(String(filterText || "").trim().toLowerCase()))
+      : filterPickerOptions(available, filterText);
     const newValue = pickerNewValue(filterText, source);
     dropdown.replaceChildren();
     matches.forEach((option) => {
@@ -209,7 +225,8 @@ export function setupProductOptionPicker(container) {
       button.type = "button";
       button.className = "product-option-picker-option";
       button.dataset.pickerOption = option;
-      button.textContent = option;
+      button.textContent = field === "item"
+        ? option + " / " + (cachedOptions?.itemTranslations?.[option] || "中文待确认") : option;
       dropdown.appendChild(button);
     });
     if (newValue && (mode === "single" || !selectedKeys.has(newValue.toLowerCase()))) {
@@ -330,6 +347,7 @@ export function setupProductOptionPicker(container) {
 
   if (mode === "multi" && valueField instanceof HTMLTextAreaElement) valueField.hidden = true;
   renderChips();
+  if (field === "item") fetchPickerOptions().then(syncChineseName).catch(() => {});
   return controller;
 }
 

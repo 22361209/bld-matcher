@@ -74,6 +74,11 @@ class ProductRepository(Protocol):
 
     def import_catalog(self, path: Path, *, actor: str) -> int: ...
 
+    def update_catalog_visibility(
+        self, product_id: int, *, language: str, visible: bool,
+        expected_visible: bool, expected_updated_at: str, actor: str,
+    ) -> ProductRecord | None: ...
+
     def export_catalog(
         self,
         path: Path,
@@ -81,6 +86,7 @@ class ProductRepository(Protocol):
         filters: ProductFilters,
         export_format: str,
         actor: str,
+        language: str | None = None,
         include_price: bool = True,
     ) -> int: ...
 
