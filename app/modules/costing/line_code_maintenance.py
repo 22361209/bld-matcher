@@ -26,6 +26,11 @@ def plan_line_codes(repository: CostingRepository) -> tuple[dict, list[tuple[dic
         resolved = set()
         for index, item in enumerate(items, start=1):
             patch, reason = inspect_line_identity(item)
+            if record.get("pair") and (patch or "material_attribute" not in item):
+                reason = "此项属于已配对型号，请在成本详情核对并保存"
+                reviews.append({"code": record["code"], "record_id": record["id"], "index": index,
+                                **_identity(item), "reason": reason})
+                continue
             if reason:
                 reviews.append({"code": record["code"], "record_id": record["id"], "index": index,
                                 **_identity(item), "reason": reason})

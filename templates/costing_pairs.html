@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% set active_page = 'costs' %}
+{% block page_title %}左右件配对 · 成本核算 · BLD{% endblock %}
+{% block page_id %}costing.pairs{% endblock %}
+{% block page_type %}import-preview{% endblock %}
+{% block page_class %}shell wide app-surface costing-page{% endblock %}
+{% block navigation %}{% if costing_trial_mode %}{% include '_costing_nav.html' %}{% else %}{{ super() }}{% endif %}{% endblock %}
+{% block page_head %}<link rel="stylesheet" href="{{ url_for('static', filename='pages/costing_pairs.css', v=static_version('pages/costing_pairs.css')) }}">{% endblock %}
+{% block page_scripts %}<script type="module" src="{{ url_for('static', filename='pages/costing_pairs.js', v=static_version('pages/costing_pairs.js')) }}"></script>{% endblock %}
+{% block page_content %}
+<section class="data-section costing-pairs">
+  <div class="workspace-command">
+    <div class="command-actions"><a class="link-button" href="{{ url_for(costing_endpoint ~ '.index') }}">← 成本列表</a><strong>左右件配对</strong></div>
+    <form class="search-form inline-search-command" method="get"><label>型号<input name="q" value="{{ query }}" placeholder="输入左件或右件型号"></label><button class="linear-button subtle" type="submit">查询</button></form>
+  </div>
+  <form method="post" action="{{ url_for(costing_endpoint ~ '.mirror_selected') }}" data-costing-pair-batch>
+    {{ csrf_field() }}<input type="hidden" name="q" value="{{ query }}">
+    <div class="workspace-command">
+      <span>{{ candidates|length }} 对候选 · 缺少对侧的型号可批量建立，有独有零件请逐行核对。</span>
+      <button class="linear-button primary" type="submit" data-mirror-submit disabled>建立所选对侧</button>
+    </div>
+    <p class="costing-pair-help">编码或名称含可识别左右型号、或名称只标明一侧的明细按左右对应件建立，其余按共用件建立。已存在的两张成本单需核对明细后配对。</p>
+    <div class="data-table-scroll"><table class="data-table">
+      <thead><tr><th scope="col"><input type="checkbox" data-pair-select-all aria-label="选择所有可建立的型号"></th><th scope="col">已有型号</th><th scope="col">对侧型号</th><th scope="col">对侧状态</th><th scope="col">明细核对</th></tr></thead>
+      <tbody>{% for row in candidates %}
+        <tr><td>{% if not row.other_id %}<input type="checkbox" name="candidate" value="{{ row.id }}:{{ row.version }}" aria-label="选择 {{ row.code }}">{% endif %}</td>
+          <td><a href="{{ url_for(costing_endpoint ~ '.edit', record_id=row.id) }}">{{ row.code }}</a></td>
+          <td>{% if row.other_id %}<a href="{{ url_for(costing_endpoint ~ '.edit', record_id=row.other_id) }}">{{ row.other_code }}</a>{% else %}{{ row.other_code }}{% endif %}</td>
+          <td>{{ '已存在' if row.other_id else '待建立' }}</td><td><a href="{{ url_for(costing_endpoint ~ '.pair_review', record_id=row.id) }}">{{ '核对两单并配对' if row.other_id else '逐行核对' }}</a></td></tr>
+      {% else %}<tr><td colspan="5"><div class="empty-state">没有符合条件的待配对型号。</div></td></tr>{% endfor %}</tbody>
+    </table></div>
+  </form>
+</section>
+{% endblock %}

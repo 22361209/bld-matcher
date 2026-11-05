@@ -5,6 +5,7 @@ from flask import Blueprint
 
 from app.security import permission_required
 
+from . import pair_views
 from . import web_handlers as views
 from .web_support import register_error_handlers
 
@@ -47,3 +48,27 @@ def create():
 @permission_required("manage_costs")
 def update(record_id: str):
     return views.update(record_id)
+
+
+@costing.get("/pairs")
+@permission_required("manage_costs")
+def pairs():
+    return pair_views.candidates()
+
+
+@costing.post("/pairs")
+@permission_required("manage_costs")
+def mirror_selected():
+    return pair_views.mirror_selected()
+
+
+@costing.get("/pairs/<record_id>")
+@permission_required("manage_costs")
+def pair_review(record_id: str):
+    return pair_views.review(record_id)
+
+
+@costing.post("/pairs/<record_id>")
+@permission_required("manage_costs")
+def apply_pair(record_id: str):
+    return pair_views.apply_review(record_id)

@@ -38,6 +38,7 @@ from ._schema import (
     MEDIA_DATASETS,
     MEDIA_DIRECTORIES,
     PACKAGE_TYPE,
+    PAIRED_COSTING_PACKAGE_VERSION,
     SUPPORTED_PACKAGE_VERSIONS,
 )
 
@@ -91,6 +92,8 @@ def _manifest_datasets(manifest: object) -> tuple[str, ...]:
         raise ValueError("旧版业务数据包不支持开发资料。")
     if "costing" in selected and version < COSTING_PACKAGE_VERSION:
         raise ValueError("旧版业务数据包不支持成本核算。")
+    if version == PAIRED_COSTING_PACKAGE_VERSION and "costing" not in selected:
+        raise ValueError("左右件业务包缺少成本核算数据集。")
     return tuple(selected)
 
 
@@ -160,6 +163,10 @@ def read_package(package_path: Path) -> tuple[Manifest, Payload]:
                 raise ValueError("业务数据包的成本核算内容与清单不符。")
             if "costing" in selected:
                 snapshot = _json_member(archive, members[COSTING_MEMBER])
+                if not isinstance(snapshot, dict) or snapshot.get("format_version") != (
+                    2 if version == PAIRED_COSTING_PACKAGE_VERSION else 1
+                ):
+                    raise ValueError("成本快照版本与业务包版本不一致，请重新导出。")
                 payload["costing"] = [validate_costing(snapshot)]
             if version >= 4:
                 for member in members.values():
@@ -295,9 +302,12 @@ def export_package(
     product_image_entries, product_image_sources = (
         collect_product_image_exports(product_rows, product_image_dir) if includes["product_images"] else ([], {})
     )
+    version = 5
+    if costing is not None:
+        version = PAIRED_COSTING_PACKAGE_VERSION if costing["format_version"] == 2 else COSTING_PACKAGE_VERSION
     manifest: Manifest = {
         "package_type": PACKAGE_TYPE,
-        "version": COSTING_PACKAGE_VERSION if costing is not None else 5,
+        "version": version,
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "datasets": list(selected),
         "media": {

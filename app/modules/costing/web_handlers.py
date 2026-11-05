@@ -8,13 +8,15 @@ from app.security import actor_name as actor, can, wants_json_response
 from .domain import CostingConflict, CostingValidationError
 from .editor_choices import editor_choices
 from .grid import COLUMN_FILTER_FIELDS, normalize_column_filters
+from .pair_codes import mirror_code
 from .web_support import costing_endpoint, import_owner, imports, service
 
 
 EDIT_FIELDS = {"code", "kind", "name", "brand", "models", "remark", "approved_cost", "scrap_credit", "theoretical_scrap",
-               "items", "suggested_tax_price_override"}
+               "items", "suggested_tax_price_override", "create_pair", "peer_version"}
 ITEM_FIELDS = {"id", "category", "name", "product_code", "material_attribute", "part_code", "supplier", "remark", "mode", "amount", "unit_price",
-               "quantity", "weight", "processing_fee", "length", "width", "height", "strap_rate", "review_note"}
+               "quantity", "weight", "processing_fee", "length", "width", "height", "strap_rate", "review_note", "pair_kind",
+               "peer_product_code", "peer_part_code"}
 
 
 def _body() -> tuple[dict, dict]:
@@ -57,11 +59,12 @@ def new():
         original = service().get(copy_id)
         # A copy is priced as a new record, even when its source has historical totals.
         record = service().calculate(original)
-        record.pop("source_info", None)
+        for key in ("source_info", "pair", "peer_code", "peer_version", "peer_has_manual_price"):
+            record.pop(key, None)
         record["code"] = ""
         for item in record["items"]:
-            item.pop("id", None)
-            item.pop("source_info", None)
+            for key in ("id", "source_info", "pair_kind", "peer_item_id"):
+                item.pop(key, None)
             item.setdefault("material_attribute", "")
         copy_from = original["code"]
     else:
@@ -77,7 +80,7 @@ def edit(record_id: str):
     if wants_json_response():
         return jsonify(ok=True, record=record)
     return render_template("costing_edit.html", record=record, is_new=False, can_edit=can("manage_costs"),
-                           revisions=service().revisions(record_id), copy_from="", references=editor_choices(imports().references()))
+                           revisions=service().revisions(record_id), candidate_code=mirror_code(record["code"]), copy_from="", references=editor_choices(imports().references()))
 
 
 def preview():

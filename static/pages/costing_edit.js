@@ -1,9 +1,13 @@
+import {mirrorCostCode, mirrorPartCode, pairKindExplanation, pairKindOptions, rowPairKind} from "./costing_pair_edit.js";
+
 const text = (value) => (value == null ? "" : String(value));
 const COST_FIELDS = ["code", "kind", "name", "brand", "models", "remark", "approved_cost", "scrap_credit", "theoretical_scrap", "suggested_tax_price_override"];
-const ITEM_FIELDS = ["id", "name", "category", "product_code", "material_attribute", "part_code", "supplier", "remark", "mode", "amount", "unit_price", "quantity", "weight", "processing_fee", "length", "width", "height", "strap_rate", "review_note"];
+const PAIR_ITEM_FIELDS = new Set(["pair_kind", "peer_product_code", "peer_part_code"]);
+const ITEM_FIELDS = ["id", "name", "category", "product_code", "material_attribute", "part_code", "supplier", "remark", "mode", "amount", "unit_price", "quantity", "weight", "processing_fee", "length", "width", "height", "strap_rate", "review_note", "pair_kind", "peer_product_code", "peer_part_code"];
 const MODES = {fixed: "直接金额", unit: "按件计算", weight: "按重量计算", package: "包装分摊", freight: "按重量运费", adjustment: "调整 / 返还"};
 const NUMERIC_FIELDS = new Set(["amount", "unit_price", "quantity", "weight", "processing_fee", "length", "width", "height", "strap_rate"]);
 const SUMMARY_INPUTS = new Set(["approved_cost", "scrap_credit", "theoretical_scrap", "suggested_tax_price_override"]);
+const PAIR_CAPTIONS = {shared: "共用", handed: "对应", local: "独有"};
 const MISSING_ITEM_NAME = "请填写成本项名称";
 const MODE_NUMBERS = {fixed: ["amount"], adjustment: ["amount"], unit: ["unit_price", "quantity"], weight: ["unit_price", "quantity", "weight", "processing_fee"], freight: ["unit_price", "weight"], package: ["unit_price", "quantity", "length", "width", "height", "strap_rate"]};
 
@@ -42,10 +46,13 @@ export const createCostTemplate = (rows) => rows.map((row) => ({...blankCostItem
 export const editableCostPayload = (record, values = {}) => {
   const payload = {};
   COST_FIELDS.forEach((key) => { payload[key] = key in values ? values[key] : record[key] ?? ""; });
+  if (record.pair) payload.peer_version = record.peer_version;
+  if (values.create_pair === true) payload.create_pair = true;
   if (record.id) payload.id = record.id;
   if (record.version != null) payload.version = record.version;
+  const paired = Boolean(record.pair || payload.create_pair);
   payload.items = (record.items || []).map((item) => Object.fromEntries(
-    ITEM_FIELDS.filter((key) => key in item && (!NUMERIC_FIELDS.has(key) || MODE_NUMBERS[item.mode]?.includes(key))).map((key) => [key, item[key]]),
+    ITEM_FIELDS.filter((key) => key in item && (paired || !PAIR_ITEM_FIELDS.has(key)) && (!NUMERIC_FIELDS.has(key) || MODE_NUMBERS[item.mode]?.includes(key))).map((key) => [key, item[key]]),
   ));
   return payload;
 };
@@ -112,7 +119,8 @@ const updateRemoveLabel = (row, index, name) => {
 
 const updateDetailsButton = (button) => {
   const open = button.getAttribute("aria-expanded") === "true";
-  button.textContent = open ? "收起" : button.dataset.issueText ? "待核对" : "展开";
+  const action = open ? "收起" : button.dataset.issueText ? "待核对" : "展开";
+  button.textContent = button.dataset.relation ? `${button.dataset.relation} · ${action}` : action;
   button.setAttribute("aria-label", `第 ${Number(button.dataset.costingDetails) + 1} 项资料 · ${button.textContent}`);
 };
 
@@ -145,6 +153,17 @@ export const initializeCostEditor = (form) => {
   const errorBox = form.querySelector("[data-costing-error]");
   const status = form.querySelector("[data-costing-status]");
   const modelCode = form.elements.namedItem("code");
+  const createPair = form.querySelector("[data-create-pair]");
+  const pairActive = () => Boolean(record.pair || createPair?.checked);
+  const originalKinds = new Map(record.items.map((item) => [item.id, item.pair_kind]));
+  const updatePairCode = () => {
+    const otherCode = mirrorCostCode(modelCode.value);
+    const preview = form.querySelector("[data-pair-code-preview]");
+    if (preview) preview.textContent = createPair?.checked ? otherCode ? `对侧型号 ${otherCode}` : "型号应含一处 LA / LB / LC 或 RA / RB / RC" : "";
+    const code = modelCode.value.trim();
+    modelCode.setCustomValidity(!code ? "请填写型号。" : /\s/.test(code) ? "型号中不能含空格。" :
+      createPair?.checked && !otherCode ? "请填写可识别的左右件型号。" : "");
+  };
   const rowCount = form.querySelector("[data-costing-row-count]");
   const issueTrigger = form.querySelector("[data-costing-issue-trigger]");
   const issueDetails = form.querySelector("[data-costing-issues]");
@@ -158,7 +177,7 @@ export const initializeCostEditor = (form) => {
   let checks;
 
   const values = () => Object.fromEntries(COST_FIELDS.map((key) => [key, form.elements.namedItem(key)?.value ?? record[key] ?? ""]));
-  const payload = () => editableCostPayload(record, values());
+  const payload = () => editableCostPayload(record, {...values(), create_pair: Boolean(createPair?.checked)});
   const snapshot = () => JSON.stringify(payload(), (_key, value) => value == null || value === "" ? undefined : value);
   const initialSnapshot = editable ? snapshot() : "";
   const hasUnsavedChanges = () => dirty && (snapshot() !== initialSnapshot ||
@@ -393,6 +412,7 @@ export const initializeCostEditor = (form) => {
     const button = element("button", "link-button costing-details-toggle");
     button.type = "button";
     button.dataset.costingDetails = index;
+    if (pairActive()) button.dataset.relation = PAIR_CAPTIONS[rowPairKind(item)];
     button.setAttribute("aria-expanded", "false");
     cells.details.append(button);
     total.textContent = costAmountLabel(item.line_total);
@@ -409,6 +429,18 @@ export const initializeCostEditor = (form) => {
     note.dataset.lineIssues = "";
     note.hidden = !issueMessage;
     details.append(note);
+    if (pairActive()) {
+      const kind = rowPairKind(item);
+      const wrapper = element("label", "", "左右件明细关系");
+      wrapper.append(selectField({...item, pair_kind: kind}, index, "pair_kind", "明细关系", pairKindOptions));
+      details.append(wrapper, element("p", "costing-source-note", pairKindExplanation(item, originalKinds.get(item.id))));
+      if (kind === "handed" && (!item.peer_item_id || originalKinds.get(item.id) === "local")) {
+        for (const [key, caption] of [["product_code", "对侧产品编码"], ["part_code", "对侧零件编码"]]) {
+          const peerKey = "peer_" + key;
+          details.append(field({...item, [peerKey]: item[peerKey] ?? mirrorPartCode(item[key])}, index, peerKey, caption));
+        }
+      }
+    }
     const source = item.source_info;
     if (source?.sheet && source.amount_cell) {
       details.append(element("p", "costing-source-note", `原表位置：${source.sheet}!${source.amount_cell}`));
@@ -493,6 +525,25 @@ export const initializeCostEditor = (form) => {
     if (!Number.isInteger(index) || !record.items[index] || !ITEM_FIELDS.includes(key)) return;
     const previous = record.items[index][key];
     record.items[index][key] = target.value;
+    if (pairActive() && ["pair_kind", "name", "product_code", "part_code"].includes(key)) {
+      const disclosure = tbody.querySelector(`[data-costing-details="${index}"]`);
+      const kind = rowPairKind(record.items[index]);
+      disclosure.dataset.relation = PAIR_CAPTIONS[kind];
+      updateDetailsButton(disclosure);
+      const expanded = document.getElementById(disclosure.getAttribute("aria-controls"));
+      if (expanded && key !== "pair_kind") {
+        const relation = expanded.querySelector('[data-item-field="pair_kind"]');
+        if (!record.items[index].pair_kind && relation?.value !== kind) {
+          expanded.replaceWith(renderDetails(record.items[index], index, disclosure.dataset.issueText));
+        }
+      }
+    }
+    if (key === "pair_kind") {
+      const current = target.closest(".costing-detail-row");
+      const newDetails = renderDetails(record.items[index], index, current.querySelector("[data-line-issues]").textContent);
+      current.replaceWith(newDetails);
+      newDetails.querySelector('[data-item-field="pair_kind"]').focus();
+    }
     if (key === "material_attribute") savedOrSelectedAttributes.add(record.items[index]);
     if (key === "name") updateRemoveLabel(target.closest("[data-costing-row]"), index, target.value);
     if (key === "mode") {
@@ -513,8 +564,7 @@ export const initializeCostEditor = (form) => {
     else {
       markEdited();
       if (key === "code") {
-        const code = modelCode.value.trim();
-        modelCode.setCustomValidity(!code ? "请填写型号。" : /\s/.test(code) ? "型号中不能含空格。" : "");
+        updatePairCode();
         updateReview();
       }
     }
@@ -543,6 +593,11 @@ export const initializeCostEditor = (form) => {
       }
     }
   });
+  createPair?.addEventListener("change", () => {
+    updatePairCode();
+    renderItems();
+    markEdited();
+  });
   form.addEventListener("change", (event) => {
     if (!editable || saving || event.target.tagName !== "SELECT") return;
     if (event.target.hasAttribute("data-costing-reference")) {
@@ -557,6 +612,12 @@ export const initializeCostEditor = (form) => {
       if (!applyCostReference(item, chosen, (message) => window.confirm(message), savedOrSelectedAttributes.has(item))) return;
       const row = tbody.querySelector(`[data-costing-row="${index}"]`);
       updateRemoveLabel(row, index, item.name);
+      if (pairActive() && (before.pair_kind || rowPairKind(before)) !== rowPairKind(item)) {
+        const disclosure = row.querySelector("[data-costing-details]");
+        disclosure.dataset.relation = PAIR_CAPTIONS[rowPairKind(item)];
+        updateDetailsButton(disclosure);
+        row.nextElementSibling.replaceWith(renderDetails(item, index, disclosure.dataset.issueText));
+      }
       for (const section of [row, row.nextElementSibling]) {
         section.querySelectorAll("input[data-item-field], select[data-item-field]").forEach((input) => {
           input.value = text(item[input.dataset.itemField]);
@@ -584,6 +645,8 @@ export const initializeCostEditor = (form) => {
       record.items.push(...createCostTemplate(references.templates[values().kind])); renderItems(); scheduleCalculation();
     } else if (button.hasAttribute("data-costing-remove")) {
       const index = Number(button.dataset.costingRemove);
+      const item = record.items[index];
+      if (record.pair && item.peer_item_id && !window.confirm(`移除“${item.name || "未命名项目"}”？保存成本后，${record.peer_code} 的对应行也会移除。`)) return;
       deleted = {index, item: record.items.splice(index, 1)[0]};
       form.querySelector("[data-costing-undo]").hidden = false;
       refreshRows(Math.min(index, record.items.length - 1));

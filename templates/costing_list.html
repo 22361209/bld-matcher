@@ -26,7 +26,7 @@
       </select></label>
       <button class="linear-button primary" type="submit">查询</button>
     </form>
-    <div class="command-actions"><button class="linear-button subtle" type="button" data-reset-list-for="costing-list" title="清除列头筛选并恢复默认列序和列宽">重置列表</button><a class="linear-button subtle" href="{{ url_for(costing_endpoint ~ '.index') }}">清除筛选</a>{% if can('manage_costs') %}<a class="linear-button subtle" href="{{ url_for('costing_import.import_page') }}">导入核对</a><a class="linear-button primary" href="{{ url_for(costing_endpoint ~ '.new') }}">新建成本</a>{% endif %}</div>
+    <div class="command-actions"><button class="linear-button subtle" type="button" data-reset-list-for="costing-list" title="清除列头筛选并恢复默认列序和列宽">重置列表</button><a class="linear-button subtle" href="{{ url_for(costing_endpoint ~ '.index') }}">清除筛选</a>{% if can('manage_costs') %}<a class="linear-button subtle" href="{{ url_for('costing_import.import_page') }}">导入核对</a><a class="linear-button subtle" href="{{ url_for(costing_endpoint ~ '.pairs') }}">左右件配对</a><a class="linear-button primary" href="{{ url_for(costing_endpoint ~ '.new') }}">新建成本</a>{% endif %}</div>
   </div>
   <div class="data-grid" data-resizable-grid data-grid-key="costing-list">
     <span class="data-grid-controls-visually-hidden" aria-live="polite" data-column-order-status></span>

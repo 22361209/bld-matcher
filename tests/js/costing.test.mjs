@@ -2,6 +2,39 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {applyCostReference, blankCostItem, calculationIssues, costAmountLabel, costingListReturnUrl, createCostPreviewGate, createCostTemplate, editableCostPayload, isCostCalculationField} from "../../static/pages/costing_edit.js";
 
+import {mirrorCostCode, mirrorPartCode, rowPairKind} from "../../static/pages/costing_pair_edit.js";
+
+test("finished model and component codes use separate handed suffix rules", () => {
+  for (const [code, other] of [["K8299LA01-618", "K8299RA01-618"], ["K8057RB", "K8057LB"]]) {
+    assert.equal(mirrorCostCode(code), other);
+    assert.equal(mirrorPartCode(other), code);
+  }
+  for (const [code, other] of [["B6004L", "B6004R"], ["FA8121LD", "FA8121RD"], ["G8354R", "G8354L"]]) {
+    assert.equal(mirrorCostCode(code), "");
+    assert.equal(mirrorPartCode(code), other);
+    assert.equal(rowPairKind({name: code}), "handed");
+  }
+  for (const code of ["10L", "BOLT027", "K8199LA-422RB"]) assert.equal(mirrorPartCode(code), "");
+  assert.equal(rowPairKind({name: "左右共用胶套"}), "shared");
+  assert.equal(rowPairKind({name: "左侧支架"}), "handed");
+  assert.equal(rowPairKind({pair_kind: "local", name: "左侧支架"}), "local");
+});
+
+test("pair save sends the peer version and intentional row overrides while plain copies omit them", () => {
+  const items = [{name: "支架", mode: "fixed", pair_kind: "handed", peer_product_code: "R2", peer_item_id: "server-owned"}];
+  const paired = editableCostPayload({items, version: 2, pair: {id: "p"}, peer_version: 3});
+  assert.equal(paired.peer_version, 3);
+  assert.equal(paired.items[0].pair_kind, "handed");
+  assert.equal(paired.items[0].peer_product_code, "R2");
+  assert.equal("peer_item_id" in paired.items[0], false);
+  const created = editableCostPayload({items}, {create_pair: true});
+  assert.equal(created.create_pair, true);
+  assert.equal(created.items[0].pair_kind, "handed");
+  const plain = editableCostPayload({items});
+  assert.equal("pair_kind" in plain.items[0], false);
+  assert.equal("peer_product_code" in plain.items[0], false);
+});
+
 test("preview runs for the line product code and financial inputs, while descriptive edits stay local", () => {
   for (const key of ["code", "name", "kind", "brand", "models", "category", "supplier", "part_code", "material_attribute", "remark", "review_note"]) {
     assert.equal(isCostCalculationField(key), false, key);

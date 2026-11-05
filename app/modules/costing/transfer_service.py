@@ -11,10 +11,12 @@ from pathlib import Path
 import re
 
 from .domain import MAX_VALUE, CostingConflict, CostingValidationError, calculate_cost, reference_snapshot, text, with_pricing
+from .transfer_pairs import format_version_for, validate_pair_histories
 from .transfer_repository import CostingTransferRepository
 
 
-MAX_TRANSFER_MIB = 64
+LEGACY_TRANSFER_MIB = 64
+MAX_TRANSFER_MIB = 128
 MAX_TRANSFER_BYTES = MAX_TRANSFER_MIB * 1024 * 1024
 MAX_RECORDS = 5000
 MAX_REVISIONS = 100000
@@ -32,11 +34,41 @@ def _encoded(value: object) -> bytes:
 
 def snapshot_digest(content: dict) -> str:
     """Content checksum, excluding the checksum itself and independent of row order."""
-    ordered = {"format_version": content["format_version"],
-               "records": sorted(content["records"], key=lambda row: row["id"]),
-               "revisions": sorted(content["revisions"], key=lambda row: row["id"]),
-               "references": content["references"]}
-    return hashlib.sha256(_encoded(ordered)).hexdigest()
+    digest = hashlib.sha256()
+    digest.update(b'{"format_version":' + _encoded(content["format_version"]) + b',"records":[')
+    # Same sorted JSON bytes as the original v1 format, keeping only one
+    # record or revision's encoded bytes at a time even for a full workspace.
+    for key in ("records", "revisions"):
+        if key == "revisions":
+            digest.update(b'],"references":' + _encoded(content["references"]) + b',"revisions":[')
+        for index, row in enumerate(sorted(content[key], key=lambda row: row["id"])):
+            if index:
+                digest.update(b",")
+            digest.update(_encoded(row))
+    digest.update(b"]}")
+    return digest.hexdigest()
+
+
+def _bounded_content(snapshot: dict, limit_mib: int, detach: bool) -> dict:
+    metadata = _encoded({**snapshot, "records": [], "revisions": []})
+    size = len(metadata)
+    limit = min(MAX_TRANSFER_BYTES, limit_mib * 1024 * 1024)
+    if size > limit:
+        raise CostingValidationError(f"成本迁移包不能超过 {limit_mib} MiB。")
+    result = json.loads(metadata) if detach else snapshot
+    for key, max_count in (("records", MAX_RECORDS), ("revisions", MAX_REVISIONS)):
+        rows = snapshot[key]
+        if not isinstance(rows, list) or len(rows) > max_count:
+            raise CostingValidationError("成本迁移包的型号或修订数量无效。")
+        size += max(0, len(rows) - 1)  # JSON array separators.
+        for row in rows:
+            encoded = _encoded(row)
+            size += len(encoded)
+            if size > limit:
+                raise CostingValidationError(f"成本迁移包不能超过 {limit_mib} MiB。")
+            if detach:
+                result[key].append(json.loads(encoded))
+    return result
 
 
 def _positive_integer(value: object, label: str) -> int:
@@ -125,15 +157,13 @@ def _validate_record(record: object) -> dict:
 def _validated_snapshot(snapshot: object, *, allow_empty: bool = False, detach: bool = True) -> dict:
     if not isinstance(snapshot, dict) or set(snapshot) != SNAPSHOT_FIELDS:
         raise CostingValidationError("成本迁移包字段不完整或含有未知字段。")
-    encoded = _encoded(snapshot)
-    if len(encoded) > MAX_TRANSFER_BYTES:
-        raise CostingValidationError(f"成本迁移包不能超过 {MAX_TRANSFER_MIB} MiB。")
+    version = snapshot["format_version"]
+    if type(version) is not int or version not in (1, 2):
+        raise CostingValidationError("成本迁移包版本不受支持。")
+    limit_mib = MAX_TRANSFER_MIB if version == 2 else LEGACY_TRANSFER_MIB
     # The standalone transfer owns a detached input; business sync already owns
     # the parsed archive tree. Neither path mutates the supplied snapshot.
-    content = json.loads(encoded) if detach else snapshot
-    del encoded
-    if type(content["format_version"]) is not int or content["format_version"] != 1:
-        raise CostingValidationError("成本迁移包版本不受支持。")
+    content = _bounded_content(snapshot, limit_mib, detach)
     records, revisions = content["records"], content["revisions"]
     minimum = 0 if allow_empty else 1
     if not isinstance(records, list) or not minimum <= len(records) <= MAX_RECORDS:
@@ -156,6 +186,8 @@ def _validated_snapshot(snapshot: object, *, allow_empty: bool = False, detach: 
             raise CostingValidationError("成本迁移包存在重复型号或编号。")
         record_map[record["id"]] = record
         codes.add(record["code"].casefold())
+    if format_version_for(records) != version:
+        raise CostingValidationError("成本迁移包版本与左右件配对资料不一致。")
     histories = defaultdict(list)
     revision_ids = set()
     for revision in revisions:
@@ -195,6 +227,7 @@ def _validated_snapshot(snapshot: object, *, allow_empty: bool = False, detach: 
             previous = revision["after"]
         if _encoded(previous) != _encoded(record):
             raise CostingValidationError("成本单与最后一版修订不一致。")
+    validate_pair_histories(histories, content["format_version"])
     digest = content["digest"]
     if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest) or not hmac.compare_digest(digest, snapshot_digest(content)):
         raise CostingValidationError("成本迁移包校验失败，资料可能已被修改。")
@@ -209,7 +242,7 @@ class CostingTransferService:
     def export_snapshot(self) -> dict:
         with CostingTransferRepository(self.db_path) as repository:
             content = repository.read_content()
-        return _validated_snapshot({**content, "digest": snapshot_digest(content)})
+        return _validated_snapshot({**content, "digest": snapshot_digest(content)}, detach=False)
 
     @staticmethod
     def _status(snapshot: dict, target: dict) -> dict:

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from flask import Blueprint, current_app, jsonify, redirect, render_template, request, session, url_for
 
+from . import pair_views
 from . import web_handlers as views
 from .trial_security import login_required, permission_required
 from .web_support import service
@@ -66,3 +67,27 @@ def create():
 @permission_required("manage_costs")
 def update(record_id: str):
     return views.update(record_id)
+
+
+@costing_trial.get("/costs/pairs")
+@permission_required("manage_costs")
+def pairs():
+    return pair_views.candidates()
+
+
+@costing_trial.post("/costs/pairs")
+@permission_required("manage_costs")
+def mirror_selected():
+    return pair_views.mirror_selected()
+
+
+@costing_trial.get("/costs/pairs/<record_id>")
+@permission_required("manage_costs")
+def pair_review(record_id: str):
+    return pair_views.review(record_id)
+
+
+@costing_trial.post("/costs/pairs/<record_id>")
+@permission_required("manage_costs")
+def apply_pair(record_id: str):
+    return pair_views.apply_review(record_id)

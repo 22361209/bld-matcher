@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% set active_page = 'costs' %}
+{% set mode_labels = {'unit':'按件','fixed':'直接金额','weight':'按重量','freight':'按重量运费','package':'包装分摊','adjustment':'调整 / 返还'} %}
+{% block page_title %}{{ record.code }} · 左右件明细核对 · BLD{% endblock %}
+{% block page_id %}costing.pair_review{% endblock %}
+{% block page_type %}import-preview{% endblock %}
+{% block page_class %}shell wide app-surface costing-page{% endblock %}
+{% block navigation %}{% if costing_trial_mode %}{% include '_costing_nav.html' %}{% else %}{{ super() }}{% endif %}{% endblock %}
+{% block page_head %}<link rel="stylesheet" href="{{ url_for('static', filename='pages/costing_pairs.css', v=static_version('pages/costing_pairs.css')) }}">{% endblock %}
+{% block page_scripts %}<script type="module" src="{{ url_for('static', filename='pages/costing_pairs.js', v=static_version('pages/costing_pairs.js')) }}"></script>{% endblock %}
+{% block page_content %}
+<section class="data-section costing-pairs">
+  <form method="post" action="{{ url_for(costing_endpoint ~ '.apply_pair', record_id=record.id) }}" data-pair-review>
+    {{ csrf_field() }}<input type="hidden" name="version" value="{{ record.version }}">
+    <input type="hidden" name="action" value="{{ 'link' if other else 'mirror' }}">
+    {% if other %}<input type="hidden" name="other_version" value="{{ other.version }}">{% endif %}
+    <div class="workspace-command"><div class="command-actions"><a class="link-button" href="{{ url_for(costing_endpoint ~ '.pairs') }}">← 左右件配对</a><strong>{{ record.code }} ↔ {{ other.code if other else other_code }}</strong></div>
+      <button class="linear-button primary" type="submit" data-confirm="{{ '确认按表中对应关系配对' if other else '确认建立对侧并配对' }} {{ record.code }} 和 {{ other.code if other else other_code }}？">{{ '确认配对' if other else '建立对侧并配对' }}</button>
+    </div>
+    <p class="costing-pair-help">共用件联动编码和单价，左右对应件各用自己的编码、单价联动。{% if other %}请核对两侧明细，未指定对应行的零件各自在本侧保留。{% else %}本侧独有的行只计入 {{ record.code }}。{% endif %}</p>
+    <div class="data-table-scroll"><table class="data-table">
+      <thead><tr><th scope="col">序号</th><th scope="col">类别 / 项目名称</th><th scope="col">产品编码 / 零件编码</th><th scope="col">计价方式</th><th scope="col">金额 / 单价</th>
+      {% if other %}<th scope="col">{{ other.code }} 对应行</th><th scope="col">明细关系</th>{% else %}<th scope="col">明细关系</th><th scope="col">对侧产品编码</th><th scope="col">对侧零件编码</th>{% endif %}</tr></thead>
+      <tbody>{% for line in record['items'] %}{% set i=loop.index %}{% set suggested=suggestions.get(line.id, {}) %}
+        <tr data-pair-review-row><td>{{ i }}<input type="hidden" name="row" value="{{ line.id }}"></td>
+          <td>{{ line.category }} · {{ line.name }}</td><td>{{ line.product_code or '—' }} / {{ line.part_code or '—' }}</td>
+          <td>{{ mode_labels.get(line.mode, line.mode) }}</td><td>{{ (line.amount if line.mode in ['fixed','adjustment'] else line.unit_price)|default(none)|cost_money }}</td>
+          {% if other %}<td><select aria-label="第 {{ i }} 行对应项目" name="target-{{ line.id }}" data-pair-target><option value="">单侧独有</option>
+            {% for peer in other['items'] %}<option value="{{ peer.id }}" {% if suggested.other_id == peer.id %}selected{% endif %}>{{ loop.index }} · {{ peer.name }} · {{ peer.product_code or peer.part_code or '—' }} · {{ (peer.amount if peer.mode in ['fixed','adjustment'] else peer.unit_price)|default(none)|cost_money }}</option>{% endfor %}
+          </select></td>{% endif %}
+          <td><select name="kind-{{ line.id }}" aria-label="第 {{ i }} 行明细关系" data-pair-kind>
+            <option value="shared" {% if suggested.mode == 'shared' %}selected{% endif %}>左右共用件</option>
+            <option value="handed" {% if suggested.mode == 'handed' %}selected{% endif %}>左右对应件</option>
+            {% if not other %}<option value="local" {% if suggested.mode == 'local' %}selected{% endif %}>本侧独有</option>{% endif %}
+          </select></td>
+          {% if not other %}{% for key, label, field in [('product','产品编码','product_code'),('part','零件编码','part_code')] %}<td><input name="{{ key }}-{{ line.id }}" aria-label="第 {{ i }} 行对侧{{ label }}" data-pair-peer-code data-shared-value="{{ line.get(field) or '' }}" value="{{ suggested.get('peer_' ~ field) or '' }}" maxlength="240"></td>{% endfor %}{% endif %}
+        </tr>
+      {% else %}<tr><td colspan="{{ 7 if other else 8 }}">暂无明细。</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </form>
+</section>
+{% if other %}
+<section class="data-section costing-pairs"><div class="workspace-command"><strong>{{ other.code }} 的现有明细</strong></div>
+  <div class="data-table-scroll"><table class="data-table"><thead><tr><th scope="col">序号</th><th scope="col">类别</th><th scope="col">项目名称</th><th scope="col">产品编码</th><th scope="col">零件编码</th><th scope="col">计价方式</th><th scope="col">金额 / 单价</th><th scope="col">本项成本</th></tr></thead>
+  <tbody>{% for line in other['items'] %}<tr><td>{{ loop.index }}</td><td>{{ line.category }}</td><td>{{ line.name }}</td><td>{{ line.product_code or '—' }}</td><td>{{ line.part_code or '—' }}</td><td>{{ mode_labels.get(line.mode, line.mode) }}</td><td>{{ (line.amount if line.mode in ['fixed','adjustment'] else line.unit_price)|default(none)|cost_money }}</td><td>{{ line.line_total|cost_money }}</td></tr>{% endfor %}</tbody></table></div>
+</section>{% endif %}
+{% endblock %}

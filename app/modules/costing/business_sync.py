@@ -7,6 +7,7 @@ import sqlite3
 
 from .domain import CostingValidationError
 from .repository import SQLiteCostingRepository
+from .transfer_pairs import group_conflicts
 from .transfer_repository import read_content
 from .transfer_service import _encoded, _validated_snapshot, snapshot_digest
 
@@ -81,16 +82,18 @@ def _plan(connection: sqlite3.Connection, snapshot: dict):
     counts = dict(new=0, updated=0, unchanged=0, conflict=0, stale=0, ignored_inactive=0)
     rows, conflicts, writes = [], [], []
 
-    def describe(status, key, label, reason="", *, local_time="", incoming_time=""):
+    def describe(status, key, label, reason="", *, local_time="", incoming_time="", peer_code=""):
         counts[status] += 1
         row = {"status": status, "key": key, "label": label, "local_updated_at": local_time,
-               "incoming_updated_at": incoming_time}
+               "incoming_updated_at": incoming_time, "peer_code": peer_code}
         if status == "conflict":
             conflicts.append({**row, "selectable": key == "references", "reason": reason, "fields": [], "all_fields": []})
         elif status in {"new", "updated"}:
             rows.append(row)
 
-    for record in snapshot["records"]:
+    statuses, reasons, local_times = {}, {}, {}
+    incoming = {row["id"]: row for row in snapshot["records"]}
+    for record in incoming.values():
         key = record["id"]
         local = local_records.get(key)
         revisions = incoming_history[key]
@@ -102,11 +105,21 @@ def _plan(connection: sqlite3.Connection, snapshot: dict):
                 status, reason = "conflict", "本机已有相同型号的另一张成本单。"
             elif any(owners.get(item["id"], key) != key for revision in revisions for item in revision["after"]["items"]):
                 status, reason = "conflict", "明细编号已用于本机另一张成本单的现有或历史明细。"
-        describe(status, key, record["code"], reason, local_time=local["updated_at"] if local else "",
-                 incoming_time=record["updated_at"])
+        statuses[key], reasons[key], local_times[key] = status, reason, local["updated_at"] if local else ""
+
+    for key, reason in group_conflicts(snapshot["records"], local_records, statuses).items():
+        if statuses[key] != "conflict":
+            statuses[key], reasons[key] = "conflict", reason
+    for record in incoming.values():
+        key = record["id"]
+        status = statuses[key]
+        describe(status, key, record["code"], reasons[key], local_time=local_times[key],
+                 incoming_time=record["updated_at"],
+                 peer_code=incoming[record["pair"]["peer_id"]]["code"] if record.get("pair") else "")
         if status in {"new", "updated"}:
+            local = local_records.get(key)
             prior_version = local["version"] if local else 0
-            writes.append((record, prior_version, revisions[prior_version:]))
+            writes.append((record, prior_version, incoming_history[key][prior_version:]))
 
     refs = snapshot["references"]
     reference_status = None
@@ -118,7 +131,10 @@ def _plan(connection: sqlite3.Connection, snapshot: dict):
         else:
             reference_status = "conflict"
         describe(reference_status, "references", "成本参考资料", "两端的成本参考资料不同，可选择采用包内参考资料。")
+    for section in (rows, conflicts):
+        section.sort(key=lambda row: (min(row["label"], row["peer_code"] or row["label"]), row["label"]))
     summary = {"label": "成本核算", "counts": counts, "rows": rows, "conflicts": conflicts,
+               "pairs": sum(1 for record in incoming.values() if record.get("pair")) // 2,
                "records": len(snapshot["records"]), "items": sum(len(r["items"]) for r in snapshot["records"]),
                "revisions": len(snapshot["revisions"]), "has_references": refs is not None}
     return summary, writes, reference_status

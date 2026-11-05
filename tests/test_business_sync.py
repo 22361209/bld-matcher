@@ -18,6 +18,7 @@ from app.database import connect
 from app.modules.business_sync import _database_apply as database_apply
 from app.modules.business_sync import _media_transaction as media_transaction
 from app.modules.business_sync import _package_archive as package_archive
+from app.modules.business_sync._schema import SUPPORTED_PACKAGE_VERSIONS
 from app.modules.business_sync.infrastructure import BusinessSyncRepository
 from app.modules.business_sync.service import BusinessSyncService
 from app.modules.materials.excel_import import import_materials_from_excel
@@ -1557,7 +1558,7 @@ class BusinessSyncServiceTest(unittest.TestCase):
             name="future-business-package.tar.gz",
             manifest={
                 "package_type": "bld_business_data",
-                "version": 7,
+                "version": max(SUPPORTED_PACKAGE_VERSIONS) + 1,
                 "datasets": ["materials"],
             },
             payload={"materials": [{"sync_id": "future-material"}]},

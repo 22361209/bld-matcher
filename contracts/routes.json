@@ -288,6 +288,34 @@
       "rule": "/costs/new"
     },
     {
+      "endpoint": "costing.pairs",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/costs/pairs"
+    },
+    {
+      "endpoint": "costing.mirror_selected",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/costs/pairs"
+    },
+    {
+      "endpoint": "costing.pair_review",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/costs/pairs/<record_id>"
+    },
+    {
+      "endpoint": "costing.apply_pair",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/costs/pairs/<record_id>"
+    },
+    {
       "endpoint": "costing.preview",
       "methods": [
         "POST"

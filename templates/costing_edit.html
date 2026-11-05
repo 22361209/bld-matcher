@@ -24,6 +24,8 @@
         <a class="link-button costing-back" data-costing-back href="{{ url_for(costing_endpoint ~ '.index') }}">← 成本列表</a>
         <strong data-costing-code data-empty-title="{{ new_title if is_new else '待填写型号' }}">{{ record.code or new_title }}</strong>
         <span class="muted-text" data-costing-description>{{ (record.name or kind_name) ~ (' · ' ~ record.brand if record.brand else '') ~ (' ' ~ record.models if record.models else '') }}</span>
+        {% if record.pair %}<a class="link-button" href="{{ url_for(costing_endpoint ~ '.edit', record_id=record.pair.peer_id) }}">对侧 {{ record.peer_code }} ↗</a>
+        {% elif not is_new and can_edit and candidate_code %}<a class="link-button" href="{{ url_for(costing_endpoint ~ '.pair_review', record_id=record.id) }}">配对 {{ candidate_code }}</a>{% endif %}
         {% if not can_edit %}<span class="muted-text">只读</span>{% endif %}
       </div>
       <div class="command-actions">
@@ -34,11 +36,16 @@
       </div>
     </div>
     <div class="message error" data-costing-error role="alert" tabindex="-1" hidden></div>
-    {% if copy_from %}<p class="costing-note">已复制 {{ copy_from }} 的成本明细，请填写新型号并修改差异项。保存后两份成本独立维护。</p>{% endif %}
+    {% if record.pair and (record.peer_has_manual_price or record.approved_cost is not none or (record.suggested_tax_price_override is defined and record.suggested_tax_price_override is not none)) %}<p class="costing-pair-manual">这对型号使用了人工核定成本或手动售价。联动改单价后，请分别核对两侧的核定成本和售价。</p>{% endif %}
+    {% if copy_from %}<p class="costing-note">已复制 {{ copy_from }} 的成本明细，请填写新型号并修改差异项。</p>{% endif %}
     <fieldset class="costing-fields" id="costing-identity-fields" {% if not is_new %}hidden{% endif %} {% if not can_edit %}disabled{% endif %}>
       <legend class="data-grid-visually-hidden">型号资料</legend>
-      <label>型号 <input name="code" value="{{ record.code or '' }}" required maxlength="80" autocomplete="off" placeholder="例如 K8461LA"></label>
-      <label>产品类型 <select name="kind"><option value="arm" {% if record.kind != 'ball' %}selected{% endif %}>摆臂</option><option value="ball" {% if record.kind == 'ball' %}selected{% endif %}>球头</option></select></label>
+      <label>型号 <input name="code" value="{{ record.code or '' }}" required {% if record.pair %}readonly{% endif %} maxlength="80" autocomplete="off" placeholder="例如 K8461LA"></label>
+      {% if is_new %}<div class="costing-create-pair">
+        <label><input type="checkbox" name="create_pair" data-create-pair>同时新建左右件</label>
+        <small class="muted-text" data-pair-code-preview aria-live="polite"></small>
+      </div>{% endif %}
+      <label>产品类型 <select name="kind" {% if record.pair %}disabled{% endif %}><option value="arm" {% if record.kind != 'ball' %}selected{% endif %}>摆臂</option><option value="ball" {% if record.kind == 'ball' %}selected{% endif %}>球头</option></select></label>
       <label>产品名称 <input name="name" value="{{ record.name or '' }}" maxlength="200" placeholder="可选"></label>
       <label>车系 <input name="brand" value="{{ record.brand or '' }}" maxlength="120" placeholder="可选"></label>
       <label class="costing-wide-field">适用车型 <input name="models" value="{{ record.models or '' }}" maxlength="240" placeholder="可选"></label>

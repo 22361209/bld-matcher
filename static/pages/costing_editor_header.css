@@ -104,3 +104,32 @@
     display: block;
   }
 }
+
+.costing-create-pair {
+  align-self: end;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  min-height: 30px;
+}
+
+.costing-identity .costing-fields .costing-create-pair label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.costing-create-pair input[type=checkbox] {
+  width: 16px;
+  min-height: 16px;
+  height: 16px;
+  accent-color: var(--linear-accent);
+}
+
+.costing-pair-manual {
+  margin: 0;
+  padding: 2px 12px 6px;
+  color: var(--linear-muted);
+  font-size: 12px;
+}

@@ -116,7 +116,7 @@
         </span>
       </summary>
       {% if key == 'costing' %}
-        <p class="note">包内含 {{ info.records }} 张成本单、{{ info["items"] }} 行明细、{{ info.revisions }} 条修改记录{% if info.has_references %}及参考资料（整套计为 1 项）{% endif %}。已有成本单仅追加同一修订历史中的新版。</p>
+        <p class="note">包内含 {{ info.records }} 张成本单、{{ info["items"] }} 行明细、{{ info.revisions }} 条修改记录{% if info.has_references %}及参考资料（整套计为 1 项）{% endif %}。{% if info.pairs %}其中 {{ info.pairs }} 对左右件按对同步，一侧有冲突时两侧都保留当前端。{% endif %}已有成本单仅追加同一修订历史中的新版。</p>
       {% endif %}
       <div class="import-preview-dataset-tools">
         <input type="search" class="import-preview-search" data-dataset="{{ key }}" placeholder="搜索 {{ info.label }}...">
@@ -140,9 +140,9 @@
               </thead>
               <tbody>
                 {% for row in info.rows %}
-                  <tr class="import-preview-row" data-search-text="{{ row.key }} {{ row.label }}">
+                  <tr class="import-preview-row" data-search-text="{{ row.key }} {{ row.label }} {{ row.peer_code }}">
                     <td>{% if row.status == "new" %}新增{% elif row.status == "conflict" %}待确认冲突{% else %}更新{% endif %}</td>
-                    <td>{{ row.label }}</td>
+                    <td>{{ row.label }}{% if row.peer_code %} <small>（对侧 {{ row.peer_code }}）</small>{% endif %}</td>
                     <td>数据包：{{ row.incoming_updated_at or "—" }}<br>当前端：{{ row.local_updated_at or "—" }}</td>
                   </tr>
                 {% endfor %}
@@ -172,7 +172,7 @@
               </thead>
               <tbody>
                 {% for conflict in info.conflicts %}
-                  <tr class="import-preview-row" data-search-text="{{ conflict.key }} {{ conflict.label }} {{ conflict.reason }} {% for field in conflict.all_fields %}{{ field.label }} {{ field.before }} {{ field.after }} {% endfor %}">
+                  <tr class="import-preview-row" data-search-text="{{ conflict.key }} {{ conflict.label }} {{ conflict.peer_code }} {{ conflict.reason }} {% for field in conflict.all_fields %}{{ field.label }} {{ field.before }} {{ field.after }} {% endfor %}">
                     <td>
                       {% if not can_import %}
                         仅查看
@@ -185,7 +185,7 @@
                         </label>
                       {% endif %}
                     </td>
-                    <td>{{ conflict.label }}</td>
+                    <td>{{ conflict.label }}{% if conflict.peer_code %} <small>（对侧 {{ conflict.peer_code }}）</small>{% endif %}</td>
                     <td>
                       {% if key == 'costing' %}
                         {{ conflict.reason }}

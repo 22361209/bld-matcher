@@ -1,0 +1,39 @@
+.costing-pairs .workspace-command {
+  padding: 7px 12px;
+}
+
+.costing-pair-help {
+  margin: 0;
+  padding: 6px 12px;
+  color: var(--linear-muted);
+  font-size: 13px;
+}
+
+.costing-pairs .data-table-scroll {
+  max-height: 65vh;
+  overflow: auto;
+}
+
+.costing-pairs th {
+  position: sticky;
+  top: 0;
+  background: var(--linear-subtle);
+}
+
+.costing-pairs .data-table :is(td, th) {
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.costing-pairs .data-table :is(input[type=text], select, input[data-pair-peer-code]) {
+  width: 100%;
+  min-width: 8em;
+  min-height: 29px;
+}
+
+.costing-pairs input[type=checkbox] {
+  width: 16px;
+  height: 16px;
+  vertical-align: middle;
+  accent-color: var(--linear-accent);
+}
