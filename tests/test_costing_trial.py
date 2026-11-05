@@ -74,6 +74,7 @@ class CostingTrialTest(unittest.TestCase):
         self.assertIn('data-page="costing.rules"', body)
         self.assertIn('href="/">成本核算</a>', body)
         self.assertIn('href="/costs/rules">核算规则</a>', body)
+        self.assertNotIn("展开成本核算导航", body)
         self.assertIn("试用环境可录入手工重量", body)
 
     def test_authentication_and_csrf_are_enforced_even_in_testing(self):

@@ -240,14 +240,8 @@ body {
   color: #fff;
 }
 
-.nav-menu[data-nav-split] > a { padding-inline-end: 3px; }
-.nav-menu[data-nav-split] > button { padding-inline: 4px 8px; }
-[data-nav-ready="true"] [data-nav-split]:not(.is-open) > .nav-menu-panel { display: none; }
-@media (pointer: coarse) {
-  .nav-menu[data-nav-split] > button { min-width: 44px; justify-content: center; }
-}
+.nav-menu.is-dismissed > .nav-menu-panel { display: none; }
 
-.nav-menu[data-nav-split].is-open > .nav-menu-panel,
 .nav-menu.is-open .nav-menu-panel {
   display: grid;
   gap: 2px;
@@ -850,6 +844,21 @@ label {
       display: grid;
       gap: 2px;
     }
+  }
+
+  .app-nav.is-mobile-menu-open [data-nav-link-menu] > .nav-menu-panel {
+    position: static;
+    display: flex;
+    align-items: center;
+    width: auto;
+    padding: 0;
+    border: 0;
+    box-shadow: none;
+  }
+
+  [data-nav-link-menu] .nav-menu-panel a {
+    min-height: 48px;
+    padding: 0 16px;
   }
 
   .nav-brand {

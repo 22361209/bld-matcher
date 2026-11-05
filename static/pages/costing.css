@@ -165,3 +165,8 @@
 @media (max-width: 640px) {
   .costing-summary-grid { grid-template-columns: repeat(2, minmax(0, 150px)); }
 }
+
+.costing-page .costing-tablet-rules { display: none; }
+@media (min-width: 761px) and (any-pointer: coarse) {
+  .costing-page .costing-tablet-rules { display: inline-flex; }
+}

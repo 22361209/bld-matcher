@@ -37,7 +37,8 @@ class CostingRulesWebTest(WebAppTestBase):
                 nav = re.search(r"<nav\b.*?</nav>", body, re.S).group()
                 self.assertIn('href="/costs">成本核算</a>', nav)
                 self.assertIn('aria-current="page" href="/costs/rules">核算规则</a>', nav)
-                self.assertIn('aria-controls="costing-nav-panel"', nav)
+                self.assertNotIn("展开成本核算导航", nav)
+                self.assertNotIn("<button", nav.split("data-nav-link-menu>", 1)[1].split("</div>", 1)[0])
                 self.assertIn('data-page="costing.rules"', body)
                 for label in ("最低含税售价", "建议含税单价", "元/件"):
                     self.assertIn(label, body)

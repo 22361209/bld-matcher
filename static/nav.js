@@ -53,7 +53,7 @@ if (nav instanceof HTMLElement && nav.dataset.navReady !== "true") {
     const panel = navigationMenu.querySelector(":scope > .nav-menu-panel");
     if (!(trigger instanceof HTMLElement) || !(panel instanceof HTMLElement)) return;
 
-    const bounds = (navigationMenu.hasAttribute("data-nav-split") ? navigationMenu : trigger).getBoundingClientRect();
+    const bounds = trigger.getBoundingClientRect();
     panel.style.setProperty("--nav-menu-panel-top", `${Math.round(bounds.bottom - 1)}px`);
     panel.style.setProperty("--nav-menu-panel-left", `${Math.round(bounds.left)}px`);
     panel.style.setProperty("--nav-menu-panel-width", `${Math.round(bounds.width)}px`);
@@ -66,6 +66,27 @@ if (nav instanceof HTMLElement && nav.dataset.navReady !== "true") {
   navMenus.forEach((navigationMenu) => {
     navigationMenu.addEventListener("pointerenter", () => positionMobileMenuPanel(navigationMenu));
     navigationMenu.addEventListener("focusin", () => positionMobileMenuPanel(navigationMenu));
+    if (!navigationMenu.hasAttribute("data-nav-link-menu")) return;
+    const link = navigationMenu.querySelector(":scope > a");
+    const firstItem = navigationMenu.querySelector(":scope > .nav-menu-panel a");
+    if (!(link instanceof HTMLAnchorElement) || !(firstItem instanceof HTMLAnchorElement)) return;
+
+    navigationMenu.addEventListener("pointerenter", () => navigationMenu.classList.remove("is-dismissed"));
+    navigationMenu.addEventListener("focusin", () => navigationMenu.classList.remove("is-dismissed"));
+    navigationMenu.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowDown" && event.target === link) {
+        event.preventDefault();
+        navigationMenu.classList.remove("is-dismissed");
+        firstItem.focus();
+      }
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || narrowViewport.matches) return;
+      const focusInside = navigationMenu.contains(document.activeElement);
+      if (!focusInside && !navigationMenu.matches(":hover")) return;
+      if (focusInside) link.focus();
+      navigationMenu.classList.add("is-dismissed");
+    });
   });
   for (const navigationMenu of navigationMenus) {
     const trigger = navigationMenu.querySelector("[data-nav-menu-trigger]");
@@ -88,29 +109,6 @@ if (nav instanceof HTMLElement && nav.dataset.navReady !== "true") {
       if (navigationMenu.classList.contains("is-open")) closeMenu();
       else openMenu();
     });
-    if (navigationMenu.hasAttribute("data-nav-split")) {
-      navigationMenu.addEventListener("pointerenter", (event) => {
-        if (event.pointerType === "mouse") openMenu();
-      });
-      navigationMenu.addEventListener("pointerleave", (event) => {
-        if (event.pointerType === "mouse" && !navigationMenu.contains(document.activeElement)) closeMenu();
-      });
-      navigationMenu.addEventListener("focusout", (event) => {
-        if (!navigationMenu.contains(event.relatedTarget)) closeMenu();
-      });
-      navigationMenu.addEventListener("keydown", (event) => {
-        if (event.key === "ArrowDown" && !event.target.closest(".nav-menu-panel")) {
-          event.preventDefault();
-          openMenu();
-          navigationMenu.querySelector(".nav-menu-panel a")?.focus();
-        } else if (event.key === "Escape" && navigationMenu.classList.contains("is-open")) {
-          event.preventDefault();
-          event.stopPropagation();
-          closeMenu();
-          trigger.focus();
-        }
-      });
-    }
     document.addEventListener("click", (event) => {
       if (!navigationMenu.contains(event.target)) closeMenu();
     });
