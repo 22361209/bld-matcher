@@ -75,6 +75,10 @@ class CostingFormalWebTest(WebAppTestBase):
         self.assertIn('form="costing-editor" data-costing-leave-save', editor)
         self.assertIn('action="/costs/new"', editor)
         self.assertIn('data-costing-identity-toggle aria-expanded="true"', editor)
+        kinds = re.search(r'<select name="kind"[^>]*>(.*?)</select>', editor, re.S).group(1)
+        self.assertEqual(re.findall(r'<option value="([^"]+)"( selected)?>([^<]+)</option>', kinds),
+                         [("arm", " selected", "控制臂"), ("ball", "", "悬挂球头")])
+        self.assertIn('data-costing-description>控制臂</span>', editor)
         self.assertEqual(re.findall(r'<th scope="col" data-col="([^"]+)">', editor),
                          ["row", "category", "name", "product_code", "material_attribute", "mode", "price", "usage", "total", "details"])
         options = re.search(r'data-material-attributes="([^"]+)"', editor).group(1)

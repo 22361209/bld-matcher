@@ -96,12 +96,12 @@ class SQLiteCostingRepository:
         fields = (*SUMMARY_COLUMNS, *SUMMARY_AMOUNTS)
         return [dict(zip(fields, row, strict=True)) for row in rows]
 
-    def pair_candidates(self) -> list[dict]:
+    def pairing_index(self) -> list[dict]:
         rows = self.connection.execute(
-            """SELECT id,code,version FROM costing_records
-            WHERE json_extract(payload_json, '$.pair') IS NULL ORDER BY code"""
+            """SELECT id, code, version, json_extract(payload_json, '$.pair.peer_id')
+               FROM costing_records ORDER BY code"""
         )
-        return [{"id": row[0], "code": row[1], "version": row[2]} for row in rows]
+        return [{"id": row[0], "code": row[1], "version": row[2], "peer_id": row[3]} for row in rows]
 
     def get_many(self, record_ids: list[str]) -> list[dict]:
         if not record_ids:

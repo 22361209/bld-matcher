@@ -63,62 +63,80 @@ def _costed_with_links(record: dict, items: list[dict], previous: dict, **fields
     return {**record, **result, "pair": record["pair"]}
 
 
+def _indexed_rows(record: dict, rows: list[dict]) -> dict[str, Mapping]:
+    supplied = {}
+    for raw in rows:
+        if not isinstance(raw, Mapping) or not isinstance(raw.get("id"), str) or raw["id"] in supplied:
+            raise CostingValidationError("明细关系格式错误或重复。")
+        supplied[raw["id"]] = raw
+    if set(supplied) != {row["id"] for row in record["items"]}:
+        raise CostingConflict("明细与预览不一致，请重新核对。")
+    return supplied
+
+
+def replace_existing_links(record: dict, peer: dict, rows: list[dict]) -> None:
+    """Replace row links on two existing sheets without touching their contents or costs."""
+    supplied = _indexed_rows(record, rows)
+    targets = {row["id"]: row for row in peer["items"]}
+    for target in targets.values():
+        _set_kind(target, "local")
+    for item in record["items"]:
+        raw = supplied[item["id"]]
+        kind = _kind(raw, "local")
+        target_id = text(raw.get("peer_item_id"), "peer_item_id")
+        if kind == "local":
+            if target_id:
+                raise CostingValidationError("仅本件使用的明细不能同时指定对侧明细。")
+            _set_kind(item, kind)
+            continue
+        target = targets.pop(target_id, None)
+        if target is None:
+            raise CostingValidationError("每行只能对应唯一的对侧明细，请重新选择。")
+        if text(target.get("mode", "fixed"), "mode") != text(item.get("mode", "fixed"), "mode"):
+            raise CostingValidationError("两侧计价方式不同，请先分别核对计价方式。")
+        if kind == "shared" and any(text(target.get(k), k) != text(item.get(k), k) for k in CODE_FIELDS):
+            raise CostingValidationError("共用件的两项编码应相同，如使用不同编码，请选择左右对应件。")
+        _link(item, target, kind)
+
+
 def establish_pair(record: dict, peer: dict, rows: list[dict] | None, *, mirror: bool) -> None:
     """Attach both sides to one pair; the caller owns versions, auditing and transaction."""
     if (record.get("pair") or peer.get("pair") or record["id"] == peer["id"]
             or mirror_code(record["code"]) != peer["code"] or record["kind"] != peer["kind"]):
         raise CostingConflict("这两张成本单无法建立左右配对，请重新预览。")
-    if not mirror and rows is None:
-        raise CostingValidationError("请先核对两侧的明细关系。")
-    supplied = {}
-    for raw in rows or []:
-        if not isinstance(raw, Mapping) or not isinstance(raw.get("id"), str) or raw["id"] in supplied:
-            raise CostingValidationError("明细关系格式错误或重复。")
-        supplied[raw["id"]] = raw
-    if rows is not None and set(supplied) != {row["id"] for row in record["items"]}:
-        raise CostingConflict("明细与预览不一致，请重新核对。")
     pair_id = uuid4().hex
     record["pair"] = {"id": pair_id, "peer_id": peer["id"]}
     peer["pair"] = {"id": pair_id, "peer_id": record["id"]}
-    original_peer = deepcopy(peer) if mirror else None
-    if mirror:
-        peer["items"] = []
-    targets = {row["id"]: row for row in peer["items"]}
-    for item in targets.values():
-        _set_kind(item, "local")
+    if not mirror:
+        if rows is None:
+            raise CostingValidationError("请先核对两侧的明细关系。")
+        replace_existing_links(record, peer, rows)
+        return
+
+    supplied = _indexed_rows(record, rows) if rows is not None else {}
+    original_peer = deepcopy(peer)
+    peer["items"] = []
     for item in record["items"]:
         raw = supplied.get(item["id"], {})
-        kind = _kind(raw, default_pair_kind(item) if mirror else "local")
-        _set_kind(item, kind)
+        kind = _kind(raw, default_pair_kind(item))
         if kind == "local":
             if raw.get("peer_item_id"):
                 raise CostingValidationError("仅本件使用的明细不能同时指定对侧明细。")
-        elif mirror:
-            peer["items"].append(_mirror_item(item, raw, kind))
+            _set_kind(item, kind)
         else:
-            target_id = text(raw.get("peer_item_id"), "peer_item_id")
-            target = targets.pop(target_id, None)
-            if target is None:
-                raise CostingValidationError("每行只能对应唯一的对侧明细，请重新选择。")
-            if text(target.get("mode", "fixed"), "mode") != text(item.get("mode", "fixed"), "mode"):
-                raise CostingValidationError("两侧计价方式不同，请先分别核对计价方式。")
-            if kind == "shared" and any(text(target.get(k), k) != text(item.get(k), k) for k in CODE_FIELDS):
-                raise CostingValidationError("共用件的两项编码应相同，如使用不同编码，请选择左右对应件。")
-            _link(item, target, kind)
-    if mirror and original_peer is not None:
-        # New identities/codes describe the opposite part. Its first snapshot should
-        # inherit historical amounts whenever the actual cost structure is identical.
-        new_rows = {item["id"]: item for item in peer["items"]}
-        for old, source in zip(original_peer["items"], record["items"], strict=True):
-            corresponding = new_rows.get(source["peer_item_id"])
-            if corresponding is not None:
-                old["id"] = corresponding["id"]
-                if "product_code" in corresponding:
-                    old["product_code"] = corresponding["product_code"]
-        overrides = {}
-        if len(peer["items"]) != len(record["items"]):
-            overrides = {"approved_cost": None, "suggested_tax_price_override": None}
-        peer.update(_costed_with_links(peer, peer["items"], original_peer, **overrides))
+            peer["items"].append(_mirror_item(item, raw, kind))
+    # Rows with identical quantities and prices inherit the historical cost snapshot.
+    new_rows = {item["id"]: item for item in peer["items"]}
+    for old, source in zip(original_peer["items"], record["items"], strict=True):
+        corresponding = new_rows.get(source["peer_item_id"])
+        if corresponding is not None:
+            old["id"] = corresponding["id"]
+            if "product_code" in corresponding:
+                old["product_code"] = corresponding["product_code"]
+    overrides = {}
+    if len(peer["items"]) != len(record["items"]):
+        overrides = {"approved_cost": None, "suggested_tax_price_override": None}
+    peer.update(_costed_with_links(peer, peer["items"], original_peer, **overrides))
 
 
 def _apply_linked_edits(item: dict, prior: dict, target: dict, kind: str) -> None:

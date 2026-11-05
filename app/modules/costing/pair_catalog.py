@@ -6,7 +6,7 @@ from copy import deepcopy
 
 from .domain import CostingConflict, CostingNotFound, CostingValidationError, MAX_ITEMS
 from .pair_codes import code_side, mirror_code, mirror_part_code
-from .pairing import default_pair_kind, establish_pair, mirror_item_name
+from .pairing import default_pair_kind, establish_pair, mirror_item_name, replace_existing_links
 from .service import CostingService, _timestamp
 
 
@@ -51,19 +51,30 @@ class CostingPairCatalog:
     def __init__(self, service: CostingService):
         self.service = service
 
-    def candidates(self) -> list[dict]:
+    def candidates(self, *, include_paired: bool = False) -> list[dict]:
         with self.service._uow(False) as uow:
-            records = uow.repository.pair_candidates()
+            records = uow.repository.pairing_index()
         by_code = {row["code"]: row for row in records}
+        by_id = {row["id"]: row for row in records}
         candidates = []
         for row in records:
-            other_code = mirror_code(row["code"])
-            if not other_code:
-                continue
-            other = by_code.get(other_code)
+            peer_id = row["peer_id"]
+            if peer_id:
+                if not include_paired:
+                    continue
+                other = by_id.get(peer_id)
+                if not other or other["peer_id"] != row["id"]:
+                    raise CostingConflict("左右件关系缺少对应成本单，请核对。")
+                other_code = other["code"]
+            else:
+                other_code = mirror_code(row["code"])
+                if not other_code:
+                    continue
+                other = by_code.get(other_code)
             if other and code_side(row["code"]) == "R":
                 continue
-            candidates.append({**row, "other_code": other_code, "other_id": other["id"] if other else None,
+            candidates.append({**row, "paired": bool(peer_id), "other_code": other_code,
+                               "other_id": other["id"] if other else None,
                                "other_version": other["version"] if other else None})
         return candidates
 
@@ -74,18 +85,28 @@ class CostingPairCatalog:
         record = repo.get(record_id)
         if record is None:
             raise CostingNotFound()
+        linked_peer = CostingService._peer(repo, record)
+        if linked_peer is not None:
+            return record, linked_peer["code"], linked_peer
         other_code = mirror_code(record["code"])
         if not other_code:
             raise CostingValidationError("型号需要含有一个可识别的 LA、LB、LC、RA、RB 或 RC 位置。")
         peer = repo.find_code(other_code)
-        if record.get("pair") or (peer and peer.get("pair")):
+        if peer and peer.get("pair"):
             raise CostingConflict("型号已建立配对，请从成本详情查看对侧。")
         return record, other_code, peer
 
     def existing(self, record_id: str) -> dict:
         with self.service._uow(False) as uow:
             record, code, peer = self._lookup(uow.repository, record_id)
-            return {"record": record, "other": peer, "other_code": code, "suggestions": _suggestions(record, peer)}
+            paired = bool(record.get("pair"))
+            if paired:
+                # Names, positions and prices can drift independently after pairing.
+                suggestions = {item["id"]: {"mode": item["pair_kind"], "other_id": item["peer_item_id"]}
+                               for item in record["items"]}
+            else:
+                suggestions = _suggestions(record, peer)
+            return {"record": record, "other": peer, "other_code": code, "suggestions": suggestions, "paired": paired}
 
     @staticmethod
     def _check_version(record: dict, version: object) -> None:
@@ -116,32 +137,47 @@ class CostingPairCatalog:
 
     def link_existing(self, record_id: str, *, version: int, other_version: int,
                       matches: list[dict], actor: str) -> dict:
+        return self._save_links(record_id, version, other_version, matches, actor, revise=False)
+
+    def revise_existing(self, record_id: str, *, version: int, other_version: int,
+                        matches: list[dict], actor: str) -> dict:
+        return self._save_links(record_id, version, other_version, matches, actor, revise=True)
+
+    def _save_links(self, record_id: str, version: int, other_version: int,
+                    matches: list[dict], actor: str, *, revise: bool) -> dict:
         actor = self.service._actor(actor)
         if not isinstance(matches, list) or len(matches) > MAX_ITEMS:
             raise CostingValidationError("左右件明细对应关系无效。")
         with self.service._uow(True) as uow:
             repo = uow.repository
             source, _, peer = self._lookup(repo, record_id)
-            if peer is None:
-                raise CostingConflict("对侧型号不存在，请重新预览。")
+            if peer is None or bool(source.get("pair")) != revise:
+                raise CostingConflict("配对状态已变化，请重新打开左右件配对页。")
             self._check_version(source, version)
             self._check_version(peer, other_version)
+            modes = ("shared", "handed", "local") if revise else ("shared", "handed")
             selected = {}
             for match in matches:
                 if (not isinstance(match, dict) or not isinstance(match.get("id"), str)
-                        or not isinstance(match.get("other_id"), str) or match.get("mode") not in ("shared", "handed")
+                        or not isinstance(match.get("other_id"), str) or match.get("mode") not in modes
                         or match["id"] in selected):
                     raise CostingValidationError("请为每条对应明细选择有效的关系。")
                 selected[match["id"]] = {"id": match["id"], "peer_item_id": match["other_id"],
                                          "pair_kind": match["mode"]}
-            if selected.keys() - {item["id"] for item in source["items"]}:
-                raise CostingValidationError("选中的明细已变化，请重新核对。")
+            source_ids = {item["id"] for item in source["items"]}
+            if selected.keys() - source_ids or (revise and selected.keys() != source_ids):
+                raise CostingValidationError("请核对本张成本单的所有明细。")
             rows = [selected.get(item["id"], {"id": item["id"], "pair_kind": "local"}) for item in source["items"]]
-            left, right = deepcopy(source), deepcopy(peer)
-            establish_pair(left, right, rows, mirror=False)
+            current, other = deepcopy(source), deepcopy(peer)
+            if revise:
+                replace_existing_links(current, other, rows)
+                if current == source and other == peer:
+                    return source
+            else:
+                establish_pair(current, other, rows, mirror=False)
             timestamp = _timestamp()
-            for before, after in ((source, left), (peer, right)):
+            for before, after in ((source, current), (peer, other)):
                 after.update(version=before["version"] + 1, updated_at=timestamp, updated_by=actor)
                 self.service._save_edit(repo, before, after, actor)
             uow.commit()
-        return left
+        return current

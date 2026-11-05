@@ -17,7 +17,7 @@
     <form class="search-form" method="get" action="{{ url_for(costing_endpoint ~ '.index') }}">
       {% for key, values in filter_query.items() %}{% for value in values %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}{% endfor %}
       <label><span>型号 / 名称 / 车型</span><input name="q" value="{{ filters.q or '' }}" placeholder="输入型号或关键词" aria-label="型号、名称或车型"></label>
-      <label><span>类型</span><select name="kind"><option value="">全部类型</option>{% for kind, label in costing_list_kind_labels.items() %}<option value="{{ kind }}" {% if filters.kind == kind %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+      <label><span>类型</span><select name="kind"><option value="">全部类型</option>{% for kind, label in costing_kind_labels.items() %}<option value="{{ kind }}" {% if filters.kind == kind %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
       <label><span>状态</span><select name="status"><option value="">全部状态</option><option value="ready" {% if filters.status == 'ready' %}selected{% endif %}>资料完整</option><option value="draft" {% if filters.status == 'draft' %}selected{% endif %}>待补充 / 核对</option></select></label>
       <label><span>排序</span><select name="sort">
         <option value="code" {% if filters.sort|default('code') == 'code' %}selected{% endif %}>产品编码（升序）</option>
@@ -26,7 +26,7 @@
       </select></label>
       <button class="linear-button primary" type="submit">查询</button>
     </form>
-    <div class="command-actions"><button class="linear-button subtle" type="button" data-reset-list-for="costing-list" title="清除列头筛选并恢复默认列序和列宽">重置列表</button><a class="linear-button subtle" href="{{ url_for(costing_endpoint ~ '.index') }}">清除筛选</a>{% if can('manage_costs') %}<a class="linear-button subtle" href="{{ url_for('costing_import.import_page') }}">导入核对</a><a class="linear-button subtle" href="{{ url_for(costing_endpoint ~ '.pairs') }}">左右件配对</a><a class="linear-button primary" href="{{ url_for(costing_endpoint ~ '.new') }}">新建成本</a>{% endif %}</div>
+    <div class="command-actions"><button class="linear-button subtle" type="button" data-reset-list-for="costing-list" title="清除列头筛选并恢复默认列序和列宽">重置列表</button><a class="linear-button subtle" href="{{ url_for(costing_endpoint ~ '.index') }}">清除筛选</a><a class="linear-button subtle" href="{{ url_for(costing_endpoint ~ '.pairs') }}">左右件配对</a>{% if can('manage_costs') %}<a class="linear-button subtle" href="{{ url_for('costing_import.import_page') }}">导入核对</a><a class="linear-button primary" href="{{ url_for(costing_endpoint ~ '.new') }}">新建成本</a>{% endif %}</div>
   </div>
   <div class="data-grid" data-resizable-grid data-grid-key="costing-list">
     <span class="data-grid-controls-visually-hidden" aria-live="polite" data-column-order-status></span>
@@ -40,8 +40,8 @@
         <tbody>{% for cost in result.records %}
           <tr>
             <td data-col="code"><a href="{{ url_for(costing_endpoint ~ '.edit', record_id=cost.id) }}"><strong>{{ cost.code }}</strong></a></td>
-            <td data-col="name"><span>{{ cost.name or '—' }}</span><small class="costing-secondary">{{ cost.models or cost.brand or '' }}</small></td>
-            <td data-col="kind">{{ costing_list_kind_labels.get(cost.kind, '—') }}</td>
+            <td data-col="name">{% set vehicle = costing_vehicle_parts(cost) %}<span>{{ vehicle[0] if vehicle else '—' }}</span>{% if vehicle|length > 1 %}<small class="costing-secondary">{{ vehicle[1] }}</small>{% endif %}</td>
+            <td data-col="kind">{{ costing_kind_labels.get(cost.kind, '—') }}</td>
             <td data-col="calculated" class="costing-number">{{ cost.calculated_cost|cost_money if cost.calculated_cost is not none else '待补充' }}</td>
             <td data-col="approved" class="costing-number">{{ cost.approved_cost|cost_money if cost.approved_cost is not none else '—' }}</td>
             <td data-col="scrap" class="costing-number">{{ cost.scrap_credit|cost_money if cost.scrap_credit is not none else '—' }}</td>

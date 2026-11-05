@@ -37,3 +37,12 @@
   vertical-align: middle;
   accent-color: var(--linear-accent);
 }
+
+.costing-pair-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

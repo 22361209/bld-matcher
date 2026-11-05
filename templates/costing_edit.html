@@ -17,14 +17,15 @@
 <form id="costing-editor" data-costing-form data-list-url="{{ url_for(costing_endpoint ~ '.index') }}" data-preview-url="{{ url_for(costing_endpoint ~ '.preview') }}" data-record="{{ record|tojson|forceescape }}" data-references="{{ (references or {})|tojson|forceescape }}" data-new="{{ 'true' if is_new else 'false' }}" data-editable="{{ 'true' if can_edit else 'false' }}" action="{{ url_for(costing_endpoint ~ '.new') if is_new else url_for(costing_endpoint ~ '.edit', record_id=record.id) }}" method="post">
   {{ csrf_field() }}
   {% set new_title = '复制新建成本' if copy_from else '新建型号成本' %}
-  {% set kind_name = '球头' if record.kind == 'ball' else '摆臂' %}
+  {% set kind_name = costing_kind_labels.get(record.kind, '—') %}
   <section class="data-section costing-identity">
     <div class="workspace-command costing-editor-bar">
       <div class="costing-identity-line">
         <a class="link-button costing-back" data-costing-back href="{{ url_for(costing_endpoint ~ '.index') }}">← 成本列表</a>
         <strong data-costing-code data-empty-title="{{ new_title if is_new else '待填写型号' }}">{{ record.code or new_title }}</strong>
         <span class="muted-text" data-costing-description>{{ (record.name or kind_name) ~ (' · ' ~ record.brand if record.brand else '') ~ (' ' ~ record.models if record.models else '') }}</span>
-        {% if record.pair %}<a class="link-button" href="{{ url_for(costing_endpoint ~ '.edit', record_id=record.pair.peer_id) }}">对侧 {{ record.peer_code }} ↗</a>
+        {% if record.pair %}<a class="link-button" href="{{ url_for(costing_endpoint ~ '.pair_review', record_id=record.id) }}">左右件配对</a>
+          <a class="link-button" href="{{ url_for(costing_endpoint ~ '.edit', record_id=record.pair.peer_id) }}">对侧 {{ record.peer_code }} ↗</a>
         {% elif not is_new and can_edit and candidate_code %}<a class="link-button" href="{{ url_for(costing_endpoint ~ '.pair_review', record_id=record.id) }}">配对 {{ candidate_code }}</a>{% endif %}
         {% if not can_edit %}<span class="muted-text">只读</span>{% endif %}
       </div>
@@ -45,7 +46,9 @@
         <label><input type="checkbox" name="create_pair" data-create-pair>同时新建左右件</label>
         <small class="muted-text" data-pair-code-preview aria-live="polite"></small>
       </div>{% endif %}
-      <label>产品类型 <select name="kind" {% if record.pair %}disabled{% endif %}><option value="arm" {% if record.kind != 'ball' %}selected{% endif %}>摆臂</option><option value="ball" {% if record.kind == 'ball' %}selected{% endif %}>球头</option></select></label>
+      <label>产品类型 <select name="kind" {% if record.pair %}disabled{% endif %}>
+        {% for kind, label in costing_kind_labels.items() %}<option value="{{ kind }}"{% if record.kind == kind %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select></label>
       <label>产品名称 <input name="name" value="{{ record.name or '' }}" maxlength="200" placeholder="可选"></label>
       <label>车系 <input name="brand" value="{{ record.brand or '' }}" maxlength="120" placeholder="可选"></label>
       <label class="costing-wide-field">适用车型 <input name="models" value="{{ record.models or '' }}" maxlength="240" placeholder="可选"></label>

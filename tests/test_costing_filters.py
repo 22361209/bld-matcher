@@ -63,6 +63,13 @@ class CostingFiltersTest(unittest.TestCase):
         self.assertEqual(self.service.list(column_filters={"kind": ["arm"], "net": ["32"]})["total"], 0)
         self.assertEqual(self.service.list(column_filters={"kind": ["arm", "ball"]})["total"], 2)
 
+    def test_same_displayed_vehicle_groups_all_matching_sheets_and_accepts_old_filter_urls(self):
+        self.service.import_records([self.sheet("GROUP1", models="活动胶套"), self.sheet("GROUP2", name="", models="活动胶套")],
+                                    actor="tester")
+        self.assertEqual(self.service.filter_options()["name"], [{"value": "活动胶套", "label": "活动胶套", "count": 2}])
+        for value in ("活动胶套", "摆臂 / 活动胶套"):
+            self.assertEqual(self.service.list(column_filters={"name": [value]})["total"], 2)
+
     def test_facets_honor_other_columns_and_include_full_dataset(self):
         self.service.import_records([
             self.sheet(f"K{index:03}", "80" if index % 2 else "160") for index in range(61)
@@ -161,6 +168,54 @@ class CostingFilterWebTest(unittest.TestCase):
 
     def tearDown(self):
         self.temporary.cleanup()
+
+    def test_vehicle_cells_and_filter_labels_use_models_or_brand_for_generic_arm_names(self):
+        cases = (
+            ("C801102", "摆臂", "活动胶套", "现代", "活动胶套", ""),
+            ("BRAND", "摆臂", "", "现代", "现代", ""),
+            ("UNKNOWN", "摆臂", "", "", "—", ""),
+            ("SPECIFIC", "下摆臂", "雅绅特", "现代", "下摆臂", "雅绅特"),
+            ("BALL", "球头", "ix35", "现代", "球头", "ix35"),
+        )
+        self.service.import_records([
+            CostingFiltersTest.sheet(code, name=name, models=models, brand=brand)
+            for code, name, models, brand, _, _ in cases
+        ], actor="tester")
+        for code, name, models, brand, primary, secondary in cases:
+            with self.subTest(code=code):
+                # Previously bookmarked column values still select the same records.
+                choice = " / ".join(filter(None, (name, models or brand)))
+                body = self.client.get("/", query_string={"q": code, "cf_name": choice}).get_data(as_text=True)
+                content = re.search(r'<td data-col="name">(.*?)</td>', body, re.S).group(1)
+                self.assertIn(f"<span>{primary}</span>", content)
+                if secondary:
+                    self.assertIn(f'<small class="costing-secondary">{secondary}</small>', content)
+                else:
+                    self.assertNotIn("<small", content)
+                label = "（空）" if primary == "—" else " / ".join(filter(None, (primary, secondary)))
+                canonical = EMPTY_FILTER_VALUE if primary == "—" else label
+                self.assertIn(f'value="{canonical}" checked><span>{label}</span>', body)
+                row = self.service.list(q=code)["records"][0]
+                self.assertEqual((row["name"], row["models"], row["brand"]), (name, models, brand))
+
+    def test_literal_vehicle_names_and_legacy_urls_remain_distinguishable(self):
+        records = [
+            ("普通", "摆臂", "雅绅特", "雅绅特"), ("名称含分隔符", "摆臂 / 雅绅特", "", "摆臂 / 雅绅特"),
+            ("车型叫摆臂", "", "摆臂", "摆臂"), ("未填", "摆臂", "", "（空）"),
+            ("保留字", "", EMPTY_FILTER_VALUE, EMPTY_FILTER_VALUE),
+        ]
+        self.service.import_records([CostingFiltersTest.sheet(code, name=name, models=models)
+                                     for code, name, models, _ in records], actor="tester")
+        choices = {option["label"]: option["value"] for option in self.service.filter_options()["name"]}
+        self.assertEqual(set(choices), {row[3] for row in records})
+        for code, _, _, label in records:
+            result = self.client.get("/", query_string={"cf_name": choices[label]},
+                                     headers={"Accept": "application/json"}).get_json()["result"]
+            self.assertEqual([row["code"] for row in result["records"]], [code])
+        for legacy, expected in (("摆臂 / 雅绅特", "普通"), ("摆臂 / 摆臂", "车型叫摆臂"), ("摆臂", "未填")):
+            result = self.client.get("/", query_string={"cf_name": legacy},
+                                     headers={"Accept": "application/json"}).get_json()["result"]
+            self.assertEqual([row["code"] for row in result["records"]], [expected])
 
     def test_filter_query_survives_search_pagination_and_json_refresh(self):
         self.service.import_records([

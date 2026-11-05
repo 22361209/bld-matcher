@@ -24,7 +24,7 @@
         {% set original_total = cost.get('source_info', {}).get('pivot', {}).get('cached', {}).get('B') %}
         <tr>
           <td data-col="code"><strong>{{ cost.code }}</strong></td>
-          <td data-col="kind">{{ '球头' if cost.kind == 'ball' else '摆臂' }}</td>
+          <td data-col="kind">{{ costing_kind_labels.get(cost.kind, '—') }}</td>
           <td data-col="models">{{ cost.models or '—' }}</td>
           <td data-col="count">{{ cost['items']|length }}</td>
           <td data-col="calculated" class="costing-number">{% if cost.calculated_cost is not none %}{{ cost.calculated_cost|cost_money }}{% else %}<span>待补充</span><small class="costing-secondary">已知小计 {{ cost.known_subtotal|cost_money }}</small>{% endif %}</td>

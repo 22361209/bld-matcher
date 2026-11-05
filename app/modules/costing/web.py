@@ -51,7 +51,7 @@ def update(record_id: str):
 
 
 @costing.get("/pairs")
-@permission_required("manage_costs")
+@permission_required("view_costs")
 def pairs():
     return pair_views.candidates()
 
@@ -63,7 +63,7 @@ def mirror_selected():
 
 
 @costing.get("/pairs/<record_id>")
-@permission_required("manage_costs")
+@permission_required("view_costs")
 def pair_review(record_id: str):
     return pair_views.review(record_id)
 

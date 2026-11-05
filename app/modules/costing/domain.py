@@ -14,6 +14,7 @@ MODE_INPUTS = {
     "package": ("unit_price", "quantity", "strap_rate", "length", "width", "height"),
 }
 MODES = frozenset(MODE_INPUTS)
+COST_KIND_LABELS = {"arm": "控制臂", "ball": "悬挂球头"}
 DEFAULT_MATERIAL_ATTRIBUTE = "自制"
 MATERIAL_ATTRIBUTES = (DEFAULT_MATERIAL_ATTRIBUTE, "外购", "委外加工")
 NUMERIC_FIELDS = (
@@ -280,8 +281,8 @@ def calculate_cost(data: Mapping[str, object], *, previous: dict | None = None) 
     if not result["code"] or any(char.isspace() for char in result["code"]):
         raise CostingValidationError("请填写完整型号，型号中不能含空格。", "code")
     kind = text(data.get("kind", "arm"), "kind")
-    if kind not in {"arm", "ball"}:
-        raise CostingValidationError("产品类型只支持摆臂或球头。", "kind")
+    if kind not in COST_KIND_LABELS:
+        raise CostingValidationError(f"产品类型只支持{'或'.join(COST_KIND_LABELS.values())}。", "kind")
     result.update(kind=kind, source_info=source_snapshot(data.get("source_info")))
     raw_items = data.get("items", [])
     if not isinstance(raw_items, list) or len(raw_items) > MAX_ITEMS:
