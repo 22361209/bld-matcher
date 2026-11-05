@@ -1,5 +1,6 @@
 """Choices and initial values supplied to the cost sheet editor."""
 
+from .quote_roles import QUOTE_ROLES
 from .material_attributes import suggested_material_attribute
 
 
@@ -30,4 +31,4 @@ def editor_choices(references: dict) -> dict:
         for item in items:
             item["material_attribute"] = suggested_material_attribute(item)
         templates[kind] = items
-    return {**choices, "templates": templates}
+    return {**choices, "templates": templates, "quote_roles": QUOTE_ROLES}

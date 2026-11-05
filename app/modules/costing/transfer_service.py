@@ -163,6 +163,8 @@ def _validate_record(record: object) -> dict:
         raise CostingValidationError("同一成本单的明细编号重复。")
     for item, checked in zip(items, calculated["items"], strict=True):
         _stored_amount(item.get("line_total"))
+        if "quote_role" in item and ("quote_role" not in checked or item["quote_role"] != checked["quote_role"]):
+            raise CostingValidationError("成本快照报价归类无效。")
         if "weight_choice" in item:
             raise CostingValidationError("成本快照应保存重量来源资料，不能携带临时取重凭据。")
         if record.get("scrap_mode") == "auto" or any(key in item for key in SCRAP_ROW_FIELDS):
@@ -181,7 +183,7 @@ def _validated_snapshot(snapshot: object, *, allow_empty: bool = False, detach: 
     if not isinstance(snapshot, dict) or set(snapshot) != SNAPSHOT_FIELDS:
         raise CostingValidationError("成本迁移包字段不完整或含有未知字段。")
     version = snapshot["format_version"]
-    if type(version) is not int or version not in (1, 2, 3):
+    if type(version) is not int or version not in (1, 2, 3, 4):
         raise CostingValidationError("成本迁移包版本不受支持。")
     limit_mib = MAX_TRANSFER_MIB if version >= 2 else LEGACY_TRANSFER_MIB
     # The standalone transfer owns a detached input; business sync already owns
@@ -229,7 +231,7 @@ def _validated_snapshot(snapshot: object, *, allow_empty: bool = False, detach: 
             raise CostingValidationError("成本修订与其记录快照不一致。")
         histories[record_id].append(revision)
     if format_version_for(records, revisions) != version:
-        raise CostingValidationError("成本迁移包版本与左右件或重量来源资料不一致。")
+        raise CostingValidationError("成本迁移包版本与报价归类、左右件或重量来源资料不一致。")
     for record_id, record in record_map.items():
         history = sorted(histories[record_id], key=lambda row: row["version"])
         if len(history) != record["version"]:

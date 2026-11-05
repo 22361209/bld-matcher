@@ -6,7 +6,14 @@ CORE_TABLES = (
 )
 
 
-def install_schema(connection):
+def install_worksheet_schema(connection):
+    connection.execute("""CREATE TABLE IF NOT EXISTS development_worksheets (
+      project_id TEXT PRIMARY KEY NOT NULL REFERENCES development_projects(id) ON DELETE CASCADE,
+      content TEXT NOT NULL
+    )""")
+
+
+def install_schema(connection, *, worksheets=True):
     statements = [
         """CREATE TABLE IF NOT EXISTS development_projects (
           id TEXT PRIMARY KEY, core_number TEXT NOT NULL, title TEXT NOT NULL,
@@ -81,6 +88,8 @@ def install_schema(connection):
         connection.execute(f"CREATE INDEX IF NOT EXISTS idx_{table}_project ON {table}(project_id)")
     connection.execute("CREATE INDEX IF NOT EXISTS idx_development_components_task ON development_components(task_id)")
     connection.execute("CREATE INDEX IF NOT EXISTS idx_development_operations_task ON development_operations(task_id)")
+    if worksheets:
+        install_worksheet_schema(connection)
     connection.execute("""CREATE TRIGGER IF NOT EXISTS development_source_immutable
       BEFORE UPDATE ON development_sources
       WHEN OLD.id IS NOT NEW.id OR OLD.code IS NOT NEW.code OR OLD.name IS NOT NEW.name

@@ -1,4 +1,4 @@
-"""Whole-project comparison and transactional application for sync package v5."""
+"""Whole-project comparison and transactional application for development data."""
 from __future__ import annotations
 
 import sqlite3
@@ -22,7 +22,7 @@ def export_aggregates(connection: sqlite3.Connection) -> list[dict]:
 
 def validate_aggregate(aggregate: dict, connection: sqlite3.Connection | None = None) -> None:
     from app.modules.development.repository import sync_validate_aggregate as validate_core
-    if not isinstance(aggregate, dict) or set(aggregate) != {"id", "project", *AGGREGATE_KEYS}:
+    if not isinstance(aggregate, dict) or set(aggregate) - {"worksheet"} != {"id", "project", *AGGREGATE_KEYS}:
         raise ValueError("开发数据包整单结构不完整。")
     if not isinstance(aggregate["project"], dict) or aggregate["id"] != aggregate["project"].get("id"):
         raise ValueError("开发单永久编号不一致。")
@@ -37,6 +37,10 @@ def _comparable(row: dict) -> dict:
 def aggregate_status(local: dict | None, incoming: dict) -> str:
     if local is None:
         return "new"
+    if ("worksheet" in local) != ("worksheet" in incoming):
+        raise ValueError("同一开发单编号在两台设备上的登记方式不同，无法合并。")
+    if local.get("worksheet") != incoming.get("worksheet"):
+        return "conflict"
     if _comparable(local["project"]) != _comparable(incoming["project"]):
         return "conflict"
     for key in AGGREGATE_KEYS:
@@ -58,7 +62,7 @@ def preview_aggregates(connection: sqlite3.Connection, incoming: list[dict], roo
         if status == "unchanged":
             continue
         project = aggregate["project"]
-        label = str(project.get("core_number") or project.get("name") or aggregate["id"])
+        label = str(project["title"] if "worksheet" in aggregate else project.get("core_number") or project["title"])
         row = {"key": aggregate["id"], "label": label, "status": status, "local_updated_at": "", "incoming_updated_at": project.get("updated_at", "")}
         rows.append(row)
         if status == "conflict":
@@ -128,7 +132,9 @@ def apply_aggregates(connection: sqlite3.Connection, package_path: Path, incomin
         if aggregate["id"] in accepted_ids:
             validate_aggregate(aggregate, connection)
     copy_accepted_files(package_path, root, accepted, changes)
-    for table in ("development_projects", "development_branches", "development_tasks", "development_components", "development_operations", "development_documents", "development_document_revisions", "development_document_links"):
+    for table in ("development_projects", "development_worksheets", "development_branches", "development_tasks",
+                  "development_components", "development_operations", "development_documents",
+                  "development_document_revisions", "development_document_links"):
         if connection.execute(f"PRAGMA foreign_key_check({table})").fetchone() is not None:
             raise ValueError("开发资料外键依赖或归属校验失败。")
     return counts, {"aggregates": [*local.values(), *incoming], "files": expected}
@@ -164,6 +170,8 @@ def aggregate_fields(local: dict, incoming: dict) -> list[dict]:
     labels = {"project": "开发单", "branches": "成品", "tasks": "任务", "components": "组件", "operations": "工序", "suppliers": "供应商", "sources": "借用来源", "documents": "文档", "revisions": "文件修订", "links": "采用版本"}
     field_labels = {**FIELD_LABELS, "title": "名称", "owner_username": "负责人", "planned_date": "计划日期", "actual_date": "实际日期", "status": "进度", "task_id": "共用任务", "borrowed_code": "借用编号", "code": "本型号编码", "notes": "备注", "revision_id": "采用修订", "sha256": "文件摘要", "label": "修订版本"}
     result = []
+    if "worksheet" in incoming:
+        result.extend(_worksheet_fields(local["worksheet"], incoming["worksheet"]))
     for key in ("project", *AGGREGATE_KEYS):
         old_rows = [local["project"]] if key == "project" else local[key]
         new_rows = [incoming["project"]] if key == "project" else incoming[key]
@@ -176,3 +184,31 @@ def aggregate_fields(local: dict, incoming: dict) -> list[dict]:
                     continue
                 result.append({"label": f"{labels[key]} {record_label} · {field_labels.get(field, field)}", "before": str(before.get(field, "—")), "after": str(value if value is not None else "—"), "changed": True})
     return result
+
+
+def _worksheet_fields(local: dict, incoming: dict) -> list[dict]:
+    from app.modules.development.worksheet import WORKSHEET_STATUSES, worksheet_status
+
+    fields = []
+
+    def compare(label, before, after):
+        if before != after:
+            fields.append({"label": label, "before": str(before or "—"), "after": str(after or "—"), "changed": True})
+
+    compare("核心编码", local.get("core_code"), incoming.get("core_code"))
+    compare("原表左件成品编码", local.get("left_code"), incoming.get("left_code"))
+    compare("原表右件成品编码", local.get("right_code"), incoming.get("right_code"))
+    compare("开发表状态", WORKSHEET_STATUSES[worksheet_status(local)], WORKSHEET_STATUSES[worksheet_status(incoming)])
+    labels = {"name": "零件名称", "side": "适用侧", "code": "产品编码", "material": "材质",
+              "mode": "借用 / 开发", "borrowed_code": "借用编码", "developer": "由谁开发",
+              "start_date": "开始日期", "due_date": "预计完成日期"}
+    choices = {"side": {"left": "L", "right": "R", "shared": "共用"},
+               "mode": {"new": "开发", "borrowed": "借用", "pending": "待定"}}
+    for index in range(max(len(local["rows"]), len(incoming["rows"]))):
+        before = local["rows"][index] if index < len(local["rows"]) else {}
+        after = incoming["rows"][index] if index < len(incoming["rows"]) else {}
+        for key, label in labels.items():
+            previous, current = before.get(key, ""), after.get(key, "")
+            options = choices.get(key, {})
+            compare(f"开发表第 {index + 1} 行 · {label}", options.get(previous, previous), options.get(current, current))
+    return fields

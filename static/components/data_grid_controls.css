@@ -101,6 +101,24 @@
   background: var(--linear-accent);
 }
 
+.data-grid-sort-trigger {
+  display: inline-grid;
+  flex: 0 0 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 4px;
+  color: var(--linear-accent);
+  font-size: 16px;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.data-grid-sort-trigger:hover,
+.data-grid-sort-trigger:focus-visible {
+  background: var(--linear-subtle);
+  text-decoration: none;
+}
+
 .data-grid-table .resizable-heading {
   cursor: default;
 }

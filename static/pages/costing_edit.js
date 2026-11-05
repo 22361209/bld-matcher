@@ -1,4 +1,5 @@
 import {createWeightLookup, weightLookupControls, weightSourceDetails, showWeightOrigin} from "./costing_weight_lookup.js";
+import {rowActionButton as rowButton} from "../components/row_action_button.js";
 import {createScrapSummary} from "./costing_scrap.js";
 import {costAmountLabel, setCostInput} from "./costing_numbers.js";
 export {costAmountLabel} from "./costing_numbers.js";
@@ -7,7 +8,7 @@ import {mirrorCostCode, mirrorPartCode, pairKindExplanation, pairKindOptions, ro
 const text = (value) => (value == null ? "" : String(value));
 const COST_FIELDS = ["code", "kind", "name", "brand", "models", "remark", "approved_cost", "scrap_credit", "theoretical_scrap", "scrap_mode", "scrap_unit_price", "scrap_credit_override", "suggested_tax_price_override"];
 const PAIR_ITEM_FIELDS = new Set(["pair_kind", "peer_product_code", "peer_part_code"]);
-const ITEM_FIELDS = ["id", "weight_choice", "scrap_expected", "name", "category", "product_code", "material_attribute", "part_code", "supplier", "remark", "mode", "amount", "unit_price", "quantity", "weight", "processing_fee", "length", "width", "height", "strap_rate", "review_note", "pair_kind", "peer_product_code", "peer_part_code"];
+const ITEM_FIELDS = ["quote_role", "id", "weight_choice", "scrap_expected", "name", "category", "product_code", "material_attribute", "part_code", "supplier", "remark", "mode", "amount", "unit_price", "quantity", "weight", "processing_fee", "length", "width", "height", "strap_rate", "review_note", "pair_kind", "peer_product_code", "peer_part_code"];
 const MODES = {fixed: "直接金额", unit: "按件计算", weight: "按重量计算", package: "包装分摊", freight: "按重量运费", adjustment: "调整 / 返还"};
 const NUMERIC_FIELDS = new Set(["amount", "unit_price", "quantity", "weight", "processing_fee", "length", "width", "height", "strap_rate"]);
 const SUMMARY_INPUTS = new Set(["approved_cost", "scrap_credit", "theoretical_scrap", "scrap_mode", "scrap_unit_price", "scrap_credit_override", "suggested_tax_price_override"]);
@@ -104,17 +105,6 @@ export const calculationIssues = (result) => {
   });
   const issues = result.issues ?? (rows.length ? [] : ["请添加成本明细"]);
   return {rows, sheet: issues.map(issueText).filter((message) => !rowMessages.has(message))};
-};
-
-const rowButton = (symbol, label) => {
-  const button = element("button", "costing-row-button");
-  const face = element("span", "", symbol);
-  face.setAttribute("aria-hidden", "true");
-  button.append(face);
-  button.type = "button";
-  button.title = label;
-  button.setAttribute("aria-label", label);
-  return button;
 };
 
 const updateRemoveLabel = (row, index, name) => {
@@ -494,7 +484,11 @@ export const initializeCostEditor = (form) => {
     const note = element("p", "costing-review-note", issueMessage);
     note.dataset.lineIssues = "";
     note.hidden = !issueMessage;
-    details.append(note);
+    const roleLabel = element("label", "", "报价归类");
+    roleLabel.append(selectField(item, index, "quote_role", "报价归类", [
+      ["", "按项目和类别识别"], ...Object.entries(references.quote_roles || {}),
+    ]));
+    details.append(note, roleLabel);
     if (pairActive()) {
       const kind = rowPairKind(item);
       const wrapper = element("label", "", "左右件明细关系");

@@ -10,6 +10,7 @@ from .domain import audit_detail, clean_fields, fail, validate_aggregate
 from .ports import UnitOfWorkFactory
 from .service_copy import DevelopmentCopyMixin
 from .service_grid import DevelopmentGridMixin
+from .worksheet import clean_worksheet, project_fields, worksheet_for_display, worksheet_status
 
 
 def new_record(data, *, actor):
@@ -37,12 +38,12 @@ class DevelopmentService(DevelopmentCopyMixin, DevelopmentGridMixin):
         return bool(self.drawing_verifier and self.drawing_verifier(project_id, target_type, target_id))
 
     @contextmanager
-    def _mutation(self, project_id, *, expected_version, actor, action):
+    def _mutation(self, project_id, *, expected_version, actor, action, worksheet=False):
         if not str(actor or "").strip():
             fail("写入需要已认证的操作人。")
         with self.unit_of_work_factory() as unit:
             repo = unit.repository
-            project_before = repo.claim_project(project_id, expected_version)
+            project_before = repo.claim_project(project_id, expected_version, worksheet=worksheet)
             before = repo.export_aggregate(project_id)
             before["project"] = project_before
             yield repo
@@ -62,12 +63,41 @@ class DevelopmentService(DevelopmentCopyMixin, DevelopmentGridMixin):
             unit.commit()
         return self.detail(project["id"])
 
+    def create_worksheet(self, data, *, actor, notes=None):
+        if not str(actor or "").strip():
+            fail("写入需要已认证的操作人。")
+        sheet = clean_worksheet(data)
+        project = new_record(project_fields(sheet, notes=notes), actor=actor)
+        with self.unit_of_work_factory() as unit:
+            repo = unit.repository
+            repo.insert("projects", project)
+            repo.save_worksheet(project["id"], sheet)
+            after = repo.export_aggregate(project["id"])
+            validate_aggregate(after)
+            repo.audit("新增新品开发表", project["id"], audit_detail(None, after), actor=actor)
+            unit.commit()
+        return self.detail(project["id"])
+
+    def update_worksheet(self, project_id, data, *, expected_version, actor, notes=None):
+        sheet = clean_worksheet(data)
+        with self._mutation(project_id, expected_version=expected_version, actor=actor,
+                            action="更新新品开发表", worksheet=True) as repo:
+            repo.update("projects", project_id, project_fields(sheet, notes=notes))
+            repo.save_worksheet(project_id, sheet)
+        return self.detail(project_id)
+
     def detail(self, project_id):
         with self.unit_of_work_factory() as unit:
+            unit.begin(write=False)
             data = unit.repository.export_aggregate(project_id)
             return self._decorate(data, unit.repository)
 
     def _decorate(self, data, repo):
+        if "worksheet" in data:
+            data["worksheet"] = worksheet_for_display(data["worksheet"])
+            data["project"]["status"] = worksheet_status(data["worksheet"])
+            data["summary"] = {}
+            return data
         tasks = {row["id"]: row for row in data["tasks"] if not row["archived"]}
         active_components = [row for row in data["components"] if not row["archived"]]
         task_ids = {row["task_id"] for row in active_components}
@@ -102,20 +132,27 @@ class DevelopmentService(DevelopmentCopyMixin, DevelopmentGridMixin):
         }
         return data
 
-    def list_projects(self, *, query="", status="", include_archived=False):
+    def list_projects(self, *, query="", status="", include_archived=False, worksheet=None):
         query = str(query).casefold().strip()[:200]
         result = []
         with self.unit_of_work_factory() as unit:
+            unit.begin(write=False)
             for row in unit.repository.rows("projects"):
                 if row["archived"] and not include_archived:
                     continue
-                aggregate = self._decorate(unit.repository.export_aggregate(row["id"]), unit.repository)
+                raw = unit.repository.export_aggregate(row["id"])
+                if worksheet is not None and ("worksheet" in raw) != worksheet:
+                    continue
+                aggregate = self._decorate(raw, unit.repository)
                 if query and query not in " ".join(str(value) for value in [row["core_number"], row["title"],
                                                     row["owner_username"], *(b["code"] for b in aggregate["branches"])]).casefold():
                     continue
                 if status and aggregate["project"]["status"] != status:
                     continue
-                result.append({**aggregate["project"], "summary": aggregate["summary"]})
+                listing = {**aggregate["project"], "summary": aggregate["summary"]}
+                if "worksheet" in aggregate:
+                    listing["worksheet"] = aggregate["worksheet"]
+                result.append(listing)
         return sorted(result, key=lambda row: (row["updated_at"], row["id"]), reverse=True)
 
     def update_project(self, project_id, data, *, expected_version, actor):

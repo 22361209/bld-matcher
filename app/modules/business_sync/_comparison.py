@@ -3,9 +3,12 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 
 from app.modules.costing.business_sync import costing_state
+from app.modules.materials.domain import material_grade_for_code
 from app.modules.materials.weights import validated_net_weight
 from app.modules.products.brand_normalization import canonicalize_brands
 from app.modules.products.catalog_language import catalog_values
@@ -73,8 +76,11 @@ def package_digest(package_path: Path) -> str:
     return digest.hexdigest()
 
 
-def state_token(connection: sqlite3.Connection, package_path: Path, datasets: tuple[str, ...], *, development_file_dir: Path | None = None, development_rows: list[dict] | None = None) -> str:
+def state_token(connection: sqlite3.Connection, package_path: Path, datasets: tuple[str, ...], *, material_sources: set[str],
+                development_file_dir: Path | None = None, development_rows: list[dict] | None = None) -> str:
     state: dict[str, object] = {}
+    if "materials" in datasets:
+        state["stamping_source_ids"] = sorted(material_sources)
     for key in datasets:
         if key == "costing":
             state[key] = costing_state(connection)
@@ -99,10 +105,31 @@ def state_token(connection: sqlite3.Connection, package_path: Path, datasets: tu
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def candidate_row(key: str, local_rows: list[sqlite3.Row], incoming: dict[str, object]) -> sqlite3.Row | None:
-    key_factory = quote_match_key if key == "quotes" else material_match_key
-    candidates = [row for row in local_rows if key_factory(dict(row)) == key_factory(incoming)]
-    return candidates[0] if len(candidates) == 1 else None
+MATERIAL_IDENTITY_CONFLICT = "本机成本单正在使用这条材料取重，须保留本机材料的同步编号。"
+
+
+@dataclass(frozen=True)
+class MaterialIdentityMatches:
+    by_incoming_id: dict[str, sqlite3.Row]
+    protected: set[str]
+
+
+def legacy_material_matches(local: dict[str, sqlite3.Row], incoming_rows: list[dict], material_sources: set[str]) -> MaterialIdentityMatches:
+    """Reserve exact identities first, then match unmatched rows one-to-one using their old business key."""
+    incoming_ids = {str(row["sync_id"]) for row in incoming_rows}
+    available = defaultdict(list)
+    for identity, row in local.items():
+        if identity not in incoming_ids:
+            available[material_match_key(dict(row))].append(row)
+    unmatched = defaultdict(list)
+    for incoming in incoming_rows:
+        identity = str(incoming["sync_id"])
+        if identity not in local:
+            unmatched[material_match_key(incoming)].append(identity)
+    matches = {identities[0]: available[key][0] for key, identities in unmatched.items()
+               if len(identities) == 1 and len(available[key]) == 1}
+    protected = {incoming_id for incoming_id, row in matches.items() if row["sync_id"] in material_sources}
+    return MaterialIdentityMatches(matches, protected)
 
 
 def equivalent_without_sync(
@@ -121,19 +148,31 @@ def incoming_status(
     local_rows: list[sqlite3.Row],
     incoming: dict[str, object],
     record_columns: list[str],
+    material_matches: MaterialIdentityMatches | None,
 ) -> tuple[str, sqlite3.Row | None, bool]:
     identity = DATASETS[key][1]
     local_row = local.get(str(incoming[identity]))
     if key == "products":
         incoming.update(catalog_values(incoming, dict(local_row) if local_row else {}))
     candidate = None
-    if local_row is None and key in {"quotes", "materials"}:
-        candidate = candidate_row(key, local_rows, incoming)
-    if key == "materials":
+    if local_row is None and key == "quotes":
+        match = quote_match_key(incoming)
+        candidates = [row for row in local_rows if quote_match_key(dict(row)) == match]
+        candidate = candidates[0] if len(candidates) == 1 else None
+    if material_matches is not None:
+        incoming_id = str(incoming[identity])
+        candidate = material_matches.by_incoming_id.get(incoming_id)
         prior = local_row or candidate
+        incoming["material_grade"] = material_grade_for_code(incoming["code"])
         incoming["net_weight"] = validated_net_weight(
             incoming, incoming.get("net_weight", prior["net_weight"] if prior is not None else None)
         )
+        if incoming_id in material_matches.protected:
+            return "conflict", candidate, False
+        # A legacy ID adoption can retain newer local timestamps without creating a fieldless conflict.
+        if (local_row is not None and str(incoming.get("updated_at") or "") <= str(local_row["updated_at"] or "")
+                and equivalent_without_sync(key, local_row, incoming, record_columns)):
+            return "unchanged", local_row, False
     if local_row is not None:
         return status(key, local_row, incoming, record_columns), local_row, False
     if candidate is None:

@@ -14,6 +14,7 @@ MATERIAL_COLUMN_FILTER_ORDER = (
     "category",
     "car",
     "part",
+    "material_grade",
     "spec_text",
     "pieces",
     "unit_weight",

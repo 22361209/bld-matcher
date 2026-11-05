@@ -608,6 +608,9 @@ class TestWebMaterialsAndOperations(WebAppTestBase):
                 "044_costing",
                 "045_material_net_weight",
                 "046_cost_detail_permission",
+                "047_development_worksheets",
+                "048_stamping_material_grade",
+                "049_derive_stamping_material_grades",
             ],
         )
 

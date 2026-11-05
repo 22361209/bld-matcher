@@ -10,28 +10,8 @@ from app.platform.clock import now_text
 from app.platform.sync_identity import MATERIAL_IDENTITY_FIELDS, material_key, stable_sync_id
 
 from .weights import validated_net_weight
-from .specification import _material_values_from_data, _parse_material_spec_query
-
-
-_UNIT_WEIGHT_SQL = "(width * length * 7.85 * thickness / pieces / 1000000.0)"
-_SCRAP_WEIGHT_SQL = f"MAX(0, {_UNIT_WEIGHT_SQL} - CAST(net_weight AS REAL))"
-_SCRAP_KNOWN_SQL = f"net_weight IS NOT NULL AND {_UNIT_WEIGHT_SQL} > 0"
-
-MATERIAL_COLUMN_EXPRESSIONS = {
-    "model": "COALESCE(model, '')",
-    "code": "COALESCE(code, '')",
-    "category": "COALESCE(category, '')",
-    "car": "COALESCE(car, '')",
-    "part": "COALESCE(part, '')",
-    "spec_text": "COALESCE(spec_text, '')",
-    "pieces": "printf('%.2f', pieces)",
-    "unit_weight": f"printf('%.2f', {_UNIT_WEIGHT_SQL})",
-    "net_weight": "COALESCE(net_weight, '')",
-    "scrap_weight": f"CASE WHEN {_SCRAP_KNOWN_SQL} THEN printf('%.4f', {_SCRAP_WEIGHT_SQL}) ELSE '' END",
-    "scrap_percent": f"CASE WHEN {_SCRAP_KNOWN_SQL} THEN printf('%.2f', 100 * {_SCRAP_WEIGHT_SQL} / {_UNIT_WEIGHT_SQL}) ELSE '' END",
-    "active": "CASE WHEN active = 1 THEN 'active' ELSE 'inactive' END",
-}
-EMPTY_FILTER_VALUE = "__blank__"
+from .item_filter_sql import EMPTY_FILTER_VALUE, MATERIAL_COLUMN_EXPRESSIONS, UNIT_WEIGHT_SQL, material_filter_clauses
+from .specification import _material_values_from_data
 
 
 def _material_changes(before: sqlite3.Row | None, after: Mapping[str, Any]) -> list[str]:
@@ -41,6 +21,7 @@ def _material_changes(before: sqlite3.Row | None, after: Mapping[str, Any]) -> l
         "category": "类别",
         "car": "车型",
         "part": "零件名称",
+        "material_grade": "材料牌号",
         "spec_text": "规格尺寸",
         "pieces": "下料只数",
         "net_weight": "净重（kg/件）",
@@ -87,6 +68,8 @@ def upsert_material_item(
     before = get_material_item(connection, int(cast(Any, item_id))) if item_id else None
     if item_id and before is None:
         raise ValueError("这条材料明细已变更，请在列表中重新打开。")
+    if before and "original_sync_id" in data and data["original_sync_id"] != (before["sync_id"] or ""):
+        raise ValueError("这条材料明细的身份已变更，请重新打开核对。")
     values = _material_values_from_data(
         data,
         source=source,
@@ -105,7 +88,7 @@ def upsert_material_item(
             UPDATE material_items
             SET model=:model, code=:code, category=:category, car=:car, part=:part,
                 spec_text=:spec_text, pieces=:pieces, thickness=:thickness, width=:width,
-                length=:length, net_weight=:net_weight, active=:active, source=:source, updated_at=:updated_at
+                length=:length, net_weight=:net_weight, material_grade=:material_grade, active=:active, source=:source, updated_at=:updated_at
             WHERE id=:id
             """,
             values,
@@ -141,10 +124,10 @@ def upsert_material_item(
             """
             INSERT INTO material_items
               (model, code, category, car, part, spec_text, pieces, thickness, width, length,
-               net_weight, active, source, source_row, sync_id, created_at, updated_at)
+               net_weight, material_grade, active, source, source_row, sync_id, created_at, updated_at)
             VALUES
               (:model, :code, :category, :car, :part, :spec_text, :pieces, :thickness, :width,
-               :length, :net_weight, :active, :source, :source_row, :sync_id, :created_at, :updated_at)
+               :length, :net_weight, :material_grade, :active, :source, :source_row, :sync_id, :created_at, :updated_at)
             """,
             values,
         )
@@ -164,73 +147,6 @@ def upsert_material_item(
     return saved_id
 
 
-def _material_spec_search(tokens: list[float]) -> tuple[str, list[object]]:
-    if not tokens:
-        return "", []
-    epsilon = 0.000001
-
-    def equal(field: str) -> str:
-        return f"ABS({field} - ?) < ?"
-
-    if len(tokens) == 1:
-        value = tokens[0]
-        return (
-            f"({equal('thickness')} OR {equal('width')} OR {equal('length')})",
-            [value, epsilon, value, epsilon, value, epsilon],
-        )
-    if len(tokens) == 2:
-        first, second = tokens
-        return (
-            f"(({equal('thickness')} AND {equal('width')}) OR "
-            f"({equal('thickness')} AND {equal('length')}) OR "
-            f"({equal('width')} AND {equal('length')}))",
-            [first, epsilon, second, epsilon] * 3,
-        )
-    first, second, third = tokens
-    return (
-        f"({equal('thickness')} AND {equal('width')} AND {equal('length')})",
-        [first, epsilon, second, epsilon, third, epsilon],
-    )
-
-
-def _filter_clauses(
-    query: str = "",
-    include_inactive: bool = False,
-    only_inactive: bool = False,
-    column_filters: Mapping[str, tuple[str, ...]] | None = None,
-) -> tuple[list[str], list[object]]:
-    clauses: list[str] = []
-    params: list[object] = []
-    if only_inactive:
-        clauses.append("active = 0")
-    elif not include_inactive:
-        clauses.append("active = 1")
-    if query.strip():
-        key = f"%{query.strip()}%"
-        search = ["(model LIKE ? OR code LIKE ? OR category LIKE ? OR car LIKE ? OR part LIKE ? OR spec_text LIKE ?)"]
-        search_params: list[object] = [key] * 6
-        spec_clause, spec_params = _material_spec_search(_parse_material_spec_query(query))
-        if spec_clause:
-            search.append(spec_clause)
-            search_params.extend(spec_params)
-        clauses.append("(" + " OR ".join(search) + ")")
-        params.extend(search_params)
-    for field, values in (column_filters or {}).items():
-        expression = MATERIAL_COLUMN_EXPRESSIONS.get(field)
-        if not expression:
-            continue
-        regular = [value for value in values if value != EMPTY_FILTER_VALUE]
-        predicates: list[str] = []
-        if regular:
-            predicates.append(f"{expression} IN ({', '.join('?' for _ in regular)})")
-            params.extend(regular)
-        if EMPTY_FILTER_VALUE in values:
-            predicates.append(f"{expression} = ''")
-        if predicates:
-            clauses.append("(" + " OR ".join(predicates) + ")")
-    return clauses, params
-
-
 def count_material_items(
     connection: sqlite3.Connection,
     query: str = "",
@@ -239,7 +155,7 @@ def count_material_items(
     column_filters: Mapping[str, tuple[str, ...]] | None = None,
 ) -> int:
     sql = "SELECT COUNT(*) FROM material_items"
-    clauses, params = _filter_clauses(query, include_inactive, only_inactive, column_filters)
+    clauses, params = material_filter_clauses(query, include_inactive, only_inactive, column_filters)
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)
     row = connection.execute(sql, params).fetchone()
@@ -256,12 +172,12 @@ def list_material_items(
     column_filters: Mapping[str, tuple[str, ...]] | None = None,
 ) -> list[sqlite3.Row]:
     sql = f"""
-        SELECT *, {_UNIT_WEIGHT_SQL} AS unit_weight,
+        SELECT *, {UNIT_WEIGHT_SQL} AS unit_weight,
                {MATERIAL_COLUMN_EXPRESSIONS["scrap_weight"]} AS scrap_weight,
                {MATERIAL_COLUMN_EXPRESSIONS["scrap_percent"]} AS scrap_percent
         FROM material_items
     """
-    clauses, params = _filter_clauses(query, include_inactive, only_inactive, column_filters)
+    clauses, params = material_filter_clauses(query, include_inactive, only_inactive, column_filters)
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)
     sql += " ORDER BY model, code, id LIMIT ? OFFSET ?"
@@ -280,7 +196,7 @@ def material_filter_options(
     options: dict[str, list[dict[str, object]]] = {}
     for field, expression in MATERIAL_COLUMN_EXPRESSIONS.items():
         remaining = {key: value for key, value in column_filters.items() if key != field}
-        clauses, params = _filter_clauses(query, include_inactive, only_inactive, remaining)
+        clauses, params = material_filter_clauses(query, include_inactive, only_inactive, remaining)
         sql = f"SELECT {expression} AS value, COUNT(*) AS count FROM material_items"
         if clauses:
             sql += " WHERE " + " AND ".join(clauses)

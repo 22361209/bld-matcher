@@ -1,0 +1,63 @@
+.costing-page .costing-list-command {
+  display: flex;
+  align-items: center;
+  gap: 8px 14px;
+}
+.costing-list-command .costing-list-search {
+  --search-field-width: 180px;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: center;
+}
+.costing-list-search .costing-keyword { flex: 0 1 var(--search-field-width); }
+.costing-keyword input[name="q"] { width: 100%; min-width: 0; }
+.costing-list-command .command-actions { margin-block: 0; gap: 6px; }
+.costing-quote-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+.costing-list-search .costing-quote-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  font-size: 12px;
+  color: var(--linear-text);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.costing-quote-controls input[type="checkbox"] {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  min-height: 0;
+  margin: 0;
+  accent-color: var(--linear-accent);
+}
+.costing-quote-controls select { width: auto; min-height: 30px; }
+.costing-list-table col[data-col="quote"] { width: 116px; }
+.costing-quote-cell { color: var(--linear-accent); }
+.costing-quote-cell summary { width: fit-content; cursor: pointer; font-weight: 600; }
+.costing-quote-cell details[open] { white-space: normal; overflow-wrap: anywhere; }
+.costing-quote-cell small { display: block; color: var(--linear-muted); }
+.costing-quote-cell ul { margin: 4px 0; padding-left: 15px; font-size: 12px; color: var(--linear-text); }
+[data-costing-current-page][aria-busy="true"] .costing-quote-cell > * { visibility: hidden; }
+
+@media (min-width: 1200px) {
+  .costing-page .costing-list-command,
+  .costing-list-command .costing-list-search,
+  .costing-list-command .command-actions,
+  .costing-list-command .costing-quote-controls { flex-wrap: nowrap; }
+}
+@media (max-width: 760px) {
+  .costing-list-command .costing-list-search { flex: 1 1 100%; }
+  .costing-list-search .costing-keyword { flex: 1 1 120px; }
+  .costing-list-command .costing-quote-controls { flex: 1 1 100%; }
+  .costing-list-command .command-actions { margin-left: 0; justify-content: flex-start; }
+}

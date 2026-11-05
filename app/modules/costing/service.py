@@ -15,6 +15,7 @@ from .line_code_maintenance import plan_line_codes
 from .pair_codes import mirror_code
 from .pairing import establish_pair, mirror_item_name, update_peer_rows
 from .ports import CostingRepository, CostingUnitOfWorkFactory
+from .quote_scenarios import Scope, scope_quote
 from .repository import SQLiteCostingUnitOfWork
 
 
@@ -32,9 +33,11 @@ class CostingService:
 
     def list(self, q: str = "", kind: str = "", status: str = "", page: int = 1,
              page_size: int = 50, sort: str = "code", column_filters: Mapping[str, object] | None = None,
-             *, summary_only: bool = False) -> dict:
+             *, summary_only: bool = False, quote_scope: Scope | None = None,
+             facet_fields: Sequence[str] | None = None) -> dict:
         q = self._list_query(q, kind, status)
         selected = normalize_column_filters(column_filters)
+        full_records: list[dict] = []
         if sort not in {"updated", "code", "code_desc"}:
             raise CostingValidationError("排序条件无效。", "sort")
         try:
@@ -43,9 +46,10 @@ class CostingService:
             raise CostingValidationError("分页参数无效。", "page") from exc
         with self._uow(False) as uow:
             matching = None
-            if selected or summary_only:
-                summaries = (displayed_cost(row) for row in uow.repository.summaries(q=q, kind=kind, status=status, sort=sort))
-                matching = [row for row in summaries if matches_columns(row, selected)]
+            summaries = []
+            if selected or summary_only or facet_fields is not None:
+                summaries = [displayed_cost(row) for row in uow.repository.summaries(q=q, kind=kind, status=status, sort=sort)]
+                matching = [row for row in summaries if matches_columns(row, selected)] if selected else summaries
             total = len(matching) if matching is not None else uow.repository.count(q=q, kind=kind, status=status)
             pages = max(1, (total + page_size - 1) // page_size)
             page = min(page, pages)
@@ -54,11 +58,19 @@ class CostingService:
                 records = uow.repository.list(q=q, kind=kind, status=status, sort=sort, limit=page_size, offset=offset)
             else:
                 records = matching[offset:offset + page_size]
-                if not summary_only:
-                    records = uow.repository.get_many([row["id"] for row in records])
+                if not summary_only or quote_scope is not None:
+                    full_records = uow.repository.get_many([row["id"] for row in records])
+                    if not summary_only:
+                        records = full_records
         if not summary_only:
             records = [displayed_cost(record) for record in records]
-        return {"records": records, "total": total, "page": page, "page_size": page_size, "pages": pages}
+        result = {"records": records, "total": total, "page": page, "page_size": page_size, "pages": pages}
+        if facet_fields is not None:
+            result["column_filter_options"] = column_filter_options(summaries, selected, facet_fields)
+        if quote_scope is not None:
+            group = (displayed_cost(sheet) for sheet in full_records) if summary_only else records
+            result["quotes"] = {sheet["code"]: scope_quote(sheet, quote_scope, details=not summary_only) for sheet in group}
+        return result
 
     @staticmethod
     def _list_query(q: str, kind: str, status: str) -> str:

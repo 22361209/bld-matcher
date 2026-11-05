@@ -3,8 +3,11 @@ from __future__ import annotations
 
 import sqlite3
 import io
+import json
+import re
 import tempfile
 import unittest
+from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
 from unittest.mock import patch
@@ -102,6 +105,79 @@ class TestDevelopmentWebAcceptance(WebAppTestBase):
         response = self.client.get("/development", headers={"Accept": "application/json"})
         self.assertEqual(response.status_code, 401)
 
+    def test_worksheet_status_saves_reopens_and_filters_completed_separately(self):
+        self.login()
+        form = {"core_code": "QA-STATUS-8461", "rows": json.dumps([{"name": "主体"}])}
+        created = self.client.post("/development/worksheets", data={**form, "status": "not_started"})
+        self.assertEqual(created.status_code, 302)
+        detail_url = created.location
+        project_id = detail_url.rsplit("/", 1)[-1]
+        for state in ("not_started", "in_progress", "completed", "in_progress"):
+            with self.subTest(state=state):
+                if state != "not_started":
+                    self.post_development(project_id, "worksheet", {**form, "status": state})
+                saved = self.service().detail(project_id)
+                self.assertEqual(saved["project"]["status"], state)
+                self.assertIs(saved["worksheet"]["started"], state != "not_started")
+                if state == "completed":
+                    self.assertIs(saved["worksheet"]["completed"], True)
+                else:
+                    self.assertNotIn("completed", saved["worksheet"])
+                reopened = self.client.get(detail_url).get_data(as_text=True)
+                self.assertIn('name="status"', reopened)
+                self.assertIn(f'<option value="{state}" selected', reopened)
+                for requested in ("not_started", "in_progress", "completed"):
+                    response = self.client.get("/development", query_string={"q": form["core_code"], "status": requested})
+                    self.assertEqual(response.status_code, 200)
+                    html = response.get_data(as_text=True)
+                    self.assertEqual(f'href="{detail_url}"' in html, requested == state)
+                    if requested == state == "completed":
+                        self.assertIn("<td>已完成</td>", html)
+
+    def test_worksheet_legacy_started_values_still_save_without_a_completion_field(self):
+        self.login()
+        form = {"core_code": "QA-OLD-STATUS", "rows": "[]"}
+        created = self.client.post("/development/worksheets", data={**form, "started": "0"})
+        self.assertEqual(created.status_code, 302)
+        project_id = created.location.rsplit("/", 1)[-1]
+        initial = self.service().detail(project_id)["worksheet"]
+        self.assertIs(initial["started"], False)
+        self.assertNotIn("completed", initial)
+        for value in ("1", "0"):
+            with self.subTest(started=value):
+                saved = self.post_development(project_id, "worksheet", {**form, "started": value})["worksheet"]
+                self.assertIs(saved["started"], value == "1")
+                self.assertNotIn("completed", saved)
+
+    def test_worksheet_completion_errors_and_view_permissions_preserve_saved_state(self):
+        self.login()
+        form = {"core_code": "QA-DRAFT-STATUS", "status": "in_progress", "rows": "[]"}
+        created = self.client.post("/development/worksheets", data=form)
+        self.assertEqual(created.status_code, 302)
+        project_id = created.location.rsplit("/", 1)[-1]
+        url = created.location + "/worksheet"
+        saved = self.service().detail(project_id)
+        pending = {**form, "status": "completed", "notes": "试装完成，等待签收",
+                   "expected_version": saved["project"]["version"]}
+        error = self.client.post(url, data={**pending, "rows": json.dumps([{"name": "球销", "mode": "borrowed"}])})
+        self.assertEqual(error.status_code, 400)
+        html = error.get_data(as_text=True)
+        self.assertIn("借用编码", html)
+        self.assertIn('<option value="completed" selected', html)
+        self.assertIn(pending["notes"], html)
+        invalid = self.client.post(url, data={**pending, "status": "unknown"})
+        self.assertEqual(invalid.status_code, 400)
+        self.assertIn("开发状态", invalid.get_data(as_text=True))
+        self.viewer()
+        readonly = self.client.get(created.location)
+        self.assertEqual(readonly.status_code, 200)
+        self.assertIn('<option value="in_progress" selected', readonly.get_data(as_text=True))
+        denied = self.client.post(url, data=pending, headers={"Accept": "application/json"})
+        self.assertEqual(denied.status_code, 403)
+        after = self.service().detail(project_id)
+        self.assertEqual(after["worksheet"], saved["worksheet"])
+        self.assertEqual(after["project"]["version"], saved["project"]["version"])
+
     def test_list_uses_shared_scroll_boundary_for_mobile_table(self):
         class ScrollBoundaryParser(HTMLParser):
             scroll_containers = []
@@ -155,6 +231,34 @@ class TestDevelopmentWebAcceptance(WebAppTestBase):
         self.assertEqual(detail["project"]["created_by"], "007")
         self.assertEqual(detail["project"]["core_number"], "8461")
 
+    def test_core_code_sheet_saves_custom_and_cleared_materials(self):
+        from app.modules.development.worksheet import default_worksheet
+
+        self.login()
+        new = self.client.get("/development/new").get_data(as_text=True)
+        self.assertEqual(new.count('value="主体"'), 1)
+        parts = default_worksheet()["rows"]
+        next(row for row in parts if row["name"] == "主体")["code"] = "BT8461"
+        next(row for row in parts if row["name"] == "球壳")["material"] = "客户指定 42CrMo"
+        next(row for row in parts if row["name"] == "防尘罩")["material"] = ""
+        created = self.client.post("/development/worksheets", data={
+            "core_code": "8461", "started": "1", "rows": json.dumps(parts, ensure_ascii=False),
+        })
+        self.assertEqual(created.status_code, 302)
+        detail = self.client.get(created.location).get_data(as_text=True)
+        self.assertIn('name="core_code" value="8461"', detail)
+        self.assertEqual(detail.count('value="主体"'), 1)
+        self.assertIn('value="BT8461"', detail)
+        saved = self.service().detail(created.location.rstrip("/").split("/")[-1])["worksheet"]["rows"]
+        self.assertEqual({row["name"]: row["material"] for row in saved if row["name"] in {"球壳", "防尘罩"}},
+                         {"球壳": "客户指定 42CrMo", "防尘罩": ""})
+        self.assertRegex(detail, r'<input\b(?=[^>]*data-field="material")(?=[^>]*value="客户指定 42CrMo")[^>]*>')
+        for field in ('name="left_code"', 'name="right_code"', 'data-field="side"', "球头子件"):
+            self.assertNotIn(field, detail)
+        results = self.client.get("/development?q=8461").get_data(as_text=True)
+        self.assertIn(f'href="{created.location}"', results)
+        self.assertIn("核心编码", results)
+
     def test_unknown_uuid_does_not_disclose_internal_path(self):
         self.login()
         response = self.client.get(f"/development/{uuid4()}")
@@ -162,6 +266,63 @@ class TestDevelopmentWebAcceptance(WebAppTestBase):
         text = response.get_data(as_text=True)
         self.assertNotIn(str(self.root), text)
         self.assertNotIn("Traceback", text)
+
+    def test_worksheet_rejects_unreadable_rows_without_offering_an_empty_replacement(self):
+        from app.modules.development.worksheet import default_worksheet
+
+        self.login()
+        sheet = {**default_worksheet(), "core_code": "QA-DRAFT"}
+        saved = self.service().create_worksheet(sheet, actor="007")["project"]
+        url = f"/development/{saved['id']}/worksheet"
+        data = {"core_code": "QA-DRAFT", "expected_version": saved["version"]}
+        for raw in ("{", "[null]", '[{"name":{"nested":true}}]', " " * 256_001):
+            with self.subTest(size=len(raw)):
+                response = self.client.post(url, data={**data, "rows": raw})
+                self.assertEqual(response.status_code, 400)
+                html = response.get_data(as_text=True)
+                self.assertIn("打开已保存的开发表", html)
+                self.assertNotIn("data-sheet-save", html)
+                self.assertNotIn('name="rows"', html)
+        rows = [{**sheet["rows"][0], "code": f"PART-{i}"} for i in range(501)]
+        response = self.client.post(url, data={**data, "rows": json.dumps(rows, ensure_ascii=False)})
+        self.assertEqual(response.status_code, 400)
+        html = response.get_data(as_text=True)
+        self.assertIn("500 行", html)
+        self.assertIn("data-sheet-save", html)
+        payload = re.search(r'name="rows" value="([^"]*)"', html)
+        self.assertIsNotNone(payload)
+        retained = json.loads(unescape(payload[1]))
+        self.assertEqual(retained, rows)
+        self.assertEqual(self.service().detail(saved["id"])["worksheet"], sheet)
+        response = self.client.post(url, data={**data, "rows": json.dumps(retained[:-1], ensure_ascii=False)})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.service().detail(saved["id"])["worksheet"]["rows"], rows[:-1])
+
+    def test_whole_sheet_notes_survive_older_forms_and_can_be_edited_or_cleared(self):
+        self.login()
+        old_parts = [{"name": "臂体", "material": "铸铝"}, {"name": "衬套 1", "material": ""},
+                     {"name": "球销", "material": ""}]
+        data = {"core_code": "8461", "rows": json.dumps(old_parts, ensure_ascii=False)}
+        created = self.client.post("/development/worksheets", data={**data, "notes": "样件已到\r\n等待试装"})
+        self.assertEqual(created.status_code, 302)
+        detail_url = created.location
+        self.assertIn("样件已到\n等待试装</textarea>", self.client.get(detail_url).get_data(as_text=True))
+
+        def save(version, **changes):
+            return self.client.post(detail_url + "/worksheet", data={**data, "expected_version": version, **changes})
+
+        self.assertEqual(save(1).status_code, 302)
+        self.assertIn("样件已到\n等待试装</textarea>", self.client.get(detail_url).get_data(as_text=True))
+        self.assertEqual(save(2, notes="已试装").status_code, 302)
+        stale = save(2, notes="仍在等待")
+        self.assertEqual(stale.status_code, 409)
+        self.assertIn("仍在等待</textarea>", stale.get_data(as_text=True))
+        self.assertIn("已试装</textarea>", self.client.get(detail_url).get_data(as_text=True))
+        self.assertEqual(save(3, notes="").status_code, 302)
+        self.assertNotIn("已试装", self.client.get(detail_url).get_data(as_text=True))
+        retained = self.service().detail(detail_url.rstrip("/").split("/")[-1])["worksheet"]["rows"]
+        self.assertEqual([(row["name"], row["material"]) for row in retained],
+                         [(row["name"], row["material"]) for row in old_parts])
 
     def test_stale_web_write_rejects_second_tab_and_preserves_first_write(self):
         self.login()

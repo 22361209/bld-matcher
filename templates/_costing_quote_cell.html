@@ -1,0 +1,11 @@
+<td data-col="quote" class="costing-quote-cell costing-number">
+  {% if quote.problem %}
+    {% if selection.stage == 'weld' and cost.kind != 'arm' %}<span>不适用</span>{% elif details %}<details><summary>待核对</summary><small>{{ quote.problem }}</small></details>{% else %}<span>待核对</span>{% endif %}
+  {% else %}
+    {% if details %}<details><summary aria-label="{{ cost.code }} 组合含税价 {{ quote.minimum_tax_price|cost_money }}，查看核算依据">{{ quote.minimum_tax_price|cost_money }}</summary>
+      <small>{{ quote.label }}</small>
+      {% if quote.included_lines %}<ul>{% for line in quote.included_lines %}<li>{{ line.name }} · {{ line.line_total|cost_money }} 元</li>{% endfor %}</ul>{% endif %}
+      {% if quote.net_cost is not none %}<small>废料抵减 {{ quote.scrap_credit|cost_money }} 元 · 抵减后成本 {{ quote.net_cost|cost_money }} 元</small>{% endif %}
+    </details>{% else %}<strong>{{ quote.minimum_tax_price|cost_money }}</strong>{% endif %}
+  {% endif %}
+</td>

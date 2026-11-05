@@ -9,7 +9,10 @@
       <section class="workbench-form-section">
         <form action="{{ url_for('save_material_item') }}" method="post" class="record-form" data-enter-navigation>
           {{ csrf_field() }}
-          {% if item %}<input type="hidden" name="id" value="{{ item.id }}">{% endif %}
+          {% if item %}
+          <input type="hidden" name="id" value="{{ item.id }}">
+          <input type="hidden" name="original_sync_id" value="{{ item.sync_id or '' }}">
+          {% endif %}
           <label>
             母件编码
             <input name="model" value="{{ item.model if item else '' }}" required>
@@ -17,6 +20,7 @@
           <label>
             零件编码
             <input name="code" value="{{ item.code if item else '' }}" placeholder="例如 KA8234" required>
+            {% include "_material_grade.html" %}
           </label>
           <label>
             零件名称

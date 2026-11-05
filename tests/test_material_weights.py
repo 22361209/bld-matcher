@@ -56,16 +56,30 @@ class MaterialWeightsTest(unittest.TestCase):
         self.assertEqual([row["sync_id"] for row in self.repo.costing_candidates("KA8057")],
                          [get_material_item(self.conn, valid)["sync_id"]])
 
-    def workbook(self, width, extra_headers=(), extra_values=()):
+    def workbook(self, width, extra_headers=(), extra_values=(), *, code="KA8057", model="8057"):
         book = Workbook()
         sheet = book.active
         sheet.title = "材料数据"
         sheet.append(["母件", "零件", "类别", "车型", "名称", "", "只数", "单重", "厚", "宽", "长", *extra_headers])
-        sheet.append(["8057", "KA8057", "", "", "主板", "", 4, 3.45, 2.5, width, 1260, *extra_values])
+        sheet.append([model, code, "", "", "主板", "", 4, 3.45, 2.5, width, 1260, *extra_values])
         path = self.root / "materials.xlsx"
         book.save(path)
         book.close()
         return path
+
+    def test_excel_grade_uses_only_part_code_with_or_without_legacy_grade_columns(self):
+        from app.modules.materials.costing_grades import read_costing_grade_rows
+
+        for code, headers, values, grade in (
+            ("KA8057", ["材料牌号"], ["SAPH440"], "SPHC"),
+            ("KA440-57", [], [], "SAPH440"),
+            ("KA440-57", ["材料牌号", "牌号"], ["SPHC", "旧值"], "SAPH440"),
+            ("", [], [], "SPHC"),
+        ):
+            with self.subTest(code=code, headers=headers):
+                import_materials_from_excel(self.conn, self.workbook(357, headers, values, code=code, model="母件440"))
+                row, = read_costing_grade_rows(self.conn)
+                self.assertEqual((row["material_grade"], row["code"]), (grade, code))
 
     def test_optional_explicit_net_column_and_old_workbooks_after_spec_change(self):
         import_materials_from_excel(self.conn, self.workbook(357))

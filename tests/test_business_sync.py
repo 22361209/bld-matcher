@@ -18,6 +18,7 @@ from app.database import connect
 from app.modules.business_sync import _database_apply as database_apply
 from app.modules.business_sync import _media_transaction as media_transaction
 from app.modules.business_sync import _package_archive as package_archive
+from app.modules.business_sync import _preview as package_preview
 from app.modules.business_sync._schema import SUPPORTED_PACKAGE_VERSIONS
 from app.modules.business_sync.infrastructure import BusinessSyncRepository
 from app.modules.business_sync.service import BusinessSyncService
@@ -551,7 +552,7 @@ class BusinessSyncServiceTest(unittest.TestCase):
         with connect(self.target) as connection:
             self._seed(connection)
             connection.execute("UPDATE quote_records SET sync_id = 'target-quote-id'")
-            connection.execute("UPDATE material_items SET sync_id = 'target-material-id'")
+            connection.execute("UPDATE material_items SET sync_id = 'target-material-id', updated_at = '2027-01-01 09:00:00'")
             connection.commit()
 
         service = BusinessSyncService(BusinessSyncRepository(self.target))
@@ -567,7 +568,79 @@ class BusinessSyncServiceTest(unittest.TestCase):
         )
         with connect(self.target) as connection:
             self.assertEqual(connection.execute("SELECT sync_id FROM quote_records").fetchone()[0], "quote-sync-id")
-            self.assertEqual(connection.execute("SELECT sync_id FROM material_items").fetchone()[0], "material-sync-id")
+            self.assertEqual(tuple(connection.execute("SELECT sync_id, updated_at FROM material_items").fetchone()),
+                             ("material-sync-id", "2027-01-01 09:00:00"))
+        self.assertEqual(service.preview(package)["summary"]["materials"]["counts"]["unchanged"], 1)
+        with connect(self.target) as connection:
+            connection.execute("UPDATE material_items SET sync_id='older-device-id', updated_at='2025-01-01 09:00:00'")
+        preview = service.preview(package)
+        service.apply(package, backup_path=self.root / "older-backup.sqlite3", actor="test", expected_token=preview["token"])
+        with connect(self.target) as connection:
+            self.assertEqual(tuple(connection.execute("SELECT sync_id, updated_at FROM material_items").fetchone()),
+                             ("material-sync-id", "2026-07-17 10:00:00"))
+        self.assertEqual(service.preview(package)["summary"]["materials"]["counts"]["unchanged"], 1)
+
+    def test_material_sync_reserves_exact_identities_before_matching_legacy_rows(self) -> None:
+        from app.modules.materials.item_store import upsert_material_item
+
+        # A true duplicate is legal: despite identical part data the two rows have different permanent IDs.
+        part = {"model": "MASTER", "code": "PART-440", "part": "板", "spec_text": "2x100x100", "pieces": "1"}
+        with connect(self.source) as conn:
+            for _ in range(2):
+                upsert_material_item(conn, part)
+            conn.execute("UPDATE material_items SET created_at=?, updated_at=?", ("2026-07-17 10:00:00",) * 2)
+            rows = [dict(row) for row in conn.execute("SELECT * FROM material_items ORDER BY id")]
+        package = self.root / "parts.tar.gz"
+        source = BusinessSyncRepository(self.source)
+        source.export(output_path=package, selected=("materials",), actor="test")
+        manifest, payload = source.read(package)
+        incoming_ids = {row["sync_id"] for row in rows}
+        for existing_id in (rows[0]["sync_id"], "other-local-id"):
+            for reverse_order in (False, True):
+                with self.subTest(existing_id=existing_id, reverse_order=reverse_order):
+                    database = self.root / f"{existing_id}-{reverse_order}.sqlite3"
+                    target = BusinessSyncRepository(database)
+                    with connect(database) as conn:
+                        item_id = upsert_material_item(conn, part)
+                        conn.execute("UPDATE material_items SET sync_id=?, created_at=?, updated_at=? WHERE id=?",
+                                     (existing_id, rows[0]["created_at"], rows[0]["updated_at"], item_id))
+                    materials = list(reversed(payload["materials"])) if reverse_order else payload["materials"]
+                    path = self._write_raw_package(name="material-order.tar.gz", manifest=manifest, payload={"materials": materials})
+                    preview = target.preview(path)
+                    counts = preview["summary"]["materials"]["counts"]
+                    expected_new = 1 if existing_id in incoming_ids else 2
+                    self.assertEqual((counts["new"], counts["updated"], counts["unchanged"]), (expected_new, 0, 2 - expected_new))
+                    imported = target.apply(path, backup_path=self.root / "material-backup.sqlite3", actor="qa",
+                                            expected_token=preview["token"], selected_conflicts={})
+                    self.assertEqual(imported["materials"]["new"], expected_new)
+                    with connect(database) as conn:
+                        after = {row["sync_id"]: row["id"] for row in conn.execute("SELECT sync_id, id FROM material_items")}
+                    self.assertEqual(after.keys(), incoming_ids | {existing_id})
+                    self.assertEqual(after[existing_id], item_id)
+                    self.assertEqual(target.preview(path)["summary"]["materials"]["counts"]["unchanged"], 2)
+
+    def test_material_identity_change_during_preview_invalidates_the_result(self) -> None:
+        with connect(self.source) as conn:
+            self._seed(conn)
+        with connect(self.target) as conn:
+            self._seed(conn)
+        source, target = BusinessSyncRepository(self.source), BusinessSyncRepository(self.target)
+        path = source.export(output_path=self.root / "part.tar.gz", selected=("materials",), actor="qa")
+        state_token = package_preview.state_token
+
+        def change_identity_then_capture(*args, **kwargs):
+            with connect(self.target) as conn:
+                conn.execute("UPDATE material_items SET sync_id='new-local-id'")
+            return state_token(*args, **kwargs)
+
+        with patch.object(package_preview, "state_token", side_effect=change_identity_then_capture):
+            preview = target.preview(path)
+        self.assertEqual(preview["summary"]["materials"]["counts"]["unchanged"], 1)
+        with self.assertRaisesRegex(ValueError, "本机数据已变化"):
+            target.apply(path, backup_path=self.root / "material-before.sqlite3", actor="qa",
+                         expected_token=preview["token"], selected_conflicts={})
+        with connect(self.target) as conn:
+            self.assertEqual(conn.execute("SELECT sync_id FROM material_items").fetchone()[0], "new-local-id")
 
     def test_quote_package_with_unknown_customer_requires_mapping(self) -> None:
         package = self._package()
@@ -662,7 +735,7 @@ class BusinessSyncServiceTest(unittest.TestCase):
         package = self.root / "materials.tar.gz"
         source.export(output_path=package, selected=("materials",), actor="test")
         manifest, payload = source.read(package)
-        self.assertEqual(manifest["version"], 8)
+        self.assertEqual(manifest["version"], 11)
         self.assertEqual(payload["materials"][0]["net_weight"], "0.0001")
 
         def apply(path):
@@ -673,6 +746,7 @@ class BusinessSyncServiceTest(unittest.TestCase):
         apply(package)
         incoming = dict(payload["materials"][0])
         del incoming["net_weight"]
+        del incoming["material_grade"]
         incoming["updated_at"] = "2026-07-18 00:00:00"
         incoming["car"] = "新车型"
         apply(self._write_package({"materials": [incoming]}))
@@ -685,6 +759,42 @@ class BusinessSyncServiceTest(unittest.TestCase):
         apply(package)
         with connect(self.target) as connection:
             self.assertIsNone(connection.execute("SELECT net_weight FROM material_items").fetchone()[0])
+
+    def test_grade_is_derived_from_incoming_part_code_in_legacy_and_new_package_previews_and_imports(self) -> None:
+        with connect(self.source) as conn:
+            self._seed(conn)
+        source = BusinessSyncRepository(self.source)
+        target = BusinessSyncService(BusinessSyncRepository(self.target))
+        package = self.root / "grades.tar.gz"
+
+        def apply(path):
+            token = target.preview(path)["token"]
+            target.apply(path, backup_path=self.root / "grades-backup.sqlite3", actor="qa", expected_token=cast(str, token))
+
+        source.export(output_path=package, selected=("materials",), actor="test")
+        manifest, payload = source.read(package)
+        self.assertEqual(manifest["version"], 11)
+        self.assertEqual(payload["materials"][0]["material_grade"], "SPHC")
+        apply(package)
+        old = dict(payload["materials"][0])
+        del old["material_grade"]
+        old.update(updated_at="2026-07-19 00:00:00", code="A-440-R", active=0)
+        apply(self._write_raw_package(name="older.tar.gz", manifest={**manifest, "version": 8}, payload={"materials": [old]}))
+        with connect(self.target) as conn:
+            self.assertEqual(tuple(conn.execute("SELECT active, code, material_grade FROM material_items").fetchone()),
+                             (0, "A-440-R", "SAPH440"))
+        modern = dict(old, code="A-R", model="MODEL440", material_grade="SAPH440", updated_at="2026-07-18 00:00:00")
+        conflicting = self._write_raw_package(name="modern.tar.gz", manifest=manifest, payload={"materials": [modern]})
+        preview = target.preview(conflicting)
+        conflict, = preview["summary"]["materials"]["conflicts"]
+        change, = [field for field in conflict["fields"] if field["label"] == "材料牌号"]
+        self.assertEqual((change["before"], change["after"]), ("SAPH440", "SPHC"))
+        target.apply(conflicting, backup_path=self.root / "conflict-backup.sqlite3", actor="qa",
+                     expected_token=preview["token"], selected_conflicts={"materials": {modern["sync_id"]}})
+        with connect(self.target) as conn:
+            self.assertEqual(tuple(conn.execute("SELECT model, code, material_grade FROM material_items").fetchone()),
+                             ("MODEL440", "A-R", "SPHC"))
+        self.assertEqual(target.preview(conflicting)["summary"]["materials"]["counts"]["unchanged"], 1)
 
     def test_material_excel_renames_keep_sync_identity(self) -> None:
         def workbook(path: Path) -> None:
@@ -1429,6 +1539,7 @@ class BusinessSyncServiceTest(unittest.TestCase):
             payload = json.loads(data_file.read())
             for row in payload["materials"]:
                 row.pop("net_weight")
+                row.pop("material_grade")
             data_bytes = json.dumps(payload, ensure_ascii=False).encode()
         manifest["version"] = 2
         manifest["media"] = {

@@ -104,6 +104,21 @@ class SQLiteCostingRepository:
         )
         return [{"id": row[0], "code": row[1], "version": row[2], "peer_id": row[3]} for row in rows]
 
+    def weight_price_lines(self) -> list[dict]:
+        """Project candidate rows without loading the workbook evidence or revision history."""
+        keys = ("id", "name", "category", "product_code", "part_code", "supplier", "unit_price",
+                "weight_source.kind", "weight_source.source_id", "weight_source.product_code", "pair_kind", "peer_item_id")
+        paths = ", ".join(f"'$.{key}'" for key in keys)
+        rows = self.connection.execute(f"""
+            SELECT r.id, r.code, r.version, i.key + 1, json_extract(r.payload_json, '$.pair.peer_id'),
+                   json_extract(i.value, {paths})
+            FROM costing_records AS r, json_each(r.payload_json, '$.items') AS i
+            WHERE trim(json_extract(i.value, '$.mode')) = 'weight'
+            ORDER BY r.code, i.key
+        """)
+        return [{"record_id": key, "code": code, "version": version, "position": pos, "peer_id": peer,
+                 **dict(zip(keys, json.loads(line), strict=True))} for key, code, version, pos, peer, line in rows]
+
     def get_many(self, record_ids: list[str]) -> list[dict]:
         if not record_ids:
             return []

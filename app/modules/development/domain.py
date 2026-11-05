@@ -48,7 +48,7 @@ def clean_bool(value):
     fail("请选择有效的是/否选项。")
 
 
-def clean_fields(kind: str, data: dict, *, current: dict | None = None) -> dict:
+def clean_fields(kind: str, data: dict, *, current: dict | None = None, worksheet=False) -> dict:
     values = {}
     for key in FIELDS[kind]:
         if key not in data:
@@ -90,12 +90,12 @@ def clean_fields(kind: str, data: dict, *, current: dict | None = None) -> dict:
                 fail("选项无效。", field=key)
         values[key] = value
     merged = {**(current or {}), **values}
-    required = {"project": ("title", "core_number"), "branch": ("code",), "component": ("name",),
+    required = {"project": ("title",) if worksheet else ("title", "core_number"), "branch": ("code",), "component": ("name",),
                 "task": ("name",), "operation": ("name", "sequence"), "supplier": ("name",), "source": ("code",)}[kind]
     for key in required:
         if not merged.get(key):
             fail("请填写必要信息。", field=key)
-    if kind == "project" and not re.fullmatch(r"[0-9]{4}", str(merged["core_number"])):
+    if kind == "project" and not worksheet and not re.fullmatch(r"[0-9]{4}", str(merged["core_number"])):
         fail("核心系列须为四位数字；完整编码请在成品或零件中填写。", field="core_number")
     if kind in {"task", "branch"} and not merged.get("drawing_required", 1) and not merged.get("drawing_reason"):
         fail("不需图纸时请填写原因。", field="drawing_reason")
@@ -123,8 +123,16 @@ def validate_aggregate(data: dict) -> None:
     if not isinstance(project, dict):
         fail("开发单内容无效。")
     validate_uuid(project.get("id"))
-    clean_fields("project", project)
-    _validate_record("project", project)
+    is_worksheet = "worksheet" in data
+    if is_worksheet:
+        from .worksheet import project_fields, validated_stored_worksheet
+        sheet = validated_stored_worksheet(data["worksheet"])
+        if sheet != data["worksheet"] or any(project.get(key) != value for key, value in project_fields(sheet).items()):
+            fail("新品开发表字段或成品型号与开发单不一致。")
+        if any(data.get(key) for key in ("branches", "components", "tasks", "operations", "suppliers", "sources",
+                                         "documents", "revisions", "links")):
+            fail("新品开发表不能混入旧开发单资料。")
+    _validate_record("project", project, worksheet=is_worksheet)
     project_id = project["id"]
     groups = {}
     all_ids = {project_id}
@@ -192,7 +200,7 @@ def validate_aggregate(data: dict) -> None:
                 fail("成品已确认但工序未完成。")
 
 
-def _validate_record(kind, row):
+def _validate_record(kind, row, *, worksheet=False):
     common = {"id", "created_by", "created_at"} if kind == "source" else {"id", "created_by", "created_at", "updated_at", "archived"}
     extra = {"project": {"version"}, "supplier": {"version"}, "branch": {"project_id", "confirmed_by", "confirmed_at"},
              "task": {"project_id"}, "component": {"project_id", "branch_id", "task_id"},
@@ -205,7 +213,7 @@ def _validate_record(kind, row):
             fail("布尔状态必须为 0 或 1。")
     if "version" in row and (type(row["version"]) is not int or not 1 <= row["version"] <= 2_147_483_647):
         fail("修订版本号无效。")
-    normalized = clean_fields(kind, row)
+    normalized = clean_fields(kind, row, worksheet=worksheet)
     for key, value in normalized.items():
         if key in row and value != row[key]:
             fail("开发记录字段未规范化。", field=key)

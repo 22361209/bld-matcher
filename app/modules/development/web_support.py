@@ -62,9 +62,10 @@ def detail_url(project_id, **kwargs):
     return url_for("development_detail", project_id=project_id, **state)
 
 
-def detail_context(project_id):
+def detail_context(project_id, context=None):
     try:
-        context = get_development_service().detail(project_id)
+        if context is None:
+            context = get_development_service().detail(project_id)
     except ValueError as exc:
         if getattr(exc, "code", "") == "development.not_found":
             abort(404)
@@ -104,8 +105,8 @@ def detail_context(project_id):
     return context
 
 
-def render_detail(project_id, *, errors=None, status=200, error_field=""):
-    context = detail_context(project_id)
+def render_detail(project_id, *, errors=None, status=200, error_field="", context=None):
+    context = detail_context(project_id, context)
     if errors:
         context.update(errors=errors, form_values=request.form, form_key=request.form.get("form_key", ""), error_field=error_field)
     return render_template("development_detail.html", **context), status
@@ -136,7 +137,7 @@ def paginate(rows, *, page_size=30):
     total = len(rows)
     total_pages = max(1, ceil(total / page_size))
     page = min(page, total_pages)
-    query = request.args.to_dict()
+    query = request.args.to_dict(flat=False)
 
     def page_url(number):
         return url_for("development_list", **{**query, "page": number})

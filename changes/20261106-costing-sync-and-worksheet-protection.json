@@ -1,0 +1,15 @@
+{
+  "date": "2026-11-06",
+  "version": "unreleased",
+  "title": "保护组合报价、材料同步和开发单明细",
+  "entries": [
+    "外箱和运费等合计在同一行时，一起勾选只计一次，一起取消就剔除；只选其中一项会提示拆分。焊接件报价不计入球头或衬套自身的电泳费。",
+    "跨设备同步材料先按已有标识匹配，不会把同规格的两条材料合成一条。已经用于成本取重的本机材料遇到不同标识时保留原记录并提示核对。",
+    "开发表明细超限时可以返回修改；无法读取的提交不会以空表覆盖原单。旧开发单在删除提交前保留原图纸，列表在其他人同时删除开发单时仍能打开。"
+  ],
+  "impact": {
+    "data": "preserve existing worksheet rows, development files and material identities; no backfill",
+    "api": "compatible",
+    "operations": "full-update-required"
+  }
+}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 
@@ -45,7 +46,16 @@ class SQLiteDevelopmentRepository:
         clauses = ",".join(f"{key}=?" for key in data)
         self.connection.execute(f"UPDATE {TABLES[kind]} SET {clauses} WHERE id=?", (*data.values(), identifier))
 
-    def claim_project(self, project_id, expected_version):
+    def get_worksheet(self, project_id):
+        row = self.connection.execute("SELECT content FROM development_worksheets WHERE project_id=?", (project_id,)).fetchone()
+        return json.loads(row["content"]) if row else None
+
+    def save_worksheet(self, project_id, sheet):
+        self.connection.execute("""INSERT INTO development_worksheets(project_id, content) VALUES (?, ?)
+            ON CONFLICT(project_id) DO UPDATE SET content=excluded.content""",
+            (project_id, json.dumps(sheet, ensure_ascii=False, separators=(",", ":"))))
+
+    def claim_project(self, project_id, expected_version, *, worksheet=False):
         if not self.connection.in_transaction:
             self.connection.execute("BEGIN IMMEDIATE")
         project = self.get("projects", project_id)
@@ -53,6 +63,8 @@ class SQLiteDevelopmentRepository:
             fail("开发单不存在。", code="development.not_found")
         if project["archived"]:
             fail("开发单已归档，资料保留且只读。", code="development.archived")
+        if (self.get_worksheet(project_id) is not None) != worksheet:
+            fail("请使用当前开发单对应的登记页面。", code="development.wrong_form")
         try:
             version = int(expected_version)
         except (TypeError, ValueError, OverflowError):
@@ -68,6 +80,9 @@ class SQLiteDevelopmentRepository:
         if not project:
             fail("开发单不存在。", code="development.not_found")
         result: dict = {"project": project}
+        sheet = self.get_worksheet(project_id)
+        if sheet is not None:
+            result["worksheet"] = sheet
         for kind in ("branches", "tasks", "components", "operations"):
             result[kind] = self.rows(kind, project_id=project_id)
         supplier_ids = {row["supplier_id"] for row in result["tasks"] if row["supplier_id"]}
@@ -86,6 +101,12 @@ class SQLiteDevelopmentRepository:
             sql += f" AND id IN ({','.join('?' for _ in branch_ids)})"
             args.extend(branch_ids)
         self.connection.execute(sql, args)
+
+    def delete_legacy_project(self, project_id):
+        for kind in ("document_links", "document_revisions", "documents", "operations",
+                     "components", "tasks", "branches"):
+            self.connection.execute(f"DELETE FROM development_{kind} WHERE project_id=?", (project_id,))
+        self.connection.execute("DELETE FROM development_projects WHERE id=?", (project_id,))
 
     def has_released_drawing(self, project_id, task_id, *, target_type="task"):
         from .document_repository import SQLiteDevelopmentDocumentRepository
@@ -120,6 +141,8 @@ class SQLiteDevelopmentRepository:
         incoming_project = dict(data["project"])
         current_project = self.get("projects", project_id)
         if current_project:
+            if (self.get_worksheet(project_id) is not None) != ("worksheet" in data):
+                fail("同一开发单不能更改登记格式。", code="development.identity_conflict")
             incoming_project["version"] = max(current_project["version"], incoming_project["version"]) + 1
         for kind, rows in (("suppliers", data.get("suppliers", [])), ("sources", data.get("sources", [])), ("projects", [incoming_project]),
                            *((kind, data.get(kind, [])) for kind in ("branches", "tasks", "components", "operations"))):
@@ -128,6 +151,8 @@ class SQLiteDevelopmentRepository:
                     self.update(kind, row["id"], {key: value for key, value in row.items() if key != "id"})
                 else:
                     self.insert(kind, row)
+        if "worksheet" in data:
+            self.save_worksheet(project_id, data["worksheet"])
         validate_aggregate(self.export_aggregate(project_id))
 
 
@@ -155,9 +180,14 @@ class SQLiteDevelopmentUnitOfWork:
         assert self.connection is not None
         self.connection.commit()
 
-    def begin(self):
+    @property
+    def in_transaction(self):
         assert self.connection is not None
-        self.connection.execute("BEGIN IMMEDIATE")
+        return self.connection.in_transaction
+
+    def begin(self, *, write=True):
+        assert self.connection is not None
+        self.connection.execute("BEGIN IMMEDIATE" if write else "BEGIN")
 
     def __exit__(self, exc_type, exc, traceback):
         assert self.connection is not None

@@ -4,6 +4,7 @@ import json
 from collections.abc import Mapping
 from decimal import Decimal, InvalidOperation, ROUND_CEILING, localcontext
 
+from .quote_roles import QUOTE_ROLES
 from .values import FIELD_LABELS, MAX_VALUE, CostingValidationError, decimal_text, number, text
 from .weight_cost import SCRAP_HEADER_FIELDS, SCRAP_ROW_FIELDS, prepare_scrap
 
@@ -169,6 +170,11 @@ def _item_inputs(raw: object, index: int, previous_items: dict) -> tuple[dict, d
         raise CostingValidationError("不支持的计价方式。", f"items.{index}.mode")
     row["mode"] = mode
     prior = previous_items.get(row["id"])
+    role = text(raw.get("quote_role", (prior or {}).get("quote_role")), f"items.{index}.quote_role")
+    if role:
+        if role not in QUOTE_ROLES:
+            raise CostingValidationError("请选择有效的报价归类。", f"items.{index}.quote_role")
+        row["quote_role"] = role
     if prior is not None and "supplier" not in raw:
         row["supplier"] = prior.get("supplier", "")
     # Historical snapshots can omit or pad a mode. Older editors omitted every
@@ -223,6 +229,8 @@ def _metadata_update(before: dict, header: dict, summary: dict, row_inputs: list
                 or ("product_code" in row and row["product_code"] != text(prior.get("product_code"), "product_code"))):
             return None
         item = {**prior, **row, "source_info": prior.get("source_info", {})}
+        if "quote_role" not in row:
+            item.pop("quote_role", None)
         for field in ("mode", "product_code"):
             if field in prior:
                 item[field] = prior[field]

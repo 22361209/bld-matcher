@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% set active_page = "development" %}
+{% block page_title %}新品开发{% endblock %}
+{% block page_id %}development.sheet{% endblock %}
+{% block page_type %}edit{% endblock %}
+{% block page_class %}shell wide app-surface{% endblock %}
+{% block page_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='pages/development_sheet.css', v=static_version('pages/development_sheet.css')) }}">
+{% endblock %}
+{% block page_content %}
+{% macro options(values, selected) -%}
+  {% for key, label in values %}<option value="{{ key }}"{% if key == selected %} selected{% endif %}>{{ label }}</option>{% endfor %}
+{%- endmacro %}
+{% macro part_row(part, number) %}
+<tr data-sheet-row>
+  <td><div class="development-sheet-number"><span data-sheet-number>{{ number }}</span></div></td>
+  <td><input data-field="name" aria-label="零件名称" value="{{ part.get('name','') }}" required></td>
+  <td><input data-field="code" aria-label="产品编码" value="{{ part.get('code','') }}" autocomplete="off"></td>
+  <td><input data-field="material" aria-label="材质" value="{{ part.get('material','') }}" maxlength="160" autocomplete="off"{% if part.get('name') in ('主体','臂体') %} list="development-body-materials"{% endif %}></td>
+  <td><select data-field="mode" aria-label="借用或开发">
+    {{ options([('pending','待定'),('borrowed','借用'),('new','开发')], part.get('mode','pending')) }}
+  </select></td>
+  <td><input data-field="borrowed_code" aria-label="借用编码" value="{{ part.get('borrowed_code','') }}" autocomplete="off"{% if part.get('mode') == 'borrowed' %} required{% else %} disabled{% endif %}></td>
+  <td><input data-field="developer" aria-label="由谁开发" value="{{ part.get('developer','') }}"{% if part.get('mode') != 'new' %} disabled{% endif %}></td>
+  <td><input data-field="start_date" aria-label="开始日期" type="date" value="{{ part.get('start_date','') }}"{% if part.get('mode') != 'new' %} disabled{% endif %}></td>
+  <td><input data-field="due_date" aria-label="预计完成日期" type="date" value="{{ part.get('due_date','') }}"{% if part.get('mode') != 'new' %} disabled{% endif %}></td>
+</tr>
+{% endmacro %}
+<section class="data-section development-sheet">
+  {% if recovery_error %}
+  <section class="message error" role="alert">
+    <strong>{{ recovery_error }}</strong>
+    <p>本次修改未保存。请用浏览器返回上一页，核对并调整原明细后再保存。</p>
+    <a class="linear-button subtle" href="{{ url_for('development_detail', project_id=project_id) if project_id else url_for('development_new') }}">{{ '打开已保存的开发表' if project_id else '重新打开新建表单' }}</a>
+  </section>
+  {% else %}
+  <form method="post" action="{{ save_url }}" data-development-sheet data-editable="{{ 'true' if can_edit else 'false' }}" data-max-rows="{{ max_rows }}" data-max-rows-chars="{{ max_rows_chars }}">
+    {{ csrf_field() }}
+    <datalist id="development-body-materials">{% for material in body_material_options %}<option value="{{ material }}"></option>{% endfor %}</datalist>
+    <input type="hidden" name="expected_version" value="{{ expected_version if expected_version is not none else '' }}">
+    <input type="hidden" name="rows" value="{{ sheet.rows|tojson|forceescape }}">
+    <div class="workspace-command">
+      <fieldset class="development-sheet-fields"{% if not can_edit %} disabled{% endif %}>
+        <legend class="data-grid-visually-hidden">核心编码与开发状态</legend>
+        <label>核心编码<input name="core_code" value="{{ sheet.core_code }}" placeholder="例如 8461" maxlength="200" autocomplete="off" required></label>
+        <label><span id="development-sheet-status-label">开发状态</span><select name="status" aria-labelledby="development-sheet-status-label">{{ options(status_choices.items(), worksheet_status) }}</select></label>
+      </fieldset>
+      <div class="command-actions">
+        <span class="muted-text" data-sheet-feedback role="status">{% if not can_edit %}只读{% endif %}</span>
+        <a class="linear-button subtle" href="{{ url_for('development_list') }}">返回列表</a>
+        {% if can_edit %}<button class="linear-button subtle" type="button" data-sheet-undo hidden>撤销移除</button>
+        <button class="linear-button primary" type="submit" data-sheet-save disabled>保存</button>{% endif %}
+      </div>
+    </div>
+    {% include '_development_errors.html' %}
+    {% if can_edit %}<noscript><p class="message error">请启用 JavaScript 后编辑零件并保存。</p></noscript>{% endif %}
+    <fieldset class="development-sheet-parts"{% if not can_edit %} disabled{% endif %}>
+      <legend class="data-grid-visually-hidden">零件开发明细</legend>
+      {% set columns = [('number','序号'),('name','零件名称'),('code','产品编码'),('material','材质'),('mode','借用 / 开发'),('borrowed_code','借用编码'),('developer','由谁开发'),('start_date','开始日期'),('due_date','预计完成日期')] %}
+      <div class="data-grid" data-resizable-grid data-grid-key="development-sheet">
+        <div class="data-table-scroll" data-grid-scroll tabindex="0" aria-label="零件开发明细，可横向滚动">
+          <table class="data-table data-grid-table development-sheet-table" aria-label="零件开发明细" data-grid-table data-column-storage-scope="{{ g.user.id }}">
+            <colgroup>{% for key, title in columns %}<col data-col="{{ key }}">{% endfor %}</colgroup>
+            <thead><tr>{% for key, title in columns %}<th scope="col" data-col="{{ key }}"><span data-grid-static-column-label>{{ title }}</span></th>{% endfor %}</tr></thead>
+            <tbody data-sheet-body>{% for part in sheet.rows %}{{ part_row(part, loop.index) }}{% endfor %}</tbody>
+          </table>
+        </div>
+        <span class="data-grid-visually-hidden" role="status" data-column-resize-status></span>
+      </div>
+      <div class="empty-state" data-sheet-empty {% if sheet.rows %}hidden{% endif %}>暂无零件。{% if can_edit %}<button type="button" class="linear-button subtle" data-sheet-first>添加第一行</button>{% endif %}</div>
+    </fieldset>
+    <label class="development-sheet-notes">整单备注
+      <textarea name="notes" rows="2" maxlength="4000"{% if not can_edit %} readonly{% endif %}>{{ notes }}</textarea>
+    </label>
+    {% if can_edit %}<template data-sheet-row-template>{{ part_row({}, '') }}</template>{% endif %}
+  </form>
+  {% endif %}
+</section>
+{% endblock %}
+{% block page_scripts %}{% if not recovery_error %}<script type="module" src="{{ url_for('static', filename='pages/development_sheet.js', v=static_version('pages/development_sheet.js')) }}"></script>{% endif %}{% endblock %}

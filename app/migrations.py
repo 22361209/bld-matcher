@@ -1290,7 +1290,7 @@ def _add_product_development_register(conn: sqlite3.Connection) -> None:
     from .modules.development.document_schema import create_schema
     from .modules.development.schema import install_schema
 
-    install_schema(conn)
+    install_schema(conn, worksheets=False)
     create_schema(conn)
 
 
@@ -1304,6 +1304,29 @@ def _add_material_net_weight(conn: sqlite3.Connection) -> None:
     columns = _columns(conn, "material_items")
     if columns and "net_weight" not in columns:
         conn.execute("ALTER TABLE material_items ADD COLUMN net_weight TEXT")
+
+
+def _add_material_grade(conn: sqlite3.Connection) -> None:
+    columns = _columns(conn, "material_items")
+    if columns and "material_grade" not in columns:
+        conn.execute("ALTER TABLE material_items ADD COLUMN material_grade TEXT")
+
+
+def _derive_stamping_material_grades(conn: sqlite3.Connection) -> None:
+    if not {"id", "code", "material_grade"} <= _columns(conn, "material_items"):
+        return
+    grade = "CASE WHEN instr({code}, '440') > 0 THEN 'SAPH440' ELSE 'SPHC' END"
+    stored = grade.format(code="code")
+    conn.execute(f"UPDATE material_items SET material_grade={stored} WHERE material_grade IS NOT ({stored})")
+    incoming = grade.format(code="NEW.code")
+    for name, event in (("insert", "INSERT"), ("update", "UPDATE OF code, material_grade")):
+        conn.execute(f"""
+            CREATE TRIGGER IF NOT EXISTS material_items_derive_grade_{name}
+            AFTER {event} ON material_items WHEN NEW.material_grade IS NOT ({incoming})
+            BEGIN
+                UPDATE material_items SET material_grade={incoming} WHERE id=NEW.id;
+            END
+        """)
 
 
 def _add_cost_detail_permission(conn: sqlite3.Connection) -> None:
@@ -1320,6 +1343,12 @@ def _add_cost_detail_permission(conn: sqlite3.Connection) -> None:
             SELECT user_id, ?, effect, updated_at
             FROM user_permission_overrides WHERE permission = 'view_costs'
         """, (permission,))
+
+
+def _add_development_worksheets(conn: sqlite3.Connection) -> None:
+    from .modules.development.schema import install_worksheet_schema
+
+    install_worksheet_schema(conn)
 
 
 MIGRATIONS: tuple[Migration, ...] = (
@@ -1369,6 +1398,9 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("044_costing", _add_costing),
     ("045_material_net_weight", _add_material_net_weight),
     ("046_cost_detail_permission", _add_cost_detail_permission),
+    ("047_development_worksheets", _add_development_worksheets),
+    ("048_stamping_material_grade", _add_material_grade),
+    ("049_derive_stamping_material_grades", _derive_stamping_material_grades),
 )
 
 

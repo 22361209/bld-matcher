@@ -1,0 +1,15 @@
+{
+  "date": "2026-11-05",
+  "version": "unreleased",
+  "title": "按冲压牌号调价、按供货条件查看售价",
+  "entries": [
+    "材料明细可按 SPHC 或 SAPH440 筛选；成本调价按已匹配到的启用材料明细确定牌号。",
+    "成本维护人员可以预览同一牌号有哪些按重冲压件、改价前后各型号的成本与建议售价，确认后批量调整单价。人工核定成本、手动建议价保留，匹配不清或左右件牌号冲突会提示核对。",
+    "成本列表内选择整件或焊接件，分别勾选电泳、内包装、外包装和运费即可比较各型号的组合含税价。销售只看到售价，费用不明会提示核对。类型和状态从列头筛选，产品编码列头切换升降序，列表动作栏移除导入核对按钮。"
+  ],
+  "impact": {
+    "data": "migration-048-add-optional-stamping-material-grade; confirmed changes keep audit and cost revisions",
+    "api": "compatible; business-sync-v11-for-grades-or-cost-quote-roles",
+    "operations": "full-update-required"
+  }
+}

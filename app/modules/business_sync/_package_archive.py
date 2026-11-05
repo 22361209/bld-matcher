@@ -13,6 +13,7 @@ from pathlib import Path, PurePosixPath
 from app.database import connect
 from app.modules.costing.business_sync import export_costing, validate_costing
 from app.modules.costing.transfer_service import MAX_TRANSFER_BYTES
+from app.modules.development.worksheet import LEGACY_MATERIALS
 from app.platform.audit_store import log_event
 from app.product_image_processing import PRODUCT_IMAGE_LARGE_MAX_BYTES, validate_synced_product_image
 
@@ -30,6 +31,9 @@ from ._product_image_transfer import (
 from ._schema import (
     DATASETS,
     COSTING_PACKAGE_VERSION,
+    COMPLETED_WORKSHEET_VERSION,
+    CUSTOM_WORKSHEET_MATERIAL_VERSION,
+    HANDED_WORKSHEET_PACKAGE_VERSION,
     LOCAL_MEDIA_COLUMNS,
     MAX_MEDIA_FILE_SIZE,
     MAX_PACKAGE_MEMBER_COUNT,
@@ -39,8 +43,10 @@ from ._schema import (
     MEDIA_DIRECTORIES,
     PACKAGE_TYPE,
     PAIRED_COSTING_PACKAGE_VERSION,
+    PRICE_CONDITIONS_VERSION,
     SUPPORTED_PACKAGE_VERSIONS,
     WEIGHT_PACKAGE_VERSION,
+    WORKSHEET_PACKAGE_VERSION,
 )
 
 
@@ -97,6 +103,12 @@ def _manifest_datasets(manifest: object) -> tuple[str, ...]:
         raise ValueError("左右件业务包缺少成本核算数据集。")
     if version == WEIGHT_PACKAGE_VERSION and "costing" not in selected and "materials" not in selected:
         raise ValueError("重量资料业务包缺少材料或成本数据集。")
+    if version == PRICE_CONDITIONS_VERSION and not {"materials", "costing"}.intersection(selected):
+        raise ValueError("新版调价资料包缺少材料或成本数据集。")
+    worksheet_versions = (HANDED_WORKSHEET_PACKAGE_VERSION, WORKSHEET_PACKAGE_VERSION,
+                          CUSTOM_WORKSHEET_MATERIAL_VERSION, COMPLETED_WORKSHEET_VERSION)
+    if version in worksheet_versions and "development" not in selected:
+        raise ValueError("开发表业务包缺少开发资料数据集。")
     return tuple(selected)
 
 
@@ -169,13 +181,22 @@ def read_package(package_path: Path) -> tuple[Manifest, Payload]:
                 isinstance(row, dict) and "net_weight" in row for row in materials
             ):
                 raise ValueError("含材料净重的业务包需使用新版格式。")
+            has_grades = isinstance(materials, list) and any(isinstance(row, dict) and "material_grade" in row for row in materials)
+            if has_grades and version < PRICE_CONDITIONS_VERSION:
+                raise ValueError("含材料牌号的业务包需使用新版格式。")
+            has_quote_roles = False
             if "costing" in selected:
                 snapshot = _json_member(archive, members[COSTING_MEMBER])
                 supported_costs = {COSTING_PACKAGE_VERSION: (1,), PAIRED_COSTING_PACKAGE_VERSION: (2,),
-                                   WEIGHT_PACKAGE_VERSION: (1, 2, 3)}
+                                   WEIGHT_PACKAGE_VERSION: (1, 2, 3), HANDED_WORKSHEET_PACKAGE_VERSION: (1, 2, 3),
+                                   WORKSHEET_PACKAGE_VERSION: (1, 2, 3), PRICE_CONDITIONS_VERSION: (1, 2, 3, 4),
+                                   CUSTOM_WORKSHEET_MATERIAL_VERSION: (1, 2, 3, 4), COMPLETED_WORKSHEET_VERSION: (1, 2, 3, 4)}
                 if not isinstance(snapshot, dict) or snapshot.get("format_version") not in supported_costs[version]:
                     raise ValueError("成本快照版本与业务包版本不一致，请重新导出。")
                 payload["costing"] = [validate_costing(snapshot)]
+                has_quote_roles = snapshot["format_version"] == 4
+            if version == PRICE_CONDITIONS_VERSION and not (has_grades or has_quote_roles):
+                raise ValueError("业务包版本与材料牌号或报价归类不一致。")
             if version >= 4:
                 for member in members.values():
                     if not member.name.startswith(PRODUCT_IMAGE_MEMBER_PREFIX):
@@ -251,13 +272,34 @@ def read_package(package_path: Path) -> tuple[Manifest, Payload]:
         if duplicates:
             raise ValueError(f"{DATASETS[key][2]}包含重复编号：{'、'.join(duplicates[:10])}")
         typed_payload[key] = rows
-    for aggregate in typed_payload.get("development", []):
+    development = typed_payload.get("development", [])
+    for aggregate in development:
         validate_aggregate(aggregate)
+    expected_version = _worksheet_package_version(development)
+    if has_grades or has_quote_roles:
+        expected_version = max(expected_version, PRICE_CONDITIONS_VERSION)
+    if (expected_version or version >= HANDED_WORKSHEET_PACKAGE_VERSION) and version != expected_version:
+        if COMPLETED_WORKSHEET_VERSION in (expected_version, version):
+            raise ValueError("已完成开发表与业务包版本不一致，请重新导出。")
+        if expected_version == CUSTOM_WORKSHEET_MATERIAL_VERSION or version == CUSTOM_WORKSHEET_MATERIAL_VERSION:
+            raise ValueError("开发表自定义材质与业务包版本不一致，请重新导出。")
+        raise ValueError("开发表与业务包版本不一致，请重新导出。")
     if "development" in typed_payload:
         with tarfile.open(package_path, "r:gz") as archive:
             validate_archive_files(archive, typed_payload["development"])
     validate_product_image_manifest(version, media, typed_payload, product_members)
     return manifest, typed_payload
+
+
+def _worksheet_package_version(development) -> int:
+    sheets = [row["worksheet"] for row in development if "worksheet" in row]
+    if any(sheet.get("completed") for sheet in sheets):
+        return COMPLETED_WORKSHEET_VERSION
+    if any(row["material"] and row["material"] not in LEGACY_MATERIALS for sheet in sheets for row in sheet["rows"]):
+        return CUSTOM_WORKSHEET_MATERIAL_VERSION
+    if any("core_code" in sheet for sheet in sheets):
+        return WORKSHEET_PACKAGE_VERSION
+    return HANDED_WORKSHEET_PACKAGE_VERSION if sheets else 0
 
 
 def export_package(
@@ -313,9 +355,12 @@ def export_package(
     version = 5
     if costing is not None:
         version = {1: COSTING_PACKAGE_VERSION, 2: PAIRED_COSTING_PACKAGE_VERSION,
-                   3: WEIGHT_PACKAGE_VERSION}[costing["format_version"]]
+                   3: WEIGHT_PACKAGE_VERSION, 4: PRICE_CONDITIONS_VERSION}[costing["format_version"]]
     if any("net_weight" in row for row in payload.get("materials", [])):
-        version = WEIGHT_PACKAGE_VERSION
+        version = max(version, WEIGHT_PACKAGE_VERSION)
+    if any("material_grade" in row for row in payload.get("materials", [])):
+        version = PRICE_CONDITIONS_VERSION
+    version = max(version, _worksheet_package_version(payload.get("development", [])))
     manifest: Manifest = {
         "package_type": PACKAGE_TYPE,
         "version": version,

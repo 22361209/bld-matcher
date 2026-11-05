@@ -7,7 +7,7 @@
 .costing-secondary { display: block; color: var(--linear-muted); max-width: 350px; white-space: normal; overflow-wrap: anywhere; }
 .costing-number { font-variant-numeric: tabular-nums; }
 .costing-row-actions { display: flex; gap: 14px; white-space: nowrap; }
-.costing-list-table col[data-col="code"] { width: 125px; }
+.costing-list-table col[data-col="code"] { width: 146px; }
 .costing-list-table col[data-col="name"] { width: 180px; }
 .costing-list-table col[data-col="kind"] { width: 90px; }
 .costing-list-table col[data-col="calculated"], .costing-list-table col[data-col="approved"], .costing-list-table col[data-col="scrap"] { width: 110px; }
@@ -83,33 +83,15 @@
   min-height: 28px;
   font-variant-numeric: tabular-nums;
 }
-.costing-row-button {
-  width: 24px;
-  min-height: 28px;
-  padding: 0;
-  background: transparent;
-}
-.costing-row-button span {
-  display: grid;
-  place-items: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--linear-accent);
-  color: white;
-  font: 700 15px/1 Arial, sans-serif;
-}
-.costing-row-button[data-costing-remove] span { background: var(--precision-danger); }
 @media (hover: hover) and (pointer: fine) {
   [data-editable="true"] .costing-row-number { position: absolute; }
-  [data-costing-row] .costing-row-button { opacity: 0; pointer-events: none; }
-  [data-costing-row]:is(:hover, :focus-within) .costing-row-button { opacity: 1; pointer-events: auto; }
+  [data-costing-row] .row-action-button { opacity: 0; pointer-events: none; }
+  [data-costing-row]:is(:hover, :focus-within) .row-action-button { opacity: 1; pointer-events: auto; }
   [data-editable="true"] [data-costing-row]:is(:hover, :focus-within) .costing-row-number { opacity: 0; }
 }
 @media (hover: none), (pointer: coarse) {
   [data-editable="true"] .costing-edit-table col[data-col="row"] { width: 96px; }
   .costing-row-controls { flex-wrap: wrap; gap: 2px; }
-  .costing-row-button { width: 28px; min-height: 30px; }
 }
 .costing-edit-table input, .costing-edit-table select, .costing-edit-table textarea {
   box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%;

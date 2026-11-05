@@ -10,6 +10,7 @@ def register(app) -> None:
     from .grid import format_cost_money
     from .historical_scrap_service import HistoricalScrapService
     from .import_web import costing_import
+    from .material_price_web import material_prices
     from .web import costing
     from .web_support import template_context
     from .weight_lookup import CostWeightLookup
@@ -24,3 +25,4 @@ def register(app) -> None:
     app.jinja_env.filters["cost_time"] = cost_time
     app.register_blueprint(costing)
     app.register_blueprint(costing_import)
+    app.register_blueprint(material_prices)

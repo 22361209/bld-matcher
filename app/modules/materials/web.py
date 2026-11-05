@@ -204,8 +204,9 @@ def register(app) -> None:
             "length": request.form.get("length", ""),
             "active": request.form.get("active", "0"),
         }
-        if "net_weight" in request.form:
-            data["net_weight"] = request.form["net_weight"]
+        for field in ("original_sync_id", "net_weight"):
+            if field in request.form:
+                data[field] = request.form[field]
         copy_json = bool(data["copy_from"]) and wants_json_response()
         try:
             get_material_service().save_item(data, actor=actor_name())

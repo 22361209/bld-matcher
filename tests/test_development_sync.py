@@ -15,6 +15,8 @@ from app.modules.business_sync import _database_apply
 from app.modules.business_sync._development import export_aggregates
 from app.modules.business_sync._development_files import MEMBER_PREFIX
 from app.modules.business_sync.infrastructure import BusinessSyncRepository
+from app.modules.development.repository import SQLiteDevelopmentUnitOfWork
+from app.modules.development.service import DevelopmentService
 
 
 PDF = b"%PDF-1.4\nsynthetic drawing\n%%EOF\n"
@@ -112,6 +114,179 @@ class DevelopmentSyncTest(unittest.TestCase):
         self.assertEqual(result["development"]["unchanged"], 1)
         with connect(self.target) as connection:
             self.assertEqual(connection.execute("SELECT count(*) FROM development_document_revisions").fetchone()[0], 1)
+
+    def create_worksheet(self, *, material="锻打"):
+        service = DevelopmentService(lambda: SQLiteDevelopmentUnitOfWork(self.source))
+        sheet = {"core_code": "8274", "started": True, "rows": [
+            {"name": "主体", "code": "A001", "mode": "borrowed", "borrowed_code": "A000", "material": material},
+            {"name": "衬套", "material": ""},
+        ]}
+        aggregate = service.create_worksheet(sheet, actor="test")
+        return aggregate["project"]["id"], aggregate["worksheet"]
+
+    def test_completed_worksheet_requires_v13_and_roundtrips_alongside_older_records(self):
+        previous_id, previous_sheet = self.create_worksheet()
+        previous_package = self.package().rename(self.root / "pre-completion.tar.gz")
+        service = DevelopmentService(lambda: SQLiteDevelopmentUnitOfWork(self.source))
+        new = service.create_worksheet(
+            {"core_code": "QA-FINISHED", "started": True, "completed": True, "rows": [{"name": "主体"}]},
+            actor="test",
+        )
+        completed_id = new["project"]["id"]
+        package = self.package()
+        self.assertEqual(self.dst.preview(package)["manifest"]["version"], 13)
+        for older_version in (10, 12):
+            with self.subTest(older_version=older_version):
+                downgraded = self.rewrite(package, lambda data: None, version=older_version)
+                with self.assertRaises(ValueError):
+                    self.dst.preview(downgraded)
+        self.assertEqual(self.apply(package)["development"]["new"], 3)
+        self.assertEqual(self.apply(previous_package)["development"]["unchanged"], 2)
+        exported = self.dst.export(output_path=self.root / "completed-roundtrip.tar.gz", selected=("development",), actor="test")
+        manifest, payload = self.src.read(exported)
+        self.assertEqual(manifest["version"], 13)
+        received = {row["id"]: row for row in payload["development"]}
+        self.assertEqual(received[completed_id]["worksheet"], new["worksheet"])
+        self.assertIs(received[completed_id]["worksheet"]["completed"], True)
+        self.assertIs(received[completed_id]["worksheet"]["started"], True)
+        self.assertEqual(received[previous_id]["worksheet"], previous_sheet)
+        self.assertNotIn("completed", received[previous_id]["worksheet"])
+        self.assertNotIn("worksheet", received[self.ids["project"]])
+
+    def test_v10_transfers_worksheet_and_old_project_and_previews_sheet_only_edits(self):
+        old_package = self.package().rename(self.root / "old-project-only.tar.gz")
+        identifier, sheet = self.create_worksheet()
+        package = self.package()
+        manifest, _ = self.dst.read(package)
+        self.assertEqual(manifest["version"], 10)
+        self.assertEqual(self.apply(package)["development"]["new"], 2)
+        self.assertEqual(self.apply(package)["development"]["unchanged"], 2)
+        self.assertEqual(self.apply(old_package)["development"]["unchanged"], 1)
+        with connect(self.target) as connection:
+            target = {row["id"]: row for row in export_aggregates(connection)}
+        self.assertEqual(target[identifier]["worksheet"], sheet)
+        self.assertNotIn("worksheet", target[self.ids["project"]])
+
+        def edit_row(data):
+            incoming = next(row for row in data["development"] if row["id"] == identifier)
+            incoming["worksheet"]["rows"][0]["borrowed_code"] = "B000"
+
+        changed = self.rewrite(package, edit_row)
+        preview = self.dst.preview(changed)
+        conflict, = preview["summary"]["development"]["conflicts"]
+        self.assertEqual(conflict["key"], identifier)
+        self.assertTrue(any(field["before"] == "A000" and field["after"] == "B000" for field in conflict["fields"]))
+        self.assertEqual(self.apply(changed)["development"]["conflict"], 1)
+        self.dst.apply(changed, backup_path=self.root / "worksheet-backup.sqlite3", actor="test",
+                       expected_token=preview["token"], selected_conflicts={"development": {identifier}})
+        self.assertEqual(self.apply(changed)["development"]["unchanged"], 2)
+
+    def test_worksheet_version_shape_and_record_type_are_enforced(self):
+        identifier, _sheet = self.create_worksheet()
+        package = self.package()
+        self.apply(package)
+        downgrade = self.rewrite(package, lambda data: None, version=5)
+        with self.assertRaisesRegex(ValueError, "版本不一致"):
+            self.dst.preview(downgrade)
+        with self.assertRaisesRegex(ValueError, "自定义材质与业务包版本不一致"):
+            self.dst.preview(self.rewrite(package, lambda data: None, version=12))
+
+        def change(data, edit):
+            row = next(row for row in data["development"] if row["id"] == identifier)
+            edit(row)
+
+        invalid = self.rewrite(package, lambda data: change(data, lambda row: row["worksheet"].update(unknown=True)))
+        with self.assertRaises(ValueError):
+            self.dst.preview(invalid)
+        legacy = self.rewrite(package, lambda data: change(data, lambda row: row.pop("worksheet")), version=5)
+        with self.assertRaisesRegex(ValueError, "登记方式不同"):
+            self.dst.preview(legacy)
+
+    def test_custom_worksheet_material_roundtrips_and_rejects_downgraded_packages(self):
+        from app.modules.materials.item_store import upsert_material_item
+
+        identifier, sheet = self.create_worksheet(material="70A 混炼胶")
+        package = self.package()
+        self.assertEqual(self.dst.preview(package)["manifest"]["version"], 12)
+        downgraded = self.rewrite(package, lambda data: None, version=10)
+        with self.assertRaisesRegex(ValueError, "自定义材质与业务包版本不一致"):
+            self.dst.preview(downgraded)
+        self.assertEqual(self.apply(package)["development"]["new"], 2)
+        reexport = self.dst.export(output_path=self.root / "roundtrip.tar.gz", selected=("development",), actor="qa")
+        manifest, payload = self.src.read(reexport)
+        self.assertEqual(manifest["version"], 12)
+        received = next(row for row in payload["development"] if row["id"] == identifier)
+        self.assertEqual(received["worksheet"], sheet)
+
+        with connect(self.source) as connection:
+            upsert_material_item(connection, {"model": "QA", "code": "QA-STAMP", "part": "主板", "spec_text": "2×100×100",
+                                              "pieces": "1", "material_grade": "SPHC"})
+        mixed = self.src.export(output_path=self.root / "mixed.tar.gz", selected=("development", "materials"), actor="qa")
+        self.assertEqual(self.dst.preview(mixed)["manifest"]["version"], 12)
+        with self.assertRaisesRegex(ValueError, "自定义材质与业务包版本不一致"):
+            self.dst.preview(self.rewrite(mixed, lambda data: None, version=11))
+
+    def test_worksheet_project_notes_roundtrip_and_note_only_conflict(self):
+        identifier, sheet = self.create_worksheet()
+        with connect(self.source) as connection:
+            connection.execute("UPDATE development_projects SET notes=? WHERE id=?", ("初次打样", identifier))
+        self.apply(self.package())
+        with connect(self.source) as connection:
+            connection.execute("UPDATE development_projects SET notes=? WHERE id=?", ("初次打样\n另寄样品", identifier))
+        package = self.package()
+        preview = self.dst.preview(package)
+        conflict, = preview["summary"]["development"]["conflicts"]
+        field, = conflict["fields"]
+        self.assertEqual(conflict["key"], identifier)
+        self.assertIn("备注", field["label"])
+        self.assertEqual((field["before"], field["after"]), ("初次打样", "初次打样\n另寄样品"))
+        self.dst.apply(package, backup_path=self.root / "notes-backup.sqlite3", actor="qa", expected_token=preview["token"],
+                       selected_conflicts={"development": {identifier}})
+        reexport = self.dst.export(output_path=self.root / "worksheet-notes.tar.gz", selected=("development",), actor="qa")
+        manifest, payload = self.src.read(reexport)
+        self.assertEqual(manifest["version"], 10)
+        record = next(row for row in payload["development"] if row["id"] == identifier)
+        self.assertEqual(record["project"]["notes"], "初次打样\n另寄样品")
+        self.assertEqual(record["worksheet"], sheet)
+
+    def test_v9_handed_sheet_survives_import_and_mixed_v10_reexport(self):
+        identifier, _ = self.create_worksheet()
+        package = self.package()
+        row = {"name": "臂体", "side": "left", "code": "A1L", "material": "锻打", "mode": "new",
+               "borrowed_code": "", "developer": "工厂甲", "start_date": "", "due_date": ""}
+        old_sheet = {"left_code": "K8274LA", "right_code": "K8274RA", "started": True,
+                     "rows": [row, {**row, "side": "right", "code": "A1R", "developer": "工厂乙"}]}
+
+        def as_old(data):
+            record = next(r for r in data["development"] if r["id"] == identifier)
+            record["worksheet"] = old_sheet
+            record["project"].update(title="K8274LA / K8274RA", core_number="8274")
+
+        v9 = self.rewrite(package, as_old, version=9)
+        self.assertEqual(self.apply(v9)["development"]["new"], 2)
+        self.assertEqual(self.apply(v9)["development"]["unchanged"], 2)
+        pure_v9 = self.dst.export(output_path=self.root / "old-pair.tar.gz", selected=("development",), actor="qa")
+        manifest, data = self.dst.read(pure_v9)
+        self.assertEqual(manifest["version"], 9)
+        self.assertEqual(next(r["worksheet"] for r in data["development"] if r["id"] == identifier), old_sheet)
+        with self.assertRaisesRegex(ValueError, "版本不一致"):
+            self.dst.preview(self.rewrite(package, lambda data: None, version=9))
+
+        target = DevelopmentService(lambda: SQLiteDevelopmentUnitOfWork(self.target))
+        new = target.create_worksheet({"core_code": "8070", "started": False, "rows": []}, actor="qa")["project"]
+        mixed = self.dst.export(output_path=self.root / "mixed.tar.gz", selected=("development",), actor="qa")
+        manifest, data = self.src.read(mixed)
+        self.assertEqual(manifest["version"], 10)
+        by_id = {r["id"]: r for r in data["development"]}
+        self.assertEqual(by_id[identifier]["worksheet"], old_sheet)
+        self.assertEqual(by_id[new["id"]]["worksheet"]["core_code"], "8070")
+        preview = self.src.preview(mixed)
+        conflict, = preview["summary"]["development"]["conflicts"]
+        self.assertEqual(conflict["key"], identifier)
+        self.assertTrue(any(field["after"] == "工厂乙" for field in conflict["fields"]))
+        self.src.apply(mixed, backup_path=self.root / "before-pair.sqlite3", actor="qa", expected_token=preview["token"],
+                       selected_conflicts={"development": {identifier}})
+        self.assertEqual(self.src.preview(mixed)["summary"]["development"]["counts"]["unchanged"], 3)
 
     def test_newer_project_is_whole_project_conflict_and_skip_copies_no_files(self):
         package = self.package()

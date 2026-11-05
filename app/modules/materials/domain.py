@@ -12,6 +12,7 @@ MATERIAL_COLUMN_FILTER_FIELDS = frozenset(
         "category",
         "car",
         "part",
+        "material_grade",
         "spec_text",
         "pieces",
         "unit_weight",
@@ -21,6 +22,10 @@ MATERIAL_COLUMN_FILTER_FIELDS = frozenset(
         "active",
     }
 )
+
+
+def material_grade_for_code(code: object) -> str:
+    return "SAPH440" if "440" in str(code or "") else "SPHC"
 
 
 @dataclass(frozen=True, slots=True)

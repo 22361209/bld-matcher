@@ -44,3 +44,8 @@ ADR 用于记录难以撤销或会影响多个领域的决定。新增框架、�
 - [ADR 0037: 业务数据包同步成本核算](0037-costing-business-sync.md)
 - [ADR 0038: 左右件成本配对与跨机同步](0038-costing-handed-pairs.md)
 - [ADR 0040: Docker 容器内手动发布程序快照](0040-docker-quick-updates.md)
+- [ADR 0041: 新品开发表与跨机同步](0041-development-worksheet.md)
+- [ADR 0042: 冲压材质调价与供货条件报价](0042-costing-price-conditions.md)
+- [ADR 0043: 开发表材质自由填写与业务包兼容](0043-development-material-text.md)
+- [ADR 0044: 冲压材料牌号由零件编码确定](0044-derive-material-grade-from-code.md)
+- [ADR 0045: 新品开发表的完成状态](0045-completed-development-worksheets.md)

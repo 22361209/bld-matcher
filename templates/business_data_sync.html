@@ -176,7 +176,7 @@
                     <td>
                       {% if not can_import %}
                         仅查看
-                      {% elif key == 'costing' and not conflict.selectable %}
+                      {% elif conflict.selectable is false %}
                         保留当前端
                       {% else %}
                         <label>
@@ -187,7 +187,7 @@
                     </td>
                     <td>{{ conflict.label }}{% if conflict.peer_code %} <small>（对侧 {{ conflict.peer_code }}）</small>{% endif %}</td>
                     <td>
-                      {% if key == 'costing' %}
+                      {% if conflict.reason %}
                         {{ conflict.reason }}
                       {% else %}
                       <ul>

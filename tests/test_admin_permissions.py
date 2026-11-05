@@ -148,7 +148,7 @@ class AdminPermissionTest(unittest.TestCase):
         self.assertEqual(roles[ADMIN_ROLE_KEY]["is_system"], 1)
         self.assertEqual(roles["editor"]["is_system"], 0)
         self.assertIsNotNone(migration)
-        self.assertEqual(MIGRATIONS[-1][0], "046_cost_detail_permission")
+        self.assertIn("046_cost_detail_permission", [identifier for identifier, _ in MIGRATIONS])
 
     def test_cost_details_migration_copies_existing_role_and_account_access_once(self) -> None:
         self.service.update_role_permissions("editor", ["view_costs", "manage_costs"], actor="root-admin")

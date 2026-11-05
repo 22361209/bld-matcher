@@ -223,10 +223,11 @@ class CostingFilterWebTest(unittest.TestCase):
             CostingFiltersTest.sheet(f"K{index:03}", "80" if index % 2 else "160") for index in range(55)
         ] + [CostingFiltersTest.sheet("Q001", "80", kind="ball")], actor="tester")
         query = [("q", "车型"), ("kind", "arm"), ("cf_minimum_price", "110"), ("cf_minimum_price", "220")]
-        response = self.client.get("/", query_string=query)
+        response = self.client.get("/", query_string=query, follow_redirects=True)
         self.assertEqual(response.status_code, 200)
+        self.assertEqual([step.status_code for step in response.history], [302])
         body = response.get_data(as_text=True)
-        search_form = re.search(r'<form class="search-form".*?</form>', body, re.S).group(0)
+        search_form = re.search(r'<form\b[^>]*data-costing-list-form[^>]*>.*?</form>', body, re.S).group(0)
         self.assertIn('name="cf_minimum_price" value="110.00"', search_form)
         self.assertIn('name="cf_minimum_price" value="220.00"', search_form)
         pagination_links = [html.unescape(link) for link in re.findall(r'href="([^"]+)"', body)
@@ -236,7 +237,7 @@ class CostingFilterWebTest(unittest.TestCase):
             parsed = parse_qs(urlsplit(link).query)
             self.assertEqual(parsed["cf_minimum_price"], ["110.00", "220.00"])
             self.assertEqual(parsed["q"], ["车型"])
-            self.assertEqual(parsed["kind"], ["arm"])
+            self.assertEqual(parsed["cf_kind"], ["arm"])
         result = self.client.get(pagination_links[0], headers={"Accept": "application/json"}).get_json()["result"]
         self.assertEqual((result["page"], result["total"]), (2, 55))
         self.assertEqual([row["code"] for row in result["records"]], [f"K{index:03}" for index in range(50, 55)])
@@ -244,7 +245,7 @@ class CostingFilterWebTest(unittest.TestCase):
         exact = self.client.get("/?cf_code=K054", headers={"Accept": "application/json"}).get_json()["result"]
         self.assertEqual([row["code"] for row in exact["records"]], ["K054"])
         self.assertEqual(body.count("data-column-filter-trigger"), 10)
-        self.assertEqual(body.count("data-column-drag-handle"), 11)
+        self.assertEqual(body.count("data-column-drag-handle"), 12)
         self.assertIn('data-column-drag-handle data-column-label="操作"', body)
         self.assertIn('data-column-order-status', body)
 

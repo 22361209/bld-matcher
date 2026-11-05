@@ -2,7 +2,7 @@
   <button type="button" class="data-grid-column-label" data-column-drag-handle data-column-label="{{ label }}" aria-label="移动{{ label }}列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">{{ label }}</button>
 {%- endmacro %}
 
-{% macro choice_heading(scope, column_id, label, filter_key, options, selected, draggable=false) %}
+{% macro choice_heading(scope, column_id, label, filter_key, options, selected, draggable=false, sort_control=none) %}
   <div class="data-grid-column-heading">
     {% if draggable %}{{ draggable_label(label) }}{% else %}<span class="data-grid-static-column-label">{{ label }}</span>{% endif %}
     <button
@@ -14,6 +14,9 @@
       aria-expanded="false"
       aria-controls="{{ scope }}-filter-{{ column_id }}"
     ><span aria-hidden="true"></span></button>
+    {% if sort_control %}
+    <a class="data-grid-sort-trigger" href="{{ sort_control.href }}" title="{{ sort_control.label }}" aria-label="{{ sort_control.label }}"><span aria-hidden="true">{{ sort_control.icon }}</span></a>
+    {% endif %}
   </div>
   <div
     class="data-grid-filter-panel"

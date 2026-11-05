@@ -43,6 +43,16 @@ def costing_state(connection: sqlite3.Connection) -> str:
     return state.hexdigest()
 
 
+def current_stamping_source_ids(connection: sqlite3.Connection) -> set[str]:
+    """Material identities referenced by current cost lines; no prices or historical revisions are exposed."""
+    return {row[0] for row in connection.execute("""
+        SELECT DISTINCT json_extract(item.value, '$.weight_source.source_id')
+        FROM costing_records AS record, json_each(record.payload_json, '$.items') AS item
+        WHERE json_extract(item.value, '$.weight_source.kind') = 'stamping'
+          AND json_type(item.value, '$.weight_source.source_id') = 'text'
+    """)}
+
+
 def _histories(revisions: list[dict]) -> dict[str, list[dict]]:
     result = defaultdict(list)
     for revision in sorted(revisions, key=lambda row: row["version"]):

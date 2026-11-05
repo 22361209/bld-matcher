@@ -131,10 +131,10 @@ def import_materials_from_excel(
         """
         INSERT INTO material_items
           (model, code, category, car, part, spec_text, pieces, thickness, width, length,
-           net_weight, active, source, source_row, sync_id, created_at, updated_at)
+           net_weight, material_grade, active, source, source_row, sync_id, created_at, updated_at)
         VALUES
           (:model, :code, :category, :car, :part, :spec_text, :pieces, :thickness, :width,
-           :length, :net_weight, :active, :source, :source_row, :sync_id, :created_at, :updated_at)
+           :length, :net_weight, :material_grade, :active, :source, :source_row, :sync_id, :created_at, :updated_at)
         """,
         rows,
     )

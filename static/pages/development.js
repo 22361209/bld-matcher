@@ -1,7 +1,11 @@
 import {initDevelopmentGrid} from "./development_grid.js";
 import {initDevelopmentCopy} from "./development_copy.js";
+import {setupDataGridControls} from "../components/data_grid_controls.js?v=20261105-1";
 
 if (document.body.dataset.page?.startsWith("development.")) {
+  setupDataGridControls(document.querySelector("#development-sheet-results table"), {
+    columns: [], storagePrefix: "bld.development.sheets", resultsHash: "development-sheet-results",
+  });
   initDevelopmentGrid();
   initDevelopmentCopy();
   document.addEventListener("change", (event) => {

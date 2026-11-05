@@ -1,35 +1,50 @@
 {% extends "base.html" %}
+{% from "_table_filter_macros.html" import choice_heading %}
 {% set active_page = "development" %}
-{% block page_title %}新产品开发{% endblock %}
+{% block page_title %}新品开发{% endblock %}
 {% block page_id %}development.list{% endblock %}
 {% block page_type %}list{% endblock %}
+{% block page_class %}shell wide app-surface{% endblock %}
 {% block page_head %}<link rel="stylesheet" href="{{ url_for('static', filename='pages/development.css', v=static_version('pages/development.css')) }}">{% endblock %}
 {% block page_content %}
 <section class="data-section">
   <div class="workspace-command">
     <form method="get" class="search-form" action="{{ url_for('development_list') }}">
-      <label><span>开发单 / 系列</span><input name="q" value="{{ filters.q }}" placeholder="系列、名称或负责人"></label>
-      <label><span>进度</span><select name="status"><option value="">全部进度</option>{% for state in ('not_started', 'in_progress', 'partial_completed', 'completed') %}<option value="{{ state }}"{% if state == filters.status %} selected{% endif %}>{{ labels[state] }}</option>{% endfor %}</select></label>
+      {% if legacy %}<input type="hidden" name="type" value="legacy">{% endif %}
+      {% for state in selected_statuses %}<input type="hidden" name="status" value="{{ state }}">{% endfor %}
+      <label><span>{{ '旧开发单' if legacy else '核心编码' }}</span><input name="q" value="{{ filters.q }}" enterkeyhint="search" placeholder="{{ '系列、名称或负责人' if legacy else '输入核心编码，按回车搜索' }}"></label>
+      {% if legacy %}
+      <label><span>开发状态</span><select name="status"><option value="">全部</option>{% for state in ('not_started', 'in_progress', 'partial_completed', 'completed') %}<option value="{{ state }}"{% if state == filters.status %} selected{% endif %}>{{ labels[state] }}</option>{% endfor %}</select></label>
       <label class="development-check"><input type="checkbox" name="archived" value="1"{% if filters.archived %} checked{% endif %}>包含已归档</label>
       <button class="linear-button primary" type="submit">搜索</button>
-      <a class="linear-button subtle" href="{{ url_for('development_list') }}">重置</a>
+      <a class="linear-button subtle" href="{{ url_for('development_list', type='legacy') }}">重置</a>
+      {% endif %}
     </form>
-    {% if can('edit_development') %}<div class="command-actions"><a class="linear-button primary" href="{{ url_for('development_new') }}">新建开发单</a></div>{% endif %}
+    <div class="command-actions">
+    {% if not legacy %}<a class="linear-button subtle" href="{{ url_for('development_list') }}">重置</a>{% endif %}
+    <a class="linear-button subtle" href="{{ url_for('development_list') if legacy else url_for('development_list', type='legacy') }}">{{ '返回新品开发' if legacy else '旧开发单' }}</a>
+    {% if can('edit_development') %}<a class="linear-button primary" href="{{ url_for('development_new') }}">新建开发表</a>{% endif %}</div>
   </div>
-  <div class="data-grid" data-resizable-grid data-grid-key="development-list">
+  <div class="data-grid" data-resizable-grid data-grid-key="{{ 'development-legacy-list' if legacy else 'development-sheet-list' }}"{% if not legacy %} id="development-sheet-results" data-table-results{% endif %}>
     <div class="data-table-scroll" data-grid-scroll>
       <table class="data-table data-grid-table development-list-table" data-grid-table><thead><tr>
-        {% for label in ('核心系列 / 开发单', '负责人', '计划日期', '进度', '缺图', '供应商未定', '延期', '未完成', '操作') %}<th><span data-grid-static-column-label>{{ label }}</span></th>{% endfor %}
+        {% set columns = ('旧开发单', '负责人', '计划日期', '进度') if legacy else ('核心编码', '开发状态', '开发件', '借用件', '待定件') %}
+        {% for label in columns %}<th data-column-label="{{ label }}">{% if label == '开发状态' %}
+          {{ choice_heading('development', 'status', label, 'status', status_options, selected_statuses) }}
+        {% else %}<span data-grid-static-column-label>{{ label }}</span>{% endif %}</th>{% endfor %}
       </tr></thead><tbody>
       {% for item in projects %}<tr>
-        <td><a href="{{ url_for('development_detail', project_id=item.id) }}"><strong>{{ item.core_number }}</strong> · {{ item.title }}</a>{% if item.archived %}<span class="status-badge">已归档</span>{% endif %}</td>
+        {% if legacy %}<td><a href="{{ url_for('development_detail', project_id=item.id) }}"><strong>{{ item.core_number }}</strong> · {{ item.title }}</a>{% if item.archived %}<span class="status-badge">已归档</span>{% endif %}</td>
         <td>{{ item.owner_username or '待指定' }}</td><td>{{ item.planned_date or '待计划' }}</td><td><span class="status-badge">{{ labels.get(item.status, item.status) }}</span></td>
-        {% for key in ('missing_drawings', 'missing_suppliers', 'overdue', 'unfinished') %}<td>{{ item.summary.get(key, 0) }}</td>{% endfor %}
-        <td><a class="linear-button subtle compact" href="{{ url_for('development_detail', project_id=item.id) }}">打开</a></td>
-      </tr>{% else %}<tr><td colspan="9"><div class="empty-state">{{ '没有符合筛选的开发单。' if filters.q or filters.status else '尚未登记开发单，可从一个 4 位核心系列开始。' }}</div></td></tr>{% endfor %}
+        {% else %}
+        <td><a href="{{ url_for('development_detail', project_id=item.id) }}"><strong>{{ item.worksheet.core_code }}</strong></a></td>
+        <td>{{ labels[item.status] }}</td>
+        {% for mode in ('new', 'borrowed', 'pending') %}<td>{{ item.worksheet.rows | selectattr('mode', 'equalto', mode) | list | length }}</td>{% endfor %}
+        {% endif %}
+      </tr>{% else %}<tr><td colspan="{{ columns|length }}"><div class="empty-state">{{ '没有符合筛选条件的记录。' if filters.q or filters.status or selected_statuses else ('暂无旧开发单。' if legacy else '暂无新品开发表。') }}</div></td></tr>{% endfor %}
       </tbody></table>
     </div>
-    {% set data_grid_label = '开发单' %}{% set data_grid_total = total %}{% set data_grid_footer_context = '开发单进度由成品负责人确认汇总' %}{% include '_data_grid_footer.html' %}
+    {% set data_grid_label = '开发单' %}{% set data_grid_total = total %}{% include '_data_grid_footer.html' %}
   </div>
 </section>
 {% endblock %}

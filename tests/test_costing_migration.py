@@ -57,7 +57,8 @@ class CostingMigrationTest(unittest.TestCase):
             run_migrations(connection)
             run_migrations(connection)
             self.assertEqual(self.prior_contents(connection), before)
-            self.assertEqual(tuple(connection.execute("SELECT * FROM material_items").fetchone()), (1, "P-8057", None))
+            self.assertEqual(dict(connection.execute("SELECT * FROM material_items").fetchone()),
+                             {"id": 1, "code": "P-8057", "net_weight": None, "material_grade": "SPHC"})
             names = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             self.assertTrue(set(COSTING_TABLES).issubset(names))
             self.assertNotIn("costing_schema", names)
@@ -85,6 +86,41 @@ class CostingMigrationTest(unittest.TestCase):
             self.assertEqual(connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall(), [])
         finally:
             connection.close()
+
+    def test_grade_migration_classifies_all_parts_without_touching_other_data_and_enforces_future_writes(self):
+        connection = self.historical_main()
+        self.addCleanup(connection.close)
+        for name in ("model", "active", "material_grade", "net_weight", "sync_id", "updated_at"):
+            connection.execute(f"ALTER TABLE material_items ADD COLUMN {name} TEXT")
+        rows = [
+            (2, "440-A", "MODEL", "1", None), (3, "A-440-B", "MODEL", "0", "SPHC"),
+            (4, "A440", "MODEL", "1", "SAPH440"), (5, "A４４０", "MODEL440", "0", "SAPH440"),
+            (6, None, "MODEL440", "1", ""), (7, "", "MODEL", "0", None),
+        ]
+        connection.executemany("INSERT INTO material_items(id, code, model, active, material_grade) VALUES(?,?,?,?,?)", rows)
+        connection.execute("UPDATE material_items SET net_weight='0.15', updated_at='2024-05-03', sync_id='part-' || id")
+        connection.commit()
+        def material_details():
+            return [tuple(row) for row in connection.execute(
+                "SELECT id, code, model, active, net_weight, updated_at, sync_id FROM material_items ORDER BY id")]
+
+        other_tables = self.prior_contents(connection)
+        details = material_details()
+        run_migrations(connection)
+        self.assertEqual(self.prior_contents(connection), other_tables)
+        self.assertEqual(material_details(), details)
+        self.assertEqual([row[0] for row in connection.execute("SELECT material_grade FROM material_items ORDER BY id")],
+                         ["SPHC", "SAPH440", "SAPH440", "SAPH440", "SPHC", "SPHC", "SPHC"])
+        changes = connection.total_changes
+        dict(MIGRATIONS)["049_derive_stamping_material_grades"](connection)
+        self.assertEqual(connection.total_changes, changes)
+
+        connection.execute("PRAGMA recursive_triggers=ON")
+        connection.execute("INSERT INTO material_items(id, code, material_grade) VALUES(8, 'P-440', 'SPHC')")
+        self.assertEqual(connection.execute("SELECT material_grade FROM material_items WHERE id=8").fetchone()[0], "SAPH440")
+        connection.execute("UPDATE material_items SET code='NORMAL' WHERE id=8")
+        connection.execute("UPDATE material_items SET material_grade='SAPH440' WHERE id=8")
+        self.assertEqual(connection.execute("SELECT material_grade FROM material_items WHERE id=8").fetchone()[0], "SPHC")
 
     def test_trial_initializer_still_rejects_main_database_without_mutation(self):
         connection = self.historical_main()

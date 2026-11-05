@@ -4,16 +4,18 @@ from collections.abc import Callable
 from pathlib import Path
 
 from app.database import connect
-from app.modules.costing.business_sync import preview_costing
+from app.modules.costing.business_sync import current_stamping_source_ids, preview_costing
 
 from app.modules.products.catalog_language import CATALOG_FIELDS
 
 from ._comparison import (
+    MATERIAL_IDENTITY_CONFLICT,
     all_comparison_fields,
     package_digest,
     columns,
     comparison_fields,
     incoming_status,
+    legacy_material_matches,
     media_summary,
     normalized_incoming,
     preview_label,
@@ -49,8 +51,9 @@ def _preview_package(
         raise ValueError("没有成本核算查看权限。")
     summary: dict[str, dict[str, object]] = {}
     with connect(database_path) as connection:
-        if {"development", "costing"}.intersection(payload):
+        if {"development", "costing", "materials"}.intersection(payload):
             connection.execute("BEGIN")
+        material_sources = current_stamping_source_ids(connection) if "materials" in payload else set()
         for key, incoming_rows in payload.items():
             if key == "costing":
                 summary[key] = preview_costing(connection, incoming_rows[0])
@@ -61,7 +64,7 @@ def _preview_package(
             table, identity, label = DATASETS[key]
             syncable_rows, ignored_inactive = syncable_incoming_rows(key, incoming_rows)
             record_columns = columns(connection, table)
-            optional_columns = {"products": CATALOG_FIELDS, "materials": ("net_weight",)}.get(key, ())
+            optional_columns = {"products": CATALOG_FIELDS, "materials": ("net_weight", "material_grade")}.get(key, ())
             if any(
                 identity not in row or any(column not in row for column in record_columns if column not in optional_columns)
                 for row in incoming_rows
@@ -70,6 +73,7 @@ def _preview_package(
                 raise ValueError(f"{label}字段与当前系统不一致，请先升级后再导入。")
             local_rows = connection.execute(f"SELECT * FROM {table}").fetchall()
             local = {str(row[identity]): row for row in local_rows}
+            material_matches = legacy_material_matches(local, syncable_rows, material_sources) if key == "materials" else None
             counts = {
                 "new": 0,
                 "updated": 0,
@@ -89,11 +93,14 @@ def _preview_package(
                     local_rows,
                     incoming,
                     record_columns,
+                    material_matches,
                 )
                 counts[row_status] += 1
                 if row_status == "conflict":
+                    protected = material_matches is not None and str(incoming[identity]) in material_matches.protected
                     conflicts.append(
                         {
+                            **({"selectable": False, "reason": MATERIAL_IDENTITY_CONFLICT} if protected else {}),
                             "key": str(incoming[identity]),
                             "label": preview_label(key, incoming),
                             "fields": comparison_fields(key, local_row, incoming, record_columns) if local_row else [],
@@ -122,7 +129,8 @@ def _preview_package(
                     if bool(row["active"]) and str(row[identity]) not in incoming_ids
                 )
             summary[key] = {"label": label, "counts": counts, "rows": rows, "conflicts": conflicts}
-        token = state_token(connection, package_path, tuple(payload), development_file_dir=development_file_dir, development_rows=payload.get("development", []))
+        token = state_token(connection, package_path, tuple(payload), material_sources=material_sources,
+                            development_file_dir=development_file_dir, development_rows=payload.get("development", []))
         missing_customers = unresolved_customers(connection, payload)
         customer_options = (
             [

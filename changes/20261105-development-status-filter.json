@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-05", "version": "unreleased",
+  "title": "在开发表记录完成状态，在列表列头筛选",
+  "entries": [
+    "新品开发表可保存为未开始、已开始或已完成。列表在开发状态列头勾选所需状态；核心编码按回车查询，重置位于右侧操作区。",
+    "跨设备同步已完成的开发表使用 v13 业务包。已有未开始、已开始的单据保留原状态。"
+  ],
+  "impact": {"data": "no backfill; optional worksheet completion state", "api": "compatible; business-sync-v13-for-completed-worksheets", "operations": "full-update-required"}
+}

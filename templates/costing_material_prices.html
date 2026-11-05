@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% set active_page = 'costs' %}
+{% macro rate(value) -%}
+  {%- set parts = (value|string).split('.') -%}
+  {{- value if value is not none and parts|length == 2 and parts[1]|length > 2 else value|cost_money -}}
+{%- endmacro %}
+{% block page_title %}冲压材料调价 · 成本核算{% endblock %}
+{% block page_id %}costing.material_prices{% endblock %}
+{% block page_type %}import-preview{% endblock %}
+{% block page_class %}shell wide app-surface costing-page{% endblock %}
+{% block page_head %}<link rel="stylesheet" href="{{ url_for('static', filename='pages/costing.css', v=static_version('pages/costing.css')) }}">{% endblock %}
+{% block page_content %}
+<section class="data-section">
+  <div class="workspace-command">
+    <strong>冲压材料调价</strong>
+    <div class="command-actions">
+      {% if can('manage_material_items') %}<a class="linear-button subtle" href="{{ url_for('material_items') }}">查看材料明细</a>{% endif %}
+      <a class="linear-button subtle" href="{{ url_for('costing.index') }}">返回成本列表</a>
+    </div>
+  </div>
+  {% if error %}<p class="message error" role="alert">{{ error }}</p>{% endif %}
+  {% if not preview %}
+    <form class="search-form costing-import-form" method="post" action="{{ url_for('costing_material_prices.preview') }}">
+      {{ csrf_field() }}
+      <label><span>材料牌号</span><select name="grade">{% for option in catalog.grades %}
+        <option value="{{ option }}" {% if option == grade %}selected{% endif %}>{{ option }}（{{ catalog.counts[option] }} 行）</option>{% endfor %}</select></label>
+      <label><span>新单价（元/kg）</span><input type="number" inputmode="decimal" min="0" step="any" name="price" value="{{ price }}" required></label>
+      <button class="linear-button primary" type="submit">预览调价</button>
+    </form>
+    <p class="costing-note">按材料明细的牌号查找各型号中按重量计价的冲压件。先核对每件的成本和售价变化，再确认应用。</p>
+  {% else %}
+    <div class="workspace-command">
+      <strong>{{ preview.grade }} · {{ rate(preview.price) }} 元/kg</strong>
+      <div class="command-actions">
+        <a class="linear-button subtle" href="{{ url_for('costing_material_prices.page', grade=grade, price=price) }}">修改条件</a>
+        {% if preview.updated_rows %}
+        <form method="post" action="{{ url_for('costing_material_prices.apply') }}">
+          {{ csrf_field() }}<input type="hidden" name="token" value="{{ token }}">
+          <button class="linear-button primary" type="submit" data-confirm="确认将 {{ preview.updated_models }} 个型号、{{ preview.updated_rows }} 行冲压件的 {{ preview.grade }} 单价调整为 {{ rate(preview.price) }} 元/kg？每张成本单会保留本次修改记录。">确认应用调价</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+    <p class="costing-note">找到 {{ preview.matched }} 行 {{ preview.grade }}。本次将调整 {{ preview.updated_models }} 个型号、{{ preview.updated_rows }} 行明细。{% if preview.audit_peers %}对侧 {{ preview.audit_peers|join('、') }} 同步记录配对修订。{% endif %}</p>
+    {% if preview.details %}
+    <div class="data-table-scroll"><table class="data-table">
+      <thead><tr><th scope="col">型号 / 明细</th><th scope="col">材料编码 / 匹配依据</th><th scope="col">原单价 → 新单价（元/kg）</th><th scope="col">计算成本（元/件）</th><th scope="col">建议含税单价（元/件）</th><th scope="col">人工定价</th></tr></thead>
+      <tbody>{% for model in preview.details %}{% for row in model.rows %}<tr>
+        <td><a href="{{ url_for('costing.edit', record_id=model.id) }}">{{ model.code }}</a> · 第 {{ row.position }} 行 {{ row.name }}</td>
+        <td>{{ row.material_code }} · {{ row.evidence }}</td>
+        <td>{{ rate(row.unit_price) }} → {{ rate(preview.price) }}</td>
+        <td>{{ model.old_cost|cost_money }} → {{ model.new_cost|cost_money }}</td>
+        <td>{{ model.old_sale|cost_money }} → {{ model.new_sale|cost_money }}</td>
+        <td>{% if model.manual_cost %}保留核定成本{% endif %}{% if model.manual_cost and model.manual_sale %}、{% endif %}{% if model.manual_sale %}保留手动售价{% endif %}{% if not model.manual_sale and not model.manual_cost %}自动{% endif %}</td>
+      </tr>{% endfor %}{% endfor %}</tbody>
+    </table></div>
+    {% endif %}
+    {% if preview.blocked %}
+    <p class="costing-note"><strong>本次跳过</strong></p>
+    <ul>{% for item in preview.blocked %}<li>{{ item.codes }} · {{ item.reason }}</li>{% endfor %}</ul>
+    {% endif %}
+  {% endif %}
+</section>
+{% set reviews = preview.reviews if preview else catalog.reviews %}
+{% if reviews %}
+<section class="data-section">
+  <details class="costing-issues"><summary>未能匹配唯一材料的成本行（{{ reviews|length }}）</summary>
+    <p class="costing-note">这些行未计入调价范围。请核对材料明细的零件编码，以及成本行的产品编码和取重来源。</p>
+    <div class="data-table-scroll"><table class="data-table"><thead><tr><th scope="col">型号</th><th scope="col">项目</th><th scope="col">材料编码</th><th scope="col">原因</th></tr></thead>
+      <tbody>{% for row in reviews %}<tr><td><a href="{{ url_for('costing.edit', record_id=row.id) }}">{{ row.code }}</a></td>
+        <td>第 {{ row.position }} 行 {{ row.name }}</td><td>{{ row.material_code or '—' }}</td><td>{{ row.reason }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </details>
+</section>
+{% endif %}
+{% endblock %}

@@ -6,6 +6,8 @@ from typing import Any
 
 from app.matcher import compact_text
 
+from .domain import material_grade_for_code
+
 
 def _parse_required_float(value: object, label: str) -> float:
     text = compact_text(value)
@@ -86,6 +88,7 @@ def _material_values_from_data(
     return {
         "model": model,
         "code": code,
+        "material_grade": material_grade_for_code(code),
         "category": compact_text(data.get("category")),
         "car": compact_text(data.get("car")),
         "part": part,

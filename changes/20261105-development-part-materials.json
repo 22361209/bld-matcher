@@ -1,0 +1,11 @@
+{
+  "date": "2026-11-05",
+  "version": "unreleased",
+  "title": "新品开发表按零件预填材质，表头合并为一栏",
+  "entries": [
+    "新开发表以主体、小衬套和大衬套登记对应零件。两只衬套预填 NR，球壳为 45号钢、球销为 40Cr、防尘罩为 CR；其他材质留空，各行都可手填或清空。已保存的开发表保留原名称和材质。",
+    "核心编码、开发状态、返回列表和保存合到同一栏，去掉表内重复标题。",
+    "包含旧选项以外材质的开发表以 v12 业务包跨机同步；请先更新接收设备。"
+  ],
+  "impact": {"data": "no database migration or backfill; defaults for new worksheets only", "api": "compatible; business-sync-v12-for-free-text-worksheet-materials", "operations": "full-update-required"}
+}

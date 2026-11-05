@@ -13,6 +13,10 @@ SCRAP_HEADER_FIELDS = ("scrap_mode", "scrap_unit_price", "scrap_credit_override"
 SCRAP_ROW_FIELDS = ("weight_source", "scrap_expected", "scrap_weight", "scrap_total_weight", "scrap_issue")
 
 
+def automatic_scrap_credit(theoretical: Decimal | None) -> Decimal:
+    return max(Decimal(0), theoretical - 1) if theoretical is not None else Decimal(0)
+
+
 def weight_snapshot(value: object) -> dict[str, str | None]:
     if not isinstance(value, dict) or set(value) != WEIGHT_SOURCE_FIELDS:
         raise CostingValidationError("重量来源快照字段不完整。", "weight_source")
@@ -105,7 +109,7 @@ def prepare_scrap(data, previous, raw_items, row_inputs, previous_items):
         theory = known if complete else None
         credit = override
         if credit is None:
-            credit = max(Decimal(0), theory - 1) if theory is not None else Decimal(0)
+            credit = automatic_scrap_credit(theory)
         return {
             "scrap_mode": mode, "scrap_unit_price": decimal_text(price),
             "scrap_credit_override": decimal_text(override) if override is not None else None,

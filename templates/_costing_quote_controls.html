@@ -1,0 +1,9 @@
+<fieldset class="costing-quote-controls" data-quote-controls>
+  <legend class="data-grid-visually-hidden">组合报价</legend>
+  <label><span class="data-grid-visually-hidden">供货阶段</span>
+    <select name="stage"><option value="finished"{% if selection.stage == 'finished' %} selected{% endif %}>整件</option><option value="weld"{% if selection.stage == 'weld' %} selected{% endif %}>焊接件</option></select>
+  </label>
+  {% for key, caption in [('ecoat','表面处理（电泳）'), ('inner','内包装'), ('outer','外包装'), ('freight','运费')] %}
+  <label><input type="checkbox" name="{{ key }}" value="1"{% if selection[key] %} checked{% endif %}>{{ caption }}</label>
+  {% endfor %}
+</fieldset>

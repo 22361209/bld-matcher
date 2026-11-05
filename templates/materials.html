@@ -107,6 +107,7 @@
               <col class="col-width-78" data-col="category">
               <col class="col-width-104" data-col="car">
               <col class="col-width-88" data-col="part">
+              <col class="col-width-80" data-col="material-grade">
               <col class="col-width-150" data-col="specification">
               <col class="col-width-64" data-col="pieces">
               <col class="col-width-76" data-col="unit-weight">
@@ -123,6 +124,7 @@
                 <th data-col="category">{{ choice_heading("materials", "category", "类别", "mf_category", material_filter_options.get("category", []), material_column_filters.get("category", [])) }}</th>
                 <th data-col="car">{{ choice_heading("materials", "car", "车型", "mf_car", material_filter_options.get("car", []), material_column_filters.get("car", [])) }}</th>
                 <th data-col="part">{{ choice_heading("materials", "part", "零件名称", "mf_part", material_filter_options.get("part", []), material_column_filters.get("part", [])) }}</th>
+                <th data-col="material-grade">{{ choice_heading("materials", "material-grade", "材料牌号", "mf_material_grade", material_filter_options.get("material_grade", []), material_column_filters.get("material_grade", [])) }}</th>
                 <th data-col="specification">{{ choice_heading("materials", "specification", "规格尺寸", "mf_spec_text", material_filter_options.get("spec_text", []), material_column_filters.get("spec_text", [])) }}</th>
                 <th data-col="pieces">{{ choice_heading("materials", "pieces", "下料只数", "mf_pieces", material_filter_options.get("pieces", []), material_column_filters.get("pieces", [])) }}</th>
                 <th data-col="unit-weight">{{ choice_heading("materials", "unit-weight", "单件下料重kg", "mf_unit_weight", material_filter_options.get("unit_weight", []), material_column_filters.get("unit_weight", [])) }}</th>
@@ -148,6 +150,7 @@
                   <td data-col="category">{{ item.category }}</td>
                   <td data-col="car">{{ item.car }}</td>
                   <td data-col="part">{{ item.part }}</td>
+                  <td data-col="material-grade">{{ item.material_grade }}</td>
                   <td data-col="specification">{{ item.spec_text }}</td>
                   <td data-col="pieces">{{ "%.0f"|format(item.pieces) if item.pieces == item.pieces|int else item.pieces }}</td>
                   <td data-col="unit-weight">{{ "%.2f"|format(item.unit_weight) }}</td>
@@ -169,7 +172,7 @@
                 </tr>
               {% endfor %}
               {% if not material_items %}
-                <tr><td colspan="13">没有找到材料明细。</td></tr>
+                <tr><td colspan="14">没有找到材料明细。</td></tr>
               {% endif %}
             </tbody>
           </table>
@@ -266,6 +269,7 @@
             <label>
               零件编码
               <input name="code" placeholder="例如 KA8234" required>
+              {% include "_material_grade.html" %}
             </label>
             <label>
               零件名称

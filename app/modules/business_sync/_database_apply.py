@@ -6,15 +6,17 @@ from datetime import datetime
 from pathlib import Path
 
 from app.database import connect
-from app.modules.costing.business_sync import apply_costing
+from app.modules.costing.business_sync import apply_costing, current_stamping_source_ids
 from app.modules.products.option_values import register_product_option_values
 from app.platform.audit_store import log_event
 from app.platform.sync_identity import stable_sync_id
 
 from ._comparison import (
+    MATERIAL_IDENTITY_CONFLICT,
     columns,
     package_digest,
     incoming_status,
+    legacy_material_matches,
     normalized_incoming,
     state_token,
     syncable_incoming_rows,
@@ -215,7 +217,9 @@ def _apply_package(
     connection = connect(database_path)
     try:
         connection.execute("BEGIN IMMEDIATE")
-        if state_token(connection, package_path, tuple(payload), development_file_dir=development_file_dir, development_rows=payload.get("development", [])) != expected_token:
+        material_sources = current_stamping_source_ids(connection) if "materials" in payload else set()
+        if state_token(connection, package_path, tuple(payload), material_sources=material_sources,
+                       development_file_dir=development_file_dir, development_rows=payload.get("development", [])) != expected_token:
             raise ValueError("预览后数据包或本机数据已变化，请重新上传预览。")
         media_requests = {
             "drawings": include_drawings,
@@ -227,7 +231,8 @@ def _apply_package(
             for key, requested in media_requests.items()
             if MEDIA_DATASETS[key] in payload
         }
-        structured_product_images = manifest.get("version") in (4, 5, 6) and requested_media.get("product_images") is True
+        version = manifest["version"]
+        structured_product_images = isinstance(version, int) and version >= 4 and requested_media.get("product_images") is True
         legacy_media_requests = dict(requested_media)
         if structured_product_images:
             legacy_media_requests["product_images"] = False
@@ -256,6 +261,7 @@ def _apply_package(
             updates = ", ".join(f"{column}=excluded.{column}" for column in write_columns if column != identity)
             local_rows = connection.execute(f"SELECT * FROM {table}").fetchall()
             local = {str(row[identity]): row for row in local_rows}
+            material_matches = legacy_material_matches(local, syncable_rows, material_sources) if key == "materials" else None
             counts = {
                 "new": 0,
                 "updated": 0,
@@ -271,12 +277,15 @@ def _apply_package(
                     local_rows,
                     incoming,
                     record_columns,
+                    material_matches,
                 )
                 selected_conflict = (
                     row_status == "conflict"
                     and str(incoming[identity]) in selected_conflicts.get(key, set())
                 )
                 if selected_conflict:
+                    if material_matches is not None and str(incoming[identity]) in material_matches.protected:
+                        raise ValueError(MATERIAL_IDENTITY_CONFLICT)
                     row_status = "updated"
                 counts[row_status] += 1
                 if row_status in {"unchanged", "conflict"}:
@@ -291,10 +300,12 @@ def _apply_package(
                         imported_quote_ids.add(int(local_row["id"]))
                     continue
                 if adopt_sync_id and local_row is not None:
-                    connection.execute(
-                        f"UPDATE {table} SET sync_id = ? WHERE id = ?",
-                        (incoming[identity], local_row["id"]),
-                    )
+                    if key == "materials":
+                        # Keep the latest known timestamp for later conflict detection on this part.
+                        connection.execute("UPDATE material_items SET sync_id=?, updated_at=MAX(updated_at, ?) WHERE id=?",
+                                           (incoming[identity], incoming["updated_at"], local_row["id"]))
+                    else:
+                        connection.execute(f"UPDATE {table} SET sync_id = ? WHERE id = ?", (incoming[identity], local_row["id"]))
                     continue
                 connection.execute(
                     f"INSERT INTO {table} ({insert_sql}) VALUES ({placeholders}) "

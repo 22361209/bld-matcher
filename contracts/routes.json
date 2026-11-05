@@ -274,6 +274,27 @@
       "rule": "/costs/import/preview"
     },
     {
+      "endpoint": "costing_material_prices.page",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/costs/material-prices"
+    },
+    {
+      "endpoint": "costing_material_prices.apply",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/costs/material-prices/apply"
+    },
+    {
+      "endpoint": "costing_material_prices.preview",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/costs/material-prices/preview"
+    },
+    {
       "endpoint": "costing.new",
       "methods": [
         "GET"
@@ -659,6 +680,13 @@
       "rule": "/development/<project_id>/components/add"
     },
     {
+      "endpoint": "development_delete_legacy",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/development/<project_id>/delete-legacy"
+    },
+    {
       "endpoint": "development_archive_document",
       "methods": [
         "POST"
@@ -757,6 +785,13 @@
       "rule": "/development/<project_id>/update"
     },
     {
+      "endpoint": "development_update_sheet",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/development/<project_id>/worksheet"
+    },
+    {
       "endpoint": "development_create",
       "methods": [
         "POST"
@@ -769,6 +804,13 @@
         "GET"
       ],
       "rule": "/development/new"
+    },
+    {
+      "endpoint": "development_create_sheet",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/development/worksheets"
     },
     {
       "endpoint": "download",

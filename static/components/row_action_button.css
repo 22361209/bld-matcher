@@ -1,0 +1,20 @@
+.row-action-button {
+  width: 24px;
+  min-height: 28px;
+  padding: 0;
+  background: transparent;
+}
+.row-action-button span {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--linear-accent);
+  color: white;
+  font: 700 15px/1 Arial, sans-serif;
+}
+.row-action-remove span { background: var(--precision-danger); }
+@media (hover: none), (pointer: coarse) {
+  .row-action-button { width: 28px; min-height: 30px; }
+}

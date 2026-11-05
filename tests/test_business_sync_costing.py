@@ -18,6 +18,7 @@ from app.modules.development.document_service import DevelopmentDocumentService
 from app.modules.development.file_store import DevelopmentFileStore
 from app.modules.development.repository import SQLiteDevelopmentUnitOfWork
 from app.modules.development.service import DevelopmentService
+from app.modules.development.worksheet import default_worksheet
 
 
 class CostingPackageTest(unittest.TestCase):
@@ -88,7 +89,58 @@ class CostingPackageTest(unittest.TestCase):
         preview = self.target_sync.preview(self.package)
         self.assertEqual(self.apply(preview["token"])["costing"]["unchanged"], 1)
 
-    def test_material_and_weighted_cost_snapshot_roundtrip_in_v8(self):
+    def test_current_stamping_references_protect_local_material_identity_during_sync(self):
+        from app.modules.costing.material_prices import MaterialPriceService
+        from app.modules.materials.item_store import upsert_material_item
+
+        part = {"code": "PART440", "model": "QA", "part": "主板", "spec_text": "2x100x100", "pieces": "1"}
+        with connect(self.source) as connection:
+            identifier = upsert_material_item(connection, {**part, "spec_text": "2x110x100"})
+            upsert_material_item(connection, {**part, "id": identifier})
+            incoming_id = connection.execute("SELECT sync_id FROM material_items").fetchone()[0]
+        with connect(self.target) as connection:
+            upsert_material_item(connection, part)
+            local_id = connection.execute("SELECT sync_id FROM material_items").fetchone()[0]
+        self.assertNotEqual(incoming_id, local_id)
+        self.export("materials")
+        adoptable = self.target_sync.preview(self.package)
+        self.assertEqual(adoptable["summary"]["materials"]["counts"]["updated"], 1)
+
+        costs = CostingService(self.target)
+        source = {"kind": "stamping", "product_code": "PART440", "name": "主板", "model": "QA", "spec": "2.0×100×100",
+                  "source_id": local_id, "pieces": "1", "gross_weight": "4", "net_weight": "3", "scrap_weight": "1"}
+        sheet = costs.create({"code": "QA-ARM", "items": [{"name": "主板", "mode": "weight", "product_code": "PART440",
+                            "weight": "4", "unit_price": "3", "weight_source": source}]}, actor="qa")
+        with self.assertRaisesRegex(ValueError, "本机数据已变化"):
+            self.apply(adoptable["token"])
+        for _ in range(2):
+            protected = self.target_sync.preview(self.package)
+            conflict, = protected["summary"]["materials"]["conflicts"]
+            self.assertIs(conflict["selectable"], False)
+            self.assertIn("正在使用这条材料取重", conflict["reason"])
+            self.assertEqual(self.apply(protected["token"])["materials"]["conflict"], 1)
+        with self.assertRaisesRegex(ValueError, "正在使用这条材料取重"):
+            self.target_sync.apply(self.package, backup_path=self.backup, actor="qa", expected_token=protected["token"],
+                                   selected_conflicts={"materials": {incoming_id}})
+        with connect(self.target) as connection:
+            self.assertEqual([row[0] for row in connection.execute("SELECT sync_id FROM material_items")], [local_id])
+        prices = MaterialPriceService(costs)
+        change = prices.request("SAPH440", "6")
+        plan = prices.preview(change)
+        self.assertEqual(plan["updated_rows"], 1)
+        prices.apply(change, plan["digest"], actor="qa")
+        updated = costs.get(sheet["id"])
+        self.assertEqual(updated["items"][0]["unit_price"], "6")
+
+        costs.update(sheet["id"], {"items": [{**updated["items"][0], "weight_source": None}]},
+                     expected_version=updated["version"], actor="qa")
+        with self.assertRaisesRegex(ValueError, "本机数据已变化"):
+            self.apply(protected["token"])
+        refreshed = self.target_sync.preview(self.package)
+        self.assertEqual(self.apply(refreshed["token"])["materials"]["updated"], 1)
+        self.assertEqual(self.target_sync.preview(self.package)["summary"]["materials"]["counts"]["unchanged"], 1)
+
+    def test_derived_grade_and_weighted_cost_snapshot_roundtrip(self):
         from app.modules.materials.item_store import upsert_material_item
 
         with connect(self.source) as conn:
@@ -98,13 +150,60 @@ class CostingPackageTest(unittest.TestCase):
                                   "items": [{"name": "主板", "mode": "weight", "unit_price": "4", "weight": "1"}]}, actor="qa")
         self.export("materials", "costing")
         with tarfile.open(self.package) as archive:
-            self.assertEqual(json.load(archive.extractfile("manifest.json"))["version"], 8)
+            self.assertEqual(json.load(archive.extractfile("manifest.json"))["version"], 11)
             self.assertEqual(json.load(archive.extractfile("costing.json"))["format_version"], 3)
         preview = self.target_sync.preview(self.package)
         self.apply(preview["token"])
         self.assertEqual(CostingService(self.target).get(auto["id"]), auto)
         with connect(self.target) as conn:
             self.assertEqual(conn.execute("SELECT net_weight FROM material_items WHERE code='QA-STAMP'").fetchone()[0], "0.1")
+
+    def test_v11_mixed_worksheet_grade_and_quote_role_survive_roundtrip(self):
+        from app.modules.materials.item_store import upsert_material_item
+
+        with connect(self.source) as conn:
+            upsert_material_item(conn, {"model": "QA", "code": "QA-440-STAMP", "part": "主板", "spec_text": "2×100×100",
+                                       "pieces": "1"})
+        rows = [dict(self.sheet["items"][0], quote_role="weld")]
+        tagged = self.costs.update(self.sheet["id"], {"items": rows}, expected_version=2, actor="qa")
+        # A later manual correction restores auto classification; the history still requires a v4 reader.
+        final = self.costs.update(tagged["id"], {"items": [dict(tagged["items"][0], quote_role="")]},
+                                  expected_version=3, actor="qa")
+        self.assertEqual(tagged["calculated_cost"], final["calculated_cost"])
+        self.assertNotIn("quote_role", final["items"][0])
+        development = DevelopmentService(lambda: SQLiteDevelopmentUnitOfWork(self.source))
+        development.create_worksheet({"core_code": "8274", "started": False, "rows": []}, actor="qa")
+        self.export("materials", "costing", "development")
+        preview = self.target_sync.preview(self.package)
+        self.assertEqual(preview["manifest"]["version"], 11)
+        with tarfile.open(self.package) as archive:
+            self.assertEqual(json.load(archive.extractfile("costing.json"))["format_version"], 4)
+        self.apply(preview["token"])
+        with connect(self.target) as conn:
+            self.assertEqual(conn.execute("SELECT material_grade FROM material_items WHERE code='QA-440-STAMP'").fetchone()[0], "SAPH440")
+        self.assertEqual(CostingService(self.target).revisions(tagged["id"]), self.costs.revisions(tagged["id"]))
+
+        new = development.create_worksheet(dict(default_worksheet(), core_code="8275"), actor="qa")
+        self.export("materials", "costing", "development")
+        preview = self.target_sync.preview(self.package)
+        self.assertEqual(preview["manifest"]["version"], 12)
+        self.assertEqual(self.apply(preview["token"])["development"]["new"], 1)
+        target = DevelopmentService(lambda: SQLiteDevelopmentUnitOfWork(self.target))
+        self.assertEqual(target.detail(new["project"]["id"])["worksheet"], new["worksheet"])
+
+    def test_v10_keeps_mixed_costs_and_structured_product_images(self):
+        development = DevelopmentService(lambda: SQLiteDevelopmentUnitOfWork(self.source))
+        sheet = {"core_code": "8274", "started": False, "rows": [{"name": "主体", "material": "铸铁"}]}
+        development.create_worksheet(sheet, actor="owner")
+        self.export("costing", "development", "products", include_images=True)
+        preview = self.target_sync.preview(self.package)
+        self.assertEqual(preview["manifest"]["version"], 10)
+        result = self.apply(preview["token"], include_images=True)
+        self.assertEqual(result["development"]["new"], 1)
+        self.assertEqual(result["costing"]["new"], 1)
+        with connect(self.target) as connection:
+            image = connection.execute("SELECT image_path FROM products WHERE bld_no='QA-PART'").fetchone()[0]
+        self.assertTrue((self.target_images / Path(image).name).is_file())
 
     def test_writes_share_transaction_and_media_rollback(self):
         self.export("costing", "products", include_images=True)

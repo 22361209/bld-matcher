@@ -1,6 +1,10 @@
 """Shared HTTP workflows; route adapters supply their own authentication boundary."""
 from __future__ import annotations
 
+from dataclasses import asdict
+
+from urllib.parse import urlencode
+
 from flask import flash, jsonify, redirect, render_template, request, url_for
 
 from app.security import actor_name as actor, can, wants_json_response
@@ -11,6 +15,7 @@ from .grid import (
     COLUMN_FILTER_FIELDS, FULL_LIST_RECORD_FIELDS, PRICE_LIST_COLUMNS, PRICE_LIST_RECORD_FIELDS, normalize_column_filters,
 )
 from .pair_codes import mirror_code
+from .quote_scenarios import OPTIONS, Scope
 from .scrap_detail import scrap_detail
 from .web_support import costing_endpoint, import_owner, imports, service, weights
 
@@ -18,7 +23,7 @@ from .web_support import costing_endpoint, import_owner, imports, service, weigh
 EDIT_FIELDS = {"code", "kind", "name", "brand", "models", "remark", "approved_cost", "scrap_credit", "theoretical_scrap",
                "items", "suggested_tax_price_override", "create_pair", "peer_version",
                "scrap_mode", "scrap_unit_price", "scrap_credit_override"}
-ITEM_FIELDS = {"id", "category", "name", "product_code", "material_attribute", "part_code", "supplier", "remark", "mode", "amount", "unit_price",
+ITEM_FIELDS = {"quote_role", "id", "category", "name", "product_code", "material_attribute", "part_code", "supplier", "remark", "mode", "amount", "unit_price",
                "quantity", "weight", "processing_fee", "length", "width", "height", "strap_rate", "review_note", "pair_kind",
                "peer_product_code", "peer_part_code", "weight_choice", "scrap_expected"}
 
@@ -43,9 +48,32 @@ def weight_lookup():
                    candidates=lookup.candidates(request.args.get("code"), request.args.get("kind", "")))
 
 
+def _canonical_list_url(full_list):
+    """Move old HTML bookmarks' standalone filters into the visible column menus."""
+    if "kind" not in request.args and "status" not in request.args:
+        return None
+    visible_columns = COLUMN_FILTER_FIELDS if full_list else PRICE_LIST_COLUMNS
+    allowed = {"q", "sort", "page", "kind", "status", "stage", *OPTIONS, *(f"cf_{key}" for key in visible_columns)}
+    args = {key: request.args.getlist(key) for key in allowed if key in request.args}
+    for key, valid, visible in (("kind", ("arm", "ball"), True), ("status", ("draft", "ready"), full_list)):
+        legacy = args.pop(key, [""])[0]
+        if visible and legacy:
+            if legacy not in valid:
+                raise CostingValidationError("筛选条件无效。", key)
+            args.setdefault("cf_" + key, [legacy])
+    query = urlencode(args, doseq=True)
+    return url_for(costing_endpoint() + ".index") + ("?" + query if query else "")
+
+
 def index():
     full_list = can("view_cost_list_full")
     details = can("view_cost_details")
+    json_response = wants_json_response()
+    canonical = _canonical_list_url(full_list) if not json_response else None
+    if canonical:
+        return redirect(canonical)
+    quote_query = {key: request.args.getlist(key) for key in ("stage", *OPTIONS) if key in request.args}
+    scope = Scope.from_query(quote_query)
     visible_columns = COLUMN_FILTER_FIELDS if full_list else PRICE_LIST_COLUMNS
     filters = {key: request.args.get(key, "") for key in ("q", "kind", "status")}
     filters["sort"] = request.args.get("sort", "code")
@@ -61,16 +89,18 @@ def index():
     except ValueError as exc:
         raise CostingValidationError("页码必须是整数。", "page") from exc
     result = service().list(q=filters["q"], kind=filters["kind"], status=filters["status"],
-                            sort=filters["sort"], page=page, column_filters=column_filters, summary_only=not details)
+                            sort=filters["sort"], page=page, column_filters=column_filters, summary_only=not details,
+                            quote_scope=scope if not json_response or quote_query else None,
+                            facet_fields=None if json_response else visible_columns)
     if not details:
         allowed = FULL_LIST_RECORD_FIELDS if full_list else PRICE_LIST_RECORD_FIELDS
         result["records"] = [{key: row.get(key) for key in allowed} for row in result["records"]]
-    if wants_json_response():
+    if json_response:
         return jsonify(ok=True, result=result)
-    options = service().filter_options(q=filters["q"], kind=filters["kind"], status=filters["status"],
-                                      column_filters=column_filters, fields=visible_columns)
+    options = result.pop("column_filter_options")
     return render_template("costing_list.html", result=result, filters=filters, column_filters=column_filters,
-                           column_filter_options=options,
+                           column_filter_options=options, selection=asdict(scope),
+                           quote_query={key: values[0] for key, values in quote_query.items()},
                            column_filter_query={f"cf_{field}": list(values) for field, values in column_filters.items()})
 
 

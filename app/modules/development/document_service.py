@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 from .document_domain import DevelopmentDocumentError, required_text
+from .domain import fail
 from .file_store import DevelopmentFileStore, legacy_source
 from .file_types import DevelopmentFilePayload
 from .file_validation import DRAWING_EXTENSIONS
@@ -28,6 +29,39 @@ class DevelopmentDocumentService:
             return work.documents.list_documents(
                 project_id, target_type=target_type, target_id=target_id,
             )
+
+    def delete_legacy_project(self, project_id: str, *, expected_version, confirmed_title: str, actor: str) -> str:
+        actor = required_text(actor, "操作人")
+        with self.unit_of_work_factory() as work:
+            work.begin()
+            data = work.repository.export_aggregate(project_id)
+            project = data["project"]
+            if "worksheet" in data:
+                fail("此操作只适用于旧开发单。", code="development.worksheet_type")
+            if str(expected_version) != str(project["version"]):
+                fail("开发单已有更新，请刷新后再删除。", code="development.version_conflict")
+            if not confirmed_title or confirmed_title != project["title"]:
+                fail("请填写完整的旧开发单名称以确认删除。")
+            work.repository.delete_legacy_project(project_id)
+            work.repository.audit("删除旧开发单", project_id, project["title"], actor=actor)
+            archive = self.storage.archive_project(project_id)
+            try:
+                work.commit()
+            except Exception:
+                if archive is not None and work.in_transaction:
+                    self.storage.discard_archive(archive)
+                raise
+        if archive is not None:
+            # Sync may have restored this UUID after commit. Respect the newly live order.
+            try:
+                with self.unit_of_work_factory() as cleanup:
+                    cleanup.begin()
+                    if cleanup.repository.get("projects", project_id) is None:
+                        self.storage.remove_project_files(project_id)
+            except Exception:
+                # The deletion has committed and its verified archive is already durable.
+                logger.exception("Development deletion left an obsolete file directory", extra={"project_id": project_id})
+        return project["title"]
 
     def upload(self, project_id: str, data: Mapping[str, object], upload: object, *, actor: str,
                expected_version: int, expected_sha256: str | None = None) -> dict:

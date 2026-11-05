@@ -5,9 +5,11 @@ import fcntl
 import logging
 import os
 import re
+import shutil
 import tempfile
 from pathlib import Path, PurePosixPath
 from typing import BinaryIO, cast
+from uuid import uuid4
 
 from .document_domain import DevelopmentDocumentError, identity
 from .file_types import PreparedDevelopmentFile
@@ -17,6 +19,14 @@ from .file_validation import CONTENT_TYPES, upload_metadata, validate_signature
 logger = logging.getLogger(__name__)
 ALLOWED_EXTENSIONS = frozenset(CONTENT_TYPES)
 MAX_FILE_BYTES = 50 * 1024 * 1024
+
+
+def _sync_entry(path: Path) -> None:
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 class DevelopmentFileStore:
@@ -163,6 +173,43 @@ class DevelopmentFileStore:
         if not candidate.resolve().is_relative_to(root):
             raise DevelopmentDocumentError("development.file_path", "文件引用无效。")
         return candidate
+
+    def archive_project(self, project_id: str) -> Path | None:
+        """Publish an independent, verified copy before deleting any live data."""
+        project = self._safe_path(PurePosixPath(identity(project_id)))
+        if not project.exists():
+            return None
+        archive = self._safe_path(PurePosixPath(".deleted", f"{project_id}-{uuid4().hex}"))
+        archive.parent.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=".staging-", dir=archive.parent) as temporary:
+            snapshot = Path(temporary) / "files"
+            snapshot.mkdir()
+            for revision in project.iterdir():
+                self._safe_path(PurePosixPath(project_id, identity(revision.name)))
+                destination = snapshot / revision.name
+                destination.mkdir()
+                for item in revision.iterdir():
+                    source = self.resolve(f"{project_id}/{revision.name}/{item.name}")
+                    target = destination / item.name
+                    shutil.copyfile(source, target)
+                    if not self.verify(target, size_bytes=source.stat().st_size, sha256=item.stem):
+                        raise DevelopmentDocumentError("development.file_integrity", "附件归档校验失败，请核对后再删除。")
+                    _sync_entry(target)
+                _sync_entry(destination)
+            _sync_entry(snapshot)
+            snapshot.rename(archive)
+            _sync_entry(archive.parent)
+            _sync_entry(archive.parent.parent)
+        return archive
+
+    def remove_project_files(self, project_id: str) -> None:
+        project = self._safe_path(PurePosixPath(identity(project_id)))
+        if project.exists():
+            shutil.rmtree(project)
+
+    @staticmethod
+    def discard_archive(archive: Path) -> None:
+        shutil.rmtree(archive)
 
     @staticmethod
     def verify(path: Path, *, size_bytes: int, sha256: str) -> bool:

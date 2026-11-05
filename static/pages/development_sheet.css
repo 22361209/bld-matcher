@@ -1,0 +1,32 @@
+.development-sheet { min-width: 0; }
+.development-sheet .workspace-command { align-items: center; }
+.development-sheet .command-actions { align-items: center; }
+.development-sheet-fields, .development-sheet-parts { min-width: 0; margin: 0; padding: 0; border: 0; }
+.development-sheet-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; width: min(100%, 450px); }
+.development-sheet-fields label { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; min-width: 0; }
+.development-sheet-fields :is(input, select) { box-sizing: border-box; width: 100%; min-width: 0; height: 36px; }
+.development-sheet .message { margin: 12px 16px; }
+.development-sheet-notes { display: grid; gap: 4px; padding: 12px 16px; }
+.development-sheet-notes textarea { width: 100%; min-width: 0; box-sizing: border-box; resize: vertical; }
+.development-sheet-parts .data-table-scroll { max-width: 100%; overflow: auto; }
+.development-sheet-parts .data-grid-viewport-fill { height: auto; }
+.development-sheet-parts .data-grid-viewport-fill [data-grid-scroll] { max-height: var(--data-grid-viewport-height); flex: none; }
+.data-grid .development-sheet-table { min-width: 0; width: max(1090px, 100%); table-layout: fixed; }
+.development-sheet-table col[data-col="number"] { width: 80px; }
+.development-sheet-table col[data-col="material"], .development-sheet-table col[data-col="mode"] { width: 85px; }
+.development-sheet-table col[data-col="start_date"], .development-sheet-table col[data-col="due_date"] { width: 148px; }
+.development-sheet-table td { padding: 4px; vertical-align: middle; }
+.development-sheet-table :is(input, select) { min-width: 0; width: 100%; font: inherit; height: 32px; box-sizing: border-box; padding: 3px 6px; }
+.development-sheet-table input:disabled { color: var(--linear-muted); background: var(--linear-subtle); }
+.development-sheet-table :is(td,th):first-child { position: sticky; left: 0; background: var(--linear-surface); z-index: 1; }
+.data-grid .development-sheet-table th:first-child { z-index: 6; }
+.development-sheet-number { display: flex; justify-content: center; align-items: center; gap: 2px; font-variant-numeric: tabular-nums; }
+.development-sheet-number [data-sheet-number] { min-width: 14px; }
+@media (pointer: coarse) {
+  .development-sheet-table col[data-col="number"] { width: 106px; }
+  .development-sheet-number .row-action-button { min-width: 40px; min-height: 44px; }
+}
+@media (max-width: 640px) {
+  .development-sheet-fields { gap: 8px; }
+  .development-sheet-fields label { grid-template-columns: 1fr; gap: 4px; }
+}

@@ -8,7 +8,7 @@
   {% from '_development_fields.html' import input, notes, select, hidden, actions, dates, value, borrowing_source with context %}
   <datalist id="development-material-categories">{% for category in ('冲压', '铸铁', '锻铁', '铸铝', '锻铝', '复合材料') %}<option value="{{ category }}"></option>{% endfor %}</datalist>
   <section class="data-section development-panel">
-    <div class="workspace-command development-context"><div><strong>{{ project.core_number }} · {{ project.title }}</strong> <span class="status-badge" data-development-project-status>{{ labels.get(project.status, project.status) }}</span>{% if project.archived %} <span class="status-badge">已归档</span>{% endif %}</div><div class="command-actions"><a class="linear-button subtle" href="{{ url_for('development_list') }}">返回列表</a></div></div>
+    <div class="workspace-command development-context"><div><strong>{{ project.core_number }} · {{ project.title }}</strong> <span class="status-badge" data-development-project-status>{{ labels.get(project.status, project.status) }}</span>{% if project.archived %} <span class="status-badge">已归档</span>{% endif %}</div><div class="command-actions"><a class="linear-button subtle" href="{{ url_for('development_list', type='legacy') }}">返回旧开发单</a></div></div>
     <nav class="development-tabs" aria-label="开发单视图">
       {% for key, label in [('overview', '成品与计划'), ('components', '分支组件树'), ('documents', '图纸与工艺文件')] %}
         {% if key != 'documents' or can('view_development_files') %}<a class="linear-button subtle" href="{{ url_for('development_detail', project_id=project.id, view=key, branch=selected_branch.id if selected_branch else '', component=selected_component.id if selected_component else '') }}"{% if active_view == key %} aria-current="page"{% endif %}>{{ label }}</a>{% endif %}
@@ -21,5 +21,15 @@
   {% if active_view == 'overview' %}{% include '_development_overview.html' %}
   {% elif active_view == 'components' %}{% include '_development_components.html' %}
   {% elif active_view == 'documents' %}{% include '_development_documents.html' %}{% endif %}
+  {% if active_view == 'overview' and can('edit_development') %}
+  <section class="data-section development-panel"><details class="development-disclosure"><summary>删除旧开发单</summary>
+    <form class="development-form" method="post" action="{{ url_for('development_delete_legacy', project_id=project.id) }}">
+      {{ csrf_field() }}<input name="expected_version" type="hidden" value="{{ project.version }}">
+      <p>删除「{{ project.title }}」及单内成品、零件、工序和图纸记录。开发附件移入本机归档。</p>
+      <label class="development-field">输入完整开发单名称以确认<input name="confirmed_title" required autocomplete="off"></label>
+      <div class="form-actions"><button type="submit" class="linear-button danger">确认删除旧开发单</button></div>
+    </form>
+  </details></section>
+  {% endif %}
 {% endblock %}
 {% block page_scripts %}<script type="module" src="{{ url_for('static', filename='pages/development.js', v=static_version('pages/development.js')) }}"></script>{% endblock %}

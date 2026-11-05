@@ -8,6 +8,7 @@ from html import unescape
 from pathlib import Path
 from threading import Barrier
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
 from openpyxl import Workbook
@@ -67,7 +68,7 @@ class CostingFormalWebTest(WebAppTestBase):
         self.assertIn("成本核算", navigation)
         self.assertNotIn("导入核对", navigation)
         self.assertNotIn("独立试用", navigation)
-        self.assertIn('href="/costs/import"', body)
+        self.assertNotIn('href="/costs/import"', body)
         self.assertIn('href="/costs/new"', body)
         references = {"cartons": [{"name": "54*41*15.5"}], "rates": [{"name": "电泳"}]}
         with patch.object(self.imports, "references", return_value=references):
@@ -92,10 +93,49 @@ class CostingFormalWebTest(WebAppTestBase):
                                for rows in choices["templates"].values() for row in rows}
         self.assertEqual([template_attributes[name] for name in ("主板", "球座", "电泳")], ["自制", "外购", "委外加工"])
         self.assertNotIn("data-costing-add", editor)
-        descending = self.client.get("/costs?sort=code_desc").get_data(as_text=True)
-        self.assertIn('<option value="code_desc" selected>', descending)
         imported = self.client.get("/costs/import").get_data(as_text=True)
         self.assertIn('action="/costs/import/preview"', imported)
+
+    def test_code_sort_in_filter_heading_preserves_scope_and_resets_page(self):
+        codes = [f"{self.code}-{n:02d}" for n in range(51)]
+        self.service.import_records([self.payload(code=code) for code in codes], actor="fixture")
+        filters = {"q": self.code, "cf_kind": ["arm", "ball"], "cf_status": "ready", "stage": "weld",
+                   "inner": "0", "outer": "0", "freight": "1", "ecoat": "1"}
+        ascending = self.client.get("/costs", query_string={**filters, "page": 2}).get_data(as_text=True)
+
+        def control(html, direction):
+            self.assertNotIn('<select name="sort"', html)
+            header = re.search(r'<th scope="col" data-col="code"[^>]*aria-sort="'+direction+r'"[^>]*>(.*?)</th>', html, re.S)[1]
+            self.assertIn("data-column-filter-trigger", header)
+            return unescape(re.search(r'<a class="data-grid-sort-trigger" href="([^"]+)"', header)[1])
+        def visible_codes(html):
+            return re.findall(r'<td data-col="code">.*?<strong>(.*?)</strong>', html)
+        self.assertEqual(visible_codes(ascending), codes[-1:])
+        url = control(ascending, "ascending")
+        args = parse_qs(urlsplit(url).query)
+        self.assertEqual(args, {**{k: v if isinstance(v, list) else [v] for k, v in filters.items()},
+                                "page": ["1"], "sort": ["code_desc"]})
+        descending = self.client.get(url).get_data(as_text=True)
+        self.assertEqual(visible_codes(descending), list(reversed(codes))[:50])
+        self.assertEqual(parse_qs(urlsplit(control(descending, "descending")).query)["sort"], ["code"])
+
+    def test_default_quote_matches_explicit_full_scope_and_unchecking_reprices_on_list(self):
+        raw = self.payload(items=[
+            {"name": name, "amount": amount}
+            for name, amount in (("主板", "10"), ("电泳", "2"), ("内袋", "1"), ("纸箱", "3"), ("运费", "4"))
+        ])
+        self.service.create(raw, actor="fixture")
+        base = {"q": self.code}
+        full = {"stage": "finished", "ecoat": "1", "inner": "1", "outer": "1", "freight": "1"}
+        for params, expected in ((base, "27.50"), ({**base, **full}, "27.50"),
+                                 ({**base, **full, "freight": "0"}, "22.00")):
+            html = self.client.get("/costs", query_string=params).get_data(as_text=True)
+            cell = re.search(r'<td data-col="quote".*?</td>', html, re.S)[0]
+            self.assertIn(expected, cell)
+            self.assertNotIn("查看组合价", html)
+            self.assertNotIn("收起组合价", html)
+        headers = {"Accept": "application/json"}
+        self.assertNotIn("quotes", self.client.get("/costs", query_string=base, headers=headers).get_json()["result"])
 
     def test_scrap_detail_distinguishes_applied_credit_and_original_piece_evidence(self):
         source = {
@@ -149,6 +189,17 @@ class CostingFormalWebTest(WebAppTestBase):
                 url = "/costs?q=" + self.code
                 html = client.get(url).get_data(as_text=True)
                 self.assertIn(self.code, html)
+                self.assertNotIn("quote-scenarios", html)
+                self.assertNotIn("导入核对", html)
+                compared = client.get(url + "&stage=finished")
+                self.assertEqual(compared.status_code, 200)
+                public_html = compared.get_data(as_text=True)
+                self.assertIn("组合含税价", public_html)
+                self.assertIn("151.00", public_html)
+                public = client.get(url + "&stage=finished", headers=headers).get_json()["result"]["quotes"]
+                self.assertEqual(set(public[self.code]), {"label", "minimum_tax_price", "problem"})
+                for secret in ("内部专用衬套", "99.54321", "107.123456", "计入明细"):
+                    self.assertNotIn(secret, public_html)
                 self.assertIn('href="/costs/rules"', html)
                 self.assertNotIn(f'href="/costs/{record["id"]}"', html)
                 self.assertNotIn('href="/costs/pairs"', html)
@@ -158,7 +209,7 @@ class CostingFormalWebTest(WebAppTestBase):
                 self.assertNotIn("107.123456", html)
                 self.assertEqual('data-col="net"' in html, full)
                 self.assertEqual('data-filter-key="cf_approved"' in html, full)
-                self.assertEqual('name="status"' in html, full)
+                self.assertNotIn('<select name="status"', html)
                 result = client.get(url, headers=headers).get_json()["result"]
                 row, = result["records"]
                 self.assertEqual(row["minimum_tax_price"], record["minimum_tax_price"])
@@ -253,25 +304,29 @@ class CostingFormalWebTest(WebAppTestBase):
             self.service.create(self.payload(code=f"{self.code}-{kind}", kind=kind, models=model), actor="007")
 
         def listing(**filters):
-            response = self.client.get("/costs", query_string={"q": self.code, **filters})
+            response = self.client.get("/costs", query_string={"q": self.code, **filters}, follow_redirects=True)
             self.assertEqual(response.status_code, 200)
             return response.get_data(as_text=True)
 
         body = listing()
         self.assertIn('data-col="name" data-column-label="车型"', body)
-        dropdown = re.search(r'<select name="kind">(.*?)</select>', body, re.S).group(1)
+        self.assertNotIn('<select name="kind"', body)
         rows = re.findall(r"<tr>(.*?)</tr>", body.split("<tbody>")[1].split("</tbody>")[0], re.S)
         self.assertEqual(len(rows), 2)
         for kind, label, model in types:
             row = next(row for row in rows if model in row)
             self.assertIn("合成成本", row)
             self.assertIn(f'<td data-col="kind">{label}</td>', row)
-            self.assertRegex(dropdown, rf'<option value="{kind}"\s*>{label}</option>')
             self.assertRegex(body, rf'type="checkbox" value="{kind}" checked><span>{label}</span>')
         arm, ball = listing(kind="arm"), listing(cf_kind="ball")
         for filtered, label in ((arm, "控制臂"), (ball, "悬挂球头")):
             self.assertEqual(re.findall(r'<td data-col="kind">(.*?)</td>', filtered), [label])
-        self.assertIn('<option value="arm" selected>控制臂</option>', arm)
+        legacy = self.client.get("/costs?kind=arm&status=ready&stage=weld&inner=1")
+        self.assertEqual(legacy.status_code, 302)
+        self.assertIn("cf_kind=arm", legacy.location)
+        self.assertIn("cf_status=ready", legacy.location)
+        self.assertIn("stage=weld", legacy.location)
+        self.assertIn('value="arm" checked><span>控制臂</span>', arm)
         self.assertIn('value="ball" checked><span>悬挂球头</span>', ball)
         self.assertRegex(ball, r'value="arm"\s*><span>控制臂</span>')
 

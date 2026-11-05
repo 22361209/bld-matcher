@@ -10,12 +10,15 @@ from .weight_cost import SCRAP_HEADER_FIELDS, SCRAP_ROW_FIELDS
 
 
 def format_version_for(records: list[dict], revisions=()) -> int:
-    # A historical snapshot can retain a sourced line that has since been removed.
+    # A historical revision still needs the matching reader after a line was removed.
+    version = 2 if any("pair" in record for record in records) else 1
     for row in chain(records, (revision["after"] for revision in revisions)):
-        if (any(key in row for key in SCRAP_HEADER_FIELDS)
+        if any("quote_role" in item for item in row["items"]):
+            return 4
+        if version < 3 and (any(key in row for key in SCRAP_HEADER_FIELDS)
                 or any(any(key in item for key in SCRAP_ROW_FIELDS) for item in row["items"])):
-            return 3
-    return 2 if any("pair" in record for record in records) else 1
+            version = 3
+    return version
 
 
 def _check_sheet(record: dict, version: int) -> None:
