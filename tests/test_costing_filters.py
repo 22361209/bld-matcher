@@ -71,7 +71,7 @@ class CostingFiltersTest(unittest.TestCase):
         self.assertEqual(options["minimum_price"], [
             {"value": "220", "label": "220", "count": 31}, {"value": "110", "label": "110", "count": 30},
         ])
-        self.assertEqual(options["kind"], [{"value": "arm", "label": "摆臂", "count": 30}])
+        self.assertEqual(options["kind"], [{"value": "arm", "label": "控制臂", "count": 30}])
         self.assertEqual(len(options["code"]), 30)
         self.assertTrue(any(option["value"] == "K059" for option in options["code"]))
         # A no-longer-matching choice remains visible with count zero so it can be cleared.
@@ -188,6 +188,9 @@ class CostingFilterWebTest(unittest.TestCase):
         exact = self.client.get("/?cf_code=K054", headers={"Accept": "application/json"}).get_json()["result"]
         self.assertEqual([row["code"] for row in exact["records"]], ["K054"])
         self.assertEqual(body.count("data-column-filter-trigger"), 10)
+        self.assertEqual(body.count("data-column-drag-handle"), 11)
+        self.assertIn('data-column-drag-handle data-column-label="操作"', body)
+        self.assertIn('data-column-order-status', body)
 
     def test_only_manual_price_input_is_writable_and_clear_restores_default(self):
         headers = {"X-CSRF-Token": self.token, "Accept": "application/json"}

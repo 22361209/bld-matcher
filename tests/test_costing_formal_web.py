@@ -111,6 +111,34 @@ class CostingFormalWebTest(WebAppTestBase):
         self.assertEqual(viewer.post("/costs/new", json=self.payload(),
                                      headers={"Accept": "application/json"}).status_code, 403)
 
+    def test_cost_list_vehicle_heading_type_labels_and_existing_filter_values(self):
+        types = (("arm", "控制臂", "雅绅特"), ("ball", "悬挂球头", "伊兰特"))
+        for kind, _, model in types:
+            self.service.create(self.payload(code=f"{self.code}-{kind}", kind=kind, models=model), actor="007")
+
+        def listing(**filters):
+            response = self.client.get("/costs", query_string={"q": self.code, **filters})
+            self.assertEqual(response.status_code, 200)
+            return response.get_data(as_text=True)
+
+        body = listing()
+        self.assertIn('data-col="name" data-column-label="车型"', body)
+        dropdown = re.search(r'<select name="kind">(.*?)</select>', body, re.S).group(1)
+        rows = re.findall(r"<tr>(.*?)</tr>", body.split("<tbody>")[1].split("</tbody>")[0], re.S)
+        self.assertEqual(len(rows), 2)
+        for kind, label, model in types:
+            row = next(row for row in rows if model in row)
+            self.assertIn("合成成本", row)
+            self.assertIn(f'<td data-col="kind">{label}</td>', row)
+            self.assertRegex(dropdown, rf'<option value="{kind}"\s*>{label}</option>')
+            self.assertRegex(body, rf'type="checkbox" value="{kind}" checked><span>{label}</span>')
+        arm, ball = listing(kind="arm"), listing(cf_kind="ball")
+        for filtered, label in ((arm, "控制臂"), (ball, "悬挂球头")):
+            self.assertEqual(re.findall(r'<td data-col="kind">(.*?)</td>', filtered), [label])
+        self.assertIn('<option value="arm" selected>控制臂</option>', arm)
+        self.assertIn('value="ball" checked><span>悬挂球头</span>', ball)
+        self.assertRegex(ball, r'value="arm"\s*><span>控制臂</span>')
+
     def test_real_csrf_and_server_actor_price_and_conflict(self):
         token = self.csrf()
         self.web.app.config["TESTING"] = False

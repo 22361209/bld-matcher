@@ -17,7 +17,7 @@ MONEY_FIELDS = {
     "calculated": "calculated_cost", "approved": "approved_cost", "scrap": "scrap_credit",
     "net": "net_cost", "minimum_price": "minimum_tax_price", "suggested_price": "suggested_tax_price",
 }
-LABELS = {"kind": {"arm": "摆臂", "ball": "球头"}, "status": {"ready": "资料完整", "draft": "待补充 / 核对"}}
+LABELS = {"kind": {"arm": "控制臂", "ball": "悬挂球头"}, "status": {"ready": "资料完整", "draft": "待补充 / 核对"}}
 
 
 def format_cost_money(value: object) -> str:

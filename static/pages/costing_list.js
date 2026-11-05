@@ -1,4 +1,4 @@
-import { setupDataGridControls } from "../components/data_grid_controls.js?v=20260729-2";
+import { setupDataGridControls } from "../components/data_grid_controls.js?v=20261105-1";
 
 const columns = [
   "code", "name", "kind", "calculated", "approved", "scrap", "net",
@@ -7,7 +7,7 @@ const columns = [
 
 if (document.body.dataset.page === "costing.list") {
   setupDataGridControls(document.querySelector("#costing-table"), {
-    columns,
+    columns: [...columns, "actions"],
     storagePrefix: "bld.costing",
     resultsHash: "costing-results",
     resetFilterParams: columns.map((column) => `cf_${column}`),

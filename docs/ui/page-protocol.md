@@ -86,7 +86,7 @@ UI protocol version: 1.2.
 主数据和查询结果列表使用同一条纵向结构，避免搜索区、表头和表体各自补写间距或底色：
 
 - 列表命令区和 `data-resizable-grid` 必须位于同一个 `data-section`；命令区使用 `workspace-command`，表格紧随其后。共享命令区负责 12px 过渡间距、边框和表面色，页面不得另写搜索区到表格的背景或间距。
-- 使用列拖拽、列筛选或静态操作列的表格必须带 `data-grid-table`。列头文字/拖拽区使用 `data-grid-column-heading` 和 `data-grid-column-label`，操作列使用 `data-grid-static-column-label`；三者都保持左对齐、垂直居中。
+- 使用列拖拽、列筛选或静态操作列的表格必须带 `data-grid-table`。可移动列（含允许移动的操作列）在表头使用 `data-grid-column-heading` 和 `data-grid-column-label`，固定操作列使用 `data-grid-static-column-label`。表头文字左对齐、垂直居中。
 - 列筛选的触发按钮、浮层和候选项分别使用 `data-grid-filter-trigger`、`data-grid-filter-panel` 和 `data-grid-filter-option`。候选项继续遵循上节的可读色 token，不能从产品、报价或材料页面复制一套筛选皮肤。
 - `static/components/data_grid_controls.css` 是上述视觉规则的唯一来源；`static/components/data_grid_controls.js` 提供列排序与筛选交互。页面只传入自身列键、URL 状态和业务筛选，不复制控件代码或使用业务域前缀命名共享类。
 

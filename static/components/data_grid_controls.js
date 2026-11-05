@@ -69,8 +69,9 @@ const elementsByColumn = (elements) => new Map(
     .map((element) => [element.dataset.col, element])
 );
 
-const applyColumnOrder = (table, order, availableColumns = DEFAULT_COLUMNS) => {
-  const completeOrder = [...normalizeOrder(order, availableColumns), "actions"];
+export const applyColumnOrder = (table, order, availableColumns = DEFAULT_COLUMNS) => {
+  const completeOrder = normalizeOrder(order, availableColumns);
+  if (!availableColumns.includes("actions")) completeOrder.push("actions");
   const colgroup = table.querySelector("colgroup");
   const headingRow = table.tHead?.rows[0];
   if (!colgroup || !headingRow) return;

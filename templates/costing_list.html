@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% from '_table_filter_macros.html' import choice_heading %}
+{% from '_table_filter_macros.html' import choice_heading, draggable_label %}
 {% set active_page = 'costs' %}
-{% set columns = [('code','产品编码'),('name','名称 / 车型'),('kind','类型'),('calculated','计算成本'),('approved','核定成本'),('scrap','废料抵减'),('net','抵减后成本'),('minimum_price','最低含税售价'),('suggested_price','建议含税单价'),('status','状态')] %}
+{% set columns = [('code','产品编码'),('name','车型'),('kind','类型'),('calculated','计算成本'),('approved','核定成本'),('scrap','废料抵减'),('net','抵减后成本'),('minimum_price','最低含税售价'),('suggested_price','建议含税单价'),('status','状态')] %}
 {% set selected_filters = column_filters|default({}) %}
 {% set filter_options = column_filter_options|default({}) %}
 {% set filter_query = column_filter_query|default({}) %}
@@ -17,7 +17,7 @@
     <form class="search-form" method="get" action="{{ url_for(costing_endpoint ~ '.index') }}">
       {% for key, values in filter_query.items() %}{% for value in values %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}{% endfor %}
       <label><span>型号 / 名称 / 车型</span><input name="q" value="{{ filters.q or '' }}" placeholder="输入型号或关键词" aria-label="型号、名称或车型"></label>
-      <label><span>类型</span><select name="kind"><option value="">全部类型</option><option value="arm" {% if filters.kind == 'arm' %}selected{% endif %}>摆臂</option><option value="ball" {% if filters.kind == 'ball' %}selected{% endif %}>球头</option></select></label>
+      <label><span>类型</span><select name="kind"><option value="">全部类型</option>{% for kind, label in costing_list_kind_labels.items() %}<option value="{{ kind }}" {% if filters.kind == kind %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
       <label><span>状态</span><select name="status"><option value="">全部状态</option><option value="ready" {% if filters.status == 'ready' %}selected{% endif %}>资料完整</option><option value="draft" {% if filters.status == 'draft' %}selected{% endif %}>待补充 / 核对</option></select></label>
       <label><span>排序</span><select name="sort">
         <option value="code" {% if filters.sort|default('code') == 'code' %}selected{% endif %}>产品编码（升序）</option>
@@ -26,18 +26,22 @@
       </select></label>
       <button class="linear-button primary" type="submit">查询</button>
     </form>
-    <div class="command-actions"><button class="linear-button subtle" type="button" data-reset-list-for="costing-list" title="清除列头筛选并恢复默认列宽">重置列表</button><a class="linear-button subtle" href="{{ url_for(costing_endpoint ~ '.index') }}">清除筛选</a>{% if can('manage_costs') %}<a class="linear-button subtle" href="{{ url_for('costing_import.import_page') }}">导入核对</a><a class="linear-button primary" href="{{ url_for(costing_endpoint ~ '.new') }}">新建成本</a>{% endif %}</div>
+    <div class="command-actions"><button class="linear-button subtle" type="button" data-reset-list-for="costing-list" title="清除列头筛选并恢复默认列序和列宽">重置列表</button><a class="linear-button subtle" href="{{ url_for(costing_endpoint ~ '.index') }}">清除筛选</a>{% if can('manage_costs') %}<a class="linear-button subtle" href="{{ url_for('costing_import.import_page') }}">导入核对</a><a class="linear-button primary" href="{{ url_for(costing_endpoint ~ '.new') }}">新建成本</a>{% endif %}</div>
   </div>
   <div class="data-grid" data-resizable-grid data-grid-key="costing-list">
+    <span class="data-grid-controls-visually-hidden" aria-live="polite" data-column-order-status></span>
     <div class="data-table-scroll" data-grid-scroll>
       <table id="costing-table" class="data-table data-grid-table costing-list-table" data-column-storage-scope="{{ g.user.id if g.user else 'trial' }}">
         <colgroup>{% for key, label in columns %}<col data-col="{{ key }}">{% endfor %}<col data-col="actions"></colgroup>
-        <thead><tr>{% for key, label in columns %}<th scope="col" data-col="{{ key }}" data-column-label="{{ label }}">{{ choice_heading('costing', key, label, 'cf_' ~ key, filter_options.get(key, []), selected_filters.get(key, [])) }}</th>{% endfor %}<th scope="col" data-col="actions" data-column-label="操作"><span class="data-grid-static-column-label">操作</span></th></tr></thead>
+        <thead><tr>
+          {% for key, label in columns %}<th scope="col" data-col="{{ key }}" data-column-label="{{ label }}">{{ choice_heading('costing', key, label, 'cf_' ~ key, filter_options.get(key, []), selected_filters.get(key, []), draggable=true) }}</th>{% endfor %}
+          <th scope="col" data-col="actions" data-column-label="操作"><div class="data-grid-column-heading">{{ draggable_label('操作') }}</div></th>
+        </tr></thead>
         <tbody>{% for cost in result.records %}
           <tr>
             <td data-col="code"><a href="{{ url_for(costing_endpoint ~ '.edit', record_id=cost.id) }}"><strong>{{ cost.code }}</strong></a></td>
             <td data-col="name"><span>{{ cost.name or '—' }}</span><small class="costing-secondary">{{ cost.models or cost.brand or '' }}</small></td>
-            <td data-col="kind">{{ '球头' if cost.kind == 'ball' else '摆臂' }}</td>
+            <td data-col="kind">{{ costing_list_kind_labels.get(cost.kind, '—') }}</td>
             <td data-col="calculated" class="costing-number">{{ cost.calculated_cost|cost_money if cost.calculated_cost is not none else '待补充' }}</td>
             <td data-col="approved" class="costing-number">{{ cost.approved_cost|cost_money if cost.approved_cost is not none else '—' }}</td>
             <td data-col="scrap" class="costing-number">{{ cost.scrap_credit|cost_money if cost.scrap_credit is not none else '—' }}</td>

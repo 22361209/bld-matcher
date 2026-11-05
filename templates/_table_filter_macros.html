@@ -1,6 +1,10 @@
-{% macro choice_heading(scope, column_id, label, filter_key, options, selected) %}
+{% macro draggable_label(label) -%}
+  <button type="button" class="data-grid-column-label" data-column-drag-handle data-column-label="{{ label }}" aria-label="移动{{ label }}列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">{{ label }}</button>
+{%- endmacro %}
+
+{% macro choice_heading(scope, column_id, label, filter_key, options, selected, draggable=false) %}
   <div class="data-grid-column-heading">
-    <span class="data-grid-static-column-label">{{ label }}</span>
+    {% if draggable %}{{ draggable_label(label) }}{% else %}<span class="data-grid-static-column-label">{{ label }}</span>{% endif %}
     <button
       class="data-grid-filter-trigger{% if selected %} active{% endif %}"
       type="button"
