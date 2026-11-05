@@ -13,10 +13,11 @@ import tarfile
 import tempfile
 import unittest
 import zipfile
+from contextlib import ExitStack
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 from types import SimpleNamespace
-from urllib.parse import unquote
+from urllib.parse import unquote, urlsplit
 from unittest.mock import patch
 
 
@@ -43,6 +44,35 @@ __all__ = (
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+_runtime_data_dirs = {(PROJECT_ROOT / "data").resolve()}
+
+
+def _guard_runtime_sqlite():
+    # Discovery may already have imported factories. Preserve the original destinations
+    # across fixtures: removing a module cannot invalidate a previously imported function.
+    loaded_config = sys.modules.get("app.config")
+    for directory in (getattr(loaded_config, "DATA_DIR", None), os.environ.get("BLD_DATA_DIR")):
+        if directory:
+            _runtime_data_dirs.add(Path(directory).expanduser().resolve())
+    connect = sqlite3.connect
+
+    def guarded(database, *args, **kwargs):
+        name = os.fsdecode(database)
+        if name and name != ":memory:":
+            filename = unquote(urlsplit(name).path) if name.startswith("file:") else name
+            path = Path(filename).resolve()
+            blocked = any(parent in _runtime_data_dirs for parent in path.parents)
+            if not blocked and path.is_file() and path.stat().st_nlink > 1:
+                databases = (directory / "products.sqlite3" for directory in _runtime_data_dirs)
+                blocked = any(db.is_file() and path.samefile(db) for db in databases)
+            if blocked:
+                raise RuntimeError(
+                    "WebAppTestBase blocked a runtime SQLite connection. Initialize the fixture first, "
+                    "then import the application factory again in the isolated process."
+                )
+        return connect(database, *args, **kwargs)
+
+    return patch.object(sqlite3, "connect", guarded)
 
 
 def load_web_module():
@@ -86,9 +116,18 @@ def strip_xlsx_dimension(path: Path) -> None:
 class WebAppTestBase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.tmp = tempfile.TemporaryDirectory()
-        root = Path(cls.tmp.name)
-        cls.root = root
+        with ExitStack() as setup:
+            setup.enter_context(_guard_runtime_sqlite())
+            cls.tmp = tempfile.TemporaryDirectory()
+            setup.callback(cls.tmp.cleanup)
+            cls.root = Path(cls.tmp.name)
+            cls._load_isolated_app()
+            cls._resources = setup.pop_all()
+            cls.addClassCleanup(cls._resources.close)
+
+    @classmethod
+    def _load_isolated_app(cls):
+        root = cls.root
         os.environ["SECRET_KEY"] = "test-secret"
         os.environ["MAX_UPLOAD_MB"] = "20"
         os.environ["PRODUCT_SYNC_MAX_UPLOAD_MB"] = "512"
@@ -110,7 +149,7 @@ class WebAppTestBase(unittest.TestCase):
         cls.client = None
         cls.web = None
         gc.collect()
-        cls.tmp.cleanup()
+        cls._resources.close()
 
     def login(self):
         return self.client.post(
