@@ -20,6 +20,7 @@ from .item_store import (
 )
 from .weights import costing_material
 from app.platform.audit_store import log_event
+from app.platform.clock import now_text
 
 
 class SQLiteMaterialRepository:
@@ -66,6 +67,23 @@ class SQLiteMaterialRepository:
             (code,),
         )
         return [item for row in rows if (item := costing_material(dict(row))) is not None]
+
+    def active_for_weight_backfill(self) -> list[dict]:
+        return [dict(row) for row in self.connection.execute(
+            "SELECT * FROM material_items WHERE active = 1 ORDER BY model, code, id"
+        )]
+
+    def fill_missing_net_weight(self, row: dict, net: str, *, evidence: str, actor: str) -> bool:
+        cursor = self.connection.execute(
+            """UPDATE material_items SET net_weight=?, updated_at=?
+               WHERE id=? AND active=1 AND NULLIF(TRIM(net_weight), '') IS NULL""",
+            (net, now_text(), row["id"]),
+        )
+        if cursor.rowcount != 1:
+            return False
+        self.audit("补录材料净重", "material_item", f"{row['model']}-{row['code']}",
+                   f"{evidence}，单件净重 {net} kg", actor=actor)
+        return True
 
     def filter_options(
         self, *, query: str, status: str, column_filters: Mapping[str, tuple[str, ...]]

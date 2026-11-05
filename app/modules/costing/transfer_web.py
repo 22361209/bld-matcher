@@ -1,6 +1,7 @@
 """Authenticated operational pages for preserving the accepted trial ledger."""
 from __future__ import annotations
 
+from collections.abc import Mapping
 import json
 
 from flask import Blueprint, Response, current_app, flash, jsonify, redirect, render_template, request, url_for
@@ -18,6 +19,13 @@ def _preview_service() -> CostingTransferPreviewService:
     return CostingTransferPreviewService(
         CostingTransferService(service().db_path), imports().directory, current_app.config["SECRET_KEY"],
     )
+
+
+def _historical_scrap_error(error: CostingValidationError | CostingConflict):
+    if wants_json_response() or request.is_json:
+        raise error
+    flash(error.message, "error")
+    return render_template("costing_historical_scrap.html", preview=None), (409 if isinstance(error, CostingConflict) else 422)
 
 
 def register_transfer_routes(app, *, trial: bool = False) -> None:
@@ -60,6 +68,46 @@ def register_transfer_routes(app, *, trial: bool = False) -> None:
                 return jsonify(ok=True, **result)
             flash(f"成本试用资料已接入：{result['records']} 个型号，原修改历史已保留。", "success")
             return redirect(url_for("costing.index"))
+
+        @blueprint.get("/historical-scrap")
+        @permission_required("manage_users")
+        @permission_required("manage_costs")
+        @permission_required("manage_material_items")
+        def historical_scrap():
+            return render_template("costing_historical_scrap.html", preview=None)
+
+        @blueprint.post("/historical-scrap/preview")
+        @permission_required("manage_users")
+        @permission_required("manage_costs")
+        @permission_required("manage_material_items")
+        def preview_historical_scrap():
+            maintenance = current_app.extensions["historical_scrap_service"]
+            try:
+                result = maintenance.preview(request.files.get("file"), owner=import_owner())
+            except (CostingValidationError, CostingConflict) as error:
+                return _historical_scrap_error(error)
+            if wants_json_response():
+                return jsonify(ok=True, preview=result)
+            return render_template("costing_historical_scrap.html", preview=result)
+
+        @blueprint.post("/historical-scrap")
+        @permission_required("manage_users")
+        @permission_required("manage_costs")
+        @permission_required("manage_material_items")
+        def apply_historical_scrap():
+            maintenance = current_app.extensions["historical_scrap_service"]
+            raw = request.get_json(silent=True) if request.is_json else request.form
+            digest = raw.get("digest") if isinstance(raw, Mapping) else None
+            try:
+                if not isinstance(digest, str) or not digest:
+                    raise CostingValidationError("请先上传原工作簿并核对预览。", "digest")
+                result = maintenance.apply(digest, owner=import_owner(), actor=actor_name())
+            except (CostingValidationError, CostingConflict) as error:
+                return _historical_scrap_error(error)
+            if wants_json_response() or request.is_json:
+                return jsonify(ok=True, result=result)
+            flash(f"已补录 {result['material_count']} 条材料净重，更新 {result['cost_count']} 个型号的废料金额。", "success")
+            return redirect(url_for("costing_transfer.historical_scrap"), code=303)
 
         @blueprint.get("/line-codes")
         @permission_required("manage_users")

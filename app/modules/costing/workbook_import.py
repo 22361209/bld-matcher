@@ -26,7 +26,7 @@ MAX_COLS = 40
 _SHEETS = {"摆臂成本核算", "球头成本核算", "透视表", "片件重量", "球座单价", "封板单价", "纸箱"}
 
 
-def _load_values(path: Path) -> WorkbookValues:
+def load_workbook_values(path: Path, *, sheets_to_read: set[str] = _SHEETS) -> WorkbookValues:
     if path.stat().st_size > MAX_FILE_BYTES:
         raise WorkbookImportError("成本文件不能超过 30 MB")
     try:
@@ -42,7 +42,7 @@ def _load_values(path: Path) -> WorkbookValues:
             for book in books:
                 sheets = {}
                 for sheet in book:
-                    if sheet.title not in _SHEETS:
+                    if sheet.title not in sheets_to_read:
                         continue
                     if sheet.max_row > MAX_ROWS or sheet.max_column > MAX_COLS:
                         raise WorkbookImportError(f"{sheet.title} 工作表范围过大，请清理空白格式后重试")
@@ -91,7 +91,7 @@ def _record_identity(record: dict, values: WorkbookValues, sheet: str, row: int)
 def parse_cost_workbook(path: Path) -> dict:
     """Return records, warnings, summary and reference snapshots; never mutate data."""
     path = Path(path)
-    values = _load_values(path)
+    values = load_workbook_values(path)
     if not any(sheet in values.raw for sheet in ("摆臂成本核算", "球头成本核算")):
         raise WorkbookImportError("未找到摆臂成本核算或球头成本核算工作表")
     digest = hashlib.sha256(path.read_bytes()).hexdigest()

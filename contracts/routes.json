@@ -344,6 +344,27 @@
       "rule": "/costs/transfer/export"
     },
     {
+      "endpoint": "costing_transfer.historical_scrap",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/costs/transfer/historical-scrap"
+    },
+    {
+      "endpoint": "costing_transfer.apply_historical_scrap",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/costs/transfer/historical-scrap"
+    },
+    {
+      "endpoint": "costing_transfer.preview_historical_scrap",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/costs/transfer/historical-scrap/preview"
+    },
+    {
       "endpoint": "costing_transfer.line_codes",
       "methods": [
         "GET"

@@ -11,7 +11,7 @@
     {{ csrf_field() }}<label><span>成本试用资料接入包</span><input type="file" name="file" accept=".json" required></label><button class="linear-button primary" type="submit">读取并核对</button><a class="linear-button subtle" href="{{ url_for('costing.index') }}">返回成本核算</a>
   </form>
   <p class="costing-note">一次性接入已验收的试用资料，保留型号、明细、人工建议价和全部修改记录。正式成本为空时才可接入；重复接入相同资料不会重复新建。</p>
-  <p class="costing-note"><a href="{{ url_for('costing_transfer.line_codes') }}">核对历史成本明细编码和物料属性</a></p>
+  <p class="costing-note"><a href="{{ url_for('costing_transfer.line_codes') }}">核对历史成本明细编码和物料属性</a>　{% if can('manage_material_items') %}<a href="{{ url_for('costing_transfer.historical_scrap') }}">核对历史净重和废料金额</a>{% endif %}</p>
 </section>
 {% if preview %}
 <section class="data-section">

@@ -9,7 +9,7 @@
 {% block page_content %}
 <section class="data-section">
   <form class="search-form costing-import-form" action="{{ url_for('costing_import.preview_import') }}" method="post" enctype="multipart/form-data">
-    {{ csrf_field() }}<label><span>成本核算工作簿</span><input type="file" name="file" accept=".xlsx" required></label><button class="linear-button primary" type="submit">读取并预览</button><a class="linear-button subtle" href="{{ url_for(costing_endpoint ~ '.index') }}">返回列表</a>
+    {{ csrf_field() }}<label><span>成本核算工作簿</span><input type="file" name="file" accept=".xlsx" required></label><button class="linear-button primary" type="submit">读取并预览</button><a class="linear-button subtle" href="{{ url_for(costing_endpoint ~ '.index') }}">返回列表</a>{% if not costing_trial_mode and can('manage_users') and can('manage_costs') and can('manage_material_items') %}<a class="linear-button subtle" href="{{ url_for('costing_transfer.historical_scrap') }}">核对历史净重和废料金额</a>{% endif %}
   </form>
   <p class="costing-note">支持现有的摆臂成本、球头成本及配套参考表。先核对预览，再确认导入；相同型号不会覆盖已有成本。</p>
 </section>
