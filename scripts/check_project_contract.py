@@ -912,9 +912,12 @@ def check(base_ref: str | None = None) -> list[str]:
     if forbidden:
         errors.append("Git 跟踪了运行数据或密钥文件: " + ", ".join(sorted(forbidden)))
 
+    dockerignore_text = (ROOT / ".dockerignore").read_text(encoding="utf-8")
+    if not dockerignore_text.isascii():
+        errors.append("群晖构建要求 .dockerignore 全文使用 ASCII 字符。")
     docker_ignores = {
         line.strip()
-        for line in (ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines()
+        for line in dockerignore_text.splitlines()
         if line.strip() and not line.lstrip().startswith("#")
     }
     missing_docker_ignores = REQUIRED_DOCKER_IGNORES - docker_ignores

@@ -1,3 +1,7 @@
+# Keep the root Markdown history while excluding local non-ASCII business folders.
+# Use ASCII patterns only for Synology BuildKit.
+[^ -~]*
+![^ -~]*.md
 .git/*
 !.git/HEAD
 !.git/refs/
@@ -19,6 +23,3 @@ uploads/
 outputs/
 data/
 static/product_images/
-产品目录/
-询价/
-单价/

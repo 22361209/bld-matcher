@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-05",
+  "version": "unreleased",
+  "title": "群晖构建改用纯 ASCII 的 Docker 忽略规则",
+  "entries": ["群晖构建时用通配规则排除原始产品目录、询价和单价文件，同时保留系统更新历史。"],
+  "impact": {"data": "none", "api": "compatible", "operations": "下次构建镜像时生效。"}
+}
