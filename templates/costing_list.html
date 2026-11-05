@@ -60,7 +60,7 @@
     {% set ns = namespace(links=[]) %}
     {% for number in range([1, result.page - 2]|max, [result.pages, result.page + 2]|min + 1) %}{% set _ = ns.links.append({'page': number, 'current': number == result.page, 'url': url_for(costing_endpoint ~ '.index', q=filters.q, kind=filters.kind, status=filters.status, sort=filters.sort, page=number, **filter_query)}) %}{% endfor %}
     {% set pagination = {'total_pages': result.pages, 'page': result.page, 'has_prev': result.page > 1, 'has_next': result.page < result.pages, 'prev_url': url_for(costing_endpoint ~ '.index', q=filters.q, kind=filters.kind, status=filters.status, sort=filters.sort, page=result.page-1, **filter_query), 'next_url': url_for(costing_endpoint ~ '.index', q=filters.q, kind=filters.kind, status=filters.status, sort=filters.sort, page=result.page+1, **filter_query), 'links': ns.links, 'jump_url': url_for(costing_endpoint ~ '.index'), 'start': (result.page-1)*result.page_size+1, 'end': [result.page*result.page_size, result.total]|min} %}
-    {% set data_grid_label = '型号成本' %}{% set data_grid_total = result.total %}{% set data_grid_footer_context = '单位：元 / 件 · 最低含税售价 = 抵减后成本 ÷ 0.8 × 1.1' if full_list else '单位：元 / 件' %}{% include '_data_grid_footer.html' %}
+    {% set data_grid_label = '型号成本' %}{% set data_grid_total = result.total %}{% set data_grid_footer_context = '单位：元 / 件 · 最低含税售价 = 抵减后成本 ÷ 0.80 × 1.10' if full_list else '单位：元 / 件' %}{% include '_data_grid_footer.html' %}
   </div>
 </section>
 {% endblock %}
