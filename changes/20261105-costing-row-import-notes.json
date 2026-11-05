@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-05",
+  "version": "unreleased",
+  "title": "精简成本明细行的展开资料",
+  "entries": [
+    "展开成本行时省去原 Excel 单元格位置和公式，保留当前取重来源、待核对原因和可编辑字段。"
+  ],
+  "impact": {"data": "保留原始导入记录", "api": "compatible", "operations": "restart-required"}
+}

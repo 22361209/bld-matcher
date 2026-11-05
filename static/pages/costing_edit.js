@@ -508,13 +508,6 @@ export const initializeCostEditor = (form) => {
         }
       }
     }
-    const source = item.source_info;
-    if (source?.sheet && source.amount_cell) {
-      details.append(element("p", "costing-source-note", `原表位置：${source.sheet}!${source.amount_cell}`));
-    }
-    if (source?.original_formula) {
-      details.append(element("p", "costing-source-note", `原表公式：${source.original_formula}`));
-    }
     const options = item.mode === "package" ? references.cartons : item.mode === "fixed" ? references.rates : null;
     if (editable && Array.isArray(options) && options.length) {
       const label = element("label", "", item.mode === "package" ? "选择纸箱参考资料" : "选择常用费用参考");
