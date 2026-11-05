@@ -249,7 +249,10 @@ export const initializeCostEditor = (form) => {
   };
   const updateTotals = (calculated) => {
     checks = calculationIssues(calculated);
-    form.querySelectorAll("[data-costing-total]").forEach((node) => { node.textContent = costAmountLabel(calculated[node.dataset.costingTotal]); });
+    form.querySelectorAll("[data-costing-total]").forEach((node) => {
+      const key = node.dataset.costingTotal;
+      node.textContent = costAmountLabel(calculated[key] ?? (key === "scrap_credit" ? "0" : null));
+    });
     form.querySelector("[data-costing-known]").textContent = calculated.calculated_cost == null ? `已知项目小计：${costAmountLabel(calculated.known_subtotal)} 元` : "";
     const manualPrice = calculated.suggested_tax_price_override != null && calculated.suggested_tax_price_override !== "";
     form.querySelector("[data-costing-price-mode]").textContent = manualPrice ? "手动定价，成本变化时保留。" : "自动跟随最低售价。";
@@ -263,6 +266,14 @@ export const initializeCostEditor = (form) => {
     });
     updateReview();
   };
+  const scrapToggle = form.querySelector("[data-costing-scrap-toggle]");
+  const scrapDetail = document.getElementById(scrapToggle.getAttribute("aria-controls"));
+  const showScrapDetail = (open) => {
+    scrapDetail.hidden = !open;
+    scrapToggle.setAttribute("aria-expanded", String(open));
+  };
+  scrapToggle.addEventListener("click", () => showScrapDetail(scrapDetail.hidden));
+  scrapDetail.addEventListener("invalid", () => showScrapDetail(true), true);
   issueTrigger.addEventListener("click", () => {
     const row = tbody.querySelector(`[data-costing-row="${firstIssueRow}"]`);
     const disclosure = row?.querySelector("[data-costing-details]");
@@ -393,6 +404,7 @@ export const initializeCostEditor = (form) => {
     cells.category.append(field(item, index, "category", "类别", {inline: true}));
     cells.name.append(field(item, index, "name", "项目名称", {inline: true}));
     cells.product_code.append(field(item, index, "product_code", "产品编码", {inline: true}));
+    cells.supplier.append(field(item, index, "supplier", "首选供应商", {inline: true}));
     cells.material_attribute.append(selectField(item, index, "material_attribute", "物料属性", attributeOptions));
     cells.mode.append(selectField(item, index, "mode", "计价方式", modeOptions));
 
@@ -463,7 +475,7 @@ export const initializeCostEditor = (form) => {
     if (item.mode === "package") {
       [["length", "纸箱长（cm）"], ["width", "纸箱宽（cm）"], ["height", "纸箱高（cm）"], ["strap_rate", "打包带单价（元 / m）"]].forEach(([key, label]) => details.append(field(item, index, key, label)));
     }
-    [["part_code", "零件编码（可选）"], ["supplier", "供应商（可选）"], ["remark", "备注（可选）"]].forEach(([key, label]) => details.append(field(item, index, key, label, {multiline: key === "remark"})));
+    [["part_code", "零件编码（可选）"], ["remark", "备注（可选）"]].forEach(([key, label]) => details.append(field(item, index, key, label, {multiline: key === "remark"})));
     if (item.review_note && editable) {
       const confirm = element("button", "linear-button subtle", "已核对本项");
       confirm.type = "button";

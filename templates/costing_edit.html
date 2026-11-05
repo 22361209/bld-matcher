@@ -70,7 +70,7 @@
       </div>
       {% endif %}
     </div>
-    {% set columns = [('row', '序号'), ('category', '类别'), ('name', '项目名称'), ('product_code', '产品编码'), ('material_attribute', '物料属性'), ('mode', '计价方式'), ('price', '金额 / 单价'), ('usage', '用量 / 重量'), ('total', '本项成本'), ('details', '资料')] %}
+    {% set columns = [('row', '序号'), ('category', '类别'), ('name', '项目名称'), ('product_code', '产品编码'), ('supplier', '首选供应商'), ('material_attribute', '物料属性'), ('mode', '计价方式'), ('price', '金额 / 单价'), ('usage', '用量 / 重量'), ('total', '本项成本'), ('details', '资料')] %}
     <div class="data-grid" data-resizable-grid data-grid-key="costing-edit">
       <div class="data-table-scroll" data-grid-scroll>
         <table class="data-table data-grid-table costing-edit-table" data-grid-table data-column-storage-scope="{{ g.user.id if g.user else 'trial' }}">
@@ -87,9 +87,12 @@
     <div class="costing-summary-grid">
       <div><span>明细计算成本</span><strong data-costing-total="calculated_cost">—</strong><small data-costing-known></small></div>
       <label>人工核定成本 <input name="approved_cost" inputmode="decimal" type="number" min="0" step="any" value="{{ record.approved_cost if record.approved_cost is not none else '' }}" placeholder="留空采用计算成本" {% if not can_edit %}readonly{% endif %}></label>
-      <label>废料抵减额 <input name="scrap_credit" inputmode="decimal" type="number" min="0" step="any" value="{{ record.scrap_credit if record.scrap_credit is not none else '' }}" placeholder="留空按 0" {% if not can_edit %}readonly{% endif %}></label>
+      <div class="costing-scrap-field"><div class="costing-scrap-heading"><label for="costing-scrap-credit">废料抵减额</label>
+        <button class="link-button" type="button" data-costing-scrap-toggle aria-controls="costing-scrap-detail" aria-expanded="false">计算明细</button></div>
+        <input id="costing-scrap-credit" name="scrap_credit" inputmode="decimal" type="number" min="0" step="any" value="{{ record.scrap_credit if record.scrap_credit is not none else '' }}" placeholder="留空按 0" {% if not can_edit %}readonly{% endif %}></div>
       <div><span>抵减后成本</span><strong data-costing-total="net_cost">—</strong><small data-costing-completeness></small></div>
     </div>
+    {% include '_costing_scrap_detail.html' %}
     <div class="workspace-command"><strong>含税售价</strong><span class="muted-text">元 / 件</span></div>
     <div class="costing-summary-grid">
       <div><span>最低含税售价</span><strong data-costing-total="minimum_tax_price">{{ record.minimum_tax_price|default(none)|cost_money }}</strong><small>抵减后成本 ÷ 0.8 × 1.1，最终向上取到分。</small></div>
@@ -97,7 +100,6 @@
       <div><span>当前建议含税单价</span><strong data-costing-total="suggested_tax_price">{{ record.suggested_tax_price|default(none)|cost_money }}</strong><small data-costing-price-mode></small></div>
       <div><span>售价计算口径</span><small>先按成本 80%、管理成本 10%、净利润 10% 计算，再乘 1.1 得到含税价。</small></div>
     </div>
-    <details class="costing-issues"><summary>废料参考资料</summary><label class="costing-reference-field">理论废料参考额（元）<input name="theoretical_scrap" type="number" inputmode="decimal" step="any" value="{{ record.theoretical_scrap if record.theoretical_scrap is not none else '' }}" {% if not can_edit %}readonly{% endif %}></label><p class="costing-note">原表参考值，可核对后修正。原始来源保留，实际抵减以上方填写金额为准。</p></details>
     <details class="costing-issues" data-costing-issues hidden><summary data-costing-issue-title>待补充 / 核对</summary><ul data-costing-issue-list></ul></details>
     <div class="form-actions">{% if can_edit %}<button class="linear-button primary" type="submit" data-costing-save>保存成本</button>{% endif %}<a class="linear-button subtle" data-costing-back href="{{ url_for(costing_endpoint ~ '.index') }}">返回列表</a><span class="muted-text">缺项可先保存，记录会标为待补充。</span></div>
   </section>

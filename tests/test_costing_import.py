@@ -80,7 +80,7 @@ class CostingImportTests(unittest.TestCase):
     def test_mixed_costs_preserve_approved_value_and_quantity_meaning(self):
         book = arm_book()
         add_arm(book, 8, "固定工费", 1)
-        add_arm(book, 9, "钢板", "=I9*K9", I=5, J=10, K=0.2)
+        add_arm(book, 9, "钢板", "=I9*K9", F="钢板供应商", I=5, J=10, K=0.2)
         add_arm(book, 10, "螺栓", "=I10*J10", I=0.25, J=3)
         add_arm(book, 11, "管件", "=(I11*K11+O11)*J11", I=0.5, J=3, K=0.4, O=0.1)
         add_arm(book, 12, "冲压工费", "=0.2+H1")
@@ -89,6 +89,7 @@ class CostingImportTests(unittest.TestCase):
         record = result["records"][0]
         self.assertEqual([item["mode"] for item in record["items"]], ["fixed", "weight", "unit", "weight", "fixed"])
         self.assertEqual(record["items"][1]["quantity"], "1")
+        self.assertEqual(record["items"][1]["supplier"], "钢板供应商")
         self.assertEqual(record["items"][1]["source_info"]["raw"]["J"], "10")
         self.assertEqual(record["approved_cost"], "5")
         self.assertEqual(record["scrap_credit"], "0.3")

@@ -74,6 +74,29 @@ class CostingMetadataEditsTest(unittest.TestCase):
                 result = calculate_cost({**before, **changes}, previous=before)
                 self.assertEqual(result["calculated_cost"], expected)
 
+    def test_supplier_can_be_set_copied_and_cleared_while_old_clients_can_omit_it(self):
+        first, second = deepcopy(self.before["items"])
+        first["supplier"] = "  外协厂  "
+        changes = {"items": [first, second]}
+        record_id = self.before["id"]
+        self.service.update(record_id, changes, expected_version=1, actor="采购")
+        saved = self.service.get(record_id)
+        self.assertEqual(saved["items"][0]["supplier"], "外协厂")
+        copied = self.service.create({**self.service.calculate(saved), "code": "COPY"}, source="copy", actor="采购")
+        self.assertEqual(self.service.get(copied["id"])["items"][0]["supplier"], "外协厂")
+
+        del first["supplier"]
+        first["category"] = "机加工"
+        kept = self.service.update(record_id, changes, expected_version=2, actor="编辑员")
+        self.assertEqual(kept["items"][0]["supplier"], "外协厂")
+        first["supplier"] = ""
+        self.service.update(record_id, changes, expected_version=3, actor="采购")
+        cleared = self.service.get(record_id)
+        self.assertEqual(cleared["items"][0]["supplier"], "")
+        for record in (saved, kept, cleared):
+            self.assertEqual(record["items"][0]["line_total"], "17.0000")
+            self.assertEqual(record["calculated_cost"], "21.0000")
+
     def test_legacy_padded_mode_and_code_match_the_normalized_editor(self):
         before = self.before
         first, second = before["items"]

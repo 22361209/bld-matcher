@@ -204,9 +204,11 @@ def _item_inputs(raw: object, index: int, previous_items: dict) -> tuple[dict, d
     if mode not in MODES:
         raise CostingValidationError("不支持的计价方式。", f"items.{index}.mode")
     row["mode"] = mode
+    prior = previous_items.get(row["id"])
+    if prior is not None and "supplier" not in raw:
+        row["supplier"] = prior.get("supplier", "")
     # Historical snapshots can omit or pad a mode. Older editors omitted every
     # numeric input for an unrecognized mode. Explicit blanks still clear a cell.
-    prior = previous_items.get(row["id"])
     if (prior and prior.get("mode") != mode and raw.get("mode") == prior.get("mode")
             and not any(key in raw for key in MODE_INPUTS[mode])):
         raw = {**{key: prior.get(key) for key in MODE_INPUTS[mode]}, **raw}

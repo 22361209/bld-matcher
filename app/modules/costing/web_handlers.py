@@ -9,6 +9,7 @@ from .domain import CostingConflict, CostingValidationError
 from .editor_choices import editor_choices
 from .grid import COLUMN_FILTER_FIELDS, normalize_column_filters
 from .pair_codes import mirror_code
+from .scrap_detail import scrap_detail
 from .web_support import costing_endpoint, import_owner, imports, service
 
 
@@ -72,7 +73,8 @@ def new():
                   "approved_cost": None, "scrap_credit": None, "theoretical_scrap": None, "items": []}
         copy_from = ""
     return render_template("costing_edit.html", record=record, is_new=True, can_edit=True,
-                           copy_from=copy_from, revisions=[], references=editor_choices(imports().references()))
+                           copy_from=copy_from, revisions=[], scrap=scrap_detail(record.get("source_info")),
+                           references=editor_choices(imports().references()))
 
 
 def edit(record_id: str):
@@ -80,7 +82,8 @@ def edit(record_id: str):
     if wants_json_response():
         return jsonify(ok=True, record=record)
     return render_template("costing_edit.html", record=record, is_new=False, can_edit=can("manage_costs"),
-                           revisions=service().revisions(record_id), candidate_code=mirror_code(record["code"]), copy_from="", references=editor_choices(imports().references()))
+                           revisions=service().revisions(record_id), candidate_code=mirror_code(record["code"]), copy_from="",
+                           scrap=scrap_detail(record.get("source_info")), references=editor_choices(imports().references()))
 
 
 def preview():

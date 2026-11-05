@@ -20,19 +20,29 @@
 .costing-summary-grid > div { display: grid; gap: 8px; }
 .costing-summary-grid strong { font-size: 22px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .costing-summary-grid small { color: var(--linear-muted); }
+.costing-summary-grid > .costing-scrap-field { gap: 6px; }
+.costing-scrap-heading, .costing-scrap-source { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; }
+.costing-scrap-heading .link-button { padding: 0; }
+.costing-scrap-detail { margin: 0 16px 14px; padding: 8px 12px; border-inline-start: 2px solid var(--linear-line); }
+.costing-scrap-detail p { margin: 6px 0; }
+.costing-scrap-source { margin: 10px 0; }
+.costing-scrap-detail code { overflow-wrap: anywhere; }
+.costing-scrap-table { width: 100%; font-variant-numeric: tabular-nums; }
+.costing-scrap-table caption { text-align: left; font-weight: 600; padding-block: 5px; }
+.costing-scrap-table td:not(:last-child), .costing-scrap-table thead th:nth-child(n+2):nth-child(-n+6) { text-align: right; white-space: nowrap; }
 .costing-issues { margin: 10px 16px; color: var(--linear-text); }
 .costing-issues summary, .costing-history summary { cursor: pointer; font-weight: 600; }
 .costing-issues ul { padding-left: 22px; line-height: 1.7; max-height: 240px; overflow: auto; }
 .costing-summary-section .form-actions { padding: 0 16px 16px; flex-wrap: wrap; }
 .data-grid .costing-edit-table { width: 100%; min-width: 1000px; }
 .costing-edit-table col[data-col="row"] { width: 56px; }
-.costing-edit-table col[data-col="category"] { width: 10%; }
-.costing-edit-table col[data-col="name"] { width: 16%; }
-.costing-edit-table col[data-col="product_code"] { width: 12%; }
-.costing-edit-table col[data-col="material_attribute"] { width: 9%; }
-.costing-edit-table col[data-col="mode"] { width: 11%; }
-.costing-edit-table col[data-col="price"], .costing-edit-table col[data-col="usage"] { width: 12%; }
-.costing-edit-table col[data-col="total"] { width: 9%; }
+.costing-edit-table col[data-col="category"] { width: 8%; }
+.costing-edit-table col[data-col="name"] { width: 13%; }
+.costing-edit-table col[data-col="product_code"], .costing-edit-table col[data-col="supplier"] { width: 11%; }
+.costing-edit-table col[data-col="material_attribute"] { width: 8%; }
+.costing-edit-table col[data-col="mode"] { width: 10%; }
+.costing-edit-table col[data-col="price"], .costing-edit-table col[data-col="usage"] { width: 10%; }
+.costing-edit-table col[data-col="total"] { width: 7%; }
 .costing-edit-table col[data-col="details"] { width: 70px; }
 .costing-edit-table td { vertical-align: middle; padding: 3px 6px; }
 .costing-edit-table td[data-col="row"] {

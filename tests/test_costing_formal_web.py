@@ -80,7 +80,7 @@ class CostingFormalWebTest(WebAppTestBase):
                          [("arm", " selected", "控制臂"), ("ball", "", "悬挂球头")])
         self.assertIn('data-costing-description>控制臂</span>', editor)
         self.assertEqual(re.findall(r'<th scope="col" data-col="([^"]+)">', editor),
-                         ["row", "category", "name", "product_code", "material_attribute", "mode", "price", "usage", "total", "details"])
+                         ["row", "category", "name", "product_code", "supplier", "material_attribute", "mode", "price", "usage", "total", "details"])
         options = re.search(r'data-material-attributes="([^"]+)"', editor).group(1)
         self.assertEqual(json.loads(unescape(options)), ["自制", "外购", "委外加工"])
         choices = json.loads(unescape(re.search(r'data-references="([^"]+)"', editor).group(1)))
@@ -94,6 +94,40 @@ class CostingFormalWebTest(WebAppTestBase):
         self.assertIn('<option value="code_desc" selected>', descending)
         imported = self.client.get("/costs/import").get_data(as_text=True)
         self.assertIn('action="/costs/import/preview"', imported)
+
+    def test_scrap_detail_distinguishes_applied_credit_and_original_piece_evidence(self):
+        source = {
+            "pivot": {"sheet": "透视表", "row": 15, "raw": {"A": "K1000LA", "F": "1.5", "K": "=SUM(H4:H8)"},
+                      "cached": {"K": "2.25"}},
+            "scrap_known_total": "2.25",
+            "scrap_reference_rows": [
+                {"name": "主板", "gross_weight": "2", "net_weight": "1.25", "scrap_weight": "0.75",
+                 "unit_price": "1.6", "amount": "2.25", "source_info": {
+                     "sheet": "片件重量", "row": 7, "raw": {"F": "=D7-E7", "H": "=F7*C5"}}},
+                {"name": "副板", "amount": None, "review_note": "重量或价格资料不完整"},
+            ],
+        }
+        imported = self.service.create(self.payload(scrap_credit="1.8", theoretical_scrap="2.2", source_info=source),
+                                       source="copy", actor="007")
+        body = self.client.get(f"/costs/{imported['id']}").get_data(as_text=True)
+        self.assertIn('aria-controls="costing-scrap-detail" aria-expanded="false">计算明细</button>', body)
+        detail = body.split('<section id="costing-scrap-detail"', 1)[1].split("</section>", 1)[0]
+        for value in ("原表型号</strong> K1000LA", "透视表!F15 · 1.5 元/件", "透视表!K15 · 2.25 元/件",
+                      "=SUM(H4:H8)", "=F7*C5", "片件重量!H7", "2.25 元/件", "还有 1 行缺少金额", "重量或价格资料不完整"):
+            self.assertIn(value, detail)
+        self.assertIn('data-costing-total="scrap_credit"', detail)
+        self.assertRegex(detail, r'name="theoretical_scrap"[^>]*value="2.2"')
+
+        manual = self.client.get("/costs/new").get_data(as_text=True)
+        self.assertIn("本单未附废料来源明细", manual)
+        self.assertNotIn("已知片件小计", manual)
+        self.assertEqual(manual.count('name="theoretical_scrap"'), 1)
+
+        missing = self.service.create(self.payload(code=self.code + "-missing", source_info={
+            "scrap_reference_rows": [{"name": "片件", "amount": None}], "scrap_known_total": "0"}), actor="007")
+        detail = self.client.get(f"/costs/{missing['id']}").get_data(as_text=True)
+        self.assertIn("已知片件小计　— 元/件", detail)
+        self.assertIn("还有 1 行缺少金额", detail)
 
     def test_formal_login_permissions_and_read_only_costs(self):
         anon = self.web.app.test_client()

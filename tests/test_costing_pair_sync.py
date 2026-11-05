@@ -30,7 +30,7 @@ class PairedCostTransferTest(unittest.TestCase):
     def pair(self):
         return self.costs.create({
             "code": "K8301LA02-6", "create_pair": True,
-            "items": [{"name": "胶套", "product_code": "C8043", "amount": "4.35"},
+            "items": [{"name": "胶套", "product_code": "C8043", "amount": "4.35", "supplier": "甲厂"},
                       {"name": "支架", "product_code": "K2101LA", "amount": "7", "pair_kind": "handed"},
                       {"name": "单侧件", "amount": "1", "pair_kind": "local"}],
         }, actor="配对建档")
@@ -59,15 +59,18 @@ class PairedCostTransferTest(unittest.TestCase):
         self.assertEqual(transfer.export_snapshot(), snapshot)
         target = CostingService(self.target)
         right = target.get(left["pair"]["peer_id"])
-        right["items"][0].update(amount="5", product_code="C8043A")
+        self.assertEqual(right["items"][0]["supplier"], "甲厂")
+        right["items"][0].update(amount="5", product_code="C8043A", supplier="乙厂")
         target.update(right["id"], right, expected_version=2, actor="接收端")
         updated = target.get(left["id"])
+        self.assertEqual(updated["items"][0]["supplier"], "甲厂")
         self.assertEqual((updated["items"][0]["product_code"], updated["items"][0]["amount"]), ("C8043A", "5"))
         self.assertEqual(len(updated["items"]), 3)
         with closing(sqlite3.connect(self.source)) as conn, conn:
             conn.execute("BEGIN IMMEDIATE")
             self.assertEqual(apply_costing(conn, self.snapshot(self.target), set())["updated"], 2)
         self.assertEqual(self.costs.get(left["id"]), updated)
+        self.assertEqual(self.costs.get(right["id"])["items"][0]["supplier"], "乙厂")
         self.assertEqual(self.apply(snapshot)["stale"], 2)
 
     def test_both_sheets_are_kept_together_when_only_peer_code_collides(self):
