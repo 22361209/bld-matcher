@@ -143,6 +143,7 @@ class MaterialPersistenceModuleTest(unittest.TestCase):
                 "created_at",
                 "updated_at",
                 "sync_id",
+                "net_weight",
             ],
         )
         self.assertEqual(snapshot["import_count"], 1)

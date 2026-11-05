@@ -40,6 +40,7 @@ from ._schema import (
     PACKAGE_TYPE,
     PAIRED_COSTING_PACKAGE_VERSION,
     SUPPORTED_PACKAGE_VERSIONS,
+    WEIGHT_PACKAGE_VERSION,
 )
 
 
@@ -94,6 +95,8 @@ def _manifest_datasets(manifest: object) -> tuple[str, ...]:
         raise ValueError("旧版业务数据包不支持成本核算。")
     if version == PAIRED_COSTING_PACKAGE_VERSION and "costing" not in selected:
         raise ValueError("左右件业务包缺少成本核算数据集。")
+    if version == WEIGHT_PACKAGE_VERSION and "costing" not in selected and "materials" not in selected:
+        raise ValueError("重量资料业务包缺少材料或成本数据集。")
     return tuple(selected)
 
 
@@ -161,11 +164,16 @@ def read_package(package_path: Path) -> tuple[Manifest, Payload]:
                 raise ValueError("业务数据包缺少可导入的数据集。")
             if ("costing" in selected) != (COSTING_MEMBER in members):
                 raise ValueError("业务数据包的成本核算内容与清单不符。")
+            materials = payload.get("materials", [])
+            if isinstance(materials, list) and version < WEIGHT_PACKAGE_VERSION and any(
+                isinstance(row, dict) and "net_weight" in row for row in materials
+            ):
+                raise ValueError("含材料净重的业务包需使用新版格式。")
             if "costing" in selected:
                 snapshot = _json_member(archive, members[COSTING_MEMBER])
-                if not isinstance(snapshot, dict) or snapshot.get("format_version") != (
-                    2 if version == PAIRED_COSTING_PACKAGE_VERSION else 1
-                ):
+                supported_costs = {COSTING_PACKAGE_VERSION: (1,), PAIRED_COSTING_PACKAGE_VERSION: (2,),
+                                   WEIGHT_PACKAGE_VERSION: (1, 2, 3)}
+                if not isinstance(snapshot, dict) or snapshot.get("format_version") not in supported_costs[version]:
                     raise ValueError("成本快照版本与业务包版本不一致，请重新导出。")
                 payload["costing"] = [validate_costing(snapshot)]
             if version >= 4:
@@ -304,7 +312,10 @@ def export_package(
     )
     version = 5
     if costing is not None:
-        version = PAIRED_COSTING_PACKAGE_VERSION if costing["format_version"] == 2 else COSTING_PACKAGE_VERSION
+        version = {1: COSTING_PACKAGE_VERSION, 2: PAIRED_COSTING_PACKAGE_VERSION,
+                   3: WEIGHT_PACKAGE_VERSION}[costing["format_version"]]
+    if any("net_weight" in row for row in payload.get("materials", [])):
+        version = WEIGHT_PACKAGE_VERSION
     manifest: Manifest = {
         "package_type": PACKAGE_TYPE,
         "version": version,

@@ -1,12 +1,14 @@
+import {createWeightLookup, weightLookupControls, weightSourceDetails, showWeightOrigin} from "./costing_weight_lookup.js";
+import {createScrapSummary} from "./costing_scrap.js";
 import {mirrorCostCode, mirrorPartCode, pairKindExplanation, pairKindOptions, rowPairKind} from "./costing_pair_edit.js";
 
 const text = (value) => (value == null ? "" : String(value));
-const COST_FIELDS = ["code", "kind", "name", "brand", "models", "remark", "approved_cost", "scrap_credit", "theoretical_scrap", "suggested_tax_price_override"];
+const COST_FIELDS = ["code", "kind", "name", "brand", "models", "remark", "approved_cost", "scrap_credit", "theoretical_scrap", "scrap_mode", "scrap_unit_price", "scrap_credit_override", "suggested_tax_price_override"];
 const PAIR_ITEM_FIELDS = new Set(["pair_kind", "peer_product_code", "peer_part_code"]);
-const ITEM_FIELDS = ["id", "name", "category", "product_code", "material_attribute", "part_code", "supplier", "remark", "mode", "amount", "unit_price", "quantity", "weight", "processing_fee", "length", "width", "height", "strap_rate", "review_note", "pair_kind", "peer_product_code", "peer_part_code"];
+const ITEM_FIELDS = ["id", "weight_choice", "scrap_expected", "name", "category", "product_code", "material_attribute", "part_code", "supplier", "remark", "mode", "amount", "unit_price", "quantity", "weight", "processing_fee", "length", "width", "height", "strap_rate", "review_note", "pair_kind", "peer_product_code", "peer_part_code"];
 const MODES = {fixed: "直接金额", unit: "按件计算", weight: "按重量计算", package: "包装分摊", freight: "按重量运费", adjustment: "调整 / 返还"};
 const NUMERIC_FIELDS = new Set(["amount", "unit_price", "quantity", "weight", "processing_fee", "length", "width", "height", "strap_rate"]);
-const SUMMARY_INPUTS = new Set(["approved_cost", "scrap_credit", "theoretical_scrap", "suggested_tax_price_override"]);
+const SUMMARY_INPUTS = new Set(["approved_cost", "scrap_credit", "theoretical_scrap", "scrap_mode", "scrap_unit_price", "scrap_credit_override", "suggested_tax_price_override"]);
 const PAIR_CAPTIONS = {shared: "共用", handed: "对应", local: "独有"};
 const MISSING_ITEM_NAME = "请填写成本项名称";
 const MODE_NUMBERS = {fixed: ["amount"], adjustment: ["amount"], unit: ["unit_price", "quantity"], weight: ["unit_price", "quantity", "weight", "processing_fee"], freight: ["unit_price", "weight"], package: ["unit_price", "quantity", "length", "width", "height", "strap_rate"]};
@@ -46,6 +48,14 @@ export const createCostTemplate = (rows) => rows.map((row) => ({...blankCostItem
 export const editableCostPayload = (record, values = {}) => {
   const payload = {};
   COST_FIELDS.forEach((key) => { payload[key] = key in values ? values[key] : record[key] ?? ""; });
+  if (payload.scrap_mode === "auto") {
+    delete payload.theoretical_scrap;
+    delete payload.scrap_credit;
+  } else {
+    delete payload.scrap_mode;
+    delete payload.scrap_unit_price;
+    delete payload.scrap_credit_override;
+  }
   if (record.pair) payload.peer_version = record.peer_version;
   if (values.create_pair === true) payload.create_pair = true;
   if (record.id) payload.id = record.id;
@@ -150,6 +160,7 @@ export const initializeCostEditor = (form) => {
   const tbody = form.querySelector("[data-costing-items]");
   const attributeOptions = [["", "—"], ...JSON.parse(tbody.dataset.materialAttributes).map((value) => [value, value])];
   const modeOptions = Object.entries(MODES);
+  const scrapSummary = createScrapSummary(form, costAmountLabel, editable);
   const errorBox = form.querySelector("[data-costing-error]");
   const status = form.querySelector("[data-costing-status]");
   const modelCode = form.elements.namedItem("code");
@@ -178,7 +189,7 @@ export const initializeCostEditor = (form) => {
 
   const values = () => Object.fromEntries(COST_FIELDS.map((key) => [key, form.elements.namedItem(key)?.value ?? record[key] ?? ""]));
   const payload = () => editableCostPayload(record, {...values(), create_pair: Boolean(createPair?.checked)});
-  const snapshot = () => JSON.stringify(payload(), (_key, value) => value == null || value === "" ? undefined : value);
+  const snapshot = () => JSON.stringify(payload(), (key, value) => key !== "weight_choice" && (value == null || value === "") ? undefined : value);
   const initialSnapshot = editable ? snapshot() : "";
   const hasUnsavedChanges = () => dirty && (snapshot() !== initialSnapshot ||
     [...form.querySelectorAll('input[type="number"]:invalid')].some((input) => input.validity.badInput));
@@ -249,9 +260,10 @@ export const initializeCostEditor = (form) => {
   };
   const updateTotals = (calculated) => {
     checks = calculationIssues(calculated);
+    scrapSummary.update(calculated);
     form.querySelectorAll("[data-costing-total]").forEach((node) => {
       const key = node.dataset.costingTotal;
-      node.textContent = costAmountLabel(calculated[key] ?? (key === "scrap_credit" ? "0" : null));
+      node.textContent = costAmountLabel(calculated[key] ?? (key === "scrap_credit" && !scrapSummary.auto() ? "0" : null));
     });
     form.querySelector("[data-costing-known]").textContent = calculated.calculated_cost == null ? `已知项目小计：${costAmountLabel(calculated.known_subtotal)} 元` : "";
     const manualPrice = calculated.suggested_tax_price_override != null && calculated.suggested_tax_price_override !== "";
@@ -313,7 +325,7 @@ export const initializeCostEditor = (form) => {
     return result;
   };
   const preview = async () => {
-    if (!editable || saving) return;
+    if (!editable || saving || weights.unresolved()) return;
     const token = gate.current();
     status.textContent = "正在核算…";
     try {
@@ -343,6 +355,46 @@ export const initializeCostEditor = (form) => {
     pendingTotals();
     timer = setTimeout(preview, 350);
   };
+  const weights = createWeightLookup({
+    items: record.items,
+    lookup: async (code, kind) => {
+      const url = new URL(form.dataset.weightLookupUrl, location.href);
+      url.searchParams.set("code", code);
+      if (kind) url.searchParams.set("kind", kind);
+      const response = await fetch(url, {headers: {Accept: "application/json"}, signal: AbortSignal.timeout(15000)});
+      if (!response.ok) throw new Error("取重失败");
+      return response.json();
+    },
+    notify: (item, reason) => {
+      const index = record.items.indexOf(item);
+      const row = tbody.querySelector(`[data-costing-row="${index}"]`);
+      if (!row) return;
+      row.querySelector("[data-weight-lookup]")?.replaceWith(weightLookupControls(item, index, weights, editable));
+      const sourceInfo = row.nextElementSibling?.querySelector(".costing-weight-source");
+      if (sourceInfo) sourceInfo.replaceWith(weightSourceDetails(item, weights, editable));
+      showWeightOrigin(row, item);
+      const phase = weights.state(item)?.phase;
+      if (["error", "missing", "multiple"].includes(phase)) {
+        status.textContent = "请核对重量";
+        form.querySelectorAll("[data-costing-total], [data-line-total]").forEach((node) => { node.textContent = "待核对重量"; });
+      }
+      if (reason === "stamping") scrapSummary.adopt();
+      if (reason) {
+        const weight = row.querySelector('[data-item-field="weight"]');
+        if (weight && reason !== "manual") weight.value = text(item.weight);
+        if (!saving) scheduleCalculation();
+      }
+    },
+  });
+  form.querySelector("[data-adopt-scrap]")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    scrapSummary.adopt();
+    markEdited();
+    await weights.refreshStamps();
+    if (!weights.unresolved() && !saving) scheduleCalculation();
+    button.disabled = false;
+  });
   const columns = Array.from(tbody.closest("table").tHead.rows[0].cells, (header) => header.dataset.col);
   const field = (item, index, key, label, options = {}) => {
     const input = element(options.multiline ? "textarea" : "input");
@@ -403,7 +455,7 @@ export const initializeCostEditor = (form) => {
     cells.row.append(controls);
     cells.category.append(field(item, index, "category", "类别", {inline: true}));
     cells.name.append(field(item, index, "name", "项目名称", {inline: true}));
-    cells.product_code.append(field(item, index, "product_code", "产品编码", {inline: true}));
+    cells.product_code.append(field(item, index, "product_code", "产品编码", {inline: true}), weightLookupControls(item, index, weights, editable));
     cells.supplier.append(field(item, index, "supplier", "首选供应商", {inline: true}));
     cells.material_attribute.append(selectField(item, index, "material_attribute", "物料属性", attributeOptions));
     cells.mode.append(selectField(item, index, "mode", "计价方式", modeOptions));
@@ -429,6 +481,7 @@ export const initializeCostEditor = (form) => {
     cells.details.append(button);
     total.textContent = costAmountLabel(item.line_total);
     updateRowIssues(row, item);
+    showWeightOrigin(row, item);
     return row;
   };
   const renderDetails = (item, index, issueMessage) => {
@@ -469,6 +522,7 @@ export const initializeCostEditor = (form) => {
       label.append(referenceSelect); details.append(label);
     }
     if (item.mode === "weight") {
+      details.append(weightSourceDetails(item, weights, editable));
       details.append(field(item, index, "processing_fee", "单件加工费（元）", {placeholder: "留空按 0"}));
       details.append(field(item, index, "quantity", "每件用量", {placeholder: "留空按 1"}));
     }
@@ -535,8 +589,17 @@ export const initializeCostEditor = (form) => {
     const index = Number(target.dataset.itemIndex);
     const key = target.dataset.itemField;
     if (!Number.isInteger(index) || !record.items[index] || !ITEM_FIELDS.includes(key)) return;
-    const previous = record.items[index][key];
-    record.items[index][key] = target.value;
+    const item = record.items[index];
+    const previous = item[key];
+    item[key] = target.value;
+    if (key === "product_code" && item.mode === "weight") weights.changed(item);
+    if (key === "weight" && item.mode === "weight") weights.manual(item);
+    if (key === "mode") {
+      if (item.mode === "weight" && text(item.product_code).trim()) {
+        weights.changed(item);
+        weights.resolve(item);
+      } else if (previous === "weight") weights.clearMode(item);
+    }
     if (pairActive() && ["pair_kind", "name", "product_code", "part_code"].includes(key)) {
       const disclosure = tbody.querySelector(`[data-costing-details="${index}"]`);
       const kind = rowPairKind(record.items[index]);
@@ -565,7 +628,13 @@ export const initializeCostEditor = (form) => {
       row.replaceWith(replacement);
       replacement.querySelector('[data-item-field="mode"]').focus();
     }
-    if (isCostCalculationField(key)) scheduleCalculation();
+    if (key === "weight" && item.mode === "weight") return; // The manual choice already requested a preview.
+    if (key === "product_code" && item.mode === "weight") {
+      gate.invalidate();
+      clearTimeout(timer);
+      pendingTotals();
+      markEdited();
+    } else if (isCostCalculationField(key)) scheduleCalculation();
     else {
       markEdited();
       if (key === "name" && Boolean(text(previous).trim()) !== Boolean(target.value.trim())) updateReview();
@@ -586,6 +655,13 @@ export const initializeCostEditor = (form) => {
     if (event.target.dataset.itemField && event.target.tagName !== "SELECT") updateItem(event.target);
     else if (COST_FIELDS.includes(event.target.name) && event.target.tagName !== "SELECT") updateHeader(event.target.name);
   });
+  tbody.addEventListener("focusout", (event) => {
+    const target = event.target;
+    if (editable && target.dataset.itemField === "product_code") {
+      const item = record.items[Number(target.dataset.itemIndex)];
+      if (item) weights.resolve(item);
+    }
+  });
   tbody.addEventListener("keydown", (event) => {
     if (!editable || saving || event.key !== "Enter" || event.isComposing || event.keyCode === 229 ||
         event.altKey || event.ctrlKey || event.metaKey) return;
@@ -593,6 +669,7 @@ export const initializeCostEditor = (form) => {
     const row = control.closest("tr");
     if (!control.matches("input[data-item-field], select[data-item-field]") || !row?.hasAttribute("data-costing-row")) return;
     event.preventDefault();
+    if (control.dataset.itemField === "product_code") weights.resolve(record.items[Number(control.dataset.itemIndex)]);
     const column = control.closest("td").dataset.col;
     const sibling = event.shiftKey ? "previousElementSibling" : "nextElementSibling";
     for (let next = row[sibling]; next; next = next[sibling]) {
@@ -659,6 +736,7 @@ export const initializeCostEditor = (form) => {
       const index = Number(button.dataset.costingRemove);
       const item = record.items[index];
       if (record.pair && item.peer_item_id && !window.confirm(`移除“${item.name || "未命名项目"}”？保存成本后，${record.peer_code} 的对应行也会移除。`)) return;
+      weights.removed(item);
       deleted = {index, item: record.items.splice(index, 1)[0]};
       form.querySelector("[data-costing-undo]").hidden = false;
       refreshRows(Math.min(index, record.items.length - 1));
@@ -668,6 +746,7 @@ export const initializeCostEditor = (form) => {
       deleted = null;
       button.hidden = true;
       refreshRows(index);
+      weights.resolve(item);
     } else if (button.hasAttribute("data-costing-reviewed")) {
       const index = Number(button.dataset.costingReviewed);
       record.items[index].review_note = "";
@@ -680,13 +759,19 @@ export const initializeCostEditor = (form) => {
     event.preventDefault();
     if (!editable || saving) return;
     const destination = event.submitter?.hasAttribute("data-costing-leave-save") ? leaveTo : null;
-    const body = payload();
     saving = true; gate.invalidate(); clearTimeout(timer); showError("");
     status.textContent = "正在保存…";
     const controls = [...form.querySelectorAll("input, select, textarea, button")].filter((control) => !control.disabled);
     controls.forEach((control) => { control.disabled = true; });
     try {
-      const result = await post(form.action, body);
+      const blocked = await weights.settle();
+      if (blocked) {
+        const index = record.items.indexOf(blocked);
+        const column = tbody.querySelector(`[data-costing-row="${index}"] [data-weight-lookup]`);
+        column?.scrollIntoView({block: "center", inline: "nearest"});
+        throw new Error(`第 ${index + 1} 项「${blocked.name || blocked.product_code || "未命名项目"}」请先选择重量来源或确认手填重量。`);
+      }
+      const result = await post(form.action, payload());
       dirty = false;
       reloadOnRestore = true;
       status.textContent = "已保存";

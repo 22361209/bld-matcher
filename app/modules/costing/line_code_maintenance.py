@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 
+from .domain import calculate_cost
 from .line_identity import inspect_line_identity
 from .material_attributes import suggested_material_attribute
 from .ports import CostingRepository
@@ -60,6 +61,8 @@ def plan_line_codes(repository: CostingRepository) -> tuple[dict, list[tuple[dic
             if resolved:
                 after["issues"] = [issue for issue in record["issues"] if issue not in resolved]
                 after["status"] = "draft" if after["issues"] else "ready"
+            if record.get("scrap_mode") == "auto":
+                after.update(calculate_cost(after, previous=record))
             updates.append((record, after))
             fingerprint = [record["id"], record["version"], changes]
             digest.update(json.dumps(fingerprint, sort_keys=True, ensure_ascii=False).encode("utf-8"))

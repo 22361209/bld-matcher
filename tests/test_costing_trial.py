@@ -71,6 +71,8 @@ class CostingTrialTest(unittest.TestCase):
         self.assertEqual(self.client.get("/", headers={"Accept": "application/json"}).status_code, 401)
         self.assertEqual(self.client.post("/login", data={"password": PASSWORD}).status_code, 400)
         token = self.login()
+        self.assertEqual(self.client.get("/costs/weight-lookup?code=QA").get_json(),
+                         {"available": False, "ok": True, "candidates": []})
         self.assertEqual(self.post("/costs/new", payload(), "wrong").status_code, 400)
         self.assertEqual(self.post("/costs/new", payload(), token).status_code, 201)
         self.client.post("/logout", data={"csrf_token": token})

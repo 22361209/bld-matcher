@@ -653,6 +653,39 @@ class BusinessSyncServiceTest(unittest.TestCase):
         with connect(self.target) as connection:
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM products WHERE bld_no = 'SYNC-PRODUCT'").fetchone()[0], 0)
 
+    def test_material_net_weight_sync_accepts_real_legacy_rows_and_explicit_clearing(self) -> None:
+        with connect(self.source) as connection:
+            self._seed(connection)
+            connection.execute("UPDATE material_items SET net_weight = '0.0001'")
+        source = BusinessSyncRepository(self.source)
+        target = BusinessSyncService(BusinessSyncRepository(self.target))
+        package = self.root / "materials.tar.gz"
+        source.export(output_path=package, selected=("materials",), actor="test")
+        manifest, payload = source.read(package)
+        self.assertEqual(manifest["version"], 8)
+        self.assertEqual(payload["materials"][0]["net_weight"], "0.0001")
+
+        def apply(path):
+            preview = target.preview(path)
+            target.apply(path, backup_path=self.root / "weights-backup.sqlite3", actor="test",
+                         expected_token=cast(str, preview["token"]))
+
+        apply(package)
+        incoming = dict(payload["materials"][0])
+        del incoming["net_weight"]
+        incoming["updated_at"] = "2026-07-18 00:00:00"
+        incoming["car"] = "新车型"
+        apply(self._write_package({"materials": [incoming]}))
+        with connect(self.target) as connection:
+            self.assertEqual(tuple(connection.execute("SELECT net_weight, car FROM material_items").fetchone()),
+                             ("0.0001", "新车型"))
+        with connect(self.source) as connection:
+            connection.execute("UPDATE material_items SET net_weight = NULL, updated_at = '2026-07-19 00:00:00'")
+        source.export(output_path=package, selected=("materials",), actor="test")
+        apply(package)
+        with connect(self.target) as connection:
+            self.assertIsNone(connection.execute("SELECT net_weight FROM material_items").fetchone()[0])
+
     def test_material_excel_renames_keep_sync_identity(self) -> None:
         def workbook(path: Path) -> None:
             book = Workbook()
@@ -1393,7 +1426,10 @@ class BusinessSyncServiceTest(unittest.TestCase):
             assert manifest_file is not None
             assert data_file is not None
             manifest = json.loads(manifest_file.read().decode("utf-8"))
-            data_bytes = data_file.read()
+            payload = json.loads(data_file.read())
+            for row in payload["materials"]:
+                row.pop("net_weight")
+            data_bytes = json.dumps(payload, ensure_ascii=False).encode()
         manifest["version"] = 2
         manifest["media"] = {
             "drawings": False,

@@ -4,8 +4,9 @@ import json
 from collections.abc import Mapping
 from decimal import Decimal, InvalidOperation, ROUND_CEILING, localcontext
 
+from .values import FIELD_LABELS, MAX_VALUE, CostingValidationError, decimal_text, number, text
+from .weight_cost import SCRAP_HEADER_FIELDS, SCRAP_ROW_FIELDS, prepare_scrap
 
-MAX_VALUE = Decimal("1000000000000")
 MAX_ITEMS = 500
 MAX_REFERENCE_BYTES = 8 * 1024 * 1024
 MODE_INPUTS = {
@@ -21,20 +22,6 @@ NUMERIC_FIELDS = (
     "amount", "unit_price", "quantity", "weight", "processing_fee",
     "length", "width", "height", "strap_rate",
 )
-FIELD_LABELS = {
-    "amount": "金额", "unit_price": "单价", "quantity": "数量", "weight": "重量",
-    "processing_fee": "加工费", "length": "长", "width": "宽", "height": "高",
-    "strap_rate": "打包带单价", "approved_cost": "核定成本", "scrap_credit": "废料抵减额",
-    "theoretical_scrap": "理论废料金额", "suggested_tax_price_override": "建议含税单价",
-}
-
-
-class CostingValidationError(ValueError):
-    def __init__(self, message: str, field: str = "") -> None:
-        super().__init__(message)
-        self.message = message
-        self.field = field
-        self.code = "costing.invalid"
 
 
 class CostingConflict(RuntimeError):
@@ -49,47 +36,6 @@ class CostingNotFound(LookupError):
         super().__init__(message)
         self.message = message
         self.code = "costing.not_found"
-
-
-def decimal_text(value: Decimal) -> str:
-    if value == 0:
-        return "0"
-    exponent = value.as_tuple().exponent
-    return format(value, "f").rstrip("0").rstrip(".") if isinstance(exponent, int) and exponent < 0 else format(value, "f")
-
-
-def text(value: object, field: str, limit: int = 240) -> str:
-    if value is None:
-        return ""
-    if not isinstance(value, str):
-        raise CostingValidationError(f"{field} 必须是文字。", field)
-    result = value.strip()
-    if len(result) > limit:
-        raise CostingValidationError(f"{field} 最多允许 {limit} 个字符。", field)
-    return result
-
-
-def number(value: object, field: str, *, allow_negative: bool = False) -> Decimal | None:
-    if value is None or value == "":
-        return None
-    label = FIELD_LABELS.get(field.split(".")[-1], field)
-    if isinstance(value, bool) or not isinstance(value, (str, int, float, Decimal)):
-        raise CostingValidationError(f"{label} 必须是数字。", field)
-    if isinstance(value, str) and len(value) > 120:
-        raise CostingValidationError(f"{label} 数值或精度超出范围。", field)
-    try:
-        parsed = Decimal(str(value).strip())
-    except InvalidOperation as exc:
-        raise CostingValidationError(f"{label} 必须是数字。", field) from exc
-    if not parsed.is_finite():
-        raise CostingValidationError(f"{label} 必须是有限数字。", field)
-    if not allow_negative and parsed < 0:
-        raise CostingValidationError(f"{label} 不能为负数。", field)
-    exponent = parsed.as_tuple().exponent
-    if (parsed.copy_abs() > MAX_VALUE or not isinstance(exponent, int)
-            or exponent < -18 or len(parsed.as_tuple().digits) > 31):
-        raise CostingValidationError(f"{label} 数值或精度超出范围。", field)
-    return parsed
 
 
 def with_pricing(record: Mapping[str, object]) -> dict:
@@ -239,16 +185,23 @@ def _replace_review_notes(issues: list[str], old: list[str], new: list[str], pre
 
 def _metadata_update(before: dict, header: dict, summary: dict, row_inputs: list, raw_items: list) -> dict | None:
     """Preserve the locked record's financial snapshot when its calculation inputs match."""
-    if len(before["items"]) != len(row_inputs) or any(
-        number(before.get(key), key, allow_negative=key == "theoretical_scrap") != value
-        for key, value in summary.items()
-    ):
+    if (len(before["items"]) != len(row_inputs)
+            or any(before.get(key) != header.get(key) for key in SCRAP_HEADER_FIELDS)):
         return None
+    for key, value in summary.items():
+        prior_value = before.get(key)
+        if header.get("scrap_mode") == "auto" and key in ("scrap_credit", "theoretical_scrap"):
+            prior_value = Decimal(prior_value) if prior_value is not None else None
+        else:
+            prior_value = number(prior_value, key, allow_negative=key == "theoretical_scrap")
+        if prior_value != value:
+            return None
     items = []
     issues = before["issues"]
     for index, (prior, (row, values), raw) in enumerate(zip(before["items"], row_inputs, raw_items)):
         mode = row["mode"]
         if (row["id"] != prior["id"] or mode != text(prior.get("mode", "fixed"), "mode")
+                or any(prior.get(key) != row.get(key) for key in SCRAP_ROW_FIELDS)
                 or ("product_code" in row and row["product_code"] != text(prior.get("product_code"), "product_code"))):
             return None
         item = {**prior, **row, "source_info": prior.get("source_info", {})}
@@ -291,16 +244,20 @@ def calculate_cost(data: Mapping[str, object], *, previous: dict | None = None) 
         raise CostingValidationError(f"每张成本单最多允许 {MAX_ITEMS} 项明细。", "items")
     previous_items = {row["id"]: row for row in previous["items"]} if previous else {}
     row_inputs = [_item_inputs(raw, index, previous_items) for index, raw in enumerate(raw_items)]
+    scrap_header, scrap_amounts = prepare_scrap(data, previous, raw_items, row_inputs, previous_items)
+    result.update(scrap_header)
     summary = {
         key: number(data.get(key), key, allow_negative=key == "theoretical_scrap")
         for key in ("approved_cost", "scrap_credit", "theoretical_scrap", "suggested_tax_price_override")
+        if key not in scrap_amounts
     }
+    summary.update(scrap_amounts)
     if previous is not None:
         preserved = _metadata_update(previous, result, summary, row_inputs, raw_items)
         if preserved is not None:
             return preserved
     with localcontext() as context:
-        context.prec = 50
+        context.prec = 100 if scrap_header else 50
         items = []
         for row, values in row_inputs:
             row_issues: list[str] = []
@@ -308,6 +265,8 @@ def calculate_cost(data: Mapping[str, object], *, previous: dict | None = None) 
             row.update({key: decimal_text(value) if value is not None else None for key, value in values.items()})
             row["line_total"] = decimal_text(line_total) if line_total is not None else None
             row["issues"] = row_issues + _review_notes(row)
+            if row.get("scrap_issue"):
+                row["issues"].append(row["scrap_issue"])
             items.append(row)
         issues = [f"第 {index + 1} 项：{issue}" for index, row in enumerate(items) for issue in row["issues"]]
         if not items:
@@ -321,6 +280,8 @@ def calculate_cost(data: Mapping[str, object], *, previous: dict | None = None) 
         calculated = subtotal if items and all(row["line_total"] is not None for row in items) else None
         effective = approved if approved is not None else calculated
         net = effective - (credit or Decimal(0)) if effective is not None else None
+        if scrap_header and credit is None:
+            net = None
         if net is not None and net < 0:
             issues.append("废料抵减额超过采用成本，请核对")
         result.update(

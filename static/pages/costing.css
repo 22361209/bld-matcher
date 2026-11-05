@@ -137,3 +137,17 @@
   .costing-summary-grid { gap: 16px 10px; }
   .costing-summary-grid strong { font-size: 19px; }
 }
+
+.costing-cost-totals { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.costing-scrap-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 6px 16px; border-block: 1px solid var(--linear-line); }
+.costing-scrap-toolbar .link-button, .costing-weight-lookup .link-button, .costing-weight-source .link-button { padding: 0; }
+.costing-scrap-grid { padding-block: 10px; gap: 8px 16px; }
+.costing-scrap-grid label { display: grid; gap: 5px; }
+.costing-summary-section [hidden] { display: none; }
+.costing-weight-lookup:not(:empty) { display: grid; gap: 4px; margin-block-start: 3px; }
+.costing-weight-lookup small { color: var(--linear-muted); }
+.costing-weight-lookup .link-button { justify-self: start; }
+.costing-weight-source { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px 14px; }
+@media (max-width: 600px) {
+  .costing-cost-totals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

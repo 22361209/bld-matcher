@@ -110,6 +110,9 @@
               <col class="col-width-150" data-col="specification">
               <col class="col-width-64" data-col="pieces">
               <col class="col-width-76" data-col="unit-weight">
+              <col class="col-width-76" data-col="net-weight">
+              <col class="col-width-76" data-col="scrap-weight">
+              <col class="col-width-76" data-col="scrap-percent">
               <col class="col-width-50" data-col="status">
               <col class="col-width-64" data-col="actions">
             </colgroup>
@@ -122,7 +125,10 @@
                 <th data-col="part">{{ choice_heading("materials", "part", "零件名称", "mf_part", material_filter_options.get("part", []), material_column_filters.get("part", [])) }}</th>
                 <th data-col="specification">{{ choice_heading("materials", "specification", "规格尺寸", "mf_spec_text", material_filter_options.get("spec_text", []), material_column_filters.get("spec_text", [])) }}</th>
                 <th data-col="pieces">{{ choice_heading("materials", "pieces", "下料只数", "mf_pieces", material_filter_options.get("pieces", []), material_column_filters.get("pieces", [])) }}</th>
-                <th data-col="unit-weight">{{ choice_heading("materials", "unit-weight", "单件重量kg", "mf_unit_weight", material_filter_options.get("unit_weight", []), material_column_filters.get("unit_weight", [])) }}</th>
+                <th data-col="unit-weight">{{ choice_heading("materials", "unit-weight", "单件下料重kg", "mf_unit_weight", material_filter_options.get("unit_weight", []), material_column_filters.get("unit_weight", [])) }}</th>
+                <th data-col="net-weight">{{ choice_heading("materials", "net-weight", "净重kg", "mf_net_weight", material_filter_options.get("net_weight", []), material_column_filters.get("net_weight", [])) }}</th>
+                <th data-col="scrap-weight">{{ choice_heading("materials", "scrap-weight", "废料重量kg", "mf_scrap_weight", material_filter_options.get("scrap_weight", []), material_column_filters.get("scrap_weight", [])) }}</th>
+                <th data-col="scrap-percent">{{ choice_heading("materials", "scrap-percent", "废料占比%", "mf_scrap_percent", material_filter_options.get("scrap_percent", []), material_column_filters.get("scrap_percent", [])) }}</th>
                 <th data-col="status">{{ choice_heading("materials", "status", "状态", "mf_active", material_filter_options.get("active", []), material_column_filters.get("active", [])) }}</th>
                 <th class="sticky-actions" data-col="actions"><span class="data-grid-static-column-label">操作</span></th>
               </tr>
@@ -138,6 +144,9 @@
                   <td data-col="specification">{{ item.spec_text }}</td>
                   <td data-col="pieces">{{ "%.0f"|format(item.pieces) if item.pieces == item.pieces|int else item.pieces }}</td>
                   <td data-col="unit-weight">{{ "%.2f"|format(item.unit_weight) }}</td>
+                  <td data-col="net-weight">{{ item.net_weight or "—" }}</td>
+                  <td data-col="scrap-weight">{{ item.scrap_weight or "—" }}</td>
+                  <td data-col="scrap-percent">{{ item.scrap_percent or "—" }}</td>
                   <td data-col="status">{% if item.active %}<span class="linear-status active">启用</span>{% else %}<span class="linear-status inactive">停用</span>{% endif %}</td>
                   <td class="row-actions" data-col="actions">
                     {% if can("manage_material_items") %}
@@ -153,7 +162,7 @@
                 </tr>
               {% endfor %}
               {% if not material_items %}
-                <tr><td colspan="10">没有找到材料明细。</td></tr>
+                <tr><td colspan="13">没有找到材料明细。</td></tr>
               {% endif %}
             </tbody>
           </table>
@@ -261,6 +270,10 @@
             <label>
               规格尺寸
               <input name="spec_text" placeholder="例如 2.5 357 1260 / 2.5*357*1260" required>
+            </label>
+            <label>
+              净重（kg/件）
+              <input name="net_weight" type="number" min="0.000000000000000001" step="any">
             </label>
             <label>
               类别

@@ -15,6 +15,9 @@ MATERIAL_COLUMN_FILTER_FIELDS = frozenset(
         "spec_text",
         "pieces",
         "unit_weight",
+        "net_weight",
+        "scrap_weight",
+        "scrap_percent",
         "active",
     }
 )

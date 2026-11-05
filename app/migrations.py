@@ -1300,6 +1300,12 @@ def _add_costing(conn: sqlite3.Connection) -> None:
     install_schema(conn)
 
 
+def _add_material_net_weight(conn: sqlite3.Connection) -> None:
+    columns = _columns(conn, "material_items")
+    if columns and "net_weight" not in columns:
+        conn.execute("ALTER TABLE material_items ADD COLUMN net_weight TEXT")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -1345,6 +1351,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("042_bilingual_catalog", _add_bilingual_catalog),
     ("043_product_development_register", _add_product_development_register),
     ("044_costing", _add_costing),
+    ("045_material_net_weight", _add_material_net_weight),
 )
 
 

@@ -203,6 +203,8 @@ def register(app) -> None:
             "length": request.form.get("length", ""),
             "active": request.form.get("active", "0"),
         }
+        if "net_weight" in request.form:
+            data["net_weight"] = request.form["net_weight"]
         try:
             get_material_service().save_item(data, actor=actor_name())
         except ValueError as exc:

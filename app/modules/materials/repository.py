@@ -18,6 +18,7 @@ from .item_store import (
     rows_for_material_sheet,
     upsert_material_item,
 )
+from .weights import costing_material
 from app.platform.audit_store import log_event
 
 
@@ -59,6 +60,13 @@ class SQLiteMaterialRepository:
             )
         ]
 
+    def costing_candidates(self, code: str) -> list[dict[str, str | None]]:
+        rows = self.connection.execute(
+            "SELECT * FROM material_items WHERE active = 1 AND code = ? COLLATE NOCASE ORDER BY model, id",
+            (code,),
+        )
+        return [item for row in rows if (item := costing_material(dict(row))) is not None]
+
     def filter_options(
         self, *, query: str, status: str, column_filters: Mapping[str, tuple[str, ...]]
     ) -> dict[str, list[dict[str, object]]]:
@@ -75,6 +83,8 @@ class SQLiteMaterialRepository:
         return dict(row) if row is not None else None
 
     def save(self, data: Mapping[str, object], *, actor: str) -> int:
+        if not self.connection.in_transaction:
+            self.connection.execute("BEGIN IMMEDIATE")
         return upsert_material_item(self.connection, dict(data), actor=actor, commit=False)
 
     def deactivate(self, item_id: int, *, actor: str) -> None:

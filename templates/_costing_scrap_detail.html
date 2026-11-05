@@ -4,6 +4,7 @@
 {%- endmacro %}
 <section id="costing-scrap-detail" class="costing-scrap-detail" aria-label="废料抵减额计算明细" hidden>
   <p>本单成本核算（元/件）　采用成本 <b data-costing-total="effective_cost">—</b> − 废料抵减额 <b data-costing-total="scrap_credit">—</b> = 抵减后成本 <b data-costing-total="net_cost">—</b></p>
+  <div data-linked-scrap></div>
   {% if scrap.original_credit.address %}
     <div class="costing-scrap-source">
       {% if scrap.model %}<div><strong>原表型号</strong> {{ scrap.model }}</div>{% endif %}
@@ -23,8 +24,8 @@
       </tr>{% endfor %}</tbody></table></div>
     <p><strong>已知片件小计　{{ amount(scrap.known_total) }} 元/件</strong>{% if scrap.missing_amounts %}　还有 {{ scrap.missing_amounts }} 行缺少金额。{% endif %}</p>
   {% else %}
-    <p class="muted-text">{% if scrap.original_credit.address %}原表未附匹配的片件重量明细。{% else %}本单未附废料来源明细，按上方填写的抵减额核算。{% endif %}</p>
+    <p class="muted-text" data-scrap-legacy {% if auto_scrap %}hidden{% endif %}>{% if scrap.original_credit.address %}原表未附匹配的片件重量明细。{% else %}本单未附废料来源明细，按上方填写的抵减额核算。{% endif %}</p>
   {% endif %}
-  <label class="costing-reference-field">理论废料参考额（元/件）<input name="theoretical_scrap" type="number" inputmode="decimal" step="any" value="{{ record.theoretical_scrap if record.theoretical_scrap is not none else '' }}" {% if not can_edit %}readonly{% endif %}></label>
-  <small class="muted-text">理论额供核对，实际抵减采用上方「废料抵减额」。</small>
+  <label class="costing-reference-field" data-scrap-legacy {% if auto_scrap %}hidden{% endif %}>理论废料参考额（元/件）<input name="theoretical_scrap" type="number" inputmode="decimal" step="any" value="{{ record.theoretical_scrap if record.theoretical_scrap is not none else '' }}" {% if not can_edit %}readonly{% endif %}></label>
+  <small class="muted-text" data-scrap-legacy {% if auto_scrap %}hidden{% endif %}>理论额供核对，实际抵减采用上方「废料抵减额」。</small>
 </section>

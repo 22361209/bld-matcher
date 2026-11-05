@@ -13,6 +13,7 @@ import re
 from .domain import MAX_VALUE, CostingConflict, CostingValidationError, calculate_cost, reference_snapshot, text, with_pricing
 from .transfer_pairs import format_version_for, validate_pair_histories
 from .transfer_repository import CostingTransferRepository
+from .weight_cost import SCRAP_HEADER_FIELDS, SCRAP_ROW_FIELDS
 
 
 LEGACY_TRANSFER_MIB = 64
@@ -137,6 +138,13 @@ def _validate_record(record: object) -> dict:
         _stored_amount(record.get(field))
     calculated = calculate_cost(record)
     with_pricing(record)
+    if any(key in record for key in SCRAP_HEADER_FIELDS):
+        for key in (*SCRAP_HEADER_FIELDS, "theoretical_scrap", "scrap_credit", "net_cost"):
+            if (key not in calculated or key not in record or type(record[key]) is not type(calculated[key])
+                    or record[key] != calculated[key]):
+                raise CostingValidationError("废料核算快照的单价、抵减额或合计与明细不一致。")
+        if not calculated["scrap_complete"] and record["status"] != "draft":
+            raise CostingValidationError("缺少冲压件废料明细的成本单应保留待核对状态。")
     for field in ("code", "name", "brand", "models", "kind"):
         if record.get(field) != calculated[field]:
             raise CostingValidationError("成本型号或索引字段格式无效。")
@@ -146,8 +154,16 @@ def _validate_record(record: object) -> dict:
     item_ids = [_identity(item.get("id")) for item in items]
     if len(item_ids) != len(set(item_ids)):
         raise CostingValidationError("同一成本单的明细编号重复。")
-    for item in items:
+    for item, checked in zip(items, calculated["items"], strict=True):
         _stored_amount(item.get("line_total"))
+        if "weight_choice" in item:
+            raise CostingValidationError("成本快照应保存重量来源资料，不能携带临时取重凭据。")
+        if record.get("scrap_mode") == "auto" or any(key in item for key in SCRAP_ROW_FIELDS):
+            for key in SCRAP_ROW_FIELDS:
+                if (key in checked) != (key in item) or item.get(key) != checked.get(key):
+                    raise CostingValidationError("成本行的重量来源与废料明细不一致。")
+            if item.get("weight_source") and item.get("weight") != checked["weight"]:
+                raise CostingValidationError("成本行重量与来源快照不一致。")
         issues = item.get("issues")
         if not isinstance(issues, list) or any(not isinstance(issue, str) for issue in issues):
             raise CostingValidationError("成本明细的核对提示格式无效。")
@@ -158,9 +174,9 @@ def _validated_snapshot(snapshot: object, *, allow_empty: bool = False, detach: 
     if not isinstance(snapshot, dict) or set(snapshot) != SNAPSHOT_FIELDS:
         raise CostingValidationError("成本迁移包字段不完整或含有未知字段。")
     version = snapshot["format_version"]
-    if type(version) is not int or version not in (1, 2):
+    if type(version) is not int or version not in (1, 2, 3):
         raise CostingValidationError("成本迁移包版本不受支持。")
-    limit_mib = MAX_TRANSFER_MIB if version == 2 else LEGACY_TRANSFER_MIB
+    limit_mib = MAX_TRANSFER_MIB if version >= 2 else LEGACY_TRANSFER_MIB
     # The standalone transfer owns a detached input; business sync already owns
     # the parsed archive tree. Neither path mutates the supplied snapshot.
     content = _bounded_content(snapshot, limit_mib, detach)
@@ -186,8 +202,6 @@ def _validated_snapshot(snapshot: object, *, allow_empty: bool = False, detach: 
             raise CostingValidationError("成本迁移包存在重复型号或编号。")
         record_map[record["id"]] = record
         codes.add(record["code"].casefold())
-    if format_version_for(records) != version:
-        raise CostingValidationError("成本迁移包版本与左右件配对资料不一致。")
     histories = defaultdict(list)
     revision_ids = set()
     for revision in revisions:
@@ -207,6 +221,8 @@ def _validated_snapshot(snapshot: object, *, allow_empty: bool = False, detach: 
                 or after["updated_at"] != revision["created_at"] or after["updated_by"] != revision["actor"]):
             raise CostingValidationError("成本修订与其记录快照不一致。")
         histories[record_id].append(revision)
+    if format_version_for(records, revisions) != version:
+        raise CostingValidationError("成本迁移包版本与左右件或重量来源资料不一致。")
     for record_id, record in record_map.items():
         history = sorted(histories[record_id], key=lambda row: row["version"])
         if len(history) != record["version"]:

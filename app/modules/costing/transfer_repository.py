@@ -43,7 +43,7 @@ def read_content(connection: sqlite3.Connection) -> dict:
     reference_data = json.loads(references[0][1]) if references else None
     if references and not isinstance(reference_data, dict):
         raise CostingValidationError("已有成本参考行内容无效，不能当作空资料覆盖。")
-    return {"format_version": format_version_for(records), "records": records, "revisions": revisions,
+    return {"format_version": format_version_for(records, revisions), "records": records, "revisions": revisions,
             "references": reference_data}
 
 

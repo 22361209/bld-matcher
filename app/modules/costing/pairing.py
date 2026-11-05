@@ -52,6 +52,8 @@ def _mirror_item(item: dict, raw: Mapping, kind: str) -> dict:
             # An unrecognized handed part number must be entered for that side.
             suggested = mirror_part_code(item.get(field) or "") or ""
             other[field] = text(raw.get("peer_" + field, suggested), "peer_" + field)
+        if other.get("weight_source") and other["product_code"].casefold() != other["weight_source"]["product_code"].casefold():
+            other["weight_source"] = None
     _link(item, other, kind)
     return other
 

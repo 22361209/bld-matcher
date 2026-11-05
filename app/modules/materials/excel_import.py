@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter, defaultdict
 import sqlite3
 import threading
 from pathlib import Path
@@ -14,10 +15,39 @@ from app.platform.clock import now_text
 from app.platform.sync_identity import material_key, stable_sync_id
 
 from .specification import _material_values_from_data
+from .weights import validated_net_weight
 
 
 _BOOTSTRAP_LOCK = threading.Lock()
 _BOOTSTRAPPED_SOURCES: set[tuple[Path, Path, int | None]] = set()
+
+
+def _part_key(row: dict) -> tuple[str, str]:
+    return row["model"].strip().upper(), (row["code"] or row["part"] or "").strip().upper()
+
+
+def _retain_net_weights(connection: sqlite3.Connection, rows: list[dict]) -> None:
+    existing = [dict(row) for row in connection.execute(
+        "SELECT model, code, part, sync_id, net_weight FROM material_items"
+    )]
+    by_sync_id = {row["sync_id"]: row for row in existing}
+    by_part: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    for row in existing:
+        by_part[_part_key(row)].append(row)
+    incoming_counts = Counter(_part_key(row) for row in rows)
+    for row in rows:
+        if row["net_weight"] is not None:
+            continue
+        prior = by_sync_id.get(row["sync_id"])
+        if prior is None:
+            part_key = _part_key(row)
+            matches = by_part[part_key]
+            if not any(match["net_weight"] is not None for match in matches):
+                continue
+            if len(matches) != 1 or incoming_counts[part_key] != 1:
+                raise ValueError(f"材料 {row['model']} / {row['code']} 有多条记录，请在工作簿中明确填写净重。")
+            prior = matches[0]
+        row["net_weight"] = validated_net_weight(row, prior["net_weight"])
 
 
 def import_materials_from_excel(
@@ -36,8 +66,18 @@ def import_materials_from_excel(
         timestamp = now_text()
         rows: list[dict[str, Any]] = []
         ordinals: dict[str, int] = {}
+        headers = next(sheet.iter_rows(min_row=1, max_row=1, values_only=True), ())
+        normalized_headers = [
+            compact_text(header).lower().translate(str.maketrans({" ": None, "（": "(", "）": ")"}))
+            for header in headers
+        ]
+        net_labels = {"净重", "净重kg", "净重(kg)", "净重(kg/件)", "单件净重", "单件净重kg", "单件净重(kg)", "单件净重(kg/件)"}
+        net_columns = [i for i, header in enumerate(normalized_headers) if header in net_labels]
+        if len(net_columns) > 1:
+            raise ValueError("材料数据含多个净重列，请保留一个明确的净重列。")
+        net_index = net_columns[0] if net_columns else None
         for row_number, values in enumerate(
-            sheet.iter_rows(min_row=2, max_col=11, values_only=True),
+            sheet.iter_rows(min_row=2, max_col=max(11, (net_index or 0) + 1), values_only=True),
             start=2,
         ):
             data = {
@@ -63,6 +103,10 @@ def import_materials_from_excel(
                 source_row=row_number,
                 require_detail_fields=False,
             )
+            try:
+                row["net_weight"] = validated_net_weight(row, values[net_index] if net_index is not None else None)
+            except ValueError as exc:
+                raise ValueError(f"材料数据第 {row_number} 行：{exc}") from exc
             key = material_key(row)
             ordinal = ordinals.get(key, 0) + 1
             ordinals[key] = ordinal
@@ -73,15 +117,24 @@ def import_materials_from_excel(
     if not rows:
         raise ValueError("材料数据里没有可导入的明细。")
     if replace:
+        started = not connection.in_transaction
+        if started:
+            connection.execute("BEGIN IMMEDIATE")
+        try:
+            _retain_net_weights(connection, rows)
+        except ValueError:
+            if started:
+                connection.rollback()
+            raise
         connection.execute("DELETE FROM material_items")
     connection.executemany(
         """
         INSERT INTO material_items
           (model, code, category, car, part, spec_text, pieces, thickness, width, length,
-           active, source, source_row, sync_id, created_at, updated_at)
+           net_weight, active, source, source_row, sync_id, created_at, updated_at)
         VALUES
           (:model, :code, :category, :car, :part, :spec_text, :pieces, :thickness, :width,
-           :length, :active, :source, :source_row, :sync_id, :created_at, :updated_at)
+           :length, :net_weight, :active, :source, :source_row, :sync_id, :created_at, :updated_at)
         """,
         rows,
     )

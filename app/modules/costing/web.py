@@ -38,6 +38,12 @@ def preview():
     return views.preview()
 
 
+@costing.get("/weight-lookup")
+@permission_required("manage_costs")
+def weight_lookup():
+    return views.weight_lookup()
+
+
 @costing.post("/new")
 @permission_required("manage_costs")
 def create():

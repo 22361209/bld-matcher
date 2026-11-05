@@ -50,12 +50,12 @@ if (document.body.dataset.page === "materials.workspace") {
     }
   });
   setupDataGridControls(document.querySelector("#materials-table"), {
-    columns: ["model", "code", "category", "car", "part", "specification", "pieces", "unit-weight", "status"],
+    columns: ["model", "code", "category", "car", "part", "specification", "pieces", "unit-weight", "net-weight", "scrap-weight", "scrap-percent", "status"],
     storagePrefix: "bld.materials",
     resultsHash: "materials-results",
     resetFilterParams: [
       "mf_model", "mf_code", "mf_category", "mf_car", "mf_part", "mf_spec_text", "mf_pieces",
-      "mf_unit_weight", "mf_active",
+      "mf_unit_weight", "mf_net_weight", "mf_scrap_weight", "mf_scrap_percent", "mf_active",
     ],
   });
 }

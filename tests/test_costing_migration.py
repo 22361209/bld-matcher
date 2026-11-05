@@ -31,10 +31,12 @@ class CostingMigrationTest(unittest.TestCase):
             CREATE TABLE products (id INTEGER PRIMARY KEY, code TEXT, price TEXT);
             CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, password_hash TEXT, role TEXT);
             CREATE TABLE role_permissions (role_key TEXT, permission_key TEXT, PRIMARY KEY(role_key, permission_key));
+            CREATE TABLE material_items (id INTEGER PRIMARY KEY, code TEXT);
             CREATE TABLE audit_logs (id INTEGER PRIMARY KEY, action TEXT, actor TEXT);
             INSERT INTO products VALUES (42, 'KEEP-PRODUCT', '31.25');
             INSERT INTO users VALUES (7, 'keep-user', 'synthetic-hash', 'editor');
             INSERT INTO role_permissions VALUES ('editor', 'edit_products');
+            INSERT INTO material_items VALUES (1, 'P-8057');
             INSERT INTO audit_logs VALUES (9, 'existing event', 'keep-user');
         """)
         connection.executemany("INSERT INTO schema_migrations(id) VALUES (?)", [
@@ -55,6 +57,7 @@ class CostingMigrationTest(unittest.TestCase):
             run_migrations(connection)
             run_migrations(connection)
             self.assertEqual(self.prior_contents(connection), before)
+            self.assertEqual(tuple(connection.execute("SELECT * FROM material_items").fetchone()), (1, "P-8057", None))
             names = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             self.assertTrue(set(COSTING_TABLES).issubset(names))
             self.assertNotIn("costing_schema", names)

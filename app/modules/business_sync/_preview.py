@@ -61,9 +61,9 @@ def _preview_package(
             table, identity, label = DATASETS[key]
             syncable_rows, ignored_inactive = syncable_incoming_rows(key, incoming_rows)
             record_columns = columns(connection, table)
+            optional_columns = {"products": CATALOG_FIELDS, "materials": ("net_weight",)}.get(key, ())
             if any(
-                identity not in row or any(column not in row for column in record_columns
-                                          if key != "products" or column not in CATALOG_FIELDS)
+                identity not in row or any(column not in row for column in record_columns if column not in optional_columns)
                 for row in incoming_rows
                 if isinstance(row, dict)
             ):

@@ -145,9 +145,58 @@ class CostingFormalWebTest(WebAppTestBase):
         self.assertIn('data-costing-identity-toggle aria-expanded="false"', body)
         self.assertIn('<th scope="col" data-col="details">', body)
         self.assertNotIn('<th scope="col" data-col="actions">', body)
+        self.assertEqual(viewer.get("/costs/weight-lookup?code=QA", headers={"Accept": "application/json"}).status_code, 403)
         self.assertEqual(viewer.get("/costs/import", headers={"Accept": "application/json"}).status_code, 403)
         self.assertEqual(viewer.post("/costs/new", json=self.payload(),
                                      headers={"Accept": "application/json"}).status_code, 403)
+
+    def test_exact_catalog_choice_stale_snapshot_and_borrowed_tube_at_save(self):
+        from app.modules.materials.factory import get_material_service
+        from app.modules.tubes.factory import get_tube_service
+
+        alias = self.code + "-T"
+        fixture = {"code": self.code, "tube_type": "普通管", "spec_text": "18×2×50",
+                   "weight_kg": "0.1052", "borrowed_codes": alias}
+        tubes = get_tube_service()
+        source_id = tubes.save(fixture, actor="qa")
+        get_material_service().save_item({"model": self.code, "code": self.code, "part": "副板",
+                                          "spec_text": "2.5×357×1260", "pieces": "4", "net_weight": "0.95"}, actor="qa")
+
+        def lookup(code, kind=""):
+            return self.client.get("/costs/weight-lookup", query_string={"code": code, "kind": kind}).get_json()["candidates"]
+
+        self.assertEqual(lookup(self.code[:-1]), [])
+        self.assertCountEqual([match["kind"] for match in lookup(self.code)], ["tube", "stamping"])
+        stamp, = lookup(self.code.lower(), "stamping")
+        tube, = lookup(alias.lower(), "tube")
+        self.assertEqual((tube["source_id"], tube["product_code"], tube["gross_weight"]),
+                         (self.code, alias, "0.1052"))
+        self.assertEqual((stamp["gross_weight"], stamp["scrap_weight"]), ("2.206929375", "1.256929375"))
+        rows = [{"name": "副板", "product_code": self.code, "mode": "weight", "unit_price": "4",
+                 "weight_choice": stamp["token"]},
+                {"name": "焊接管", "product_code": alias, "mode": "weight", "unit_price": "6",
+                 "weight_choice": tube["token"]}]
+        draft = self.payload(items=rows, scrap_mode="auto")
+        csrf = self.csrf()
+        created = self.post("/costs/new", draft, token=csrf)
+        self.assertEqual(created.status_code, 201, created.get_json())
+        record = created.get_json()["record"]
+        self.assertEqual((record["scrap_known_weight"], record["scrap_credit"]), ("1.256929375", "1.51385875"))
+        self.assertEqual(record["items"][1]["weight"], "0.1052")
+        self.assertNotIn("weight_choice", record["items"][0])
+        tubes.save({**fixture, "id": source_id, "weight_kg": "0.22"}, actor="qa")
+        self.assertEqual(self.post("/costs/preview", draft, token=csrf).status_code, 409)
+        self.assertEqual(lookup(alias, "tube")[0]["gross_weight"], "0.22")
+        retained = self.post(created.get_json()["url"], {"version": record["version"], "remark": "核对"}, token=csrf)
+        self.assertEqual(retained.get_json()["record"]["items"][1]["weight"], "0.1052")
+        rows[1]["weight_choice"] = "invented"
+        self.assertEqual(self.post("/costs/preview", draft, token=csrf).status_code, 422)
+        rows[1]["weight_choice"] = stamp["token"]
+        self.assertEqual(self.post("/costs/preview", draft, token=csrf).status_code, 422)
+        rows[1].pop("weight_choice")
+        rows[1]["weight_source"] = {"kind": "tube", "gross_weight": "999"}
+        unsigned = self.post("/costs/preview", draft, token=csrf).get_json()["record"]
+        self.assertIsNone(unsigned["items"][1]["weight_source"])
 
     def test_cost_list_vehicle_heading_type_labels_and_existing_filter_values(self):
         types = (("arm", "控制臂", "雅绅特"), ("ball", "悬挂球头", "伊兰特"))

@@ -57,6 +57,12 @@ def preview():
     return views.preview()
 
 
+@costing_trial.get("/costs/weight-lookup")
+@permission_required("manage_costs")
+def weight_lookup():
+    return views.weight_lookup()
+
+
 @costing_trial.post("/costs/new")
 @permission_required("manage_costs")
 def create():

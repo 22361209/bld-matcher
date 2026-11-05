@@ -6,6 +6,7 @@ import sqlite3
 from pathlib import Path
 
 from app.modules.costing.business_sync import costing_state
+from app.modules.materials.weights import validated_net_weight
 from app.modules.products.brand_normalization import canonicalize_brands
 from app.modules.products.catalog_language import catalog_values
 from app.platform.sync_identity import material_match_key, quote_match_key
@@ -125,11 +126,16 @@ def incoming_status(
     local_row = local.get(str(incoming[identity]))
     if key == "products":
         incoming.update(catalog_values(incoming, dict(local_row) if local_row else {}))
+    candidate = None
+    if local_row is None and key in {"quotes", "materials"}:
+        candidate = candidate_row(key, local_rows, incoming)
+    if key == "materials":
+        prior = local_row or candidate
+        incoming["net_weight"] = validated_net_weight(
+            incoming, incoming.get("net_weight", prior["net_weight"] if prior is not None else None)
+        )
     if local_row is not None:
         return status(key, local_row, incoming, record_columns), local_row, False
-    if key not in {"quotes", "materials"}:
-        return "new", None, False
-    candidate = candidate_row(key, local_rows, incoming)
     if candidate is None:
         return "new", None, False
     if equivalent_without_sync(key, candidate, incoming, record_columns):

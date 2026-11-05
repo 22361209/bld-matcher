@@ -88,6 +88,24 @@ class CostingPackageTest(unittest.TestCase):
         preview = self.target_sync.preview(self.package)
         self.assertEqual(self.apply(preview["token"])["costing"]["unchanged"], 1)
 
+    def test_material_and_weighted_cost_snapshot_roundtrip_in_v8(self):
+        from app.modules.materials.item_store import upsert_material_item
+
+        with connect(self.source) as conn:
+            upsert_material_item(conn, {"model": "QA", "code": "QA-STAMP", "part": "主板", "spec_text": "2×100×100",
+                                       "pieces": "1", "net_weight": "0.1"})
+        auto = self.costs.create({"code": "QA-WEIGHT", "scrap_mode": "auto", "scrap_credit_override": "0",
+                                  "items": [{"name": "主板", "mode": "weight", "unit_price": "4", "weight": "1"}]}, actor="qa")
+        self.export("materials", "costing")
+        with tarfile.open(self.package) as archive:
+            self.assertEqual(json.load(archive.extractfile("manifest.json"))["version"], 8)
+            self.assertEqual(json.load(archive.extractfile("costing.json"))["format_version"], 3)
+        preview = self.target_sync.preview(self.package)
+        self.apply(preview["token"])
+        self.assertEqual(CostingService(self.target).get(auto["id"]), auto)
+        with connect(self.target) as conn:
+            self.assertEqual(conn.execute("SELECT net_weight FROM material_items WHERE code='QA-STAMP'").fetchone()[0], "0.1")
+
     def test_writes_share_transaction_and_media_rollback(self):
         self.export("costing", "products", include_images=True)
         preview = self.target_sync.preview(self.package)

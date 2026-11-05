@@ -18,6 +18,20 @@ class TubeRepository:
     def __init__(self, connection: sqlite3.Connection) -> None:
         self.connection = connection
 
+    def costing_matches(self, code: str) -> list[dict]:
+        """A borrowed code uses the same active source row that the tube list displays."""
+        rows = self.connection.execute(
+            """SELECT item.code, COALESCE(source.code, item.code) AS source_code,
+                      CASE WHEN source.id IS NULL THEN item.weight_kg ELSE source.weight_kg END AS weight_kg,
+                      COALESCE(source.spec_text, item.spec_text) AS spec_text,
+                      COALESCE(source.tube_type, item.tube_type) AS tube_type
+               FROM tube_items AS item
+               LEFT JOIN tube_items AS source ON source.code = item.borrowed_from AND source.active = 1
+               WHERE item.code = ? COLLATE NOCASE AND item.active = 1
+               ORDER BY item.code""", (code.strip(),),
+        )
+        return [dict(row) for row in rows]
+
     def list(self, *, filters: Mapping[str, object], limit: int, offset: int) -> list[dict[str, object]]:
         clauses, parameters = self._where(filters, item_alias="item")
         where = " AND ".join(clauses)

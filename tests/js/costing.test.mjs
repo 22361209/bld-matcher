@@ -205,3 +205,78 @@ test("fixed fee references preserve the row identity and enter a name only when 
   applyCostReference(item, reference);
   assert.equal(item.name, "安装费");
 });
+
+import {createWeightLookup} from "../../static/pages/costing_weight_lookup.js";
+
+test("immediate save waits for the last row code and ignores an older lookup response", async () => {
+  const item = {mode: "weight", product_code: "A", weight: "7"};
+  const requests = new Map();
+  const lookup = createWeightLookup({
+    items: [item], lookup: (code) => new Promise((resolve) => requests.set(code, resolve)), notify() {},
+  });
+  const candidate = (code, weight) => ({kind: "stamping", product_code: code, token: code, gross_weight: weight});
+  lookup.changed(item);
+  const oldRequest = lookup.resolve(item);
+  item.product_code = "B";
+  lookup.changed(item);
+  const submit = lookup.settle();
+  requests.get("B")({candidates: [candidate("B", "2")], available: true});
+  assert.equal(await submit, undefined);
+  requests.get("A")({candidates: [candidate("A", "10")], available: true});
+  await oldRequest;
+  assert.equal(item.weight, "2");
+  const body = editableCostPayload({items: [item], scrap_mode: "auto", scrap_unit_price: "2", scrap_credit_override: "0"});
+  assert.equal(body.items[0].weight_choice, "B");
+  assert.equal("weight_source" in body.items[0], false);
+  assert.equal(body.scrap_credit_override, "0");
+  assert.equal("scrap_credit" in body, false);
+});
+
+test("missing or ambiguous weight requires a choice, and manual weight can supersede a pending result", async () => {
+  const item = {name: "焊接管", mode: "weight", product_code: "T03", weight: "7"};
+  const options = [1, 2].map((n) => ({token: String(n), kind: "tube", product_code: "T03", gross_weight: String(n)}));
+  let reply = {candidates: options, available: true};
+  const calls = [];
+  const lookup = createWeightLookup({items: [item], lookup: async (code, kind) => {
+    calls.push([code, kind]); return reply;
+  }, notify() {}});
+  lookup.changed(item);
+  assert.equal(await lookup.settle(), item);
+  assert.deepEqual(calls, [["T03", "tube"]]);
+  assert.equal(item.weight, "7");
+  lookup.choose(item, options[1]);
+  assert.equal(item.weight, "2");
+  assert.equal(item.scrap_expected, false);
+  item.product_code = "missing";
+  lookup.changed(item);
+  reply = {candidates: [], available: false};
+  assert.equal(await lookup.settle(), item);
+  assert.equal(item.weight, "2");
+  lookup.manual(item);
+  assert.equal(await lookup.settle(), undefined);
+  assert.equal(item.weight_choice, null);
+  reply = {candidates: [options[0]], available: true};
+  const pending = lookup.resolve(item, true);
+  item.weight = "8";
+  lookup.manual(item);
+  await pending;
+  assert.equal(item.weight, "8");
+  assert.equal(item.weight_choice, null);
+});
+
+test("batch recalculation refreshes existing plate codes, retains the saved specification and skips tubes", async () => {
+  const stamp = {name: "旧板", mode: "weight", product_code: "P", weight_source: {kind: "stamping", source_id: "spec-2"}};
+  const tube = {name: "焊接管", mode: "weight", product_code: "T", weight: "1"};
+  const other = {name: "焊接支架", mode: "weight", product_code: "other", weight: "4"};
+  const options = [1, 2].map((n) => ({kind: "stamping", product_code: "P", source_id: "spec-"+n, gross_weight: String(n), token: String(n)}));
+  const calls = [];
+  const lookup = createWeightLookup({items: [stamp, tube, other], lookup: async (code, kind) => {
+    calls.push([code, kind]); return {available: true, candidates: code === "P" ? options : []};
+  }, notify() {}});
+  await lookup.refreshStamps();
+  assert.deepEqual(calls, [["P", "stamping"], ["other", "stamping"]]);
+  assert.equal(stamp.weight, "2");
+  assert.equal(tube.weight, "1");
+  assert.equal(other.weight, "4");
+  assert.equal(lookup.unresolved(), undefined);
+});

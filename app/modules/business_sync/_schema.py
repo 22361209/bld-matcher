@@ -5,7 +5,9 @@ PACKAGE_SUFFIX = ".tar.gz"
 PACKAGE_TYPE = "bld_business_data"
 COSTING_PACKAGE_VERSION = 6
 PAIRED_COSTING_PACKAGE_VERSION = 7
-SUPPORTED_PACKAGE_VERSIONS = frozenset({1, 2, 3, 4, 5, COSTING_PACKAGE_VERSION, PAIRED_COSTING_PACKAGE_VERSION})
+WEIGHT_PACKAGE_VERSION = 8
+SUPPORTED_PACKAGE_VERSIONS = frozenset({1, 2, 3, 4, 5, COSTING_PACKAGE_VERSION, PAIRED_COSTING_PACKAGE_VERSION,
+                                        WEIGHT_PACKAGE_VERSION})
 
 MAX_MEDIA_FILE_SIZE = 512 * 1024 * 1024
 MAX_PACKAGE_METADATA_SIZE = 64 * 1024 * 1024
@@ -61,6 +63,7 @@ FIELD_LABELS = {
     "outer_diameter_mm": "外径",
     "part": "零件",
     "pieces": "下料只数",
+    "net_weight": "单件净重（kg）",
     "price": "报价",
     "price_cny": "价格",
     "product_model": "产品型号",

@@ -365,6 +365,13 @@
       "rule": "/costs/transfer/preview"
     },
     {
+      "endpoint": "costing.weight_lookup",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/costs/weight-lookup"
+    },
+    {
       "endpoint": "quote_web.old_customer_prices_redirect",
       "methods": [
         "GET"

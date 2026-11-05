@@ -9,8 +9,13 @@ from app.platform.audit_store import log_event
 from app.platform.clock import now_text
 from app.platform.sync_identity import MATERIAL_IDENTITY_FIELDS, material_key, stable_sync_id
 
+from .weights import validated_net_weight
 from .specification import _material_values_from_data, _parse_material_spec_query
 
+
+_UNIT_WEIGHT_SQL = "(width * length * 7.85 * thickness / pieces / 1000000.0)"
+_SCRAP_WEIGHT_SQL = f"MAX(0, {_UNIT_WEIGHT_SQL} - CAST(net_weight AS REAL))"
+_SCRAP_KNOWN_SQL = f"net_weight IS NOT NULL AND {_UNIT_WEIGHT_SQL} > 0"
 
 MATERIAL_COLUMN_EXPRESSIONS = {
     "model": "COALESCE(model, '')",
@@ -20,7 +25,10 @@ MATERIAL_COLUMN_EXPRESSIONS = {
     "part": "COALESCE(part, '')",
     "spec_text": "COALESCE(spec_text, '')",
     "pieces": "printf('%.2f', pieces)",
-    "unit_weight": "printf('%.2f', width * length * 7.85 * thickness / pieces / 1000000.0)",
+    "unit_weight": f"printf('%.2f', {_UNIT_WEIGHT_SQL})",
+    "net_weight": "COALESCE(net_weight, '')",
+    "scrap_weight": f"CASE WHEN {_SCRAP_KNOWN_SQL} THEN printf('%.4f', {_SCRAP_WEIGHT_SQL}) ELSE '' END",
+    "scrap_percent": f"CASE WHEN {_SCRAP_KNOWN_SQL} THEN printf('%.2f', 100 * {_SCRAP_WEIGHT_SQL} / {_UNIT_WEIGHT_SQL}) ELSE '' END",
     "active": "CASE WHEN active = 1 THEN 'active' ELSE 'inactive' END",
 }
 EMPTY_FILTER_VALUE = "__blank__"
@@ -35,6 +43,7 @@ def _material_changes(before: sqlite3.Row | None, after: Mapping[str, Any]) -> l
         "part": "零件名称",
         "spec_text": "规格尺寸",
         "pieces": "下料只数",
+        "net_weight": "净重（kg/件）",
         "thickness": "规格1",
         "width": "规格2",
         "length": "规格3",
@@ -64,11 +73,14 @@ def upsert_material_item(
     timestamp = now_text()
     item_id = data.get("id")
     before = get_material_item(connection, int(cast(Any, item_id))) if item_id else None
+    if item_id and before is None:
+        raise ValueError("这条材料明细已变更，请在列表中重新打开。")
     values = _material_values_from_data(
         data,
         source=source,
         source_row=before["source_row"] if before else 0,
     )
+    values["net_weight"] = validated_net_weight(values, data.get("net_weight", before["net_weight"] if before else None))
     values["updated_at"] = timestamp
     if before:
         values["id"] = int(cast(Any, item_id))
@@ -77,7 +89,7 @@ def upsert_material_item(
             UPDATE material_items
             SET model=:model, code=:code, category=:category, car=:car, part=:part,
                 spec_text=:spec_text, pieces=:pieces, thickness=:thickness, width=:width,
-                length=:length, active=:active, source=:source, updated_at=:updated_at
+                length=:length, net_weight=:net_weight, active=:active, source=:source, updated_at=:updated_at
             WHERE id=:id
             """,
             values,
@@ -105,10 +117,10 @@ def upsert_material_item(
             """
             INSERT INTO material_items
               (model, code, category, car, part, spec_text, pieces, thickness, width, length,
-               active, source, source_row, sync_id, created_at, updated_at)
+               net_weight, active, source, source_row, sync_id, created_at, updated_at)
             VALUES
               (:model, :code, :category, :car, :part, :spec_text, :pieces, :thickness, :width,
-               :length, :active, :source, :source_row, :sync_id, :created_at, :updated_at)
+               :length, :net_weight, :active, :source, :source_row, :sync_id, :created_at, :updated_at)
             """,
             values,
         )
@@ -219,8 +231,10 @@ def list_material_items(
     offset: int = 0,
     column_filters: Mapping[str, tuple[str, ...]] | None = None,
 ) -> list[sqlite3.Row]:
-    sql = """
-        SELECT *, (width * length * 7.85 * thickness / pieces / 1000000.0) AS unit_weight
+    sql = f"""
+        SELECT *, {_UNIT_WEIGHT_SQL} AS unit_weight,
+               {MATERIAL_COLUMN_EXPRESSIONS["scrap_weight"]} AS scrap_weight,
+               {MATERIAL_COLUMN_EXPRESSIONS["scrap_percent"]} AS scrap_percent
         FROM material_items
     """
     clauses, params = _filter_clauses(query, include_inactive, only_inactive, column_filters)

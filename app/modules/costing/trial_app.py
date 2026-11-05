@@ -25,6 +25,7 @@ from .trial_support import CONFIG_NAME, DATABASE_NAME, ROOT, atomic_json, load_s
 from .trial_web import costing_trial
 from .transfer_web import register_transfer_routes
 from .web_support import template_context
+from .weight_lookup import CostWeightLookup
 
 
 logger = logging.getLogger(__name__)
@@ -82,6 +83,7 @@ def create_trial_app(data_dir: Path, read_only: bool = False) -> Flask:
     app.jinja_env.globals.update(can=can, can_any=can_any, csrf_field=csrf_field, csrf_token=csrf_token,
                                 static_version=lambda name: int((ROOT / "static" / name).stat().st_mtime))
     app.context_processor(template_context)
+    app.extensions["costing_weights"] = CostWeightLookup(settings["secret_key"])
     app.jinja_env.filters["cost_money"] = cost_money
     app.jinja_env.filters["cost_time"] = cost_time
 

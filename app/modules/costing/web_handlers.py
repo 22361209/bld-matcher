@@ -10,14 +10,15 @@ from .editor_choices import editor_choices
 from .grid import COLUMN_FILTER_FIELDS, normalize_column_filters
 from .pair_codes import mirror_code
 from .scrap_detail import scrap_detail
-from .web_support import costing_endpoint, import_owner, imports, service
+from .web_support import costing_endpoint, import_owner, imports, service, weights
 
 
 EDIT_FIELDS = {"code", "kind", "name", "brand", "models", "remark", "approved_cost", "scrap_credit", "theoretical_scrap",
-               "items", "suggested_tax_price_override", "create_pair", "peer_version"}
+               "items", "suggested_tax_price_override", "create_pair", "peer_version",
+               "scrap_mode", "scrap_unit_price", "scrap_credit_override"}
 ITEM_FIELDS = {"id", "category", "name", "product_code", "material_attribute", "part_code", "supplier", "remark", "mode", "amount", "unit_price",
                "quantity", "weight", "processing_fee", "length", "width", "height", "strap_rate", "review_note", "pair_kind",
-               "peer_product_code", "peer_part_code"}
+               "peer_product_code", "peer_part_code", "weight_choice", "scrap_expected"}
 
 
 def _body() -> tuple[dict, dict]:
@@ -30,7 +31,14 @@ def _body() -> tuple[dict, dict]:
             raise CostingValidationError("成本明细格式不正确。", "items")
         data["items"] = [{key: value for key, value in item.items() if key in ITEM_FIELDS}
                          if isinstance(item, dict) else item for item in data["items"]]
+        weights().apply(data["items"])
     return raw, data
+
+
+def weight_lookup():
+    lookup = weights()
+    return jsonify(ok=True, available=lookup.available,
+                   candidates=lookup.candidates(request.args.get("code"), request.args.get("kind", "")))
 
 
 def index():
@@ -67,10 +75,13 @@ def new():
             for key in ("id", "source_info", "pair_kind", "peer_item_id"):
                 item.pop(key, None)
             item.setdefault("material_attribute", "")
+            if item.get("weight_source"):
+                item["weight_choice"] = weights().copy_token(item["weight_source"])
         copy_from = original["code"]
     else:
         record = {"code": "", "kind": "arm", "name": "", "brand": "", "models": "", "remark": "",
-                  "approved_cost": None, "scrap_credit": None, "theoretical_scrap": None, "items": []}
+                  "approved_cost": None, "scrap_credit": None, "theoretical_scrap": None, "items": [],
+                  "scrap_mode": "auto", "scrap_unit_price": "2", "scrap_credit_override": None}
         copy_from = ""
     return render_template("costing_edit.html", record=record, is_new=True, can_edit=True,
                            copy_from=copy_from, revisions=[], scrap=scrap_detail(record.get("source_info")),

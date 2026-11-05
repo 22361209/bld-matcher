@@ -13,6 +13,7 @@ from .domain import COST_KIND_LABELS, MATERIAL_ATTRIBUTES, CostingConflict, Cost
 from .grid import vehicle_parts
 from .service import CostingService
 from .transfer_service import MAX_TRANSFER_MIB
+from .weight_lookup import CostWeightLookup
 
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,10 @@ def service() -> CostingService:
 
 def imports():
     return current_app.extensions["costing_imports"]
+
+
+def weights() -> CostWeightLookup:
+    return current_app.extensions["costing_weights"]
 
 
 def costing_endpoint() -> str:

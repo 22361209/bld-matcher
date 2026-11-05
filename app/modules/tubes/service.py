@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from decimal import Decimal
 from pathlib import Path
 from typing import cast
 
@@ -60,6 +61,24 @@ class TubeService:
     def get_item(self, item_id: int) -> dict[str, object] | None:
         with self.unit_of_work_factory() as unit_of_work:
             return unit_of_work.repository.get(item_id)
+
+    def costing_candidates(self, code: str) -> list[dict]:
+        with self.unit_of_work_factory() as unit_of_work:
+            rows = unit_of_work.repository.costing_matches(code)
+        candidates = []
+        for row in rows:
+            if row["weight_kg"] is None:
+                continue
+            weight = Decimal(str(row["weight_kg"]))
+            if not weight.is_finite() or not 0 < weight <= Decimal("1000000000000"):
+                continue
+            exponent = weight.as_tuple().exponent
+            if isinstance(exponent, int) and exponent < -18:
+                weight = round(weight, 18)
+            if weight:
+                candidates.append({"code": row["code"], "source_code": row["source_code"], "name": row["tube_type"],
+                                   "spec": row["spec_text"], "gross_weight": format(weight, "f")})
+        return candidates
 
     def save(self, data: Mapping[str, object], *, actor: str) -> int:
         with self.unit_of_work_factory() as unit_of_work:

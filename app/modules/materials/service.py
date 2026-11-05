@@ -52,6 +52,13 @@ class MaterialService:
             stats = unit_of_work.repository.stats()
         return MaterialPage(records=records, total=total, limit=safe_limit, offset=safe_offset, stats=stats)
 
+    def costing_candidates(self, code: str) -> list[dict[str, str | None]]:
+        if not code.strip():
+            return []
+        self.bootstrap()
+        with self.unit_of_work_factory() as unit_of_work:
+            return unit_of_work.repository.costing_candidates(code.strip())
+
     def filter_options(
         self,
         *,

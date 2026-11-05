@@ -31,6 +31,10 @@
             <input name="spec_text" value="{{ item.spec_text if item else '' }}" placeholder="例如 2.5 357 1260 / 2.5*357*1260" required>
           </label>
           <label>
+            净重（kg/件）
+            <input name="net_weight" type="number" min="0.000000000000000001" step="any" value="{{ item.net_weight if item and item.net_weight is not none else '' }}">
+          </label>
+          <label>
             类别
             <input name="category" value="{{ item.category if item else '' }}" placeholder="例如 前下摆臂">
           </label>

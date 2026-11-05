@@ -321,7 +321,7 @@ class TestWebMaterialsAndOperations(WebAppTestBase):
         self.assertRegex(html, r'<input name="part"[^>]*required')
         self.assertIn('aria-label="筛选母件编码"', html)
         self.assertIn('aria-label="筛选零件编码"', html)
-        self.assertIn('aria-label="筛选单件重量kg"', html)
+        self.assertIn('aria-label="筛选单件下料重kg"', html)
         self.assertNotIn("<th>型号</th>", html)
         self.assertNotIn("<th>编码</th>", html)
         self.assertNotIn('name="thickness"', html)
@@ -403,7 +403,7 @@ class TestWebMaterialsAndOperations(WebAppTestBase):
 
         response = self.client.get("/materials/items?q=T-SPEC-WEB-SPACE")
         html = response.get_data(as_text=True)
-        self.assertIn("单件重量kg", html)
+        self.assertIn("单件下料重kg", html)
         self.assertIn("4.41", html)
         for query in ["357", "2.5 357", "357/1260", "2.5-1260", "2.5*357*1260"]:
             with self.subTest(query=query):
@@ -413,6 +413,22 @@ class TestWebMaterialsAndOperations(WebAppTestBase):
         response = self.client.get("/materials/items", query_string={"q": "2.5 999"})
         html = response.get_data(as_text=True)
         self.assertNotIn("T-SPEC-WEB-SPACE", html)
+
+    def test_optional_material_net_weight_is_visible_editable_and_clearable(self):
+        self.login()
+        form = {"model": "M-SCRAP", "code": "P-SCRAP", "part": "主板", "pieces": "4", "active": "1",
+                "spec_text": "2.5×357×1260", "net_weight": "0.95"}
+        self.client.post("/materials/items/save", data=form)
+        with self.web.connect(self.web.DB_PATH) as conn:
+            item_id, = conn.execute("SELECT id FROM material_items WHERE model = 'M-SCRAP'").fetchone()
+        self.assertIn('value="0.95"', self.client.get(f"/materials/items/{item_id}/edit").get_data(as_text=True))
+        html = self.client.get("/materials/items?q=M-SCRAP").get_data(as_text=True)
+        self.assertIn('data-col="scrap-weight">1.2569</td>', html)
+        self.assertIn('data-col="scrap-percent">56.95</td>', html)
+        self.client.post("/materials/items/save", data={**form, "id": item_id, "net_weight": ""})
+        html = self.client.get("/materials/items?q=M-SCRAP").get_data(as_text=True)
+        self.assertIn('data-col="net-weight">—</td>', html)
+        self.assertIn('data-col="scrap-weight">—</td>', html)
 
     def test_material_item_requires_code_and_part(self):
         self.login()
@@ -590,6 +606,7 @@ class TestWebMaterialsAndOperations(WebAppTestBase):
                 "042_bilingual_catalog",
                 "043_product_development_register",
                 "044_costing",
+                "045_material_net_weight",
             ],
         )
 

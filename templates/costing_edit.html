@@ -14,7 +14,7 @@
 <script type="module" src="{{ url_for('static', filename='pages/costing_identity.js', v=static_version('pages/costing_identity.js')) }}"></script>
 {% endblock %}
 {% block page_content %}
-<form id="costing-editor" data-costing-form data-list-url="{{ url_for(costing_endpoint ~ '.index') }}" data-preview-url="{{ url_for(costing_endpoint ~ '.preview') }}" data-record="{{ record|tojson|forceescape }}" data-references="{{ (references or {})|tojson|forceescape }}" data-new="{{ 'true' if is_new else 'false' }}" data-editable="{{ 'true' if can_edit else 'false' }}" action="{{ url_for(costing_endpoint ~ '.new') if is_new else url_for(costing_endpoint ~ '.edit', record_id=record.id) }}" method="post">
+<form id="costing-editor" data-costing-form data-list-url="{{ url_for(costing_endpoint ~ '.index') }}" data-preview-url="{{ url_for(costing_endpoint ~ '.preview') }}" data-record="{{ record|tojson|forceescape }}" data-references="{{ (references or {})|tojson|forceescape }}" data-weight-lookup-url="{{ url_for(costing_endpoint ~ '.weight_lookup') }}" data-new="{{ 'true' if is_new else 'false' }}" data-editable="{{ 'true' if can_edit else 'false' }}" action="{{ url_for(costing_endpoint ~ '.new') if is_new else url_for(costing_endpoint ~ '.edit', record_id=record.id) }}" method="post">
   {{ csrf_field() }}
   {% set new_title = '复制新建成本' if copy_from else '新建型号成本' %}
   {% set kind_name = costing_kind_labels.get(record.kind, '—') %}
@@ -84,13 +84,31 @@
     <noscript><p class="message error">成本明细编辑需要启用浏览器 JavaScript。</p></noscript>
   </section>
   <section class="data-section costing-summary-section">
-    <div class="costing-summary-grid">
+    {% set auto_scrap = record.scrap_mode == 'auto' or (is_new and not copy_from) %}
+    <input type="hidden" name="scrap_mode" value="{{ 'auto' if auto_scrap else 'legacy' }}">
+    <div class="costing-summary-grid costing-cost-totals">
       <div><span>明细计算成本</span><strong data-costing-total="calculated_cost">—</strong><small data-costing-known></small></div>
       <label>人工核定成本 <input name="approved_cost" inputmode="decimal" type="number" min="0" step="any" value="{{ record.approved_cost if record.approved_cost is not none else '' }}" placeholder="留空采用计算成本" {% if not can_edit %}readonly{% endif %}></label>
-      <div class="costing-scrap-field"><div class="costing-scrap-heading"><label for="costing-scrap-credit">废料抵减额</label>
-        <button class="link-button" type="button" data-costing-scrap-toggle aria-controls="costing-scrap-detail" aria-expanded="false">计算明细</button></div>
-        <input id="costing-scrap-credit" name="scrap_credit" inputmode="decimal" type="number" min="0" step="any" value="{{ record.scrap_credit if record.scrap_credit is not none else '' }}" placeholder="留空按 0" {% if not can_edit %}readonly{% endif %}></div>
       <div><span>抵减后成本</span><strong data-costing-total="net_cost">—</strong><small data-costing-completeness></small></div>
+    </div>
+    <div class="costing-scrap-toolbar">
+      <strong>废料抵减</strong>
+      <button class="link-button" type="button" data-costing-scrap-toggle aria-controls="costing-scrap-detail" aria-expanded="false">计算明细</button>
+      {% if can_edit %}<button class="link-button" type="button" data-adopt-scrap>按材料明细重算</button>{% endif %}
+    </div>
+    <div class="costing-summary-grid costing-scrap-grid">
+      <div><span>废料重量（kg/件）</span><strong data-scrap-weight>—</strong><small data-scrap-complete></small></div>
+      <div><label data-scrap-auto {% if not auto_scrap %}hidden{% endif %}>废料单价（元/kg）
+        <input name="scrap_unit_price" type="number" inputmode="decimal" min="0" step="any" value="{{ record.scrap_unit_price if record.scrap_unit_price is defined and record.scrap_unit_price is not none else '2' }}" placeholder="默认 2" {% if not can_edit %}readonly{% endif %}></label>
+        <span data-scrap-legacy {% if auto_scrap %}hidden{% endif %}>废料单价（元/kg）</span><strong data-scrap-legacy {% if auto_scrap %}hidden{% endif %}>见原表</strong></div>
+      <div><span>理论废料金额（元/件）</span><strong data-costing-total="theoretical_scrap">—</strong></div>
+      <div>
+        <label data-scrap-auto {% if not auto_scrap %}hidden{% endif %}>实际抵减额（元/件）
+          <input name="scrap_credit_override" type="number" inputmode="decimal" min="0" step="any" value="{{ record.scrap_credit_override if record.scrap_credit_override is defined and record.scrap_credit_override is not none else '' }}" placeholder="跟随自动" {% if not can_edit %}readonly{% endif %}></label>
+        <small data-scrap-auto {% if not auto_scrap %}hidden{% endif %}><span data-scrap-applied></span> 默认取理论金额减 1 元，最低为 0。清空恢复自动。</small>
+        <label data-scrap-legacy {% if auto_scrap %}hidden{% endif %}>废料抵减额（元/件）
+          <input name="scrap_credit" inputmode="decimal" type="number" min="0" step="any" value="{{ record.scrap_credit if record.scrap_credit is not none else '' }}" placeholder="留空按 0" {% if not can_edit %}readonly{% endif %}></label>
+      </div>
     </div>
     {% include '_costing_scrap_detail.html' %}
     <div class="workspace-command"><strong>含税售价</strong><span class="muted-text">元 / 件</span></div>

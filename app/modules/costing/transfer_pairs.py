@@ -2,12 +2,19 @@
 from __future__ import annotations
 
 import re
+from itertools import chain
 
 from .domain import CostingValidationError, text
 from .pair_codes import mirror_code
+from .weight_cost import SCRAP_HEADER_FIELDS, SCRAP_ROW_FIELDS
 
 
-def format_version_for(records: list[dict]) -> int:
+def format_version_for(records: list[dict], revisions=()) -> int:
+    # A historical snapshot can retain a sourced line that has since been removed.
+    for row in chain(records, (revision["after"] for revision in revisions)):
+        if (any(key in row for key in SCRAP_HEADER_FIELDS)
+                or any(any(key in item for key in SCRAP_ROW_FIELDS) for item in row["items"])):
+            return 3
     return 2 if any("pair" in record for record in records) else 1
 
 
@@ -17,7 +24,7 @@ def _check_sheet(record: dict, version: int) -> None:
         if any("pair_kind" in item or "peer_item_id" in item for item in items):
             raise CostingValidationError("独立成本单含有未配对的明细关系。")
         return
-    if version != 2:
+    if version < 2:
         raise CostingValidationError("旧版成本快照不能携带左右件关系。")
     pair = record["pair"]
     if (not isinstance(pair, dict) or set(pair) != {"id", "peer_id"}

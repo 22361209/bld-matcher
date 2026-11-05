@@ -126,7 +126,9 @@ CREATE TABLE IF NOT EXISTS material_items (
   source TEXT DEFAULT '',
   source_row INTEGER DEFAULT 0,
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  sync_id TEXT DEFAULT '',
+  net_weight TEXT
 );
 
 CREATE TABLE IF NOT EXISTS tube_items (
