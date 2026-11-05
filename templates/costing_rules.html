@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% set active_page = 'costs' %}
+{% block page_title %}核算规则 · 成本核算 · BLD{% endblock %}
+{% block page_id %}costing.rules{% endblock %}
+{% block page_type %}list{% endblock %}
+{% block page_class %}shell wide app-surface costing-page{% endblock %}
+{% block navigation %}{% if costing_trial_mode %}{% include '_costing_nav.html' %}{% else %}{{ super() }}{% endif %}{% endblock %}
+{% block page_content %}
+{% if not can('view_cost_list_full') %}
+<section class="data-section" aria-label="售价使用说明">
+  <div class="workspace-command"><strong>售价使用说明（元/件）</strong><a class="linear-button subtle" href="{{ url_for(costing_endpoint ~ '.index') }}">返回成本列表</a></div>
+  <div class="data-table-scroll"><table class="data-table">
+    <thead><tr><th scope="col">列表栏位</th><th scope="col">含义</th></tr></thead>
+    <tbody>
+      <tr><th scope="row">最低含税售价</th><td>该型号每件产品的含税售价参考下限。价格显示「—」表示暂缺。</td></tr>
+      <tr><th scope="row">建议含税单价</th><td>该型号当前建议采用的每件含税售价。如需确认某个型号的建议价是否经过手动调整，可请有成本明细权限的同事核对。</td></tr>
+    </tbody>
+  </table></div>
+</section>
+{% else %}
+<section class="data-section" aria-label="成本汇总与售价">
+  <div class="workspace-command"><strong>成本汇总与售价（元/件）</strong><a class="linear-button subtle" href="{{ url_for(costing_endpoint ~ '.index') }}">返回成本列表</a></div>
+  <div class="data-table-scroll"><table class="data-table">
+    <thead><tr><th scope="col">项目</th><th scope="col">核算方法</th></tr></thead>
+    <tbody>
+      <tr><th scope="row">计算成本</th><td>各项成本之和。明细缺少必填金额、单价或用量时，编辑页列出已知项目小计，待补齐后得出完整计算成本。</td></tr>
+      <tr><th scope="row">抵减后成本</th><td>采用成本 − 实际废料抵减额。优先采用人工核定成本，留空时采用计算成本。</td></tr>
+      <tr><th scope="row">最低含税售价</th><td>抵减后成本 ÷ 0.8 × 1.1，最后向上取到分。例如抵减后成本 20 元，最低含税售价为 27.50 元。</td></tr>
+      <tr><th scope="row">建议含税单价</th><td>默认跟随最低含税售价。可手动调整，清空后恢复自动。抵减后成本缺失或为负时，最低售价留空。</td></tr>
+    </tbody>
+  </table></div>
+</section>
+<section class="data-section" aria-label="明细计价方式">
+  <div class="workspace-command"><strong>明细计价方式</strong></div>
+  <div class="data-table-scroll"><table class="data-table">
+    <thead><tr><th scope="col">计价方式</th><th scope="col">本项成本（元/件）</th></tr></thead>
+    <tbody>
+      <tr><th scope="row">直接金额</th><td>按填写的每件金额计入。</td></tr>
+      <tr><th scope="row">按件计算</th><td>零件单价 × 每件用量。</td></tr>
+      <tr><th scope="row">按重量计算</th><td>（单价 × 单件重量 + 单件加工费）× 每件用量。重量按 kg，加工费留空按 0，用量留空按 1。</td></tr>
+      <tr><th scope="row">按重量运费</th><td>运费单价（元/kg）× 重量（kg）。</td></tr>
+      <tr><th scope="row">包装分摊</th><td>（纸箱单价 + 每箱打包带费用）÷ 每箱装箱数。打包带费用 = 用带长度（米）× 每米单价。箱尺寸按厘米输入，用带长度 = [4 ×（长 + 高）+ 4 ×（宽 + 高）+ 2 ×（长 + 宽）] ÷ 100。</td></tr>
+      <tr><th scope="row">调整 / 返还</th><td>按填写金额计入，负数抵减成本。</td></tr>
+    </tbody>
+  </table></div>
+</section>
+<section class="data-section" aria-label="取重与废料抵减">
+  <div class="workspace-command"><strong>取重与废料抵减</strong></div>
+  <div class="data-table-scroll"><table class="data-table">
+    <thead><tr><th scope="col">项目</th><th scope="col">口径</th></tr></thead>
+    <tbody>
+      <tr><th scope="row">冲压件下料重</th><td>厚 × 宽 × 长（mm）× 7.85 ÷ 下料只数 ÷ 1,000,000，得到每个片件的耗料重量（kg）。每个成品的装配用量在成本行填写。</td></tr>
+      <tr><th scope="row">按编码取重</th><td>{% if costing_trial_mode %}试用环境可录入手工重量，已保存的重量来源可在明细资料中查看。{% else %}按重量计价时，录完产品编码即可带入唯一匹配的重量。同码有多条可选规格时选择一条。焊接管采用管件资料中的单件重量。{% endif %}</td></tr>
+      <tr><th scope="row">理论废料金额</th><td>各冲压件的（单件下料重 − 净重）× 每件用量，相加得到废料总重量，再乘废料单价（默认 2 元/kg）。焊接管只计材料成本。</td></tr>
+      <tr><th scope="row">实际抵减额</th><td>按材料规则核算时，默认取理论废料金额减 1 元，最低为 0。冲压件缺净重时保留核对提示，自动抵减暂按 0。手动输入的抵减额优先，清空恢复自动。历史成本单按原采用额核算，可主动按材料明细重算。</td></tr>
+    </tbody>
+  </table></div>
+</section>
+<section class="data-section" aria-label="左右件配对">
+  <div class="workspace-command"><strong>左右件配对</strong></div>
+  <div class="data-table-scroll"><table class="data-table">
+    <thead><tr><th scope="col">明细关系</th><th scope="col">保存后的联动范围</th></tr></thead>
+    <tbody>
+      <tr><th scope="row">左右共用件</th><td>两侧联动产品编码、零件编码和计价金额或单价。共用纸箱的长、宽、高也联动。</td></tr>
+      <tr><th scope="row">左右对应件</th><td>两侧各用自己的编码，计价方式及相应金额或单价联动。数量、重量、人工核定成本及手动售价分别维护。</td></tr>
+      <tr><th scope="row">本侧独有</th><td>只计入本侧成本，另一侧可保留自己的独有零件。</td></tr>
+    </tbody>
+  </table></div>
+</section>
+{% endif %}
+{% endblock %}

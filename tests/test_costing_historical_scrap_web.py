@@ -96,7 +96,8 @@ class HistoricalScrapWebTest(WebAppTestBase):
         username = "scrap-rights-" + uuid4().hex[:8]
         admin.save_user({"username": username, "display_name": username, "password": "test-rights-pw",
                          "role": "viewer", "active": "1",
-                         "permission_overrides": {"manage_costs": "allow", "manage_material_items": "allow"}},
+                         "permission_overrides": {"view_costs": "allow", "view_cost_list_full": "allow", "view_cost_details": "allow",
+                                                  "manage_costs": "allow", "manage_material_items": "allow"}},
                         actor="007", actor_user_id=admin_id)
         client = self.web.app.test_client()
         self.assertEqual(client.post("/login", data={"username": username, "password": "test-rights-pw"}).status_code, 302)

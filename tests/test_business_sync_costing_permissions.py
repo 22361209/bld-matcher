@@ -13,7 +13,7 @@ class CostSyncPermissionTest(WebAppTestBase):
 
         admin = get_admin_service()
         permissions = {"sync_product_data": "allow", "generate_match": "allow",
-                       "view_costs": "allow", "manage_costs": "deny"}
+                       "view_costs": "allow", "view_cost_list_full": "allow", "view_cost_details": "allow", "manage_costs": "deny"}
         user_id = admin.save_user({
             "username": "qa-cost-sync", "password": "fixture-password", "display_name": "测试同步员",
             "role": "viewer", "active": "1", "permission_overrides": permissions,
@@ -43,12 +43,13 @@ class CostSyncPermissionTest(WebAppTestBase):
         form = {"package_path": str(uploaded), "preview_token": unescape(token[1]) if token else "forged"}
         self.assertEqual(client.post("/business-data-sync/apply", data=form).status_code, 403)
 
-        admin.update_user_overrides(user_id, {**permissions, "view_costs": "deny", "manage_costs": "allow"}, actor="007")
-        self.assertNotIn('value="costing"', client.get("/business-data-sync").get_data(as_text=True))
-        self.assertEqual(client.post("/business-data-sync/export", data={"dataset": "costing"}).status_code, 403)
-        self.assertEqual(preview().status_code, 403)
-        self.assertEqual(client.post("/business-data-sync/apply", data=form).status_code, 403)
-        self.assertEqual(client.get(download).status_code, 403)
+        for revoked in ("view_cost_details", "view_cost_list_full", "view_costs"):
+            admin.update_user_overrides(user_id, {**permissions, revoked: "deny", "manage_costs": "allow"}, actor="007")
+            self.assertNotIn('value="costing"', client.get("/business-data-sync").get_data(as_text=True))
+            self.assertEqual(client.post("/business-data-sync/export", data={"dataset": "costing"}).status_code, 403)
+            self.assertEqual(preview().status_code, 403)
+            self.assertEqual(client.post("/business-data-sync/apply", data=form).status_code, 403)
+            self.assertEqual(client.get(download).status_code, 403)
         # Case-insensitive filesystems also accept alternate spellings of the same path.
         upper_name = saved_package.name.upper()
         uppercase = saved_package.with_name(upper_name)

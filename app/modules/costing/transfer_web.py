@@ -30,7 +30,7 @@ def _historical_scrap_error(error: CostingValidationError | CostingConflict):
 
 def register_transfer_routes(app, *, trial: bool = False) -> None:
     blueprint = Blueprint("costing_transfer", __name__, url_prefix="/costs/transfer")
-    protect = trial_permission_required("view_costs") if trial else permission_required("manage_users")
+    protect = trial_permission_required("view_cost_details") if trial else permission_required("manage_users")
 
     @blueprint.get("/export")
     @protect

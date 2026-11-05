@@ -40,16 +40,18 @@ class CostingFormalWebTest(WebAppTestBase):
             "Accept": "application/json", "X-CSRF-Token": token or self.csrf(client),
         })
 
-    def viewer(self, *, cost_access=False):
+    def viewer(self, *, cost_access=False, overrides=None):
         from app.modules.admin.factory import get_admin_service
 
         admin = get_admin_service()
         with self.client.session_transaction() as state:
             admin_id = state["user_id"]
         username = "cost-view-" + uuid4().hex[:8]
+        if overrides is None:
+            overrides = dict.fromkeys(("view_costs", "view_cost_list_full", "view_cost_details"), "allow") if cost_access else {}
         admin.save_user({"username": username, "display_name": username, "password": "viewer-password",
                          "role": "viewer", "active": "1",
-                         "permission_overrides": {"view_costs": "allow"} if cost_access else {}},
+                         "permission_overrides": overrides},
                         actor="007", actor_user_id=admin_id)
         client = self.web.app.test_client()
         response = client.post("/login", data={"username": username, "password": "viewer-password"})
@@ -133,6 +135,47 @@ class CostingFormalWebTest(WebAppTestBase):
         detail = self.client.get(f"/costs/{missing['id']}").get_data(as_text=True)
         self.assertIn("已知片件小计　— 元/件", detail)
         self.assertIn("还有 1 行缺少金额", detail)
+
+    def test_price_only_and_full_list_roles_cannot_infer_or_open_restricted_costs(self):
+        record = self.service.create(self.payload(approved_cost="107.123456", suggested_tax_price_override="151",
+                                                  items=[{"name": "内部专用衬套", "amount": "99.54321"}]), actor="007")
+        headers = {"Accept": "application/json"}
+        for full in (False, True):
+            with self.subTest(full_list=full):
+                overrides = {"view_costs": "allow", "manage_costs": "allow"}
+                if full:
+                    overrides["view_cost_list_full"] = "allow"
+                client = self.viewer(overrides=overrides)
+                url = "/costs?q=" + self.code
+                html = client.get(url).get_data(as_text=True)
+                self.assertIn(self.code, html)
+                self.assertIn('href="/costs/rules"', html)
+                self.assertNotIn(f'href="/costs/{record["id"]}"', html)
+                self.assertNotIn('href="/costs/pairs"', html)
+                self.assertNotIn('href="/costs/new"', html)
+                self.assertNotIn('内部专用衬套', html)
+                self.assertEqual("107.123456" in html, full)
+                self.assertEqual('data-col="net"' in html, full)
+                self.assertEqual('data-filter-key="cf_approved"' in html, full)
+                self.assertEqual('name="status"' in html, full)
+                result = client.get(url, headers=headers).get_json()["result"]
+                row, = result["records"]
+                self.assertEqual(row["minimum_tax_price"], record["minimum_tax_price"])
+                self.assertEqual(row["suggested_tax_price"], "151")
+                fields = {"code", "kind", "name", "brand", "models", "minimum_tax_price", "suggested_tax_price"}
+                if full:
+                    fields.update(("status", "calculated_cost", "approved_cost", "net_cost", "scrap_credit"))
+                self.assertEqual(set(row), fields)
+                for query in ("&cf_approved=987654321", "&status=draft", "&cf_status=draft"):
+                    filtered = client.get(url + query, headers=headers).get_json()["result"]["records"]
+                    self.assertEqual(filtered, [] if full else [row])
+                for path in (f"/costs/{record['id']}", f"/costs/pairs/{record['id']}", "/costs/pairs",
+                             f"/costs/new?copy={record['id']}", "/costs/weight-lookup?code=X",
+                             "/costs/import", "/costs/transfer/export"):
+                    self.assertEqual(client.get(path, headers=headers).status_code, 403, path)
+                for path in (f"/costs/{record['id']}", "/costs/preview", "/costs/new", "/costs/pairs"):
+                    self.assertEqual(client.post(path, json={"version": 1}, headers=headers).status_code, 403, path)
+                self.assertEqual(client.get("/costs/rules").status_code, 200)
 
     def test_formal_login_permissions_and_read_only_costs(self):
         anon = self.web.app.test_client()

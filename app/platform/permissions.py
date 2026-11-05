@@ -14,6 +14,7 @@ class PermissionDefinition:
     group: str
     assignable: bool = True
     active: bool = True
+    requires: tuple[str, ...] = ()
 
 
 PERMISSION_DEFINITIONS: tuple[PermissionDefinition, ...] = (
@@ -93,8 +94,19 @@ PERMISSION_DEFINITIONS: tuple[PermissionDefinition, ...] = (
     PermissionDefinition("view_development", "查看产品开发", "查看开发单、成品分支、组件、任务和工序。", "产品开发"),
     PermissionDefinition("edit_development", "维护产品开发", "维护开发单、组件、任务、供应商和工程文件，按负责人确认量产完成。", "产品开发"),
     PermissionDefinition("view_development_files", "查看开发文件", "查看开发图纸与工艺文件的修订历史、预览和下载。", "产品开发"),
-    PermissionDefinition("view_costs", "查看成本核算", "查看、查询型号成本、含税售价及成本修改记录。", "成本核算"),
-    PermissionDefinition("manage_costs", "维护成本核算", "新建、修改、复制型号成本和建议含税单价，预览并确认成本工作簿导入。", "成本核算"),
+    PermissionDefinition("view_costs", "查看成本列表（仅售价）", "可查询型号及其售价。", "成本核算"),
+    PermissionDefinition(
+        "view_cost_list_full", "查看完整成本列表", "需有仅售价列表权限，可查看成本列表中的全部汇总金额。", "成本核算",
+        requires=("view_costs",),
+    ),
+    PermissionDefinition(
+        "view_cost_details", "查看成本明细", "需有完整成本列表权限，可查看成本明细、左右件关系和修改记录。", "成本核算",
+        requires=("view_costs", "view_cost_list_full"),
+    ),
+    PermissionDefinition(
+        "manage_costs", "修改成本核算", "需有查看成本明细权限，可新建、修改、复制成本单及导入成本资料。", "成本核算",
+        requires=("view_costs", "view_cost_list_full", "view_cost_details"),
+    ),
     PermissionDefinition(
         "sync_product_data",
         "业务数据同步",
@@ -177,4 +189,4 @@ def effective_permissions(
         for permission, effect in overrides.items()
         if effect == "deny"
     )
-    return frozenset(allowed)
+    return frozenset(key for key in allowed if allowed.issuperset(PERMISSION_BY_KEY[key].requires))

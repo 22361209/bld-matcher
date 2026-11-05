@@ -154,7 +154,7 @@ class CostPairWebTest(WebAppTestBase):
         username = "pair-viewer-" + uuid4().hex[:8]
         get_admin_service().save_user(
             {"username": username, "display_name": username, "password": "review-view-only", "role": "viewer",
-             "active": "1", "permission_overrides": {"view_costs": "allow", "manage_costs": "deny"}},
+             "active": "1", "permission_overrides": {"view_costs": "allow", "view_cost_list_full": "allow", "view_cost_details": "allow", "manage_costs": "deny"}},
             actor="007", actor_user_id=admin_id,
         )
         client = self.web.app.test_client()

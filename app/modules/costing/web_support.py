@@ -10,7 +10,7 @@ from werkzeug.exceptions import HTTPException
 from app.security import wants_json_response
 
 from .domain import COST_KIND_LABELS, MATERIAL_ATTRIBUTES, CostingConflict, CostingNotFound, CostingValidationError
-from .grid import vehicle_parts
+from .grid import PRICE_LIST_COLUMNS, vehicle_parts
 from .service import CostingService
 from .transfer_service import MAX_TRANSFER_MIB
 from .weight_lookup import CostWeightLookup
@@ -37,7 +37,7 @@ def costing_endpoint() -> str:
 
 def template_context() -> dict:
     return {"costing_endpoint": costing_endpoint(), "costing_material_attributes": MATERIAL_ATTRIBUTES,
-            "costing_kind_labels": COST_KIND_LABELS, "costing_vehicle_parts": vehicle_parts,
+            "costing_price_list_columns": PRICE_LIST_COLUMNS, "costing_kind_labels": COST_KIND_LABELS, "costing_vehicle_parts": vehicle_parts,
             "costing_trial_mode": bool(current_app.config.get("COSTING_TRIAL_MODE"))}
 
 

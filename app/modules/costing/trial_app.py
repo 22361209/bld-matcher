@@ -91,7 +91,9 @@ def create_trial_app(data_dir: Path, read_only: bool = False) -> Flask:
     def authenticate():
         g.user = None
         if session.get("costing_authenticated") == settings["credential_id"]:
-            permissions = {"view_costs"} if read_only else {"view_costs", "manage_costs"}
+            permissions = {"view_costs", "view_cost_list_full", "view_cost_details"}
+            if not read_only:
+                permissions.add("manage_costs")
             g.user = {"id": 1, "username": ACTOR, "role": "costing_trial", "permissions": permissions}
         if request.method in {"POST", "PUT", "PATCH", "DELETE"} and not validate_csrf_token():
             return fail("页面已过期，请刷新后重试。", 400)

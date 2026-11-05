@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 from typing import Any, cast
 
-from flask import abort, flash, redirect, render_template, request, send_file, url_for
+from flask import abort, flash, jsonify, redirect, render_template, request, send_file, url_for
 
 from app.helpers import (
     all_recent_outputs,
@@ -14,7 +14,7 @@ from app.helpers import (
     user_recent_outputs,
     user_upload_path,
 )
-from app.security import actor_name, can, permission_required
+from app.security import actor_name, can, permission_required, wants_json_response
 
 from .factory import get_material_service
 from .infrastructure import MaterialImportBusyError
@@ -191,6 +191,7 @@ def register(app) -> None:
     def save_material_item():
         data = {
             "id": request.form.get("id", ""),
+            "copy_from": request.form.get("copy_from", ""),
             "model": request.form.get("model", ""),
             "code": request.form.get("code", ""),
             "category": request.form.get("category", ""),
@@ -205,16 +206,24 @@ def register(app) -> None:
         }
         if "net_weight" in request.form:
             data["net_weight"] = request.form["net_weight"]
+        copy_json = bool(data["copy_from"]) and wants_json_response()
         try:
             get_material_service().save_item(data, actor=actor_name())
         except ValueError as exc:
+            if copy_json:
+                return jsonify(ok=False, error=str(exc)), 422
             flash(f"保存失败：{exc}", "error")
             return redirect(url_for("material_items"))
         except Exception:
             logger.exception("Material item save failed")
+            if copy_json:
+                return jsonify(ok=False, error="保存失败，请稍后重试。"), 500
             flash("保存失败，请稍后重试。", "error")
             return redirect(url_for("material_items"))
         flash("材料明细已保存。", "success")
+        if data["copy_from"]:
+            target = url_for("material_items", q=data["code"], status="inactive" if data["active"] == "0" else "active")
+            return jsonify(ok=True, url=target) if copy_json else redirect(target)
         return redirect(url_for("material_items", q=data["model"]))
 
     @app.post("/materials/items/<int:item_id>/deactivate")

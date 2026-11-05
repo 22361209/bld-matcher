@@ -53,7 +53,7 @@ if (nav instanceof HTMLElement && nav.dataset.navReady !== "true") {
     const panel = navigationMenu.querySelector(":scope > .nav-menu-panel");
     if (!(trigger instanceof HTMLElement) || !(panel instanceof HTMLElement)) return;
 
-    const bounds = trigger.getBoundingClientRect();
+    const bounds = (navigationMenu.hasAttribute("data-nav-split") ? navigationMenu : trigger).getBoundingClientRect();
     panel.style.setProperty("--nav-menu-panel-top", `${Math.round(bounds.bottom - 1)}px`);
     panel.style.setProperty("--nav-menu-panel-left", `${Math.round(bounds.left)}px`);
     panel.style.setProperty("--nav-menu-panel-width", `${Math.round(bounds.width)}px`);
@@ -75,19 +75,42 @@ if (nav instanceof HTMLElement && nav.dataset.navReady !== "true") {
       navigationMenu.classList.remove("is-open");
       trigger.setAttribute("aria-expanded", "false");
     };
-    const toggleMenu = () => {
-      const willOpen = !navigationMenu.classList.contains("is-open");
+    const openMenu = () => {
       navigationMenus.forEach((item) => {
         item.classList.remove("is-open");
         item.querySelector("[data-nav-menu-trigger]")?.setAttribute("aria-expanded", "false");
       });
-      if (willOpen) {
-        navigationMenu.classList.add("is-open");
-        trigger.setAttribute("aria-expanded", "true");
-      }
+      navigationMenu.classList.add("is-open");
+      trigger.setAttribute("aria-expanded", "true");
+      positionMobileMenuPanel(navigationMenu);
     };
-
-    trigger.addEventListener("click", toggleMenu);
+    trigger.addEventListener("click", () => {
+      if (navigationMenu.classList.contains("is-open")) closeMenu();
+      else openMenu();
+    });
+    if (navigationMenu.hasAttribute("data-nav-split")) {
+      navigationMenu.addEventListener("pointerenter", (event) => {
+        if (event.pointerType === "mouse") openMenu();
+      });
+      navigationMenu.addEventListener("pointerleave", (event) => {
+        if (event.pointerType === "mouse" && !navigationMenu.contains(document.activeElement)) closeMenu();
+      });
+      navigationMenu.addEventListener("focusout", (event) => {
+        if (!navigationMenu.contains(event.relatedTarget)) closeMenu();
+      });
+      navigationMenu.addEventListener("keydown", (event) => {
+        if (event.key === "ArrowDown" && !event.target.closest(".nav-menu-panel")) {
+          event.preventDefault();
+          openMenu();
+          navigationMenu.querySelector(".nav-menu-panel a")?.focus();
+        } else if (event.key === "Escape" && navigationMenu.classList.contains("is-open")) {
+          event.preventDefault();
+          event.stopPropagation();
+          closeMenu();
+          trigger.focus();
+        }
+      });
+    }
     document.addEventListener("click", (event) => {
       if (!navigationMenu.contains(event.target)) closeMenu();
     });

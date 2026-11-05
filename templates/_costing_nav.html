@@ -6,7 +6,7 @@
   {% if g.user %}
   <button class="mobile-workspace-trigger" type="button" aria-expanded="false" aria-controls="mobile-workspace-nav" data-mobile-workspace-trigger>成本核算<span aria-hidden="true">⌄</span></button>
   <div class="nav-primary"><div class="nav-links" id="mobile-workspace-nav" data-mobile-workspace-menu>
-    <a class="nav-mobile-core {% if active_page == 'costs' %}active{% endif %}" href="{{ url_for('costing_trial.index') }}">成本核算</a>
+    {% include "_costing_nav_menu.html" %}
   </div></div>
   <div class="nav-user"><span class="user-badge">{{ g.user.display_name or g.user.username }}</span><form method="post" action="{{ url_for('costing_trial.logout') }}">{{ csrf_field() }}<button class="ghost compact" type="submit">退出</button></form></div>
   {% endif %}

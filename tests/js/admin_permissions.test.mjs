@@ -293,6 +293,32 @@ test("account permission preview handles ordinary and administrator roles plus o
 });
 
 
+test("account preview applies every prerequisite when granting or denying a cost permission", () => {
+  const harness = buildAccountHarness();
+  const levels = ["view_costs", "view_cost_list_full", "view_cost_details", "manage_costs"];
+  const costRows = harness.rows.slice(0, levels.length);
+  costRows.forEach(({ row }, index) => {
+    row.dataset.permission = levels[index];
+    row.dataset.requires = levels.slice(0, index).join(" ");
+  });
+  harness.ordinaryRole.dataset.permissions = levels.join(" ");
+  harness.roleSelect.dispatch("change");
+  assert.equal(harness.allowCount.textContent, "4");
+  for (const [index, { radios }] of costRows.entries()) {
+    const deny = radios.find((radio) => radio.value === "deny");
+    deny.checked = true;
+    harness.accountForm.dispatch("change", { target: deny });
+    assert.equal(harness.allowCount.textContent, String(index));
+    assert.deepEqual(costRows.map(({ finalResult }) => finalResult.dataset.state),
+      levels.map((_key, level) => level < index ? "allow" : "deny"));
+    const inherit = radios.find((radio) => radio.value === "inherit");
+    inherit.checked = true;
+    harness.accountForm.dispatch("change", { target: inherit });
+    assert.equal(harness.allowCount.textContent, "4");
+  }
+});
+
+
 test("role permission summary counts checkbox changes", () => {
   const checkboxes = [true, false, true].map((checked) => new HTMLInputElement({
     type: "checkbox",

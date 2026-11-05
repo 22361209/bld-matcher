@@ -1306,6 +1306,22 @@ def _add_material_net_weight(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE material_items ADD COLUMN net_weight TEXT")
 
 
+def _add_cost_detail_permission(conn: sqlite3.Connection) -> None:
+    if not _columns(conn, "roles"):
+        return
+    for permission in ("view_cost_list_full", "view_cost_details"):
+        conn.execute("""
+            INSERT OR IGNORE INTO role_permissions (role_key, permission, created_at)
+            SELECT role_key, ?, created_at
+            FROM role_permissions WHERE permission = 'view_costs'
+        """, (permission,))
+        conn.execute("""
+            INSERT OR IGNORE INTO user_permission_overrides (user_id, permission, effect, updated_at)
+            SELECT user_id, ?, effect, updated_at
+            FROM user_permission_overrides WHERE permission = 'view_costs'
+        """, (permission,))
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -1352,6 +1368,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("043_product_development_register", _add_product_development_register),
     ("044_costing", _add_costing),
     ("045_material_net_weight", _add_material_net_weight),
+    ("046_cost_detail_permission", _add_cost_detail_permission),
 )
 
 

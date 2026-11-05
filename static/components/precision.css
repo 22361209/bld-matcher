@@ -240,6 +240,14 @@ body {
   color: #fff;
 }
 
+.nav-menu[data-nav-split] > a { padding-inline-end: 3px; }
+.nav-menu[data-nav-split] > button { padding-inline: 4px 8px; }
+[data-nav-ready="true"] [data-nav-split]:not(.is-open) > .nav-menu-panel { display: none; }
+@media (pointer: coarse) {
+  .nav-menu[data-nav-split] > button { min-width: 44px; justify-content: center; }
+}
+
+.nav-menu[data-nav-split].is-open > .nav-menu-panel,
 .nav-menu.is-open .nav-menu-panel {
   display: grid;
   gap: 2px;

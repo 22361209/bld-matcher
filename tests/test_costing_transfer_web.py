@@ -93,7 +93,7 @@ class CostingTransferWebTest(WebAppTestBase):
         username = "cost-maintainer-" + uuid4().hex[:8]
         get_admin_service().save_user({"username": username, "display_name": username,
             "password": "maintainer-password", "role": "viewer", "active": "1",
-            "permission_overrides": {"view_costs": "allow", "manage_costs": "allow"}},
+            "permission_overrides": {"view_costs": "allow", "view_cost_list_full": "allow", "view_cost_details": "allow", "manage_costs": "allow"}},
             actor="007", actor_user_id=admin_id)
         client = self.web.app.test_client()
         client.post("/login", data={"username": username, "password": "maintainer-password"})

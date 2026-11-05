@@ -116,11 +116,12 @@
                       {% for permission in definitions %}
                         {% set role_allows = selected_role.is_system or permission.key in selected_role.permissions %}
                         {% set override = editing_user.permission_overrides.get(permission.key, 'inherit') %}
-                        {% set final_allows = selected_role.is_system or override == 'allow' or (override == 'inherit' and role_allows) %}
+                        {% set final_allows = permission.key in editing_user.permissions %}
                         <tr
                           class="permission-data-row{% if not permission.active %} permission-row-retained{% endif %}"
                           data-permission-row
                           data-permission="{{ permission.key }}"
+                          {% if permission.requires %}data-requires="{{ permission.requires | join(' ') }}"{% endif %}
                         >
                           <th scope="row" class="permission-name-cell">
                             <span class="permission-name">{{ permission.label }}</span>

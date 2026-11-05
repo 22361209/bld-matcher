@@ -137,7 +137,14 @@
               {% for item in material_items %}
                 <tr class="{% if not item.active %}muted-row{% endif %}">
                   <td data-col="model"><strong>{{ item.model }}</strong></td>
-                  <td data-col="code">{{ item.code }}</td>
+                  <td data-col="code">
+                    {% if item.code and item.sync_id and can("manage_material_items") %}
+                      <button type="button" class="link-button" title="从 {{ item.code }} 复制新建材料明细"
+                              aria-haspopup="dialog" aria-controls="material-modal"
+                              data-copy-material='{{ dict(copy_from=item.sync_id, model=item.model, part=item.part,
+                                  pieces=item.pieces, spec_text=item.spec_text, category=item.category, car=item.car)|tojson }}'>{{ item.code }}</button>
+                    {% else %}{{ item.code }}{% endif %}
+                  </td>
                   <td data-col="category">{{ item.category }}</td>
                   <td data-col="car">{{ item.car }}</td>
                   <td data-col="part">{{ item.part }}</td>
@@ -243,14 +250,15 @@
 {% if show_material_items and can("manage_material_items") %}
       <div class="editor-modal" id="material-modal" aria-hidden="true">
         <div class="editor-modal-backdrop" data-close-material-modal></div>
-        <div class="editor-modal-panel material-modal-panel" role="dialog" aria-modal="true" aria-label="新增材料明细">
-          <button class="image-modal-close" type="button" data-close-material-modal aria-label="关闭新增材料明细">×</button>
+        <div class="editor-modal-panel material-modal-panel" role="dialog" aria-modal="true" aria-labelledby="material-modal-title">
+          <button class="image-modal-close" type="button" data-close-material-modal aria-label="关闭">×</button>
           <div class="modal-heading">
-            <h2>新增材料明细</h2>
+            <h2 id="material-modal-title">新增材料明细</h2>
             <p class="note">母件编码用于匹配生产计划；规格尺寸支持空格、*、-、/ 分隔。</p>
           </div>
           <form action="{{ url_for('save_material_item') }}" method="post" class="record-form modal-form material-modal-form" data-enter-navigation>
             {{ csrf_field() }}
+            <input type="hidden" name="copy_from">
             <label>
               母件编码
               <input name="model" required>
@@ -265,7 +273,7 @@
             </label>
             <label>
               下料只数
-              <input name="pieces" type="number" step="0.01" min="0.01" required>
+              <input name="pieces" type="number" step="any" min="0.000000000000000001" required>
             </label>
             <label>
               规格尺寸
@@ -288,6 +296,7 @@
               启用
             </label>
             <div class="form-actions modal-actions">
+              <span role="alert" data-material-error></span>
               <button type="submit">保存材料明细</button>
               <button class="ghost" type="button" data-close-material-modal>取消</button>
             </div>

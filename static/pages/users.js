@@ -127,6 +127,7 @@ if (accountForm) {
       : accountForm.dataset.systemRole === "1";
     let allowedCount = 0;
     let overrideCount = 0;
+    const allowed = new Set();
 
     rows.forEach((row) => {
       const permission = row.dataset.permission || "";
@@ -141,18 +142,24 @@ if (accountForm) {
       const override = radios.length
         ? row.querySelector('input[type="radio"]:checked')?.value || "inherit"
         : "inherit";
-      const finalAllows = radios.length
+      const grantsPermission = radios.length
         ? isSystemRole || override === "allow" || (override === "inherit" && roleAllows)
         : isSystemRole;
-      if (finalAllows) allowedCount += 1;
+      if (grantsPermission) allowed.add(permission);
       if (!isSystemRole && radios.length && override !== "inherit") overrideCount += 1;
 
       const roleResult = row.querySelector("[data-role-result]");
-      const finalResult = row.querySelector("[data-permission-result]");
       if (roleResult) {
         roleResult.textContent = roleAllows ? "允许" : "禁止";
         roleResult.dataset.state = roleAllows ? "allow" : "deny";
       }
+    });
+
+    rows.forEach((row) => {
+      const requires = (row.dataset.requires || "").split(" ").filter(Boolean);
+      const finalAllows = allowed.has(row.dataset.permission) && requires.every((key) => allowed.has(key));
+      if (finalAllows) allowedCount += 1;
+      const finalResult = row.querySelector("[data-permission-result]");
       if (finalResult) {
         finalResult.textContent = finalAllows ? "允许" : "禁止";
         finalResult.dataset.state = finalAllows ? "allow" : "deny";

@@ -67,6 +67,15 @@ class CostingTrialTest(unittest.TestCase):
     def post(self, path, data, token, client=None):
         return (client or self.client).post(path, json=data, headers={"X-CSRF-Token": token, "Accept": "application/json"})
 
+    def test_rules_share_the_authenticated_trial_navigation(self):
+        self.assertEqual(self.client.get("/costs/rules", headers={"Accept": "application/json"}).status_code, 401)
+        self.login()
+        body = self.client.get("/costs/rules").get_data(as_text=True)
+        self.assertIn('data-page="costing.rules"', body)
+        self.assertIn('href="/">成本核算</a>', body)
+        self.assertIn('href="/costs/rules">核算规则</a>', body)
+        self.assertIn("试用环境可录入手工重量", body)
+
     def test_authentication_and_csrf_are_enforced_even_in_testing(self):
         self.assertEqual(self.client.get("/", headers={"Accept": "application/json"}).status_code, 401)
         self.assertEqual(self.client.post("/login", data={"password": PASSWORD}).status_code, 400)

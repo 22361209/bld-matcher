@@ -7,7 +7,9 @@ from app.security import actor_name as actor, can, wants_json_response
 
 from .domain import CostingConflict, CostingValidationError
 from .editor_choices import editor_choices
-from .grid import COLUMN_FILTER_FIELDS, normalize_column_filters
+from .grid import (
+    COLUMN_FILTER_FIELDS, FULL_LIST_RECORD_FIELDS, PRICE_LIST_COLUMNS, PRICE_LIST_RECORD_FIELDS, normalize_column_filters,
+)
 from .pair_codes import mirror_code
 from .scrap_detail import scrap_detail
 from .web_support import costing_endpoint, import_owner, imports, service, weights
@@ -42,21 +44,31 @@ def weight_lookup():
 
 
 def index():
+    full_list = can("view_cost_list_full")
+    details = can("view_cost_details")
+    visible_columns = COLUMN_FILTER_FIELDS if full_list else PRICE_LIST_COLUMNS
     filters = {key: request.args.get(key, "") for key in ("q", "kind", "status")}
     filters["sort"] = request.args.get("sort", "code")
+    if not full_list:
+        filters["status"] = ""
+        if filters["sort"] == "updated":
+            filters["sort"] = "code"
     column_filters = normalize_column_filters({
-        field: request.args.getlist(f"cf_{field}") for field in COLUMN_FILTER_FIELDS if f"cf_{field}" in request.args
+        field: request.args.getlist(f"cf_{field}") for field in visible_columns if f"cf_{field}" in request.args
     })
     try:
         page = int(request.args.get("page", "1"))
     except ValueError as exc:
         raise CostingValidationError("页码必须是整数。", "page") from exc
     result = service().list(q=filters["q"], kind=filters["kind"], status=filters["status"],
-                            sort=filters["sort"], page=page, column_filters=column_filters)
+                            sort=filters["sort"], page=page, column_filters=column_filters, summary_only=not details)
+    if not details:
+        allowed = FULL_LIST_RECORD_FIELDS if full_list else PRICE_LIST_RECORD_FIELDS
+        result["records"] = [{key: row.get(key) for key in allowed} for row in result["records"]]
     if wants_json_response():
         return jsonify(ok=True, result=result)
     options = service().filter_options(q=filters["q"], kind=filters["kind"], status=filters["status"],
-                                      column_filters=column_filters)
+                                      column_filters=column_filters, fields=visible_columns)
     return render_template("costing_list.html", result=result, filters=filters, column_filters=column_filters,
                            column_filter_options=options,
                            column_filter_query={f"cf_{field}": list(values) for field, values in column_filters.items()})

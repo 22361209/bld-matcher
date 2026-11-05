@@ -10,7 +10,7 @@ def development_access(*, write: bool = False) -> bool:
 
 
 def costing_access(*, write: bool = False) -> bool:
-    return can("view_costs") and (not write or can("manage_costs"))
+    return can("view_cost_details") and (not write or can("manage_costs"))
 
 
 def permitted_datasets(*, write: bool = False) -> dict:

@@ -12,6 +12,9 @@ COLUMN_FILTER_FIELDS = (
     "code", "name", "kind", "calculated", "approved", "scrap", "net",
     "minimum_price", "suggested_price", "status",
 )
+PRICE_LIST_COLUMNS = ("code", "name", "kind", "minimum_price", "suggested_price")
+LIST_IDENTITY_FIELDS = ("code", "name", "brand", "models", "kind")
+PRICE_LIST_RECORD_FIELDS = (*LIST_IDENTITY_FIELDS, "minimum_tax_price", "suggested_tax_price")
 EMPTY_FILTER_VALUE = "__empty__"
 _VEHICLE_LITERAL = "__vehicle__:"
 _LEGACY_ARM_PREFIX = "摆臂 / "
@@ -19,6 +22,7 @@ MONEY_FIELDS = {
     "calculated": "calculated_cost", "approved": "approved_cost", "scrap": "scrap_credit",
     "net": "net_cost", "minimum_price": "minimum_tax_price", "suggested_price": "suggested_tax_price",
 }
+FULL_LIST_RECORD_FIELDS = (*LIST_IDENTITY_FIELDS, *MONEY_FIELDS.values(), "status")
 LABELS = {"kind": COST_KIND_LABELS, "status": {"ready": "资料完整", "draft": "待补充 / 核对"}}
 
 
@@ -104,11 +108,12 @@ def _option_label(field: str, value: str) -> str:
 
 def column_filter_options(
     records: list[dict], filters: Mapping[str, tuple[str, ...]],
+    fields: Sequence[str] = COLUMN_FILTER_FIELDS,
 ) -> dict[str, list[dict[str, object]]]:
     # Candidate values honor other columns, while retaining alternatives in their own column.
-    counters: dict[str, Counter[str]] = {field: Counter() for field in COLUMN_FILTER_FIELDS}
+    counters: dict[str, Counter[str]] = {field: Counter() for field in fields}
     for record in records:
-        values = {field: column_value(record, field) for field in COLUMN_FILTER_FIELDS}
+        values = {field: column_value(record, field) for field in fields}
         unmatched = {field for field, selected in filters.items() if values[field] not in selected}
         for field, counter in counters.items():
             if not unmatched or unmatched == {field}:

@@ -39,6 +39,12 @@ def index():
     return views.index()
 
 
+@costing_trial.get("/costs/rules")
+@permission_required("view_costs")
+def rules():
+    return render_template("costing_rules.html")
+
+
 @costing_trial.get("/costs/new")
 @permission_required("manage_costs")
 def new():
@@ -46,7 +52,7 @@ def new():
 
 
 @costing_trial.get("/costs/<record_id>")
-@permission_required("view_costs")
+@permission_required("view_cost_details")
 def edit(record_id: str):
     return views.edit(record_id)
 
@@ -76,7 +82,7 @@ def update(record_id: str):
 
 
 @costing_trial.get("/costs/pairs")
-@permission_required("view_costs")
+@permission_required("view_cost_details")
 def pairs():
     return pair_views.candidates()
 
@@ -88,7 +94,7 @@ def mirror_selected():
 
 
 @costing_trial.get("/costs/pairs/<record_id>")
-@permission_required("view_costs")
+@permission_required("view_cost_details")
 def pair_review(record_id: str):
     return pair_views.review(record_id)
 

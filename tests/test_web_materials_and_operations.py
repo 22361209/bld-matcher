@@ -607,6 +607,7 @@ class TestWebMaterialsAndOperations(WebAppTestBase):
                 "043_product_development_register",
                 "044_costing",
                 "045_material_net_weight",
+                "046_cost_detail_permission",
             ],
         )
 

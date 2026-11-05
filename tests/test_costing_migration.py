@@ -11,7 +11,7 @@ from app.migrations import MIGRATIONS, run_migrations
 from app.modules.costing.repository import initialize_costing_database
 from app.modules.costing.schema import COSTING_TABLES, install_schema
 from app.modules.costing.service import CostingService
-from app.platform.permissions import LEGACY_ROLE_PERMISSIONS, effective_permissions
+from app.platform.permissions import LEGACY_ROLE_PERMISSIONS, effective_permissions, permission_groups
 from app.security import landing_page_options, permission_landing_url
 
 
@@ -107,11 +107,19 @@ class CostingMigrationTest(unittest.TestCase):
             self.assertEqual(connection.execute("SELECT version FROM costing_schema").fetchall(), [(1,)])
 
     def test_cost_permissions_are_explicit_for_non_admin_and_support_cost_only_landing(self):
-        keys = {"view_costs", "manage_costs"}
+        levels = ("view_costs", "view_cost_list_full", "view_cost_details", "manage_costs")
+        self.assertEqual(tuple(item.key for item in dict(permission_groups())["成本核算"]), levels)
+        keys = set(levels)
         self.assertTrue(keys.issubset(effective_permissions("admin", set())))
         for role in ("editor", "user", "viewer"):
             self.assertFalse(keys & effective_permissions(role, LEGACY_ROLE_PERMISSIONS[role]))
         self.assertEqual(effective_permissions("cost-viewer", {"view_costs"}), frozenset({"view_costs"}))
+        for index, permission in enumerate(levels):
+            expected = set(levels[:index])
+            with self.subTest(permission=permission):
+                self.assertEqual(effective_permissions("custom", keys - {permission}), expected)
+                self.assertEqual(effective_permissions("custom", keys, {permission: "deny"}), expected)
+                self.assertEqual(effective_permissions("custom", keys - {permission}, {permission: "allow"}), keys)
         app = Flask(__name__)
         app.add_url_rule("/costs", endpoint="costing.index", view_func=lambda: "costs")
         with app.test_request_context("/"):

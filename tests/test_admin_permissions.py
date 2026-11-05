@@ -17,6 +17,7 @@ from app.migrations import (
     _grant_view_product_prices_to_existing_roles,
     _revoke_view_product_prices_permission,
     _split_granular_permissions,
+    run_migrations,
 )
 from app.modules.admin.persistence import ensure_default_admin, get_user
 from app.modules.admin.repository import SQLiteAdminUnitOfWork
@@ -147,7 +148,37 @@ class AdminPermissionTest(unittest.TestCase):
         self.assertEqual(roles[ADMIN_ROLE_KEY]["is_system"], 1)
         self.assertEqual(roles["editor"]["is_system"], 0)
         self.assertIsNotNone(migration)
-        self.assertEqual(MIGRATIONS[-1][0], "045_material_net_weight")
+        self.assertEqual(MIGRATIONS[-1][0], "046_cost_detail_permission")
+
+    def test_cost_details_migration_copies_existing_role_and_account_access_once(self) -> None:
+        self.service.update_role_permissions("editor", ["view_costs", "manage_costs"], actor="root-admin")
+        editor_id = self._save_user("cost-editor", "editor")
+        denied_id = self._save_user("cost-denied", "editor", overrides={"view_costs": "deny"})
+        allowed_id = self._save_user("cost-reader", "viewer", overrides={"view_costs": "allow"})
+        viewer_id = self._save_user("catalog-viewer", "viewer")
+        with connect(self.database_path) as connection:
+            connection.execute("DELETE FROM schema_migrations WHERE id = '046_cost_detail_permission'")
+            connection.commit()
+            run_migrations(connection)
+            for user_id, expected in (
+                (editor_id, {"view_costs", "view_cost_list_full", "view_cost_details", "manage_costs"}),
+                (denied_id, set()),
+                (allowed_id, {"view_costs", "view_cost_list_full", "view_cost_details"}),
+                (viewer_id, set()),
+            ):
+                with self.subTest(user_id=user_id):
+                    user = get_user(connection, user_id)
+                    assert user is not None
+                    self.assertEqual({key for key in user["permissions"] if "cost" in key}, expected)
+                    overrides = user["permission_overrides"]
+                    self.assertEqual(overrides.get("view_costs"), overrides.get("view_cost_list_full"))
+                    self.assertEqual(overrides.get("view_costs"), overrides.get("view_cost_details"))
+            connection.execute("DELETE FROM role_permissions WHERE role_key = 'editor' AND permission = 'view_cost_list_full'")
+            connection.commit()
+            run_migrations(connection)
+            editor = get_user(connection, editor_id)
+            assert editor is not None
+            self.assertEqual(editor["permissions"], ["view_costs"])
 
     def test_migration_seeds_unknown_historical_roles_idempotently(self) -> None:
         historical_path = Path(self.temporary.name) / "historical.sqlite3"

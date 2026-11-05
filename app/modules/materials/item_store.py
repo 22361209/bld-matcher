@@ -72,6 +72,18 @@ def upsert_material_item(
 ) -> int:
     timestamp = now_text()
     item_id = data.get("id")
+    original = None
+    original_spec = None
+    if data.get("copy_from"):
+        if item_id:
+            raise ValueError("复制新建时不能指定要编辑的记录。")
+        original = connection.execute("SELECT * FROM material_items WHERE sync_id = ?", (data["copy_from"],)).fetchone()
+        if original is None:
+            raise ValueError("原材料明细已变更，请刷新列表后重新复制。")
+        if data.get("spec_text") == original["spec_text"]:
+            # The label can be rounded or a legacy description. Copy its actual dimensions.
+            original_spec = original["spec_text"]
+            data = {**data, "spec_text": "", **{k: original[k] for k in ("thickness", "width", "length")}}
     before = get_material_item(connection, int(cast(Any, item_id))) if item_id else None
     if item_id and before is None:
         raise ValueError("这条材料明细已变更，请在列表中重新打开。")
@@ -80,6 +92,10 @@ def upsert_material_item(
         source=source,
         source_row=before["source_row"] if before else 0,
     )
+    if original_spec is not None:
+        values["spec_text"] = original_spec
+    if original is not None and values["code"].casefold() == original["code"].casefold():
+        raise ValueError("请填写与原件不同的新零件编码。")
     values["net_weight"] = validated_net_weight(values, data.get("net_weight", before["net_weight"] if before else None))
     values["updated_at"] = timestamp
     if before:
@@ -109,10 +125,18 @@ def upsert_material_item(
         values["created_at"] = timestamp
         key = material_key(values)
         existing_rows = connection.execute(
-            f"SELECT {', '.join(MATERIAL_IDENTITY_FIELDS)} FROM material_items"
+            f"SELECT sync_id, {', '.join(MATERIAL_IDENTITY_FIELDS)} FROM material_items"
         ).fetchall()
         ordinal = 1 + sum(material_key(dict(row)) == key for row in existing_rows)
-        values["sync_id"] = stable_sync_id("material", key, ordinal)
+        if original is not None and ordinal > 1:
+            raise ValueError("该母件已有相同编码和下料资料的材料明细。")
+        # Renamed materials retain their synchronization identity on other devices.
+        used_sync_ids = {row["sync_id"] for row in existing_rows}
+        sync_id = stable_sync_id("material", key, ordinal)
+        while sync_id in used_sync_ids:
+            ordinal += 1
+            sync_id = stable_sync_id("material", key, ordinal)
+        values["sync_id"] = sync_id
         cursor = connection.execute(
             """
             INSERT INTO material_items
@@ -132,7 +156,7 @@ def upsert_material_item(
             "新增材料明细",
             "material_item",
             f"{values['model']}-{values['code'] or values['part'] or saved_id}",
-            "新增材料明细",
+            f"从 {original['model']} / {original['code']} 复制新建" if original is not None else "新增材料明细",
             actor=actor,
         )
     if commit:

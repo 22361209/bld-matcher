@@ -417,6 +417,11 @@ class TestWebProductCatalog(WebAppTestBase):
         self.assertIn('id="product-modal"', html)
         self.assertIn('id="product-edit-modal"', html)
         self.assertIn("data-draggable-modal-panel", html)
+        for close_action in ("data-close-product-modal", "data-close-product-edit-modal"):
+            with self.subTest(close_action=close_action):
+                close_controls = re.findall(rf"<(\w+)\b[^>]*\s{close_action}\b[^>]*>", html)
+                self.assertTrue(close_controls)
+                self.assertEqual(set(close_controls), {"button"})
 
         for query in ["HYUNDAI", "Sportage"]:
             with self.subTest(query=query):

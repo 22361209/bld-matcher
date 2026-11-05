@@ -1,0 +1,7 @@
+<div class="nav-menu {{ 'nav-mobile-core' if costing_trial_mode else 'nav-mobile-secondary' }}" data-nav-menu data-nav-split>
+  <a class="{% if active_page == 'costs' %}active{% endif %}" href="{{ url_for(costing_endpoint ~ '.index') }}">成本核算</a>
+  <button type="button" aria-expanded="false" aria-controls="costing-nav-panel" aria-label="展开成本核算导航" data-nav-menu-trigger><span aria-hidden="true">▾</span></button>
+  <div id="costing-nav-panel" class="nav-menu-panel">
+    <a {% if request.endpoint == costing_endpoint ~ '.rules' %}class="active" aria-current="page"{% endif %} href="{{ url_for(costing_endpoint ~ '.rules') }}">核算规则</a>
+  </div>
+</div>

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
@@ -10,7 +10,7 @@ from .domain import (
     DEFAULT_MATERIAL_ATTRIBUTE, CostingConflict, CostingNotFound, CostingValidationError,
     calculate_cost, displayed_cost, reference_snapshot, text,
 )
-from .grid import column_filter_options, matches_columns, normalize_column_filters
+from .grid import COLUMN_FILTER_FIELDS, column_filter_options, matches_columns, normalize_column_filters
 from .line_code_maintenance import plan_line_codes
 from .pair_codes import mirror_code
 from .pairing import establish_pair, mirror_item_name, update_peer_rows
@@ -31,7 +31,8 @@ class CostingService:
         return calculate_cost(data, previous=previous)
 
     def list(self, q: str = "", kind: str = "", status: str = "", page: int = 1,
-             page_size: int = 50, sort: str = "code", column_filters: Mapping[str, object] | None = None) -> dict:
+             page_size: int = 50, sort: str = "code", column_filters: Mapping[str, object] | None = None,
+             *, summary_only: bool = False) -> dict:
         q = self._list_query(q, kind, status)
         selected = normalize_column_filters(column_filters)
         if sort not in {"updated", "code", "code_desc"}:
@@ -42,17 +43,21 @@ class CostingService:
             raise CostingValidationError("分页参数无效。", "page") from exc
         with self._uow(False) as uow:
             matching = None
-            if selected:
+            if selected or summary_only:
                 summaries = (displayed_cost(row) for row in uow.repository.summaries(q=q, kind=kind, status=status, sort=sort))
-                matching = [row["id"] for row in summaries if matches_columns(row, selected)]
+                matching = [row for row in summaries if matches_columns(row, selected)]
             total = len(matching) if matching is not None else uow.repository.count(q=q, kind=kind, status=status)
             pages = max(1, (total + page_size - 1) // page_size)
             page = min(page, pages)
             offset = (page - 1) * page_size
-            records = uow.repository.get_many(matching[offset:offset + page_size]) if matching is not None else (
-                uow.repository.list(q=q, kind=kind, status=status, sort=sort, limit=page_size, offset=offset)
-            )
-        records = [displayed_cost(record) for record in records]
+            if matching is None:
+                records = uow.repository.list(q=q, kind=kind, status=status, sort=sort, limit=page_size, offset=offset)
+            else:
+                records = matching[offset:offset + page_size]
+                if not summary_only:
+                    records = uow.repository.get_many([row["id"] for row in records])
+        if not summary_only:
+            records = [displayed_cost(record) for record in records]
         return {"records": records, "total": total, "page": page, "page_size": page_size, "pages": pages}
 
     @staticmethod
@@ -62,12 +67,13 @@ class CostingService:
         return text(q, "q")
 
     def filter_options(self, q: str = "", kind: str = "", status: str = "",
-                       column_filters: Mapping[str, object] | None = None) -> dict[str, list[dict[str, object]]]:
+                       column_filters: Mapping[str, object] | None = None,
+                       *, fields: Sequence[str] = COLUMN_FILTER_FIELDS) -> dict[str, list[dict[str, object]]]:
         q = self._list_query(q, kind, status)
         selected = normalize_column_filters(column_filters)
         with self._uow(False) as uow:
             records = [displayed_cost(row) for row in uow.repository.summaries(q=q, kind=kind, status=status, sort="code")]
-        return column_filter_options(records, selected)
+        return column_filter_options(records, selected, fields)
 
     def get(self, record_id: str) -> dict:
         with self._uow(False) as uow:
