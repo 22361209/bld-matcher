@@ -1,5 +1,7 @@
 import {createWeightLookup, weightLookupControls, weightSourceDetails, showWeightOrigin} from "./costing_weight_lookup.js";
 import {createScrapSummary} from "./costing_scrap.js";
+import {costAmountLabel, setCostInput} from "./costing_numbers.js";
+export {costAmountLabel} from "./costing_numbers.js";
 import {mirrorCostCode, mirrorPartCode, pairKindExplanation, pairKindOptions, rowPairKind} from "./costing_pair_edit.js";
 
 const text = (value) => (value == null ? "" : String(value));
@@ -78,12 +80,6 @@ export const costingListReturnUrl = (list, referrer) => {
     if (source.origin === list.origin && source.pathname === list.pathname) return source.href;
   } catch { /* Direct visits have no referring page. */ }
   return list.href;
-};
-
-export const costAmountLabel = (value) => {
-  if (value === null || value === undefined || value === "") return "待补充";
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? new Intl.NumberFormat("zh-CN", {maximumFractionDigits: 6}).format(parsed) : text(value);
 };
 
 const element = (tag, className, content) => {
@@ -187,7 +183,10 @@ export const initializeCostEditor = (form) => {
   let firstIssueRow = -1;
   let checks;
 
-  const values = () => Object.fromEntries(COST_FIELDS.map((key) => [key, form.elements.namedItem(key)?.value ?? record[key] ?? ""]));
+  const values = () => Object.fromEntries(COST_FIELDS.map((key) => {
+    const input = form.elements.namedItem(key);
+    return [key, input?.dataset.exactDecimal ?? input?.value ?? record[key] ?? ""];
+  }));
   const payload = () => editableCostPayload(record, {...values(), create_pair: Boolean(createPair?.checked)});
   const snapshot = () => JSON.stringify(payload(), (key, value) => key !== "weight_choice" && (value == null || value === "") ? undefined : value);
   const initialSnapshot = editable ? snapshot() : "";
@@ -383,7 +382,7 @@ export const initializeCostEditor = (form) => {
       if (reason === "stamping") scrapSummary.adopt();
       if (reason) {
         const weight = row.querySelector('[data-item-field="weight"]');
-        if (weight && reason !== "manual") weight.value = text(item.weight);
+        if (weight && reason !== "manual") setCostInput(weight, item.weight);
         if (!saving) scheduleCalculation();
       }
     },
@@ -405,7 +404,7 @@ export const initializeCostEditor = (form) => {
       input.step = "any"; input.inputMode = "decimal";
       if (!(key === "amount" && item.mode === "adjustment")) input.min = "0";
     } else input.maxLength = key === "remark" ? 2000 : 240;
-    input.value = text(item[key]); input.dataset.itemField = key; input.dataset.itemIndex = index;
+    setCostInput(input, item[key]); input.dataset.itemField = key; input.dataset.itemIndex = index;
     input.setAttribute("aria-label", `第 ${index + 1} 项 ${label}`);
     input.disabled = !editable;
     if (options.placeholder) input.placeholder = options.placeholder;
@@ -513,13 +512,13 @@ export const initializeCostEditor = (form) => {
       const label = element("label", "", item.mode === "package" ? "选择纸箱参考资料" : "选择常用费用参考");
       const referenceSelect = element("select"); referenceSelect.dataset.costingReference = index;
       const placeholder = element("option", "", "选择后带入，可继续修改"); placeholder.value = ""; referenceSelect.append(placeholder);
-      options.forEach((option, optionIndex) => { const entry = element("option", "", `${option.code || ""} ${option.name || ""} · ${option.unit_price ?? option.amount ?? "未填价格"}`); entry.value = String(optionIndex); referenceSelect.append(entry); });
+      options.forEach((option, optionIndex) => { const entry = element("option", "", `${option.code || ""} ${option.name || ""} · ${costAmountLabel(option.unit_price ?? option.amount, "未填价格")}`); entry.value = String(optionIndex); referenceSelect.append(entry); });
       label.append(referenceSelect); details.append(label);
     }
     if (item.mode === "weight") {
       details.append(weightSourceDetails(item, weights, editable));
-      details.append(field(item, index, "processing_fee", "单件加工费（元）", {placeholder: "留空按 0"}));
-      details.append(field(item, index, "quantity", "每件用量", {placeholder: "留空按 1"}));
+      details.append(field(item, index, "processing_fee", "单件加工费（元）", {placeholder: "留空按 0.00"}));
+      details.append(field(item, index, "quantity", "每件用量", {placeholder: "留空按 1.00"}));
     }
     if (item.mode === "package") {
       [["length", "纸箱长（cm）"], ["width", "纸箱宽（cm）"], ["height", "纸箱高（cm）"], ["strap_rate", "打包带单价（元 / m）"]].forEach(([key, label]) => details.append(field(item, index, key, label)));
@@ -647,8 +646,18 @@ export const initializeCostEditor = (form) => {
   };
   form.addEventListener("input", (event) => {
     if (!editable || saving) return;
+    if ("exactDecimal" in event.target.dataset) event.target.dataset.exactDecimal = event.target.value;
     if (event.target.dataset.itemField && event.target.tagName !== "SELECT") updateItem(event.target);
     else if (COST_FIELDS.includes(event.target.name) && event.target.tagName !== "SELECT") updateHeader(event.target.name);
+  });
+  form.addEventListener("focusin", ({target}) => {
+    if (editable && !target.readOnly && target.dataset.exactDecimal != null && target.value !== target.dataset.exactDecimal) {
+      target.value = target.dataset.exactDecimal;
+      target.select();
+    }
+  });
+  form.addEventListener("focusout", ({target}) => {
+    if (target.dataset.exactDecimal != null && target.validity.valid) setCostInput(target, target.dataset.exactDecimal);
   });
   tbody.addEventListener("focusout", (event) => {
     const target = event.target;
@@ -704,7 +713,7 @@ export const initializeCostEditor = (form) => {
       }
       for (const section of [row, row.nextElementSibling]) {
         section.querySelectorAll("input[data-item-field], select[data-item-field]").forEach((input) => {
-          input.value = text(item[input.dataset.itemField]);
+          setCostInput(input, item[input.dataset.itemField]);
         });
       }
       if (Object.keys(item).some((key) => isCostCalculationField(key) && text(before[key]) !== text(item[key]))) {

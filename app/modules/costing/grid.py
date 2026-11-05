@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from decimal import Decimal, InvalidOperation, localcontext
 
 from .domain import COST_KIND_LABELS, CostingValidationError
+from .formatters import format_cost_money
 
 
 COLUMN_FILTER_FIELDS = (
@@ -24,23 +24,6 @@ MONEY_FIELDS = {
 }
 FULL_LIST_RECORD_FIELDS = (*LIST_IDENTITY_FIELDS, *MONEY_FIELDS.values(), "status")
 LABELS = {"kind": COST_KIND_LABELS, "status": {"ready": "资料完整", "draft": "待补充 / 核对"}}
-
-
-def format_cost_money(value: object) -> str:
-    if value is None or value == "":
-        return "—"
-    try:
-        with localcontext() as context:
-            context.prec = 64
-            amount = Decimal(str(value))
-            if not amount.is_finite():
-                return "—"
-            amount = amount.quantize(Decimal("0.000001"))
-            if not amount:
-                return "0"
-            return format(amount, ",f").rstrip("0").rstrip(".")
-    except (InvalidOperation, ValueError):
-        return "—"
 
 
 def _vehicle_value(label: str) -> str:
@@ -70,6 +53,11 @@ def normalize_column_filters(values: Mapping[str, object] | None) -> dict[str, t
                     value = EMPTY_FILTER_VALUE
                 elif value.startswith(_LEGACY_ARM_PREFIX):
                     value = _vehicle_value(value.removeprefix(_LEGACY_ARM_PREFIX))
+            elif field in MONEY_FIELDS and value and value != EMPTY_FILTER_VALUE:
+                # Amounts in bookmarked filter URLs used up to six decimal places.
+                formatted = format_cost_money(value.replace(",", ""))
+                if formatted != "—":
+                    value = formatted
             if value and value not in selected:
                 selected.append(value)
         if selected:

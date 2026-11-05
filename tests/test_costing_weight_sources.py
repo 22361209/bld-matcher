@@ -119,8 +119,10 @@ class CostingWeightSourceTest(unittest.TestCase):
         filters = {"scrap": "0", "net": "20", "minimum_price": "27.5", "status": "draft"}
         self.assertEqual(installed.list(q="K6001B", column_filters=filters)["records"], [reopened])
         options = installed.filter_options(q="K6001B")
-        for field, value in filters.items():
+        current_filters = {"scrap": "0.00", "net": "20.00", "minimum_price": "27.50", "status": "draft"}
+        for field, value in current_filters.items():
             self.assertEqual([row["value"] for row in options[field]], [value])
+        self.assertEqual(installed.list(q="K6001B", column_filters=current_filters)["records"], [reopened])
         self.assertEqual(installed.list(column_filters={"net": EMPTY_FILTER_VALUE})["total"], 0)
         self.assertEqual(receiver.export_snapshot(), snapshot)
         updated = installed.update(record["id"], {**reopened, "remark": "已复核"},

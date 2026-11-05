@@ -1,3 +1,5 @@
+import {costAmountLabel} from "./costing_numbers.js";
+
 const codeOf = (item) => String(item.product_code || "").trim();
 const isTubeLine = (item) => String(item.name || "").includes("焊接管");
 const isPlateLine = (item) => /主板|副板|加强板|冲压件|冲压片|冲压板/.test(item.name || "");
@@ -131,7 +133,7 @@ export function weightLookupControls(item, index, controller, editable) {
     select.setAttribute("aria-label", `第 ${index + 1} 项选择重量来源`);
     select.add(new Option("选择重量来源…", ""));
     entry.candidates.forEach((option, n) => {
-      const label = [option.kind === "tube" ? "管件" : "冲压件", option.name, option.model, option.spec, option.pieces ? `每条出 ${option.pieces} 件` : "", option.net_weight ? `净重 ${option.net_weight} kg` : "", option.gross_weight == null ? "重量待补" : `毛重 ${option.gross_weight} kg`, option.source_id?.slice(-8)].filter(Boolean).join(" · ");
+      const label = [option.kind === "tube" ? "管件" : "冲压件", option.name, option.model, option.spec, option.pieces ? `每条出 ${costAmountLabel(option.pieces)} 件` : "", option.net_weight != null ? `净重 ${costAmountLabel(option.net_weight)} kg` : "", option.gross_weight == null ? "重量待补" : `毛重 ${costAmountLabel(option.gross_weight)} kg`, option.source_id?.slice(-8)].filter(Boolean).join(" · ");
       const choice = new Option(label, String(n));
       choice.disabled = option.gross_weight == null;
       select.add(choice);
@@ -158,9 +160,9 @@ export function weightSourceDetails(item, controller, editable) {
   const source = item.weight_source;
   const summary = document.createElement("span");
   if (source?.kind === "stamping") {
-    summary.textContent = `冲压件 ${source.product_code} · ${source.name || ""} ${source.spec || ""} · 毛重 ${source.gross_weight} kg · 净重 ${source.net_weight ?? "待补"} kg · 单片废料 ${source.scrap_weight ?? "待补"} kg`;
+    summary.textContent = `冲压件 ${source.product_code} · ${source.name || ""} ${source.spec || ""} · 毛重 ${costAmountLabel(source.gross_weight, "待补")} kg · 净重 ${costAmountLabel(source.net_weight, "待补")} kg · 单片废料 ${costAmountLabel(source.scrap_weight, "待补")} kg`;
   } else if (source?.kind === "tube") {
-    summary.textContent = `焊接管 ${source.product_code} · ${source.spec || ""} · 管件重量 ${source.gross_weight} kg`;
+    summary.textContent = `焊接管 ${source.product_code} · ${source.spec || ""} · 管件重量 ${costAmountLabel(source.gross_weight, "待补")} kg`;
   } else summary.textContent = "重量来源：手工录入";
   row.append(summary);
   if (editable && codeOf(item)) {

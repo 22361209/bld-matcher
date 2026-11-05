@@ -33,7 +33,7 @@
   <div class="workspace-command"><strong>待补材料净重</strong></div>
   <div class="data-table-scroll"><table class="data-table">
     <thead><tr><th scope="col">母件编码</th><th scope="col">零件编码</th><th scope="col">零件名称</th><th scope="col">拟补净重（kg/件）</th><th scope="col">原表位置</th></tr></thead>
-    <tbody>{% for row in preview.materials %}<tr><td>{{ cell(row.model) }}</td><td>{{ cell(row.code) }}</td><td>{{ cell(row.part) }}</td><td>{{ cell(row.net_weight) }}</td><td>{% if row.source_row %}片件重量!E{{ row.source_row }}{% else %}—{% endif %}</td></tr>{% endfor %}</tbody>
+    <tbody>{% for row in preview.materials %}<tr><td>{{ cell(row.model) }}</td><td>{{ cell(row.code) }}</td><td>{{ cell(row.part) }}</td><td>{{ row.net_weight|cost_money }}</td><td>{% if row.source_row %}片件重量!E{{ row.source_row }}{% else %}—{% endif %}</td></tr>{% endfor %}</tbody>
   </table></div>
 </section>
 {% endif %}
@@ -42,7 +42,7 @@
   <div class="workspace-command"><strong>待更新成本（元/件）</strong></div>
   <div class="data-table-scroll"><table class="data-table">
     <thead><tr><th scope="col">型号</th><th scope="col">原理论废料额</th><th scope="col">新理论废料额</th><th scope="col">原实际抵减额</th><th scope="col">新实际抵减额</th></tr></thead>
-    <tbody>{% for row in preview.costs %}<tr><td>{{ cell(row.code) }}</td><td>{{ cell(row.old_theory) }}</td><td>{{ cell(row.new_theory) }}</td><td>{{ cell(row.old_credit) }}</td><td>{{ cell(row.new_credit) }}</td></tr>{% endfor %}</tbody>
+    <tbody>{% for row in preview.costs %}<tr><td>{{ cell(row.code) }}</td><td>{{ row.old_theory|cost_money }}</td><td>{{ row.new_theory|cost_money }}</td><td>{{ row.old_credit|cost_money }}</td><td>{{ row.new_credit|cost_money }}</td></tr>{% endfor %}</tbody>
   </table></div>
 </section>
 {% endif %}

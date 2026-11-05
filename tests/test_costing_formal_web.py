@@ -119,11 +119,11 @@ class CostingFormalWebTest(WebAppTestBase):
         self.assertNotIn("售价计算口径", body)
         self.assertIn('aria-controls="costing-scrap-detail" aria-expanded="false">计算明细</button>', body)
         detail = body.split('<section id="costing-scrap-detail"', 1)[1].split("</section>", 1)[0]
-        for value in ("原表型号</strong> K1000LA", "透视表!F15 · 1.5 元/件", "透视表!K15 · 2.25 元/件",
+        for value in ("原表型号</strong> K1000LA", "透视表!F15 · 1.50 元/件", "透视表!K15 · 2.25 元/件",
                       "=SUM(H4:H8)", "=F7*C5", "片件重量!H7", "2.25 元/件", "还有 1 行缺少金额", "重量或价格资料不完整"):
             self.assertIn(value, detail)
         self.assertIn('data-costing-total="scrap_credit"', detail)
-        self.assertRegex(detail, r'name="theoretical_scrap"[^>]*value="2.2"')
+        self.assertRegex(detail, r'name="theoretical_scrap"[^>]*value="2.20"')
 
         manual = self.client.get("/costs/new").get_data(as_text=True)
         self.assertIn("本单未附废料来源明细", manual)
@@ -154,7 +154,8 @@ class CostingFormalWebTest(WebAppTestBase):
                 self.assertNotIn('href="/costs/pairs"', html)
                 self.assertNotIn('href="/costs/new"', html)
                 self.assertNotIn('内部专用衬套', html)
-                self.assertEqual("107.123456" in html, full)
+                self.assertEqual("107.12" in html, full)
+                self.assertNotIn("107.123456", html)
                 self.assertEqual('data-col="net"' in html, full)
                 self.assertEqual('data-filter-key="cf_approved"' in html, full)
                 self.assertEqual('name="status"' in html, full)

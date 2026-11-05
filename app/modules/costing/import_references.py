@@ -6,6 +6,7 @@ from decimal import Decimal
 import re
 from typing import Any
 
+from .formatters import format_cost_money
 from .import_values import FormulaUnavailable, TOLERANCE, WorkbookValues, decimal_value, number, text
 
 
@@ -101,7 +102,7 @@ def attach_totals(record: dict, pivot: dict | None, scraps: dict, warnings: list
                     record[field] = pivot[field]
         total = decimal_value(pivot["pivot_detail_total"])
         if total is not None and abs(known - total) > TOLERANCE:
-            notes.append(f"明细复算已知小计 {number(known)} 与原透视汇总 {number(total)} 不同，请核对")
+            notes.append(f"明细复算已知小计 {format_cost_money(known)} 与原透视汇总 {format_cost_money(total)} 原值有差异，请核对")
             source["pivot_difference"] = number(known - total)
         series = pivot["series_code"]
     else:

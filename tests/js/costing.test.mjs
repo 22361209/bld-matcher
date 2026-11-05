@@ -149,11 +149,14 @@ test("material attribute is optional and explicitly cleared selections are submi
 });
 
 test("display distinguishes unknown values, actual zero and negative adjustments", () => {
+  assert.equal(costAmountLabel("-0.0049"), "0.00");
+  assert.equal(costAmountLabel("-5.005"), "-5.01");
+  assert.equal(costAmountLabel("999999999999.9949999999999999"), "999,999,999,999.99");
   assert.equal(costAmountLabel(null), "待补充");
   assert.equal(costAmountLabel(""), "待补充");
-  assert.equal(costAmountLabel("0"), "0");
-  assert.equal(costAmountLabel("-0.4"), "-0.4");
-  assert.equal(costAmountLabel("19.783652"), "19.783652");
+  assert.equal(costAmountLabel("0"), "0.00");
+  assert.equal(costAmountLabel("-0.4"), "-0.40");
+  assert.equal(costAmountLabel("19.783652"), "19.78");
 });
 
 test("choosing a carton keeps its number and specification in separate editable fields", () => {

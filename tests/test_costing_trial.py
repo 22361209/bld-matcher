@@ -208,8 +208,8 @@ class CostingTrialTest(unittest.TestCase):
         self.assertEqual(response.get_json()["instance_id"], "test-instance")
         self.assertEqual(response.headers["Cache-Control"], "no-store")
         self.assertEqual(response.headers["X-Frame-Options"], "DENY")
-        self.assertEqual(cost_money("19.783652"), "19.783652")
-        self.assertEqual(cost_money("1.33333333333333333333333333333"), "1.333333")
+        self.assertEqual(cost_money("19.783652"), "19.78")
+        self.assertEqual(cost_money("1.33333333333333333333333333333"), "1.33")
         self.assertEqual(cost_money(None), "—")
 
 

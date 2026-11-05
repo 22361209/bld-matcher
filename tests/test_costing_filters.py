@@ -76,14 +76,14 @@ class CostingFiltersTest(unittest.TestCase):
         ] + [self.sheet("Q001", "32", kind="ball")], actor="tester")
         options = self.service.filter_options(column_filters={"kind": ["arm"], "minimum_price": ["110"]})
         self.assertEqual(options["minimum_price"], [
-            {"value": "220", "label": "220", "count": 31}, {"value": "110", "label": "110", "count": 30},
+            {"value": "220.00", "label": "220.00", "count": 31}, {"value": "110.00", "label": "110.00", "count": 30},
         ])
         self.assertEqual(options["kind"], [{"value": "arm", "label": "控制臂", "count": 30}])
         self.assertEqual(len(options["code"]), 30)
         self.assertTrue(any(option["value"] == "K059" for option in options["code"]))
         # A no-longer-matching choice remains visible with count zero so it can be cleared.
         selected = self.service.filter_options(column_filters={"kind": ["arm"], "minimum_price": ["44"]})
-        self.assertIn({"value": "44", "label": "44", "count": 0}, selected["minimum_price"])
+        self.assertIn({"value": "44.00", "label": "44.00", "count": 0}, selected["minimum_price"])
         searched = self.service.filter_options(q="Q001")
         self.assertEqual(searched["code"], [{"value": "Q001", "label": "Q001", "count": 1}])
 
@@ -103,13 +103,13 @@ class CostingFiltersTest(unittest.TestCase):
 
     def test_amount_filters_use_same_rounding_and_grouping_as_display(self):
         self.service.import_records([
-            self.sheet("A", "1234.5678901"), self.sheet("B", "1234.5678902"), self.sheet("C", "1234.567891"),
+            self.sheet("A", "1234.5678901"), self.sheet("B", "1234.5678902"), self.sheet("C", "1234.5749999999999999"), self.sheet("D", "1234.575"),
         ], actor="tester")
         displayed = format_cost_money("1234.5678901")
-        self.assertEqual(displayed, "1,234.56789")
+        self.assertEqual(displayed, "1,234.57")
         result = self.service.list(column_filters={"net": [displayed]})
-        self.assertEqual([row["code"] for row in result["records"]], ["A", "B"])
-        self.assertIn({"value": displayed, "label": displayed, "count": 2}, self.service.filter_options()["net"])
+        self.assertEqual([row["code"] for row in result["records"]], ["A", "B", "C"])
+        self.assertIn({"value": displayed, "label": displayed, "count": 3}, self.service.filter_options()["net"])
 
     def test_legacy_prices_are_derived_without_writes_and_manual_prices_filter_effective_value(self):
         legacy = self.service.create(self.sheet("LEGACY", "80.001"), actor="tester")
@@ -227,14 +227,14 @@ class CostingFilterWebTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.get_data(as_text=True)
         search_form = re.search(r'<form class="search-form".*?</form>', body, re.S).group(0)
-        self.assertIn('name="cf_minimum_price" value="110"', search_form)
-        self.assertIn('name="cf_minimum_price" value="220"', search_form)
+        self.assertIn('name="cf_minimum_price" value="110.00"', search_form)
+        self.assertIn('name="cf_minimum_price" value="220.00"', search_form)
         pagination_links = [html.unescape(link) for link in re.findall(r'href="([^"]+)"', body)
                             if "page=2" in link]
         self.assertTrue(pagination_links)
         for link in pagination_links:
             parsed = parse_qs(urlsplit(link).query)
-            self.assertEqual(parsed["cf_minimum_price"], ["110", "220"])
+            self.assertEqual(parsed["cf_minimum_price"], ["110.00", "220.00"])
             self.assertEqual(parsed["q"], ["车型"])
             self.assertEqual(parsed["kind"], ["arm"])
         result = self.client.get(pagination_links[0], headers={"Accept": "application/json"}).get_json()["result"]

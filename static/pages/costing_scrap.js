@@ -38,8 +38,10 @@ export function createScrapSummary(form, format, editable) {
     for (const item of lines) {
       const row = body.insertRow();
       const src = item.weight_source;
-      const cells = [[item.name, item.product_code].filter(Boolean).join(" · "), src?.gross_weight, src?.net_weight, item.scrap_weight, item.quantity ?? "1", item.scrap_total_weight];
-      for (const value of cells) row.insertCell().textContent = value == null ? "待补" : String(value);
+      row.insertCell().textContent = [item.name, item.product_code].filter(Boolean).join(" · ");
+      for (const value of [src?.gross_weight, src?.net_weight, item.scrap_weight, item.quantity ?? "1", item.scrap_total_weight]) {
+        row.insertCell().textContent = format(value, "待补");
+      }
     }
     const scroll = document.createElement("div"); scroll.className = "data-table-scroll"; scroll.append(table); container.append(scroll);
   };

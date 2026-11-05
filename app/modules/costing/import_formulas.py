@@ -5,6 +5,7 @@ from decimal import Decimal, localcontext
 import re
 from typing import Any
 
+from .formatters import format_cost_money
 from .import_values import FormulaUnavailable, TOLERANCE, WorkbookValues, decimal_value, number, text
 from .line_identity import line_identity_changes
 from .material_attributes import suggested_material_attribute
@@ -125,7 +126,7 @@ def parse_cost_item(values: WorkbookValues, sheet: str, row: int, amount_column:
             notes.append(str(exc))
         saved = decimal_value(cached_amount)
         if computed is not None and saved is not None and abs(computed - saved) > TOLERANCE:
-            notes.append(f"原表缓存金额 {number(saved)} 与复算金额 {number(computed)} 不同，请核对")
+            notes.append(f"原表缓存金额 {format_cost_money(saved)} 与复算金额 {format_cost_money(computed)} 原值有差异，请核对")
             source["reconciliation_difference"] = number(computed - saved)
     else:
         item["amount"] = number(raw_amount)
