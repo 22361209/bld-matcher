@@ -80,7 +80,7 @@ def new():
         copy_from = original["code"]
     else:
         record = {"code": "", "kind": "arm", "name": "", "brand": "", "models": "", "remark": "",
-                  "approved_cost": None, "scrap_credit": None, "theoretical_scrap": None, "items": [],
+                  "approved_cost": None, "scrap_credit": "0", "theoretical_scrap": None, "items": [],
                   "scrap_mode": "auto", "scrap_unit_price": "2", "scrap_credit_override": None}
         copy_from = ""
     return render_template("costing_edit.html", record=record, is_new=True, can_edit=True,

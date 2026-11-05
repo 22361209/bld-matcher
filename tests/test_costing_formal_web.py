@@ -110,6 +110,11 @@ class CostingFormalWebTest(WebAppTestBase):
         imported = self.service.create(self.payload(scrap_credit="1.8", theoretical_scrap="2.2", source_info=source),
                                        source="copy", actor="007")
         body = self.client.get(f"/costs/{imported['id']}").get_data(as_text=True)
+        summary = body.split('aria-label="成本汇总（元/件）">', 1)[1].split('class="costing-summary-heading"', 1)[0]
+        labels = [label.strip() for label in re.findall(r'<(?:span|label)>([^<]+)<', summary)]
+        self.assertEqual(labels, ["明细汇总成本", "人工核定成本", "废料抵减金额", "废料抵减后成本"])
+        self.assertIn('data-costing-total="scrap_credit"', summary)
+        self.assertNotIn("售价计算口径", body)
         self.assertIn('aria-controls="costing-scrap-detail" aria-expanded="false">计算明细</button>', body)
         detail = body.split('<section id="costing-scrap-detail"', 1)[1].split("</section>", 1)[0]
         for value in ("原表型号</strong> K1000LA", "透视表!F15 · 1.5 元/件", "透视表!K15 · 2.25 元/件",

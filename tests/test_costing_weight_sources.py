@@ -7,6 +7,7 @@ import unittest
 
 from app.modules.costing.business_sync import validate_costing
 from app.modules.costing.domain import CostingValidationError, calculate_cost
+from app.modules.costing.grid import EMPTY_FILTER_VALUE
 from app.modules.costing.repository import initialize_costing_database
 from app.modules.costing.service import CostingService
 from app.modules.costing.transfer_service import CostingTransferService, snapshot_digest
@@ -62,9 +63,9 @@ class CostingWeightSourceTest(unittest.TestCase):
         ])
         r = calculate_cost(sheet(items=rows, scrap_credit="9", theoretical_scrap="99"))
         self.assertEqual((r["scrap_known_amount"], r["scrap_complete"], r["scrap_credit"], r["net_cost"]),
-                         ("4", False, None, None))
+                         ("4", False, "0", "47.09"))
         self.assertIsNone(r["theoretical_scrap"])
-        self.assertIsNone(r["minimum_tax_price"])
+        self.assertEqual(r["minimum_tax_price"], "64.75")
         self.assertEqual([x["scrap_expected"] for x in r["items"]], [True, True, True, True, False, False])
         self.assertIn("缺净重", r["items"][1]["scrap_issue"])
         self.assertIn("缺产品编码", r["items"][2]["scrap_issue"])
@@ -72,6 +73,70 @@ class CostingWeightSourceTest(unittest.TestCase):
         actual = calculate_cost(sheet(items=rows, approved_cost="50", scrap_credit_override="2"))
         self.assertEqual((actual["scrap_credit"], actual["net_cost"], actual["status"]), ("2", "48", "draft"))
         self.assertEqual(calculate_cost(sheet(items=[rows[-1]]))["scrap_credit"], "0")
+
+    def test_missing_scrap_uses_manual_override_or_zero_without_inventing_missing_cost(self):
+        rows = [{"name": "主板", "mode": "weight", "unit_price": "5", "weight": "4"},
+                {"name": "加工费", "mode": "fixed"}]
+        r = self.service.create(sheet(items=rows), actor="qa")
+        self.assertEqual((r["scrap_credit"], r["known_subtotal"], r["calculated_cost"], r["net_cost"],
+                          r["minimum_tax_price"], r["status"]), ("0", "20", None, None, None, "draft"))
+        for override, credit, net, price in [("4", "4", "16", "22"), ("0", "0", "20", "27.5"),
+                                            (None, "0", "20", "27.5")]:
+            r = self.update(r, approved_cost="20", scrap_credit_override=override)
+            self.assertEqual((r["scrap_credit_override"], r["scrap_credit"], r["net_cost"], r["minimum_tax_price"]),
+                             (override, credit, net, price))
+            self.assertIsNone(r["calculated_cost"])
+            self.assertFalse(r["scrap_complete"])
+            self.assertEqual(r["status"], "draft")
+
+    def test_legacy_blank_deduction_survives_get_edit_roundtrip(self):
+        record = self.service.create({"code": "LEGACY", "items": [{"name": "零件", "amount": "10"}]}, actor="qa")
+        before = self.service.get(record["id"])
+        self.assertIsNone(before["scrap_credit"])
+        after = self.update(before, **{**before, "remark": "已复核"})
+        self.assertEqual((after["scrap_credit"], after["net_cost"]), (None, "10"))
+        self.assertIsNone(self.service.revisions(record["id"])[0]["after"]["scrap_credit"])
+
+    def test_older_pending_snapshot_is_readable_filterable_and_preserved_across_sync(self):
+        rows = [{"name": "主板", "mode": "weight", "weight": "2", "unit_price": "9.916696"}]
+        record = self.service.create(sheet(code="K6001B", approved_cost="20", items=rows), actor="qa")
+        snapshot = CostingTransferService(self.path).export_snapshot()
+        for version in (snapshot["records"][0], snapshot["revisions"][0]["after"]):
+            for key in ("scrap_credit", "net_cost", "minimum_tax_price", "suggested_tax_price"):
+                version[key] = None
+        snapshot["digest"] = snapshot_digest(snapshot)
+        target = self.path.with_name("old.sqlite3")
+        initialize_costing_database(target)
+        receiver = CostingTransferService(target)
+        receiver.apply(snapshot, actor="qa", expected_digest=snapshot["digest"])
+        installed = CostingService(target)
+        reopened = installed.get(record["id"])
+        self.assertEqual((reopened["calculated_cost"], reopened["scrap_credit"], reopened["net_cost"],
+                          reopened["minimum_tax_price"], reopened["suggested_tax_price"], reopened["status"]),
+                         ("19.833392", "0", "20", "27.5", "27.5", "draft"))
+        self.assertFalse(reopened["scrap_complete"])
+        self.assertIsNone(reopened["theoretical_scrap"])
+        filters = {"scrap": "0", "net": "20", "minimum_price": "27.5", "status": "draft"}
+        self.assertEqual(installed.list(q="K6001B", column_filters=filters)["records"], [reopened])
+        options = installed.filter_options(q="K6001B")
+        for field, value in filters.items():
+            self.assertEqual([row["value"] for row in options[field]], [value])
+        self.assertEqual(installed.list(column_filters={"net": EMPTY_FILTER_VALUE})["total"], 0)
+        self.assertEqual(receiver.export_snapshot(), snapshot)
+        updated = installed.update(record["id"], {**reopened, "remark": "已复核"},
+                                   expected_version=1, actor="qa")
+        self.assertEqual(updated["items"], record["items"])
+        self.assertEqual(updated["net_cost"], "20")
+        self.assertEqual(installed.revisions(record["id"])[0]["before"], snapshot["records"][0])
+        current = receiver.export_snapshot()
+        self.assertEqual(validate_costing(current)["records"], current["records"])
+
+        for field, value in (("scrap_credit", "1"), ("net_cost", "99")):
+            broken = deepcopy(snapshot)
+            broken["records"][0][field] = broken["revisions"][0]["after"][field] = value
+            broken["digest"] = snapshot_digest(broken)
+            with self.subTest(field=field), self.assertRaisesRegex(CostingValidationError, "核算快照"):
+                validate_costing(broken)
 
     def test_detach_on_weight_change_and_retain_locked_history_for_unrelated_edits(self):
         raw = sheet()["items"][0]
@@ -89,7 +154,7 @@ class CostingWeightSourceTest(unittest.TestCase):
         self.assertIsNotNone(r["items"][0]["weight_source"])
         r = self.update(r, items=[{**old_client_row, "weight": "2.25"}])
         self.assertIsNone(r["items"][0]["weight_source"])
-        self.assertIsNone(r["scrap_credit"])
+        self.assertEqual(r["scrap_credit"], "0")
         self.assertEqual(r["items"][0]["weight"], "2.25")
         self.assertEqual(self.service.revisions(r["id"])[-1]["after"]["scrap_credit"], "4.38")
 
@@ -115,7 +180,7 @@ class CostingWeightSourceTest(unittest.TestCase):
         for current in (a, b):
             self.assertIsNone(current["items"][0]["weight_source"])
             self.assertTrue(current["items"][0]["scrap_expected"])
-            self.assertIsNone(current["scrap_credit"])
+            self.assertEqual(current["scrap_credit"], "0")
         self.assertEqual((a["items"][0]["quantity"], b["items"][0]["quantity"]), ("2", "3"))
 
     def test_sync_preserves_sources_and_rejects_inconsistent_new_financial_fields(self):

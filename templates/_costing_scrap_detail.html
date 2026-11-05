@@ -4,6 +4,7 @@
 {%- endmacro %}
 <section id="costing-scrap-detail" class="costing-scrap-detail" aria-label="废料抵减额计算明细" hidden>
   <p>本单成本核算（元/件）　采用成本 <b data-costing-total="effective_cost">—</b> − 废料抵减额 <b data-costing-total="scrap_credit">—</b> = 抵减后成本 <b data-costing-total="net_cost">—</b></p>
+  <p data-scrap-auto {% if not auto_scrap %}hidden{% endif %}>实际抵减默认取理论废料金额减 1 元，最低为 0。废料资料不全时按 0 元抵减。手填金额优先，清空恢复自动。</p>
   <div data-linked-scrap></div>
   {% if scrap.original_credit.address %}
     <div class="costing-scrap-source">

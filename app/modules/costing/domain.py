@@ -66,6 +66,24 @@ def with_pricing(record: Mapping[str, object]) -> dict:
     }
 
 
+def old_pending_scrap(record: Mapping[str, object]) -> bool:
+    # Previous automatic snapshots withheld the applied deduction and net cost together.
+    # SQLite's scalar filter projection represents JSON false as 0.
+    return (record.get("scrap_mode") == "auto" and record.get("scrap_complete") == 0
+            and record.get("scrap_credit_override") is None and record.get("scrap_credit") is None
+            and record.get("net_cost") is None and record.get("theoretical_scrap") is None)
+
+
+def displayed_cost(record: Mapping[str, object]) -> dict:
+    """Expose the applied deduction and current prices while retaining stored accounting history."""
+    if old_pending_scrap(record):
+        basis = record.get("approved_cost")
+        if basis is None:
+            basis = record.get("calculated_cost")
+        record = {**record, "scrap_credit": "0", "net_cost": basis}
+    return with_pricing(record)
+
+
 def source_snapshot(value: object) -> dict:
     if value is None:
         return {}
@@ -253,6 +271,9 @@ def calculate_cost(data: Mapping[str, object], *, previous: dict | None = None) 
     }
     summary.update(scrap_amounts)
     if previous is not None:
+        if old_pending_scrap(previous):
+            # Text-only edits must retain the stored line totals even when the old summary was blank.
+            previous = displayed_cost(previous)
         preserved = _metadata_update(previous, result, summary, row_inputs, raw_items)
         if preserved is not None:
             return preserved
@@ -280,8 +301,6 @@ def calculate_cost(data: Mapping[str, object], *, previous: dict | None = None) 
         calculated = subtotal if items and all(row["line_total"] is not None for row in items) else None
         effective = approved if approved is not None else calculated
         net = effective - (credit or Decimal(0)) if effective is not None else None
-        if scrap_header and credit is None:
-            net = None
         if net is not None and net < 0:
             issues.append("废料抵减额超过采用成本，请核对")
         result.update(

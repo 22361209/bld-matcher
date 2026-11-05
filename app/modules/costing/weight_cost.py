@@ -104,8 +104,8 @@ def prepare_scrap(data, previous, raw_items, row_inputs, previous_items):
             raise CostingValidationError("冲压件废料合计超出允许范围。", "scrap_unit_price")
         theory = known if complete else None
         credit = override
-        if credit is None and theory is not None:
-            credit = max(Decimal(0), theory - 1)
+        if credit is None:
+            credit = max(Decimal(0), theory - 1) if theory is not None else Decimal(0)
         return {
             "scrap_mode": mode, "scrap_unit_price": decimal_text(price),
             "scrap_credit_override": decimal_text(override) if override is not None else None,

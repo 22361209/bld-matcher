@@ -90,12 +90,13 @@ class CostingFiltersTest(unittest.TestCase):
     def test_empty_values_are_selectable_and_zero_is_distinct(self):
         empty = self.service.create(self.sheet("EMPTY", name="", models="", items=[]), actor="tester")
         zero = self.service.create(self.sheet("ZERO", "0", approved_cost="0", scrap_credit="0"), actor="tester")
-        for field in ("name", "calculated", "approved", "scrap", "net", "minimum_price", "suggested_price"):
+        for field in ("name", "calculated", "approved", "net", "minimum_price", "suggested_price"):
             with self.subTest(field=field):
                 result = self.service.list(column_filters={field: [EMPTY_FILTER_VALUE]})
                 self.assertEqual([row["id"] for row in result["records"]], [empty["id"]])
                 self.assertIn({"value": EMPTY_FILTER_VALUE, "label": "（空）", "count": 1},
                               self.service.filter_options()[field])
+        self.assertEqual(self.service.list(column_filters={"scrap": ["0"]})["total"], 2)
         result = self.service.list(column_filters={"minimum_price": ["0"], "status": ["ready"]})
         self.assertEqual([row["id"] for row in result["records"]], [zero["id"]])
         self.assertEqual(self.service.list(column_filters={"status": ["draft"]})["total"], 1)

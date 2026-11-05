@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from .domain import (
     DEFAULT_MATERIAL_ATTRIBUTE, CostingConflict, CostingNotFound, CostingValidationError,
-    calculate_cost, reference_snapshot, text, with_pricing,
+    calculate_cost, displayed_cost, reference_snapshot, text,
 )
 from .grid import column_filter_options, matches_columns, normalize_column_filters
 from .line_code_maintenance import plan_line_codes
@@ -43,7 +43,7 @@ class CostingService:
         with self._uow(False) as uow:
             matching = None
             if selected:
-                summaries = (with_pricing(row) for row in uow.repository.summaries(q=q, kind=kind, status=status, sort=sort))
+                summaries = (displayed_cost(row) for row in uow.repository.summaries(q=q, kind=kind, status=status, sort=sort))
                 matching = [row["id"] for row in summaries if matches_columns(row, selected)]
             total = len(matching) if matching is not None else uow.repository.count(q=q, kind=kind, status=status)
             pages = max(1, (total + page_size - 1) // page_size)
@@ -52,7 +52,7 @@ class CostingService:
             records = uow.repository.get_many(matching[offset:offset + page_size]) if matching is not None else (
                 uow.repository.list(q=q, kind=kind, status=status, sort=sort, limit=page_size, offset=offset)
             )
-        records = [with_pricing(record) for record in records]
+        records = [displayed_cost(record) for record in records]
         return {"records": records, "total": total, "page": page, "page_size": page_size, "pages": pages}
 
     @staticmethod
@@ -66,7 +66,7 @@ class CostingService:
         q = self._list_query(q, kind, status)
         selected = normalize_column_filters(column_filters)
         with self._uow(False) as uow:
-            records = [with_pricing(row) for row in uow.repository.summaries(q=q, kind=kind, status=status, sort="code")]
+            records = [displayed_cost(row) for row in uow.repository.summaries(q=q, kind=kind, status=status, sort="code")]
         return column_filter_options(records, selected)
 
     def get(self, record_id: str) -> dict:
@@ -79,7 +79,7 @@ class CostingService:
 
     @staticmethod
     def _display(record: dict, peer: dict | None) -> dict:
-        result = with_pricing(record)
+        result = displayed_cost(record)
         if peer:
             result.update(peer_code=peer["code"], peer_version=peer["version"],
                           peer_has_manual_price=any(peer.get(key) not in (None, "") for key in

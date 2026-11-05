@@ -86,17 +86,18 @@
   <section class="data-section costing-summary-section">
     {% set auto_scrap = record.scrap_mode == 'auto' or (is_new and not copy_from) %}
     <input type="hidden" name="scrap_mode" value="{{ 'auto' if auto_scrap else 'legacy' }}">
-    <div class="costing-summary-grid costing-cost-totals">
-      <div><span>明细计算成本</span><strong data-costing-total="calculated_cost">—</strong><small data-costing-known></small></div>
+    <div class="costing-summary-grid costing-cost-totals" role="group" aria-label="成本汇总（元/件）">
+      <div><span>明细汇总成本</span><strong data-costing-total="calculated_cost">—</strong><small data-costing-known></small></div>
       <label>人工核定成本 <input name="approved_cost" inputmode="decimal" type="number" min="0" step="any" value="{{ record.approved_cost if record.approved_cost is not none else '' }}" placeholder="留空采用计算成本" {% if not can_edit %}readonly{% endif %}></label>
-      <div><span>抵减后成本</span><strong data-costing-total="net_cost">—</strong><small data-costing-completeness></small></div>
+      <div><span>废料抵减金额</span><strong data-costing-total="scrap_credit">—</strong></div>
+      <div><span>废料抵减后成本</span><strong data-costing-total="net_cost">—</strong><small data-costing-completeness></small></div>
     </div>
-    <div class="costing-scrap-toolbar">
+    <div class="costing-summary-heading">
       <strong>废料抵减</strong>
       <button class="link-button" type="button" data-costing-scrap-toggle aria-controls="costing-scrap-detail" aria-expanded="false">计算明细</button>
       {% if can_edit %}<button class="link-button" type="button" data-adopt-scrap>按材料明细重算</button>{% endif %}
     </div>
-    <div class="costing-summary-grid costing-scrap-grid">
+    <div class="costing-summary-grid">
       <div><span>废料重量（kg/件）</span><strong data-scrap-weight>—</strong><small data-scrap-complete></small></div>
       <div><label data-scrap-auto {% if not auto_scrap %}hidden{% endif %}>废料单价（元/kg）
         <input name="scrap_unit_price" type="number" inputmode="decimal" min="0" step="any" value="{{ record.scrap_unit_price if record.scrap_unit_price is defined and record.scrap_unit_price is not none else '2' }}" placeholder="默认 2" {% if not can_edit %}readonly{% endif %}></label>
@@ -105,18 +106,17 @@
       <div>
         <label data-scrap-auto {% if not auto_scrap %}hidden{% endif %}>实际抵减额（元/件）
           <input name="scrap_credit_override" type="number" inputmode="decimal" min="0" step="any" value="{{ record.scrap_credit_override if record.scrap_credit_override is defined and record.scrap_credit_override is not none else '' }}" placeholder="跟随自动" {% if not can_edit %}readonly{% endif %}></label>
-        <small data-scrap-auto {% if not auto_scrap %}hidden{% endif %}><span data-scrap-applied></span> 默认取理论金额减 1 元，最低为 0。清空恢复自动。</small>
+        <small data-scrap-auto data-scrap-applied {% if not auto_scrap %}hidden{% endif %}></small>
         <label data-scrap-legacy {% if auto_scrap %}hidden{% endif %}>废料抵减额（元/件）
           <input name="scrap_credit" inputmode="decimal" type="number" min="0" step="any" value="{{ record.scrap_credit if record.scrap_credit is not none else '' }}" placeholder="留空按 0" {% if not can_edit %}readonly{% endif %}></label>
       </div>
     </div>
     {% include '_costing_scrap_detail.html' %}
-    <div class="workspace-command"><strong>含税售价</strong><span class="muted-text">元 / 件</span></div>
+    <div class="costing-summary-heading"><strong>含税售价</strong><span class="muted-text">元/件</span></div>
     <div class="costing-summary-grid">
-      <div><span>最低含税售价</span><strong data-costing-total="minimum_tax_price">{{ record.minimum_tax_price|default(none)|cost_money }}</strong><small>抵减后成本 ÷ 0.8 × 1.1，最终向上取到分。</small></div>
-      <label>建议含税单价（手动调整）<input name="suggested_tax_price_override" inputmode="decimal" type="number" min="0" step="any" value="{{ record.suggested_tax_price_override if record.suggested_tax_price_override is defined and record.suggested_tax_price_override is not none else '' }}" placeholder="留空自动采用最低售价" {% if not can_edit %}readonly{% endif %}><small>清空后恢复自动跟随最低售价。</small></label>
+      <div><span>最低含税售价</span><strong data-costing-total="minimum_tax_price">{{ record.minimum_tax_price|default(none)|cost_money }}</strong></div>
+      <label>建议含税单价（手动调整）<input name="suggested_tax_price_override" inputmode="decimal" type="number" min="0" step="any" value="{{ record.suggested_tax_price_override if record.suggested_tax_price_override is defined and record.suggested_tax_price_override is not none else '' }}" placeholder="留空自动采用最低售价" {% if not can_edit %}readonly{% endif %}><small>清空恢复自动。</small></label>
       <div><span>当前建议含税单价</span><strong data-costing-total="suggested_tax_price">{{ record.suggested_tax_price|default(none)|cost_money }}</strong><small data-costing-price-mode></small></div>
-      <div><span>售价计算口径</span><small>先按成本 80%、管理成本 10%、净利润 10% 计算，再乘 1.1 得到含税价。</small></div>
     </div>
     <details class="costing-issues" data-costing-issues hidden><summary data-costing-issue-title>待补充 / 核对</summary><ul data-costing-issue-list></ul></details>
     <div class="form-actions">{% if can_edit %}<button class="linear-button primary" type="submit" data-costing-save>保存成本</button>{% endif %}<a class="linear-button subtle" data-costing-back href="{{ url_for(costing_endpoint ~ '.index') }}">返回列表</a><span class="muted-text">缺项可先保存，记录会标为待补充。</span></div>

@@ -10,7 +10,10 @@ import json
 from pathlib import Path
 import re
 
-from .domain import MAX_VALUE, CostingConflict, CostingValidationError, calculate_cost, reference_snapshot, text, with_pricing
+from .domain import (
+    MAX_VALUE, CostingConflict, CostingValidationError, calculate_cost, old_pending_scrap,
+    reference_snapshot, text, with_pricing,
+)
 from .transfer_pairs import format_version_for, validate_pair_histories
 from .transfer_repository import CostingTransferRepository
 from .weight_cost import SCRAP_HEADER_FIELDS, SCRAP_ROW_FIELDS
@@ -139,7 +142,11 @@ def _validate_record(record: object) -> dict:
     calculated = calculate_cost(record)
     with_pricing(record)
     if any(key in record for key in SCRAP_HEADER_FIELDS):
-        for key in (*SCRAP_HEADER_FIELDS, "theoretical_scrap", "scrap_credit", "net_cost"):
+        amounts = ("theoretical_scrap", "scrap_credit", "net_cost")
+        if old_pending_scrap(record) and calculated.get("scrap_complete") is False:
+            # Earlier v3 ledgers recorded an unknown deduction and net before any manual override.
+            amounts = ("theoretical_scrap",)
+        for key in (*SCRAP_HEADER_FIELDS, *amounts):
             if (key not in calculated or key not in record or type(record[key]) is not type(calculated[key])
                     or record[key] != calculated[key]):
                 raise CostingValidationError("废料核算快照的单价、抵减额或合计与明细不一致。")

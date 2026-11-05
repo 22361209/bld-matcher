@@ -263,7 +263,9 @@ export const initializeCostEditor = (form) => {
     scrapSummary.update(calculated);
     form.querySelectorAll("[data-costing-total]").forEach((node) => {
       const key = node.dataset.costingTotal;
-      node.textContent = costAmountLabel(calculated[key] ?? (key === "scrap_credit" && !scrapSummary.auto() ? "0" : null));
+      const value = calculated[key];
+      const blankLegacyCredit = key === "scrap_credit" && !scrapSummary.auto() && (value == null || value === "");
+      node.textContent = costAmountLabel(blankLegacyCredit ? "0" : value);
     });
     form.querySelector("[data-costing-known]").textContent = calculated.calculated_cost == null ? `已知项目小计：${costAmountLabel(calculated.known_subtotal)} 元` : "";
     const manualPrice = calculated.suggested_tax_price_override != null && calculated.suggested_tax_price_override !== "";

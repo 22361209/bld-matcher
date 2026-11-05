@@ -12,7 +12,8 @@ from .schema import COSTING_TABLES, install_schema
 SCHEMA_VERSION = 1
 LIST_ORDER = {"updated": "updated_at DESC, code ASC", "code": "code ASC", "code_desc": "code DESC"}
 SUMMARY_COLUMNS = ("id", "code", "kind", "name", "brand", "models", "status")
-SUMMARY_AMOUNTS = ("calculated_cost", "approved_cost", "scrap_credit", "net_cost", "suggested_tax_price_override")
+SUMMARY_FIELDS = ("calculated_cost", "approved_cost", "scrap_credit", "net_cost", "suggested_tax_price_override",
+                  "scrap_mode", "scrap_complete", "scrap_credit_override", "theoretical_scrap")
 
 
 def initialize_costing_database(path: Path) -> None:
@@ -88,12 +89,12 @@ class SQLiteCostingRepository:
     def summaries(self, *, q: str, kind: str, status: str, sort: str) -> list[dict]:
         """Read list values only; large detail and import snapshots stay out of filter scans."""
         clause, parameters = _filters(q, kind, status)
-        expressions = [*SUMMARY_COLUMNS, *(f"json_extract(payload_json, '$.{field}')" for field in SUMMARY_AMOUNTS)]
+        expressions = [*SUMMARY_COLUMNS, *(f"json_extract(payload_json, '$.{field}')" for field in SUMMARY_FIELDS)]
         rows = self.connection.execute(
             "SELECT " + ", ".join(expressions) + " FROM costing_records" + clause + " ORDER BY " + LIST_ORDER[sort],
             parameters,
         ).fetchall()
-        fields = (*SUMMARY_COLUMNS, *SUMMARY_AMOUNTS)
+        fields = (*SUMMARY_COLUMNS, *SUMMARY_FIELDS)
         return [dict(zip(fields, row, strict=True)) for row in rows]
 
     def pairing_index(self) -> list[dict]:

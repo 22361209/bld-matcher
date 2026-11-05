@@ -81,7 +81,9 @@ def vehicle_parts(record: Mapping[str, object]) -> tuple[str, ...]:
 
 def column_value(record: Mapping[str, object], field: str) -> str:
     if field in MONEY_FIELDS:
-        displayed = format_cost_money(record.get(MONEY_FIELDS[field]))
+        value = record.get(MONEY_FIELDS[field])
+        # An empty legacy deduction applies zero, while its editable input stays empty.
+        displayed = format_cost_money("0" if field == "scrap" and value in (None, "") else value)
         return EMPTY_FILTER_VALUE if displayed == "—" else displayed
     if field == "name":
         return _vehicle_value(" / ".join(vehicle_parts(record)))
