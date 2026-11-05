@@ -14,14 +14,15 @@ die() {
 
 usage() {
   printf '%s\n' \
-    '用法：bash tools/docker_local.sh {start|stop|status|logs|update}' \
+    '用法：bash tools/docker_local.sh {start|stop|status|logs|quick-update|update}' \
+    'quick-update：验证后让正在运行的 5055 加载代码快照，需先用完整更新启用。' \
     'start：启动已经部署的本机容器；不构建镜像。' \
     'update：完整检查、构建、停止本机服务、备份、迁移并启动新版。' \
     'Docker Desktop 中也可直接启动、停止或重启 bld-matcher-local。'
 }
 
 case "$ACTION" in
-  start|stop|status|logs|update) ;;
+  start|stop|status|logs|quick-update|update) ;;
   help|-h|--help) usage; exit 0 ;;
   *) usage >&2; exit 2 ;;
 esac
@@ -31,6 +32,10 @@ esac
 # Reject a changed desktop-linux context before any daemon operation.
 docker_local() {
   docker --context desktop-linux "$@"
+}
+
+local_env_digest() {
+  shasum -a 256 < "$PROJECT_DIR/.env" | cut -d ' ' -f 1
 }
 
 compose_local() {
@@ -92,18 +97,40 @@ case "$ACTION" in
   logs)
     compose_local logs --tail=100 --follow bld-matcher
     ;;
+  quick-update)
+    [[ "$MANAGED_CONTAINER_RUNNING" == true ]] || die '请先启动已部署的本机容器。'
+    compose_local exec -T bld-matcher test -f /app/.quick-baseline.json || \
+      die '此镜像尚未启用快速更新，请先运行 bash tools/docker_local.sh update。'
+    command -v uv >/dev/null || die '未找到 uv，无法运行项目检查。'
+    release_temp="$(mktemp -d)"
+    trap 'rm -rf "$release_temp"' EXIT
+    # Hashes only: the build label covers additions, removals, and edits to .env.
+    deployed_env="$(docker_local inspect --format '{{index .Config.Labels "bld.local.env-sha256"}}' "$CONTAINER_NAME")"
+    [[ "$deployed_env" == "$(local_env_digest)" ]] || die '本机 .env 与部署时不同，请使用完整更新。'
+    head_before="$(git rev-parse HEAD)"
+    uv run python tools/quick_release.py pack --source "$PROJECT_DIR" --output "$release_temp/source.tar"
+    uv run python scripts/verify.py
+    uv run python tools/quick_release.py pack --source "$PROJECT_DIR" --output "$release_temp/after.tar"
+    [[ "$(git rev-parse HEAD)" == "$head_before" ]] && cmp -s "$release_temp/source.tar" "$release_temp/after.tar" || \
+      die '验证期间代码发生变化，请重新运行快速更新。'
+    hash="$(shasum -a 256 < "$release_temp/source.tar")"
+    revision="$head_before-${hash:0:12}"
+    compose_local exec -T bld-matcher python /app/tools/quick_runtime.py apply "$revision" < "$release_temp/source.tar"
+    ;;
   update)
     check_port
     command -v uv >/dev/null || die '未找到 uv，无法执行项目完整检查和运行数据备份。'
     printf '%s\n' '执行完整项目检查；通过后构建新镜像。'
     uv run python scripts/verify.py
+    BLD_LOCAL_ENV_DIGEST="$(local_env_digest)"
+    export BLD_LOCAL_ENV_DIGEST
     compose_local build bld-matcher
     printf '%s\n' '停止本机服务并备份运行数据；备份或迁移失败时保持停止。'
     compose_local stop bld-matcher
     uv run python tools/backup_local_runtime.py
     compose_local run --rm --no-deps --name bld-matcher-local-image-migrate \
       bld-matcher sh -c 'python -m scripts.init_database && python tools/migrate_product_images.py --apply'
-    compose_local up -d --no-build --wait --wait-timeout 180 bld-matcher
+    compose_local up -d --no-build --force-recreate --wait --wait-timeout 180 bld-matcher
     probe
     ;;
 esac

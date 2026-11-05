@@ -59,6 +59,7 @@ class DockerLocalTests(unittest.TestCase):
         self.root = Path(self.temp.name).resolve()
         (self.root / "tools").mkdir()
         (self.root / "bin").mkdir()
+        (self.root / ".env").write_text("TEST_FIXTURE=1\n")
         source = Path(__file__).resolve().parents[1] / "tools" / "docker_local.sh"
         self.script = self.root / "tools" / "docker_local.sh"
         shutil.copyfile(source, self.script)

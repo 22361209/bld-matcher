@@ -57,7 +57,7 @@ bash tools/docker_local.sh start
 bash tools/docker_local.sh status
 ```
 
-代码更新使用 `bash tools/docker_local.sh update`，包含完整检查、镜像构建、停机一致性备份、数据库与图片迁移及健康等待。日常启动复用现有容器，不构建镜像、不执行图片转换。备份默认位于 `~/Library/Application Support/BLD/backups/`，包含 SQLite Backup API 快照和配套文件；详见 `docs/operations/local-docker.md`。
+本机服务首次接入快速更新时，用 `bash tools/docker_local.sh update` 部署支持快速更新的镜像。以后改页面、样式或普通 Python 业务代码，用 `bash tools/docker_local.sh quick-update` 验证并发布当前工作树。改依赖、容器配置或涉及数据迁移时继续用完整更新 `update`，它包含镜像构建、停机一致性备份、迁移与健康检查。备份默认位于 `~/Library/Application Support/BLD/backups/`。详见[本机 Docker 运维](docs/operations/local-docker.md)。
 
 本机配置为显式指定的 `compose.local.yml`；NAS 继续使用原 `docker-compose.yml` 和 Git 部署流程。两端运行数据不自动同步。本机若明确需要原生模式，先停止 Docker 容器，再使用 `bash tools/restart_local_5055.sh` 或 `/Applications/BLD.app`；原生启动日志仍在 `logs/bld-local-5055.log`。
 
@@ -261,26 +261,9 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 
 ## NAS 更新流程
 
-本机完成改动后：
+客户端先取得并验证代码，再推送已提交的 `main` 到 NAS 的 Git 仓库。Mac、Windows 或 Linux 客户端可从仓库根目录使用 `uv run python tools/nas_quick_update.py`。首次使用前按 [NAS 部署手册](NAS_DEPLOY.md) 核对远端和 SSH 权限，在群晖启用相应镜像并安装受限快速更新命令。
 
-首次在 MacBook Air 上通过 GitHub 中转到 NAS 前，先按 `NAS_DEPLOY.md` 的“MacBook Air 中转前检查”确认 Git 历史和 NAS 运行数据状态；检查未通过时不要执行 NAS `reset --hard`。
-
-```bash
-git status --short
-uv run python scripts/verify.py
-git pull --ff-only origin main
-git add ...
-git commit -m "..."
-git push nas main
-```
-
-NAS 运行目录更新：
-
-```bash
-ssh -i ~/.ssh/bld_matcher_deploy deploy@192.168.110.93 'cd /volume1/docker/bld-matcher && git fetch origin main && git reset --hard origin/main && git status -sb && sudo -n /usr/local/sbin/rebuild-bld-matcher rebuild && sudo -n /usr/local/sbin/rebuild-bld-matcher status'
-```
-
-NAS `deploy` 用户已配置受限免密 sudo wrapper：`/usr/local/sbin/rebuild-bld-matcher`。常规重建和状态检查必须优先用 `sudo -n` 调用该 wrapper；只有 wrapper 缺失或不足以完成任务时，才打开可见 Terminal 让用户输入 sudo 密码。
+需要完整更新时，按同一手册核对 Git 历史及运行数据排除规则，再走受限 `rebuild` 和 `status` 命令。群晖现场的启用与发布状态以对应目标的实际探针为准。
 
 部署重建会先运行幂等的产品图片迁移服务，把历史目录图片转换为受限 WebP 大图、统一迁移到 `_1` 至 `_5` 图片位文件名并生成缩略图；已合规 WebP 大图保留原始字节。结果写入 `data/product_image_migration_report.json`。也可以手工检查或执行：
 

@@ -43,3 +43,4 @@ ADR 用于记录难以撤销或会影响多个领域的决定。新增框架、�
 - [ADR 0036: 成本核算正式接入本机项目](0036-costing-main-application.md)
 - [ADR 0037: 业务数据包同步成本核算](0037-costing-business-sync.md)
 - [ADR 0038: 左右件成本配对与跨机同步](0038-costing-handed-pairs.md)
+- [ADR 0040: Docker 容器内手动发布程序快照](0040-docker-quick-updates.md)

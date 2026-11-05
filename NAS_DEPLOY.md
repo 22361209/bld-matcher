@@ -5,7 +5,7 @@
 NAS 上的程序更新**只能通过 Git 仓库发布**：
 
 ```text
-本机代码 -> git push nas main -> NAS 运行目录 git pull/reset -> docker-compose 重建
+局域网发布电脑验证代码 -> git push nas main -> 群晖从本地 Git 仓库取同一提交 -> 快速更新或完整重建
 ```
 
 不要用 Finder、File Station、`scp`、`rsync`、压缩包或手动拖拽去覆盖 `/volume1/docker/bld-matcher` 的程序文件。直接覆盖会让 NAS 运行目录脱离 Git 管理，也容易误碰运行数据。
@@ -100,19 +100,56 @@ http://192.168.1.20:5055
 1. 本机确认代码已经 commit，并测试通过
 2. 本机推送到 NAS Git 仓库
 3. NAS 运行目录从 Git 更新
-4. 重新构建并启动项目
+4. 普通应用改动走快速更新。首次接入、依赖、数据库、图片迁移或运维配置变动走完整发布。
 
-### MacBook Air 中转前检查
+### 局域网电脑中转前检查
 
-第一次在 MacBook Air 上接入 GitHub -> NAS 流程时，先确认本机代码历史和 NAS 历史已经连上，且 NAS Git 仓库不再跟踪运行数据：
+每台发布电脑准备项目仓库、Git、OpenSSH、公钥登录和 uv。需要从 GitHub 同步时，在该电脑上拉取并核对目标提交。群晖只从本机的 `/volume1/git/bld-matcher.git` 取代码。首次连入群晖时先在可见终端核对 SSH 主机指纹，配置目标 remote（已有 `nas` 时先核对 URL）。
 
 ```bash
+git remote add nas deploy@192.168.110.93:/volume1/git/bld-matcher.git
+git remote get-url --push nas
 git fetch nas main
-git merge-base main nas/main >/dev/null || echo "STOP: GitHub 和 NAS Git 历史尚未打通，不能直接 push/reset"
-git ls-tree -r --name-only nas/main -- data static/product_images | sed -n '1,40p'
+git merge-base main nas/main
+git ls-tree -r --name-only nas/main -- data uploads outputs .env static/product_images
 ```
 
-如果第二行输出 `STOP`，或第三行列出 `data/products.sqlite3`、`data/catalog.xlsx`、产品图片等运行数据，先做一次专门的 NAS Git 清理迁移；不要继续执行下面的 `git push nas main` 和 NAS `git reset --hard`。
+如果 `git merge-base` 找不到共同祖先，或最后一行列出 `data/products.sqlite3`、`data/catalog.xlsx`、产品图片等运行数据，先做一次专门的 NAS Git 清理迁移；不要继续执行下面的 `git push nas main` 和 NAS `git reset --hard`。
+
+### 首次启用快速更新
+
+1. 先完成下面的完整发布，让正在运行的群晖容器带有新的快速更新程序及构建基线。确认容器、健康与登录探针正常。
+2. 管理员在可见终端审阅该次提交的 `tools/nas/quick-bld-matcher`，将已核对的脚本安装到 root 管理的目录。脚本内的 Docker 安装路径为 `/usr/local/bin/docker`、Compose 工作目录为 `/volume1/docker/bld-matcher`。如需适配 DSM 安装路径，应先核对实际路径和所有者。
+3. 用 `visudo` 创建单独的 sudoers 配置并校验。下面的 `""` 限定命令必须没有参数，提交号由入口从标准输入读取。
+
+```sh
+cd /volume1/docker/bld-matcher
+sudo install -o root -g root -m 0755 tools/nas/quick-bld-matcher /usr/local/sbin/quick-bld-matcher
+sudo visudo -f /etc/sudoers.d/bld-matcher-quick
+# 添加下行并保存
+# deploy ALL=(root) NOPASSWD: /usr/local/sbin/quick-bld-matcher ""
+sudo visudo -c
+```
+
+脚本更新时需重新审阅和安装 root 副本。保留原有 `rebuild-bld-matcher` 完整发布命令。
+
+### 日常快速更新
+
+在能访问 NAS 的局域网电脑上，进入已提交且干净的 `main`。macOS、Linux 直接运行下列命令。Windows 可在 WSL 中使用同样的命令和该环境的 SSH 凭据，完整验收包含 Bash 等 POSIX 工具。
+
+```bash
+uv run python tools/nas_quick_update.py
+```
+
+可用 `--identity-file PATH` 指定该电脑的私钥。默认查找用户目录下的 `.ssh/bld_matcher_deploy`，也支持 OpenSSH 配置与 ssh-agent。入口以无交互模式取回 NAS 的 main，检查待推送历史中的运行文件，随后在本地临时 Git 副本检出指定提交并执行完整验收（`uv run python scripts/verify.py --base-ref <NAS原提交>`），通过后将同一提交快进推送到 `nas/main`，随后通过 SSH 请求群晖启用这个提交。不同电脑使用同一个 NAS remote 和非强制推送，即可接续发布。
+
+群晖受限入口检查正式容器的身份，以 `deploy` 身份核对本地 Git 来源、受保护运行路径和干净的工作树。NAS 仅快进到已验证提交，从自己的 bare 仓库导出对应源码，交给容器内的发布工具判定、切换和探测。源代码需与容器的依赖和迁移基线兼容。快速更新失败时请查看报错；Git 推送和服务启用是两个独立的结果，即使 Git 已到目标提交，服务也可能仍运行旧版。依赖、迁移等超出快速范围的改动须走完整发布。群晖自己的 `.env` 独立存放，脚本无法从 Git 检测其修改。改过 `.env` 时请主动选完整发布，以便新容器载入配置。
+
+发布成功以容器内两个 worker 的版本确认和业务探针为准；也可在可访问服务的电脑上执行 `curl -sD - -o /dev/null http://192.168.110.93:5055/health/live`，核对 `X-BLD-Release` 等于这次快速发布的完整 SHA。候选校验失败或服务回退时，NAS 工作树可能已经快进到新 SHA，排查时以实际服务版本为准。
+
+若进程被强制杀死而遗留 `/var/run/quick-bld-matcher.lock`，由管理员先核实没有正在进行的发布，再在可见终端清理该锁目录。完整重建前照常停止写入并做好 NAS 自身运行数据的备份。
+
+### 完整发布
 
 本机：
 
@@ -161,7 +198,7 @@ outputs/
 .env
 ```
 
-当前 Compose 配置使用 `restart: unless-stopped`。Dockerfile 会先运行数据库初始化和迁移，成功后再启动 Gunicorn，并通过 `/login` 健康检查确认 Web 进程可响应；初始化失败时不会带病启动 worker。这和本机临时 Flask 开发进程不同；如果容器进程异常退出，Docker 会按重启策略自动拉起。
+当前 Compose 配置使用 `restart: unless-stopped`。Dockerfile 会先运行数据库初始化和迁移，成功后再启动 Gunicorn，并通过 `/health/ready` 健康检查，发布后再核对最小业务探针和登录页；初始化失败时不会带病启动 worker。这和本机临时 Flask 开发进程不同；如果容器进程异常退出，Docker 会按重启策略自动拉起。
 
 ## 7. 安全建议
 

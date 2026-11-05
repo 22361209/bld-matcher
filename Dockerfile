@@ -38,11 +38,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY --from=app-source /source/ .
 COPY --from=version-artifact /deployment-version /app/.deployment-version
 
-RUN mkdir -p /app/data /app/uploads /app/outputs
+RUN python tools/quick_release.py baseline --source /app --output /app/.quick-baseline.json \
+    && mkdir -p /app/data /app/uploads /app/outputs
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3).close()"
 
-CMD ["sh", "-c", "python -m scripts.init_database && exec gunicorn --bind 0.0.0.0:8000 --workers 2 --timeout 120 wsgi:app"]
+CMD ["python", "/app/tools/quick_runtime.py", "start"]

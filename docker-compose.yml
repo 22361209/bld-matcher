@@ -27,6 +27,9 @@ services:
       - ./outputs:/app/outputs
     environment:
       - TZ=Asia/Shanghai
+      - BLD_DATA_DIR=/app/data
+      - BLD_UPLOAD_DIR=/app/uploads
+      - BLD_OUTPUT_DIR=/app/outputs
 
   bld-retention:
     build: .

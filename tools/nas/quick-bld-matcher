@@ -1,0 +1,77 @@
+#!/bin/sh
+# Install this reviewed file outside the checkout, owned by root (see NAS_DEPLOY.md).
+set -eu
+PATH=/usr/local/bin:/var/packages/Git/target/bin:/usr/bin:/bin:/usr/sbin:/sbin
+export PATH
+BARE=/volume1/git/bld-matcher.git
+CHECKOUT=/volume1/docker/bld-matcher
+INSTALLED=/usr/local/sbin/quick-bld-matcher
+
+die() { echo "$*" >&2; exit 1; }
+valid_sha() {
+    [ "${#1}" -eq 40 ] || die '无效的 Git SHA。'
+    case "$1" in *[!0-9a-f]*) die '无效的 Git SHA。';; esac
+}
+clean_checkout() {
+    [ "$(git -C "$CHECKOUT" symbolic-ref HEAD)" = refs/heads/main ] || die 'NAS 工作树需位于 main。'
+    changes=$(git -C "$CHECKOUT" status --porcelain --untracked-files=normal -- . ':!data' ':!uploads' ':!outputs' ':!logs' ':!static/product_images')
+    [ -z "$changes" ] || die 'NAS 工作树有改动，请先处理后重试。'
+}
+check_tree() {
+    protected=$(git -C "$1" ls-tree "$2" -- data uploads outputs logs .env static/product_images)
+    [ -z "$protected" ] || die 'Git 包含受保护的运行文件，请先完成数据隔离。'
+    roots=$(git -C "$1" ls-tree --name-only "$2")
+    extra_env=$(printf '%s\n' "$roots" | sed -n '/^\.env\./{ /^\.env\.example$/!p; }')
+    [ -z "$extra_env" ] || die 'Git 包含环境配置，请先完成数据隔离。'
+}
+archive_as_deploy() {
+    # All Git operations run as deploy, including any local Git configuration.
+    bare_main=$(git -C "$BARE" rev-parse --verify refs/heads/main)
+    [ "$bare_main" = "$1" ] || die 'NAS main 已改变，请从客户端重新核对目标提交。'
+    origin=$(git -C "$CHECKOUT" remote get-url --all origin)
+    case "$origin" in "$BARE"|"file://$BARE") ;; *) die 'NAS origin 必须指向指定的本地 bare 仓库。';; esac
+    clean_checkout
+    check_tree "$BARE" "$1"
+    # Old tracked runtime files could otherwise be removed by the fast-forward.
+    check_tree "$CHECKOUT" HEAD
+    if [ -e "$CHECKOUT/static/product_images" ]; then
+        static_type=$(git -C "$BARE" cat-file -t "$1:static" 2>/dev/null || :)
+        [ "$static_type" = tree ] || die '目标提交将替换旧图片目录的上级路径，已停止发布。'
+    fi
+    git -C "$CHECKOUT" -c core.hooksPath=/dev/null -c protocol.allow=never -c protocol.file.allow=always fetch --no-tags --recurse-submodules=no origin refs/heads/main >&2
+    fetched=$(git -C "$CHECKOUT" rev-parse --verify FETCH_HEAD)
+    [ "$fetched" = "$1" ] || die '拉取期间 NAS main 已变化，已停止切换。'
+    git -C "$CHECKOUT" -c core.hooksPath=/dev/null -c merge.autoStash=false merge --ff-only "$1" >&2
+    clean_checkout
+    [ "$(git -C "$CHECKOUT" rev-parse HEAD)" = "$1" ] || die 'NAS 工作树与目标提交不同。'
+    git -C "$BARE" archive --format=tar "$1"
+}
+
+main() {
+    if [ "$(id -u)" != 0 ]; then
+        [ "$(id -un)" = deploy ] && [ "$#" = 2 ] && [ "$1" = --archive ] || die '仅供受限发布入口调用。'
+        valid_sha "$2"
+        archive_as_deploy "$2"
+        exit
+    fi
+
+    umask 077
+    [ "$#" = 0 ] || die '本命令从标准输入接收目标提交，不接受参数。'
+    IFS= read -r revision || die '缺少目标提交。'
+    valid_sha "$revision"
+    # A root-private lock serializes the Git checks with container activation.
+    lock=/var/run/quick-bld-matcher.lock
+    mkdir "$lock" || die '另一个群晖快速更新正在进行或保留了锁。'
+    trap 'rm -f "$lock/source.tar"; rmdir "$lock"' EXIT
+    trap 'exit 1' HUP INT TERM
+    docker_local() {
+        env -i PATH="$PATH" HOME=/root /usr/local/bin/docker --host unix:///var/run/docker.sock "$@"
+    }
+    container=$(docker_local inspect --type container --format '{{.Id}}' bld-matcher)
+    label='{{index .Config.Labels "com.docker.compose.project.working_dir"}}|{{index .Config.Labels "com.docker.compose.service"}}|{{.State.Running}}'
+    [ "$(docker_local inspect --type container --format "$label" "$container")" = "$CHECKOUT|bld-matcher|true" ] || die 'NAS 正式容器未运行或不属于本项目。'
+    docker_local exec "$container" test -f /app/tools/quick_runtime.py || die '当前镜像还没有快速入口，请先完整发布一次。'
+    sudo -n -H -u deploy -- "$INSTALLED" --archive "$revision" > "$lock/source.tar"
+    docker_local exec -i "$container" python /app/tools/quick_runtime.py apply "$revision" < "$lock/source.tar"
+}
+main "$@"

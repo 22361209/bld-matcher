@@ -6,6 +6,8 @@ services:
     image: bld-matcher:local
     container_name: bld-matcher-local
     restart: unless-stopped
+    labels:
+      bld.local.env-sha256: "${BLD_LOCAL_ENV_DIGEST:-unset}"
     ports:
       - "127.0.0.1:5055:8000"
     env_file:

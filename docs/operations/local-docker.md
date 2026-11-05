@@ -25,7 +25,24 @@ bash tools/docker_local.sh logs
 
 Docker Desktop 必须运行，容器才能运行。可在 Docker Desktop Settings / General 中选择登录后启动 Docker Desktop；容器使用 `unless-stopped`，Docker 恢复后会恢复之前运行中的容器，手动停止的容器仍需点击启动。本次部署不修改 Docker Desktop 的全局偏好。
 
-## 首次部署与代码更新
+## 选择更新入口
+
+在 Mac mini 项目目录执行命令。先看 `git status --short` 和变更片段，核对本次要发布的内容。本机快速入口以**当前工作树**生成快照，因此尚未提交的代码也可能进入本次发布。修改源文件或刷新浏览器都不会单独触发发布。
+
+| 本次改动 | 入口 |
+| --- | --- |
+| 调整页面布局、CSS、JavaScript 或普通 Python 业务逻辑 | `bash tools/docker_local.sh quick-update` |
+| 首次安装快速更新、改依赖、`.env` 或 Compose 配置、数据库结构或历史数据迁移、图片迁移 | `bash tools/docker_local.sh update` |
+
+快速入口检查待发布内容与当前容器镜像的差异，通过检查后发布一个固定版本并验证本机 5055 服务。刷新浏览器即可查看切换后的页面。若入口提示需要完整更新，先查看列出的原因，再按下文操作。若版本或业务探针失败，按命令输出核对当前实际运行版本及错误，排除原因后重试。
+
+可从 Mac mini 独立核对快速发布的版本：`curl -sSI http://127.0.0.1:5055/health/live` 响应中的 `X-BLD-Release` 应与命令返回的版本一致。再运行 `uv run python -m scripts.runtime_probe --base-url http://127.0.0.1:5055` 检查就绪状态和登录页，打开本次修改的页面验证实际效果。
+
+普通页面或业务逻辑改动的片段可声明 `{"data":"none","api":"compatible","operations":"quick-update"}` 作为 `impact`。依赖、数据库和图片迁移等改动按实际影响声明，即使随批还有界面改动，也应执行完整更新。
+
+重启同一个容器会保留上次快速发布的代码快照。完整更新用新镜像重新创建容器时会丢弃旧容器内的快照，并从镜像中的版本启动。需要保留或传到另一台电脑的改动应先提交到 Git。
+
+## 首次部署与完整更新
 
 先完成代码修改及变更片段；从远程同步代码时，先处理本地未提交改动，再选择正确分支更新。AI 执行预计超过 5 分钟的操作前，遵守 `AGENTS.md` 的长操作规则。
 
@@ -44,7 +61,7 @@ bash tools/docker_local.sh update
 
 停机、备份和迁移阶段本机页面暂不可用。NAS 不需要停机。失败后保留日志、迁移报告和备份；不会自动用旧镜像接管已经迁移过的数据。
 
-## 备份与验收
+## 完整更新的备份与验收
 
 更新会调用：
 

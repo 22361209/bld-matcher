@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from functools import lru_cache
 from datetime import timedelta
+import os
+from pathlib import Path
 
 from app.config import BASE_DIR, DB_PATH, OUTPUT_DIR, UPLOAD_DIR
 from app.modules.products.factory import get_product_service
@@ -18,7 +20,7 @@ def get_inquiry_service() -> InquiryService:
     settings = get_runtime_settings()
     return InquiryService(
         get_product_service(),
-        WorkbookInquiryEngine(base_dir=BASE_DIR, upload_dir=UPLOAD_DIR, output_dir=OUTPUT_DIR),
+        WorkbookInquiryEngine(base_dir=Path(os.environ.get("BLD_INQUIRY_BASE_DIR", BASE_DIR)), upload_dir=UPLOAD_DIR, output_dir=OUTPUT_DIR),
         lambda: SQLiteInquiryUnitOfWork(DB_PATH),
         SQLiteArtifactStore(
             DB_PATH,
