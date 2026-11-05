@@ -3,11 +3,12 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from flask import flash, jsonify, redirect, render_template, request, send_file, url_for
+from flask import abort, flash, jsonify, redirect, render_template, request, send_file, url_for
 
 from app.config import CATALOG_PATH, OUTPUT_DIR
 from app.helpers import all_recent_outputs, download_name, user_output_dir, user_recent_outputs
 from app.matcher import ProductCatalog, catalog_summary
+from app.modules.business_sync.access import can_access_package
 from app.modules.inquiry.factory import get_inquiry_service
 from app.modules.products.factory import get_product_service
 from app.security import can, permission_required
@@ -159,4 +160,12 @@ def register(app) -> None:
             if user_root not in path.parents:
                 flash("当前账号没有权限下载这个文件。", "error")
                 return redirect(url_for("index"))
+        filename = path.name.casefold()
+        if filename.startswith("business-data-") and filename.endswith(".tar.gz"):
+            try:
+                allowed = can_access_package(path)
+            except ValueError:
+                abort(404)
+            if not allowed:
+                abort(403)
         return send_file(path, as_attachment=True)

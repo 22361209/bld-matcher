@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from app.database import connect
+from app.modules.costing.business_sync import apply_costing
 from app.modules.products.option_values import register_product_option_values
 from app.platform.audit_store import log_event
 from app.platform.sync_identity import stable_sync_id
@@ -19,7 +20,8 @@ from ._comparison import (
     syncable_incoming_rows,
     unresolved_customers,
 )
-from ._package_archive import PackageReader
+from ._package_archive import Manifest, PackageReader, Payload
+from ._package_snapshot import prepared_package
 from ._schema import DATASETS, LOCAL_MEDIA_COLUMNS, MEDIA_DATASETS
 from ._development import apply_aggregates, verify_applied_files
 from ._development_files import restore_development_files
@@ -168,7 +170,7 @@ def resolve_quote_customers(
                 row["customer_name"] = canonical
 
 
-def apply_package(
+def _apply_package(
     database_path: Path,
     package_path: Path,
     *,
@@ -181,20 +183,23 @@ def apply_package(
     include_images: bool,
     include_material_drawings: bool,
     deactivate_local_only: bool,
-    read_package_fn: PackageReader,
+    content: tuple[Manifest, Payload],
     normalized_incoming_fn: IncomingNormalizer = normalized_incoming,
     media_copy_fn: MediaCopy,
     media_restore_fn: MediaRestore,
     product_image_apply_fn: ProductImageApply,
     resolve_quote_customers_fn: QuoteCustomerResolver = resolve_quote_customers,
     development_file_dir: Path | None = None,
-    original_package_path: Path | None = None,
+    original_package_path: Path,
     allow_development: bool = True,
+    allow_costing: bool = False,
 ) -> dict[str, dict[str, int]]:
     initial_digest = package_digest(package_path)
-    manifest, payload = read_package_fn(package_path)
+    manifest, payload = content
     if "development" in payload and not allow_development:
         raise ValueError("没有开发资料编辑及文件访问权限。")
+    if "costing" in payload and not allow_costing:
+        raise ValueError("没有成本核算维护权限。")
     backup_path.parent.mkdir(parents=True, exist_ok=True)
     backup = sqlite3.connect(backup_path)
     try:
@@ -222,7 +227,7 @@ def apply_package(
             for key, requested in media_requests.items()
             if MEDIA_DATASETS[key] in payload
         }
-        structured_product_images = manifest.get("version") in {4, 5} and requested_media.get("product_images") is True
+        structured_product_images = manifest.get("version") in (4, 5, 6) and requested_media.get("product_images") is True
         legacy_media_requests = dict(requested_media)
         if structured_product_images:
             legacy_media_requests["product_images"] = False
@@ -234,6 +239,9 @@ def apply_package(
         imported_quote_ids: set[int] = set()
         resolve_quote_customers_fn(connection, payload, customer_mappings)
         for key, incoming_rows in payload.items():
+            if key == "costing":
+                result[key] = apply_costing(connection, incoming_rows[0], selected_conflicts.get(key, set()))
+                continue
             if key == "development":
                 result[key], development_verification = apply_aggregates(connection, package_path, incoming_rows, development_file_dir, selected_conflicts.get(key, set()), development_changes)
                 continue
@@ -340,8 +348,8 @@ def apply_package(
         )
         if development_verification is not None:
             verify_applied_files(development_file_dir, development_verification)
-            if package_digest(original_package_path or package_path) != initial_digest:
-                raise ValueError("提交前数据包已变化，请重新预览。")
+        if package_digest(original_package_path) != initial_digest:
+            raise ValueError("提交前数据包已变化，请重新预览。")
         connection.commit()
     except Exception:
         connection.rollback()
@@ -353,3 +361,10 @@ def apply_package(
     finally:
         connection.close()
     return result
+
+
+def apply_package(database_path: Path, package_path: Path, *, read_package_fn: PackageReader, **kwargs):
+    with prepared_package(package_path, read_package_fn) as (snapshot, content):
+        return _apply_package(
+            database_path, snapshot, original_package_path=package_path, content=content, **kwargs,
+        )

@@ -18,6 +18,34 @@ def _json(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
 
 
+def read_content(connection: sqlite3.Connection) -> dict:
+    records = []
+    rows = connection.execute(
+        "SELECT " + ",".join(RECORD_COLUMNS) + ",payload_json FROM costing_records ORDER BY id",
+    )
+    for row in rows:
+        record = json.loads(row[-1])
+        if not isinstance(record, dict) or any(record.get(key) != row[index] for index, key in enumerate(RECORD_COLUMNS)):
+            raise CostingValidationError("成本索引与记录内容不一致，请先核对资料。")
+        records.append(record)
+    revisions = [
+        {"id": row[0], "record_id": row[1], "version": row[2], "action": row[3], "actor": row[4],
+         "created_at": row[5], "before": json.loads(row[6]) if row[6] is not None else None,
+         "after": json.loads(row[7])}
+        for row in connection.execute(
+            "SELECT id,record_id,version,action,actor,created_at,before_json,after_json FROM costing_revisions ORDER BY id",
+        )
+    ]
+    references = connection.execute("SELECT name,payload_json FROM costing_reference_data").fetchall()
+    if len(references) > 1 or references and references[0][0] != "workbook":
+        raise CostingValidationError("成本参考资料格式无效。")
+    reference_data = json.loads(references[0][1]) if references else None
+    if references and not isinstance(reference_data, dict):
+        raise CostingValidationError("已有成本参考行内容无效，不能当作空资料覆盖。")
+    return {"format_version": 1, "records": records, "revisions": revisions,
+            "references": reference_data}
+
+
 class CostingTransferRepository:
     def __init__(self, path: Path, *, write: bool = False) -> None:
         self.path = Path(path)
@@ -33,31 +61,7 @@ class CostingTransferRepository:
 
     def read_content(self) -> dict:
         assert self.connection is not None
-        records = []
-        rows = self.connection.execute(
-            "SELECT " + ",".join(RECORD_COLUMNS) + ",payload_json FROM costing_records ORDER BY id",
-        ).fetchall()
-        for row in rows:
-            record = json.loads(row[-1])
-            if not isinstance(record, dict) or any(record.get(key) != row[index] for index, key in enumerate(RECORD_COLUMNS)):
-                raise CostingValidationError("成本索引与记录内容不一致，请先核对资料。")
-            records.append(record)
-        revisions = [
-            {"id": row[0], "record_id": row[1], "version": row[2], "action": row[3], "actor": row[4],
-             "created_at": row[5], "before": json.loads(row[6]) if row[6] is not None else None,
-             "after": json.loads(row[7])}
-            for row in self.connection.execute(
-                "SELECT id,record_id,version,action,actor,created_at,before_json,after_json FROM costing_revisions ORDER BY id",
-            )
-        ]
-        references = self.connection.execute("SELECT name,payload_json FROM costing_reference_data").fetchall()
-        if len(references) > 1 or references and references[0][0] != "workbook":
-            raise CostingValidationError("成本参考资料格式无效。")
-        reference_data = json.loads(references[0][1]) if references else None
-        if references and not isinstance(reference_data, dict):
-            raise CostingValidationError("已有成本参考行内容无效，不能当作空资料覆盖。")
-        return {"format_version": 1, "records": records, "revisions": revisions,
-                "references": reference_data}
+        return read_content(self.connection)
 
     def restore(self, content: dict) -> None:
         assert self.connection is not None

@@ -7,14 +7,14 @@ from typing import IO
 
 from ._comparison import media_summary, normalized_incoming
 from ._database_apply import resolve_quote_customers
-from ._apply_snapshot import apply_package
+from ._database_apply import apply_package
 from ._media_transaction import (
     atomic_copy,
     atomic_copy_stream,
     copy_requested_media,
     restore_media,
 )
-from ._package_archive import add_media_directory, export_package, read_package
+from ._package_archive import add_media_directory, export_package, package_datasets, read_package
 from ._preview import preview_package
 from ._product_image_transfer import apply_product_images
 from ._schema import DATASETS, PACKAGE_SUFFIX
@@ -36,10 +36,12 @@ class BusinessSyncRepository:
         material_drawing_dir: Path | None = None,
         development_file_dir: Path | None = None,
         allow_development: bool = True,
+        allow_costing: bool = False,
     ) -> None:
         self.database_path = database_path
         self.development_file_dir = development_file_dir
         self.allow_development = allow_development
+        self.allow_costing = allow_costing
         self.media_dirs = {
             "drawings": drawing_dir,
             "product_images": image_dir,
@@ -58,6 +60,8 @@ class BusinessSyncRepository:
     ) -> Path:
         if "development" in selected and not self.allow_development:
             raise ValueError("没有开发资料及文件访问权限。")
+        if "costing" in selected and not self.allow_costing:
+            raise ValueError("没有成本核算查看权限。")
         return export_package(
             self.database_path,
             output_path=output_path,
@@ -79,6 +83,8 @@ class BusinessSyncRepository:
     def read(package_path: Path) -> tuple[dict[str, object], dict[str, list[dict[str, object]]]]:
         return read_package(package_path)
 
+    package_datasets = staticmethod(package_datasets)
+
     def preview(self, package_path: Path) -> dict[str, object]:
         return preview_package(
             self.database_path,
@@ -88,6 +94,7 @@ class BusinessSyncRepository:
             media_summary_fn=self._media_summary,
             development_file_dir=self.development_file_dir,
             allow_development=self.allow_development,
+            allow_costing=self.allow_costing,
         )
 
     @staticmethod
@@ -140,6 +147,7 @@ class BusinessSyncRepository:
             resolve_quote_customers_fn=self._resolve_quote_customers,
             development_file_dir=self.development_file_dir,
             allow_development=self.allow_development,
+            allow_costing=self.allow_costing,
         )
 
     def _copy_requested_media(

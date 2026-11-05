@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import cast
 from uuid import uuid4
 
 from flask import abort, flash, redirect, render_template, request, send_file, url_for
@@ -11,8 +12,10 @@ from werkzeug.exceptions import HTTPException
 from app.config import DATA_DIR
 from app.helpers import user_file_label, user_output_dir, user_upload_dir, user_upload_path
 from app.locks import ImportLockError, import_lock
-from app.security import actor_name, can, permission_required
+from app.modules.costing.domain import CostingValidationError
+from app.security import actor_name, permission_required
 
+from .access import can_access_package, costing_access, development_access, permitted_datasets
 from .infrastructure import DATASETS, PACKAGE_SUFFIX, BusinessSyncRepository
 from .service import BusinessSyncService
 
@@ -29,23 +32,14 @@ def _service(*, write: bool = False) -> BusinessSyncService:
             image_dir=PRODUCT_IMAGE_DIR,
             material_drawing_dir=MATERIAL_DRAWING_DIR,
             development_file_dir=DATA_DIR / "development_files",
-            allow_development=_development_access(write=write),
+            allow_development=development_access(write=write),
+            allow_costing=costing_access(write=write),
         )
     )
 
 
-def _development_access(*, write: bool = False) -> bool:
-    return can("view_development") and can("view_development_files") and (not write or can("edit_development"))
-
-
-def _datasets() -> dict:
-    return {key: value for key, value in DATASETS.items() if key != "development" or _development_access()}
-
-
 def _authorize_package(path: Path, *, write: bool = False) -> None:
-    manifest, _payload = BusinessSyncRepository.read(path)
-    datasets = manifest.get("datasets", [])
-    if isinstance(datasets, list) and "development" in datasets and not _development_access(write=write):
+    if not can_access_package(path, write=write):
         abort(403)
 
 
@@ -86,13 +80,13 @@ def register(app) -> None:
     @app.get("/business-data-sync")
     @permission_required("sync_product_data")
     def business_data_sync():
-        return render_template("business_data_sync.html", datasets=_datasets(), preview=None)
+        return render_template("business_data_sync.html", datasets=permitted_datasets(), preview=None)
 
     @app.post("/business-data-sync/export")
     @permission_required("sync_product_data")
     def export_business_data_sync():
         selected = _selected()
-        if "development" in selected and not _development_access():
+        if not set(selected).issubset(permitted_datasets()):
             abort(403)
         if not selected:
             flash("请至少选择一类业务数据。", "error")
@@ -111,6 +105,9 @@ def register(app) -> None:
                 ),
                 as_attachment=True,
             )
+        except CostingValidationError as exc:
+            flash(exc.message, "error")
+            return redirect(url_for("business_data_sync"))
         except Exception:
             logger.exception("Business data package export failed")
             flash("业务数据包导出失败。", "error")
@@ -137,7 +134,11 @@ def register(app) -> None:
             logger.exception("Business data package preview failed")
             flash("业务数据包读取失败，请检查文件后重试。", "error")
             return redirect(url_for("business_data_sync"))
-        return render_template("business_data_sync.html", datasets=_datasets(), preview={**preview, "package_path": str(path)})
+        writable = permitted_datasets(write=True)
+        return render_template(
+            "business_data_sync.html", datasets=permitted_datasets(), preview={**preview, "package_path": str(path)},
+            import_denied_labels=[DATASETS[key][2] for key in cast(dict, preview["summary"]) if key not in writable],
+        )
 
     @app.post("/business-data-sync/apply")
     @permission_required("sync_product_data")

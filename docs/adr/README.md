@@ -41,3 +41,4 @@ ADR 用于记录难以撤销或会影响多个领域的决定。新增框架、�
 - [ADR 0033: Routine Dependency Upgrade Baseline 2026-09](0033-routine-dependency-upgrade-202609.md)
 - [ADR 0035: 独立成本核算与分阶段接入](0035-independent-costing-trial.md)
 - [ADR 0036: 成本核算正式接入本机项目](0036-costing-main-application.md)
+- [ADR 0037: 业务数据包同步成本核算](0037-costing-business-sync.md)

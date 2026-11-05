@@ -98,7 +98,7 @@ PERMISSION_DEFINITIONS: tuple[PermissionDefinition, ...] = (
     PermissionDefinition(
         "sync_product_data",
         "业务数据同步",
-        "导入、导出跨设备客户、产品目录、报价记录、管件资料和材料明细数据包，并可显式携带产品图纸、产品图片和物料图纸。",
+        "导入、导出跨设备业务数据，可携带产品图纸、产品图片和物料图纸。开发资料和成本核算另按各自的查看与维护权限控制。",
         "数据管理",
     ),
 )

@@ -11,6 +11,8 @@ from datetime import datetime
 from pathlib import Path, PurePosixPath
 
 from app.database import connect
+from app.modules.costing.business_sync import export_costing, validate_costing
+from app.modules.costing.transfer_service import MAX_TRANSFER_BYTES
 from app.platform.audit_store import log_event
 from app.product_image_processing import PRODUCT_IMAGE_LARGE_MAX_BYTES, validate_synced_product_image
 
@@ -27,6 +29,7 @@ from ._product_image_transfer import (
 )
 from ._schema import (
     DATASETS,
+    COSTING_PACKAGE_VERSION,
     LOCAL_MEDIA_COLUMNS,
     MAX_MEDIA_FILE_SIZE,
     MAX_PACKAGE_MEMBER_COUNT,
@@ -35,7 +38,6 @@ from ._schema import (
     MEDIA_DATASETS,
     MEDIA_DIRECTORIES,
     PACKAGE_TYPE,
-    PACKAGE_VERSION,
     SUPPORTED_PACKAGE_VERSIONS,
 )
 
@@ -44,6 +46,65 @@ Manifest = dict[str, object]
 Payload = dict[str, list[dict[str, object]]]
 PackageReader = Callable[[Path], tuple[Manifest, Payload]]
 MediaAdder = Callable[[tarfile.TarFile, str], int]
+COSTING_MEMBER = "costing.json"
+
+
+def _members(archive: tarfile.TarFile) -> dict[str, tarfile.TarInfo]:
+    members = {}
+    total = 0
+    for member in archive:
+        total += member.size
+        limit = MAX_MEDIA_FILE_SIZE
+        if member.name in {"manifest.json", "data.json"}:
+            limit = MAX_PACKAGE_METADATA_SIZE
+        elif member.name == COSTING_MEMBER:
+            limit = MAX_TRANSFER_BYTES
+        if (len(members) >= MAX_PACKAGE_MEMBER_COUNT or member.name in members or not member.isfile()
+                or not 0 <= member.size <= limit or total > MAX_PACKAGE_TOTAL_SIZE):
+            raise ValueError("业务数据包格式或文件大小无效。")
+        members[member.name] = member
+    if not {"manifest.json", "data.json"}.issubset(members):
+        raise ValueError("业务数据包格式或文件大小无效。")
+    return members
+
+
+def _json_member(archive: tarfile.TarFile, member: tarfile.TarInfo):
+    stream = archive.extractfile(member)
+    if stream is None:
+        raise ValueError("业务数据包内容不完整。")
+    with stream:
+        return json.loads(stream.read().decode("utf-8"))
+
+
+def _manifest_datasets(manifest: object) -> tuple[str, ...]:
+    if not isinstance(manifest, dict) or manifest.get("package_type") != PACKAGE_TYPE:
+        raise ValueError("不是受支持的业务数据包。")
+    version = manifest.get("version")
+    if type(version) is not int or version not in SUPPORTED_PACKAGE_VERSIONS:
+        raise ValueError("业务数据包版本不受支持，请先升级系统后再导入。")
+    selected = manifest.get("datasets")
+    if (not isinstance(selected, list) or not selected
+            or any(not isinstance(key, str) or key not in DATASETS for key in selected)
+            or len(set(selected)) != len(selected)):
+        raise ValueError("业务数据包缺少可导入的数据集。")
+    if "development" in selected and version < 5:
+        raise ValueError("旧版业务数据包不支持开发资料。")
+    if "costing" in selected and version < COSTING_PACKAGE_VERSION:
+        raise ValueError("旧版业务数据包不支持成本核算。")
+    return tuple(selected)
+
+
+def package_datasets(path: Path) -> tuple[str, ...]:
+    """Read only the manifest for the preliminary permission check."""
+    try:
+        with tarfile.open(path, "r:gz") as archive:
+            members = _members(archive)
+            datasets = _manifest_datasets(_json_member(archive, members["manifest.json"]))
+            if ("costing" in datasets) != (COSTING_MEMBER in members):
+                raise ValueError("业务数据包的成本核算内容与清单不符。")
+            return datasets
+    except (EOFError, OSError, tarfile.TarError, UnicodeError, json.JSONDecodeError, RecursionError) as exc:
+        raise ValueError("业务数据包无法读取。") from exc
 
 
 def add_media_directory(
@@ -88,34 +149,20 @@ def read_package(package_path: Path) -> tuple[Manifest, Payload]:
     product_members: dict[str, tuple[int, str]] = {}
     try:
         with tarfile.open(package_path, "r:gz") as archive:
-            raw_members = archive.getmembers()
-            members = {member.name: member for member in raw_members}
-            if len(members) != len(raw_members) or not {"manifest.json", "data.json"}.issubset(members):
-                raise ValueError("业务数据包格式或文件大小无效。")
-            if (
-                len(raw_members) > MAX_PACKAGE_MEMBER_COUNT
-                or sum(member.size for member in raw_members) > MAX_PACKAGE_TOTAL_SIZE
-                or members["manifest.json"].size > MAX_PACKAGE_METADATA_SIZE
-                or members["data.json"].size > MAX_PACKAGE_METADATA_SIZE
-            ):
-                raise ValueError("业务数据包格式或文件大小无效。")
-            if any(
-                not member.isfile()
-                or member.issym()
-                or member.islnk()
-                or member.size < 0
-                or member.size > MAX_MEDIA_FILE_SIZE
-                for member in raw_members
-            ):
-                raise ValueError("业务数据包格式或文件大小无效。")
-            manifest_file = archive.extractfile(members["manifest.json"])
-            data_file = archive.extractfile(members["data.json"])
-            if manifest_file is None or data_file is None:
-                raise ValueError("业务数据包内容不完整。")
-            manifest = json.loads(manifest_file.read().decode("utf-8"))
-            payload = json.loads(data_file.read().decode("utf-8"))
-            if isinstance(manifest, dict) and manifest.get("version") in {4, 5}:
-                for member in raw_members:
+            members = _members(archive)
+            manifest = _json_member(archive, members["manifest.json"])
+            selected = _manifest_datasets(manifest)
+            version = manifest["version"]
+            payload = _json_member(archive, members["data.json"])
+            if not isinstance(payload, dict) or set(payload) != set(selected) - {"costing"}:
+                raise ValueError("业务数据包缺少可导入的数据集。")
+            if ("costing" in selected) != (COSTING_MEMBER in members):
+                raise ValueError("业务数据包的成本核算内容与清单不符。")
+            if "costing" in selected:
+                snapshot = _json_member(archive, members[COSTING_MEMBER])
+                payload["costing"] = [validate_costing(snapshot)]
+            if version >= 4:
+                for member in members.values():
                     if not member.name.startswith(PRODUCT_IMAGE_MEMBER_PREFIX):
                         continue
                     relative = member.name[len(PRODUCT_IMAGE_MEMBER_PREFIX) :]
@@ -127,25 +174,10 @@ def read_package(package_path: Path) -> tuple[Manifest, Payload]:
                     image_payload = image_file.read()
                     validate_synced_product_image(image_payload)
                     product_members[relative] = (member.size, hashlib.sha256(image_payload).hexdigest())
-    except (OSError, tarfile.TarError, json.JSONDecodeError) as exc:
+    except (EOFError, OSError, tarfile.TarError, UnicodeError, json.JSONDecodeError, RecursionError) as exc:
         raise ValueError("业务数据包无法读取。") from exc
-    if not isinstance(manifest, dict) or manifest.get("package_type") != PACKAGE_TYPE or not isinstance(payload, dict):
-        raise ValueError("不是受支持的业务数据包。")
-    version = manifest.get("version")
-    if type(version) is not int or version not in SUPPORTED_PACKAGE_VERSIONS:
-        raise ValueError("业务数据包版本不受支持，请先升级系统后再导入。")
-    raw_datasets = manifest.get("datasets", [])
-    if (
-        not isinstance(raw_datasets, list)
-        or any(not isinstance(key, str) or key not in DATASETS for key in raw_datasets)
-        or len(set(raw_datasets)) != len(raw_datasets)
-    ):
+    if any(not isinstance(payload[key], list) for key in selected):
         raise ValueError("业务数据包缺少可导入的数据集。")
-    selected = tuple(raw_datasets)
-    if not selected or set(payload) != set(selected) or any(not isinstance(payload.get(key), list) for key in selected):
-        raise ValueError("业务数据包缺少可导入的数据集。")
-    if "development" in selected and version < 5:
-        raise ValueError("旧版业务数据包不支持开发资料。")
     media = manifest.get("media", {})
     if not isinstance(media, dict):
         raise ValueError("业务数据包媒体信息无效。")
@@ -164,10 +196,10 @@ def read_package(package_path: Path) -> tuple[Manifest, Payload]:
         raise ValueError("业务数据包媒体文件计数无效。")
     actual_files = {key: 0 for key in MEDIA_DIRECTORIES}
     normalized_targets = {key: set() for key in MEDIA_DIRECTORIES}
-    for member in raw_members:
-        if member.name in {"manifest.json", "data.json"}:
+    for member in members.values():
+        if member.name in {"manifest.json", "data.json", COSTING_MEMBER}:
             continue
-        if version == 5 and "development" in selected and member.name.startswith(MEMBER_PREFIX):
+        if "development" in selected and member.name.startswith(MEMBER_PREFIX):
             continue
         media_key = next(
             (key for key, directory in MEDIA_DIRECTORIES.items() if member.name.startswith(f"{directory}/")),
@@ -187,6 +219,9 @@ def read_package(package_path: Path) -> tuple[Manifest, Payload]:
             raise ValueError("业务数据包媒体文件计数与实际内容不一致。")
     typed_payload: Payload = {}
     for key in selected:
+        if key == "costing":
+            typed_payload[key] = payload[key]
+            continue
         identity = DATASETS[key][1]
         seen: set[str] = set()
         duplicates: list[str] = []
@@ -226,10 +261,14 @@ def export_package(
 ) -> Path:
     payload: Payload = {}
     product_rows: list[dict[str, object]] = []
+    costing = None
     with connect(database_path) as connection:
-        if "development" in selected:
+        if {"development", "costing"}.intersection(selected):
             connection.execute("BEGIN")
         for key in selected:
+            if key == "costing":
+                costing = export_costing(connection)
+                continue
             if key == "development":
                 payload[key] = export_aggregates(connection)
                 continue
@@ -258,7 +297,7 @@ def export_package(
     )
     manifest: Manifest = {
         "package_type": PACKAGE_TYPE,
-        "version": PACKAGE_VERSION,
+        "version": COSTING_PACKAGE_VERSION if costing is not None else 5,
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "datasets": list(selected),
         "media": {
@@ -277,6 +316,11 @@ def export_package(
             (root / "data.json").write_text(json.dumps(payload, ensure_ascii=False, default=str), encoding="utf-8")
             with tarfile.open(temporary, "w:gz") as archive:
                 archive.add(root / "data.json", arcname="data.json")
+                if costing is not None:
+                    with (root / COSTING_MEMBER).open("w", encoding="utf-8") as output:
+                        json.dump(costing, output, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+                    archive.add(root / COSTING_MEMBER, arcname=COSTING_MEMBER)
+                    del costing
                 add_archive_files(archive, development_file_dir, payload.get("development", []))
                 media = manifest["media"]
                 if not isinstance(media, dict):

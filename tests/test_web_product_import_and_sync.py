@@ -30,7 +30,9 @@ class TestWebProductImportAndSync(WebAppTestBase):
             self.assertIn("<strong>物料图纸</strong>", html)
             self.assertNotIn("包含物料图纸", html)
             self.assertEqual(html.count('class="sync-option-grid sync-option-grid-unified"'), 1)
-            self.assertEqual(html.count('class="sync-option"'), 9)
+            self.assertEqual(html.count('class="sync-option"'), 10)
+            self.assertIn('name="dataset" value="costing" checked', html)
+            self.assertIn("明细金额、修改记录及参考资料", html)
             for media_field in ("include_drawings", "include_images", "include_material_drawings"):
                 media_input = re.search(rf'<input\b[^>]*name="{media_field}"[^>]*>', html)
                 self.assertIsNotNone(media_input)

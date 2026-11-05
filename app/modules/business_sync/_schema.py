@@ -3,8 +3,8 @@ from __future__ import annotations
 
 PACKAGE_SUFFIX = ".tar.gz"
 PACKAGE_TYPE = "bld_business_data"
-PACKAGE_VERSION = 5
-SUPPORTED_PACKAGE_VERSIONS = frozenset({1, 2, 3, 4, 5})
+COSTING_PACKAGE_VERSION = 6
+SUPPORTED_PACKAGE_VERSIONS = frozenset({1, 2, 3, 4, 5, COSTING_PACKAGE_VERSION})
 
 MAX_MEDIA_FILE_SIZE = 512 * 1024 * 1024
 MAX_PACKAGE_METADATA_SIZE = 64 * 1024 * 1024
@@ -25,6 +25,7 @@ DATASETS = {
     "development": ("development_projects", "id", "新产品开发"),
     "customers": ("customers", "sync_id", "客户"),
     "products": ("products", "bld_no", "产品目录"),
+    "costing": ("costing_records", "id", "成本核算"),
     "quotes": ("quote_records", "sync_id", "报价记录"),
     "tubes": ("tube_items", "code", "管件资料"),
     "materials": ("material_items", "sync_id", "材料明细"),

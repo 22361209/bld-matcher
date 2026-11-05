@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-import shutil
-import tempfile
 
 from app.database import connect
+from app.modules.costing.business_sync import preview_costing
 
 from app.modules.products.catalog_language import CATALOG_FIELDS
 
@@ -22,7 +21,8 @@ from ._comparison import (
     syncable_incoming_rows,
     unresolved_customers,
 )
-from ._package_archive import PackageReader
+from ._package_archive import Manifest, PackageReader, Payload
+from ._package_snapshot import prepared_package
 from ._schema import DATASETS
 from ._development import preview_aggregates
 
@@ -35,20 +35,26 @@ def _preview_package(
     database_path: Path,
     package_path: Path,
     *,
-    read_package_fn: PackageReader,
+    content: tuple[Manifest, Payload],
     normalized_incoming_fn: IncomingNormalizer = normalized_incoming,
     media_summary_fn: MediaSummarizer = media_summary,
     development_file_dir: Path | None = None,
     allow_development: bool = True,
+    allow_costing: bool = False,
 ) -> dict[str, object]:
-    manifest, payload = read_package_fn(package_path)
+    manifest, payload = content
     if "development" in payload and not allow_development:
         raise ValueError("没有开发资料及文件访问权限。")
+    if "costing" in payload and not allow_costing:
+        raise ValueError("没有成本核算查看权限。")
     summary: dict[str, dict[str, object]] = {}
     with connect(database_path) as connection:
-        if "development" in payload:
+        if {"development", "costing"}.intersection(payload):
             connection.execute("BEGIN")
         for key, incoming_rows in payload.items():
+            if key == "costing":
+                summary[key] = preview_costing(connection, incoming_rows[0])
+                continue
             if key == "development":
                 summary[key] = preview_aggregates(connection, incoming_rows, development_file_dir)
                 continue
@@ -137,13 +143,8 @@ def _preview_package(
 
 
 def preview_package(database_path: Path, package_path: Path, *, read_package_fn: PackageReader, **kwargs) -> dict[str, object]:
-    manifest, payload = read_package_fn(package_path)
-    if "development" not in payload:
-        return _preview_package(database_path, package_path, read_package_fn=lambda _path: (manifest, payload), **kwargs)
-    with tempfile.TemporaryDirectory(prefix="bld-development-preview-") as directory:
-        snapshot = Path(directory) / package_path.name
-        shutil.copyfile(package_path, snapshot)
-        result = _preview_package(database_path, snapshot, read_package_fn=read_package_fn, **kwargs)
+    with prepared_package(package_path, read_package_fn) as (snapshot, content):
+        result = _preview_package(database_path, snapshot, content=content, **kwargs)
         if package_digest(snapshot) != package_digest(package_path):
             raise ValueError("预览时数据包已变化，请重新上传预览。")
         return result

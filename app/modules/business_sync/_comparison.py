@@ -5,6 +5,7 @@ import json
 import sqlite3
 from pathlib import Path
 
+from app.modules.costing.business_sync import costing_state
 from app.modules.products.brand_normalization import canonicalize_brands
 from app.modules.products.catalog_language import catalog_values
 from app.platform.sync_identity import material_match_key, quote_match_key
@@ -74,6 +75,9 @@ def package_digest(package_path: Path) -> str:
 def state_token(connection: sqlite3.Connection, package_path: Path, datasets: tuple[str, ...], *, development_file_dir: Path | None = None, development_rows: list[dict] | None = None) -> str:
     state: dict[str, object] = {}
     for key in datasets:
+        if key == "costing":
+            state[key] = costing_state(connection)
+            continue
         if key == "development":
             from ._development import development_state
             state[key] = development_state(connection, development_rows or [], development_file_dir)

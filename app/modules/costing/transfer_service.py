@@ -63,6 +63,22 @@ def _timestamp(value: object) -> datetime:
     return parsed
 
 
+def _stored_amount(value: object) -> None:
+    """Historical derived amounts can have more precision than editable inputs."""
+    if value is None:
+        return
+    if not isinstance(value, str) or not value or len(value) > 128:
+        raise CostingValidationError("成本快照金额格式无效。")
+    try:
+        amount = Decimal(value)
+    except InvalidOperation as exc:
+        raise CostingValidationError("成本快照金额格式无效。") from exc
+    exponent = amount.as_tuple().exponent
+    if (not amount.is_finite() or amount.copy_abs() > MAX_VALUE * 4
+            or not isinstance(exponent, int) or abs(exponent) > 128):
+        raise CostingValidationError("成本快照金额超出范围。")
+
+
 def _validate_record(record: object) -> dict:
     if not isinstance(record, dict):
         raise CostingValidationError("迁移成本单格式无效。")
@@ -85,25 +101,13 @@ def _validate_record(record: object) -> dict:
         raise CostingValidationError("成本核对提示格式无效。")
     # Validate editability with today's rules, but retain every original value,
     # including historical derived sale prices and source evidence.
+    for field in DERIVED_AMOUNTS:
+        _stored_amount(record.get(field))
     calculated = calculate_cost(record)
     with_pricing(record)
     for field in ("code", "name", "brand", "models", "kind"):
         if record.get(field) != calculated[field]:
             raise CostingValidationError("成本型号或索引字段格式无效。")
-    for field in DERIVED_AMOUNTS:
-        if field not in record and field in {"minimum_tax_price", "suggested_tax_price"}:
-            continue
-        raw = record.get(field)
-        if raw is None:
-            continue
-        if not isinstance(raw, str) or not raw or len(raw) > 128:
-            raise CostingValidationError("成本汇总金额格式无效。")
-        try:
-            amount = Decimal(raw)
-        except InvalidOperation as exc:
-            raise CostingValidationError("成本汇总金额格式无效。") from exc
-        if not amount.is_finite() or amount.copy_abs() > MAX_VALUE * 4:
-            raise CostingValidationError("成本汇总金额超出范围。")
     items = record.get("items")
     if not isinstance(items, list):
         raise CostingValidationError("成本明细格式无效。")
@@ -111,26 +115,30 @@ def _validate_record(record: object) -> dict:
     if len(item_ids) != len(set(item_ids)):
         raise CostingValidationError("同一成本单的明细编号重复。")
     for item in items:
+        _stored_amount(item.get("line_total"))
         issues = item.get("issues")
         if not isinstance(issues, list) or any(not isinstance(issue, str) for issue in issues):
             raise CostingValidationError("成本明细的核对提示格式无效。")
     return record
 
 
-def _validated_snapshot(snapshot: object) -> dict:
+def _validated_snapshot(snapshot: object, *, allow_empty: bool = False, detach: bool = True) -> dict:
     if not isinstance(snapshot, dict) or set(snapshot) != SNAPSHOT_FIELDS:
         raise CostingValidationError("成本迁移包字段不完整或含有未知字段。")
     encoded = _encoded(snapshot)
     if len(encoded) > MAX_TRANSFER_BYTES:
         raise CostingValidationError(f"成本迁移包不能超过 {MAX_TRANSFER_MIB} MiB。")
-    # Work from an independent JSON tree so callers cannot mutate an applied preview.
-    content = json.loads(encoded)
+    # The standalone transfer owns a detached input; business sync already owns
+    # the parsed archive tree. Neither path mutates the supplied snapshot.
+    content = json.loads(encoded) if detach else snapshot
+    del encoded
     if type(content["format_version"]) is not int or content["format_version"] != 1:
         raise CostingValidationError("成本迁移包版本不受支持。")
     records, revisions = content["records"], content["revisions"]
-    if not isinstance(records, list) or not 1 <= len(records) <= MAX_RECORDS:
+    minimum = 0 if allow_empty else 1
+    if not isinstance(records, list) or not minimum <= len(records) <= MAX_RECORDS:
         raise CostingValidationError("成本迁移包需要包含 1 至 5000 个型号。")
-    if not isinstance(revisions, list) or not 1 <= len(revisions) <= MAX_REVISIONS:
+    if not isinstance(revisions, list) or not minimum <= len(revisions) <= MAX_REVISIONS:
         raise CostingValidationError("成本迁移包的修订数量无效。")
     if content["references"] is not None:
         reference_snapshot(content["references"])
@@ -140,17 +148,14 @@ def _validated_snapshot(snapshot: object) -> dict:
                 if not isinstance(options, list) or any(not isinstance(option, dict) for option in options):
                     raise CostingValidationError("成本参考候选资料必须是对象数组。")
     record_map = {}
-    codes, item_ids = set(), set()
+    codes = set()
+    item_owners = {}
     for row in records:
         record = _validate_record(row)
         if record["id"] in record_map or record["code"].casefold() in codes:
             raise CostingValidationError("成本迁移包存在重复型号或编号。")
         record_map[record["id"]] = record
         codes.add(record["code"].casefold())
-        for item in record["items"]:
-            if item["id"] in item_ids:
-                raise CostingValidationError("不同成本单共用了同一明细编号。")
-            item_ids.add(item["id"])
     histories = defaultdict(list)
     revision_ids = set()
     for revision in revisions:
@@ -163,6 +168,9 @@ def _validated_snapshot(snapshot: object) -> dict:
         revision_ids.add(revision_id)
         _positive_integer(revision["version"], "修订版本")
         after = _validate_record(revision["after"])
+        for item in after["items"]:
+            if item_owners.setdefault(item["id"], record_id) != record_id:
+                raise CostingValidationError("不同成本单共用了同一明细编号。")
         if (after["id"] != record_id or after["version"] != revision["version"]
                 or after["updated_at"] != revision["created_at"] or after["updated_by"] != revision["actor"]):
             raise CostingValidationError("成本修订与其记录快照不一致。")
@@ -174,7 +182,7 @@ def _validated_snapshot(snapshot: object) -> dict:
         previous = None
         origin = history[0]["after"]
         for version, revision in enumerate(history, 1):
-            if revision["version"] != version or revision["before"] != previous:
+            if revision["version"] != version or _encoded(revision["before"]) != _encoded(previous):
                 raise CostingValidationError("成本修订顺序或前后快照不一致。")
             after = revision["after"]
             if any(after[key] != origin[key] for key in ("created_at", "created_by", "source")):
@@ -185,14 +193,13 @@ def _validated_snapshot(snapshot: object) -> dict:
             if not isinstance(revision["action"], str) or revision["action"] not in expected_actions:
                 raise CostingValidationError("成本修订操作无效。")
             previous = revision["after"]
-        if previous != record:
+        if _encoded(previous) != _encoded(record):
             raise CostingValidationError("成本单与最后一版修订不一致。")
-    digest = content.pop("digest")
+    digest = content["digest"]
     if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest) or not hmac.compare_digest(digest, snapshot_digest(content)):
         raise CostingValidationError("成本迁移包校验失败，资料可能已被修改。")
-    content["records"].sort(key=lambda row: row["id"])
-    content["revisions"].sort(key=lambda row: row["id"])
-    return {**content, "digest": digest}
+    return {**content, "records": sorted(records, key=lambda row: row["id"]),
+            "revisions": sorted(revisions, key=lambda row: row["id"])}
 
 
 class CostingTransferService:
