@@ -1,6 +1,6 @@
 # BLD Project Brief
 
-更新时间：2026-10-03
+更新时间：2026-11-05
 
 这是给新接手 Codex 或开发者的短版项目说明。先读 `AGENTS.md`，再读本文件。详细历史在 `项目交接说明.md`，需要查旧决策时用 `rg` 搜索，不要默认整篇读取。
 
@@ -49,13 +49,19 @@ NAS 信息：
 
 ## 本机启动
 
+Mac mini 使用 Docker Desktop 的 `bld-local` 项目，长期服务容器为 `bld-matcher-local`。首次部署完成后，在 Containers 中点击该容器的启动、停止或重启按钮即可；访问地址仍为 `http://127.0.0.1:5055/`，只监听本机。
+
 ```bash
 cd "/Users/linzhenyue/Projects/bld-matcher"
-uv run python -m scripts.init_database
-bash tools/restart_local_5055.sh
+bash tools/docker_local.sh start
+bash tools/docker_local.sh status
 ```
 
-本机 5055 只通过 `bash tools/restart_local_5055.sh` 或 `/Applications/BLD.app` 启动；两者复用同一个启动器，会仅停止本工作区的旧服务并精确关闭它创建的旧 Terminal 窗口。首次安装或拉取启动器更新后，运行 `bash tools/install_bld_launcher.sh` 重建 BLD.app；它不用于 NAS。启动日志在 `logs/bld-local-5055.log`。
+代码更新使用 `bash tools/docker_local.sh update`，包含完整检查、镜像构建、停机一致性备份、数据库与图片迁移及健康等待。日常启动复用现有容器，不构建镜像、不执行图片转换。备份默认位于 `~/Library/Application Support/BLD/backups/`，包含 SQLite Backup API 快照和配套文件；详见 `docs/operations/local-docker.md`。
+
+本机配置为显式指定的 `compose.local.yml`；NAS 继续使用原 `docker-compose.yml` 和 Git 部署流程。两端运行数据不自动同步。本机若明确需要原生模式，先停止 Docker 容器，再使用 `bash tools/restart_local_5055.sh` 或 `/Applications/BLD.app`；原生启动日志仍在 `logs/bld-local-5055.log`。
+
+2026-11-03 已在 Mac mini 启用并实测 Docker Desktop 停止/启动同一容器，健康与最小业务探针通过。迁移前完整备份在 `~/Library/Application Support/BLD/backups/docker-desktop-20261103T110445+0800-f7194ba2/`；41 张表结构和行数保持一致，仅两条产品图片路径更新。完整验收日志在 `logs/docker-desktop-20261103T110137/`。NAS 未部署或同步。
 
 常用检查：
 
@@ -92,6 +98,17 @@ lsof -nP -iTCP:5055 -sTCP:LISTEN
 - 新增开发查看、维护、文件查看权限；旧角色不自动扩权。现有供应商仅有合同自由文本，因此开发模块新增轻量供应商主档，不依赖客户档案或可重建的物料自增 ID。
 - 2026-10-02 经用户确认，Mac mini 已完成一致性备份、迁移 `043_product_development_register` 和受管 5055 重启；健康及业务探针通过，31 张既有表迁移前后摘要一致。备份位于 `data/local-backups/development-043-20261002T173618Z/`。公司 NAS 未更新，未执行跨机同步。
 - 2026-10-03 八列树形录入已更新到 Mac mini 正式 5055；更新前完整备份位于 `data/local-backups/development-tree-20261002T183853Z/`（目录使用 UTC 时间）。本次未新增迁移，重启前后 42 张表摘要和 schema 一致，运行版本仍为 043；公司 NAS 未更新。
+
+## 成本核算（2026-11-05）
+
+- `app/modules/costing/` 提供纯 Decimal 核算、成本数据表、修订与并发保护，以及原成本工作簿预览导入；支持查看、查询、修改、新建和复制相似型号。
+- 成本功能已通过受管更新部署到本机 Docker Desktop 项目 `/costs`，沿用项目账号与主导航“成本核算”；“导入核对”位于列表动作条，复用同一套页面与核算实现。
+- `044_costing` 已在正式主库追加三张成本表，容器健康及业务探针通过；`view_costs` / `manage_costs` 控制查看和维护，旧非管理员不自动扩权。443 个型号、9902 条明细、444 条修订已通过管理员认证接入正式 5055，重导出与源包完整一致；原 `data/costing-trial/` 保留且 5056 已停止。不覆盖产品目录销售价格，不向 NAS 同步。
+- 计算成本、核定成本和废料抵减分开保存；缺项、特殊公式及异常保留原值并提示核对。日常运维见 `docs/operations/costing.md`，试用验收历史见 `docs/operations/costing-trial.md`，边界见 ADR 0035/0036。
+- 成本列表默认按产品编码升序，支持列头组合筛选及列宽拖动；更新时间放在成本详情。最低含税售价按抵减后成本÷0.8×1.1最终向上取到分，建议含税单价默认跟随最低价，仅在成本编辑页手动覆盖，清空恢复自动。
+- 成本详情以紧凑表格录入。已有型号资料默认折叠，表格上方显示抵减后成本、建议含税价和待核对数量。序号列的加号在本行下方插入，减号移除本行，支持撤销最近一次移除。Tab 横向录入，Enter 在同列向下移动，行资料按需展开，更新时间见页底修改记录。
+- 明细序号右侧依次为类别、项目名称、产品编码、物料属性。物料属性按材料和工序分为外购、委外加工、其余暂归自制，可逐行调整。纸箱归入外包装，规格填产品编码，原零件编码保留在行资料中。管理员可预览并整理历史明细。返回列表时可放弃修改或保存后返回。
+- 修改类别、名称、物料属性或备注只更新资料及相应待核对提示，保存时沿用原有成本金额。调整明细产品编码、增删行、切换计价方式或修改计价数值时重新核算。
 
 ## 当前关键行为
 

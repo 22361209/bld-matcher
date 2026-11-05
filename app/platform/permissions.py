@@ -93,6 +93,8 @@ PERMISSION_DEFINITIONS: tuple[PermissionDefinition, ...] = (
     PermissionDefinition("view_development", "查看产品开发", "查看开发单、成品分支、组件、任务和工序。", "产品开发"),
     PermissionDefinition("edit_development", "维护产品开发", "维护开发单、组件、任务、供应商和工程文件，按负责人确认量产完成。", "产品开发"),
     PermissionDefinition("view_development_files", "查看开发文件", "查看开发图纸与工艺文件的修订历史、预览和下载。", "产品开发"),
+    PermissionDefinition("view_costs", "查看成本核算", "查看、查询型号成本、含税售价及成本修改记录。", "成本核算"),
+    PermissionDefinition("manage_costs", "维护成本核算", "新建、修改、复制型号成本和建议含税单价，预览并确认成本工作簿导入。", "成本核算"),
     PermissionDefinition(
         "sync_product_data",
         "业务数据同步",

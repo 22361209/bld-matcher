@@ -1,0 +1,106 @@
+.costing-page .costing-identity {
+  margin-bottom: 6px;
+}
+
+.costing-page .costing-editor-bar {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px 16px;
+  margin: 0;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.costing-editor-bar .command-actions,
+.costing-identity-line,
+.costing-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+}
+
+.costing-editor-bar .command-actions {
+  margin-top: 0;
+}
+
+.costing-identity-line {
+  flex: 1 1 260px;
+  gap: 4px 12px;
+  overflow-wrap: anywhere;
+}
+
+.costing-identity-line > strong {
+  font-size: 17px;
+}
+
+.costing-identity-line .muted-text,
+.costing-editor-bar [data-costing-status] {
+  font-size: 13px;
+}
+
+.costing-back {
+  border-right: 1px solid var(--linear-line);
+  padding-right: 12px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.costing-metrics {
+  gap: 4px 18px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.costing-metrics > span, .costing-metrics > strong {
+  overflow-wrap: anywhere;
+}
+
+.costing-metrics > span, .costing-metrics small {
+  color: var(--linear-muted);
+}
+
+.costing-metrics strong {
+  color: var(--linear-text);
+}
+
+.costing-identity .costing-fields {
+  gap: 6px 12px;
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--linear-line);
+}
+
+.costing-identity .costing-fields label {
+  gap: 2px;
+}
+
+.costing-page .costing-history-footer {
+  display: flow-root;
+  padding: 9px 12px;
+}
+
+.costing-history-footer .costing-updated {
+  float: right;
+  max-width: 100%;
+  color: var(--linear-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.costing-history-footer .data-table-scroll {
+  clear: both;
+}
+
+@media (max-width: 760px) {
+  .costing-editor-bar .command-actions {
+    justify-content: flex-start;
+    margin-left: 0;
+  }
+  .costing-history-footer .costing-updated {
+    float: none;
+    display: block;
+  }
+}

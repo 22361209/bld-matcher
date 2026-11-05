@@ -1,0 +1,129 @@
+.costing-page { min-width: 0; }
+.costing-page .data-section { margin-bottom: 16px; }
+.costing-fields { margin: 0; padding: 16px; border: 0; display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap: 14px; }
+.costing-fields label, .costing-summary-grid label, .costing-login label { display: grid; gap: 6px; min-width: 0; }
+.costing-fields input, .costing-fields select, .costing-summary-grid input { width: 100%; min-width: 0; }
+.costing-wide-field { grid-column: span 2; }
+.costing-secondary { display: block; color: var(--linear-muted); max-width: 350px; white-space: normal; overflow-wrap: anywhere; }
+.costing-number { font-variant-numeric: tabular-nums; }
+.costing-row-actions { display: flex; gap: 14px; white-space: nowrap; }
+.costing-list-table col[data-col="code"] { width: 125px; }
+.costing-list-table col[data-col="name"] { width: 180px; }
+.costing-list-table col[data-col="kind"] { width: 90px; }
+.costing-list-table col[data-col="calculated"], .costing-list-table col[data-col="approved"], .costing-list-table col[data-col="scrap"] { width: 110px; }
+.costing-list-table col[data-col="net"] { width: 125px; }
+.costing-list-table col[data-col="minimum_price"], .costing-list-table col[data-col="suggested_price"] { width: 140px; }
+.costing-list-table col[data-col="status"] { width: 135px; }
+.costing-list-table col[data-col="actions"] { width: 160px; }
+.costing-note { margin: 0; padding: 12px 16px; color: var(--linear-muted); line-height: 1.6; }
+.costing-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap: 20px; padding: 18px 16px; align-items: start; }
+.costing-summary-grid > div { display: grid; gap: 8px; }
+.costing-summary-grid strong { font-size: 22px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.costing-summary-grid small { color: var(--linear-muted); }
+.costing-issues { margin: 10px 16px; color: var(--linear-text); }
+.costing-issues summary, .costing-history summary { cursor: pointer; font-weight: 600; }
+.costing-issues ul { padding-left: 22px; line-height: 1.7; max-height: 240px; overflow: auto; }
+.costing-summary-section .form-actions { padding: 0 16px 16px; flex-wrap: wrap; }
+.data-grid .costing-edit-table { width: 100%; min-width: 1000px; }
+.costing-edit-table col[data-col="row"] { width: 56px; }
+.costing-edit-table col[data-col="category"] { width: 10%; }
+.costing-edit-table col[data-col="name"] { width: 16%; }
+.costing-edit-table col[data-col="product_code"] { width: 12%; }
+.costing-edit-table col[data-col="material_attribute"] { width: 9%; }
+.costing-edit-table col[data-col="mode"] { width: 11%; }
+.costing-edit-table col[data-col="price"], .costing-edit-table col[data-col="usage"] { width: 12%; }
+.costing-edit-table col[data-col="total"] { width: 9%; }
+.costing-edit-table col[data-col="details"] { width: 70px; }
+.costing-edit-table td { vertical-align: middle; padding: 3px 6px; }
+.costing-edit-table td[data-col="row"] {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  padding-inline: 3px;
+  background: var(--linear-surface);
+}
+.costing-edit-table tbody tr:nth-child(even) > td[data-col="row"],
+.costing-edit-table tbody tr:is(:hover, :focus-within) > td[data-col="row"] { background: inherit; }
+.data-grid .costing-edit-table th[data-col="row"] { left: 0; z-index: 6; }
+.costing-row-controls {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  font-variant-numeric: tabular-nums;
+}
+.costing-row-button {
+  width: 24px;
+  min-height: 28px;
+  padding: 0;
+  background: transparent;
+}
+.costing-row-button span {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--linear-accent);
+  color: white;
+  font: 700 15px/1 Arial, sans-serif;
+}
+.costing-row-button[data-costing-remove] span { background: var(--precision-danger); }
+@media (hover: hover) and (pointer: fine) {
+  [data-editable="true"] .costing-row-number { position: absolute; }
+  [data-costing-row] .costing-row-button { opacity: 0; pointer-events: none; }
+  [data-costing-row]:is(:hover, :focus-within) .costing-row-button { opacity: 1; pointer-events: auto; }
+  [data-editable="true"] [data-costing-row]:is(:hover, :focus-within) .costing-row-number { opacity: 0; }
+}
+@media (hover: none), (pointer: coarse) {
+  [data-editable="true"] .costing-edit-table col[data-col="row"] { width: 96px; }
+  .costing-row-controls { flex-wrap: wrap; gap: 2px; }
+  .costing-row-button { width: 28px; min-height: 30px; }
+}
+.costing-edit-table input, .costing-edit-table select, .costing-edit-table textarea {
+  box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%;
+}
+.costing-edit-table input, .costing-edit-table select {
+  height: 30px; padding: 3px 7px; border-radius: 4px; font: inherit;
+}
+.costing-edit-table td[data-col="price"], .costing-edit-table td[data-col="usage"],
+.costing-edit-table td[data-col="total"], .costing-edit-table input[type="number"] {
+  text-align: right; font-variant-numeric: tabular-nums;
+}
+.costing-edit-table [data-costing-row]:focus-within { background: var(--linear-accent-soft); }
+.costing-cell-unit { display: flex; gap: 4px; align-items: center; min-width: 0; }
+.costing-cell-unit > span { flex: none; width: 32px; color: var(--linear-muted); font-size: 11px; text-align: left; white-space: nowrap; }
+.costing-line-total { overflow-wrap: anywhere; }
+.costing-edit-table .costing-details-toggle[data-issue-text]:not([data-issue-text=""]) { color: var(--precision-danger); }
+.costing-edit-table .costing-detail-row > td { background: var(--linear-subtle); }
+.costing-detail-fields {
+  position: sticky; left: 0; max-width: min(100%, calc(100vw - 64px)); padding: 8px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); align-items: start; gap: 8px 12px;
+}
+.costing-detail-fields label { display: grid; gap: 3px; min-width: 0; }
+.costing-detail-fields textarea { min-height: 30px; resize: vertical; }
+.costing-detail-fields button { align-self: end; justify-self: start; }
+.costing-review-note, .costing-source-note { grid-column: 1 / -1; margin: 0; white-space: normal; overflow-wrap: anywhere; }
+.costing-review-note { color: var(--precision-danger); }
+.costing-source-note { color: var(--linear-muted); }
+.costing-empty-row { padding: 24px; text-align: center; color: var(--linear-muted); }
+.costing-history { padding: 16px; }
+.costing-reference-field { display: grid; gap: 6px; max-width: 260px; margin-top: 14px; }
+.costing-history details[open] summary { margin-bottom: 12px; }
+.costing-import-form { padding: 16px; }
+.costing-page .costing-import-table { min-width: 1280px; }
+.costing-login { max-width: 440px; margin: 36px auto; padding: 24px; }
+.costing-page .message { margin: 12px 16px; }
+@media (max-width: 800px) {
+  .costing-fields, .costing-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .costing-page .workspace-command { flex-wrap: wrap; }
+  .costing-page .nav-brand-copy small { display: block; }
+  .costing-page .nav-user { flex-shrink: 0; }
+}
+@media (max-width: 480px) {
+  .costing-fields { grid-template-columns: minmax(0, 1fr); }
+  .costing-wide-field { grid-column: auto; }
+  .costing-summary-grid { gap: 16px 10px; }
+  .costing-summary-grid strong { font-size: 19px; }
+}

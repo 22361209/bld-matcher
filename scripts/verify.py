@@ -13,6 +13,7 @@ TYPECHECK_PATHS = (
     "app/modules/admin",
     "app/modules/business_sync",
     "app/modules/contracts",
+    "app/modules/costing",
     "app/modules/development",
     "app/modules/inquiry/alias_web.py",
     "app/modules/inquiry/download_web.py",
@@ -31,6 +32,7 @@ TYPECHECK_PATHS = (
     "app/modules/products/service.py",
     "scripts/cleanup_runtime.py",
     "scripts/runtime_probe.py",
+    "tools/costing_trial.py",
 )
 
 

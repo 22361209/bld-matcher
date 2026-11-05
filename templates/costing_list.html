@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% from '_table_filter_macros.html' import choice_heading %}
+{% set active_page = 'costs' %}
+{% set columns = [('code','产品编码'),('name','名称 / 车型'),('kind','类型'),('calculated','计算成本'),('approved','核定成本'),('scrap','废料抵减'),('net','抵减后成本'),('minimum_price','最低含税售价'),('suggested_price','建议含税单价'),('status','状态')] %}
+{% set selected_filters = column_filters|default({}) %}
+{% set filter_options = column_filter_options|default({}) %}
+{% set filter_query = column_filter_query|default({}) %}
+{% block page_title %}成本核算 · BLD{% endblock %}
+{% block page_id %}costing.list{% endblock %}
+{% block page_type %}list{% endblock %}
+{% block page_class %}shell wide app-surface costing-page{% endblock %}
+{% block navigation %}{% if costing_trial_mode %}{% include '_costing_nav.html' %}{% else %}{{ super() }}{% endif %}{% endblock %}
+{% block page_head %}<link rel="stylesheet" href="{{ url_for('static', filename='pages/costing.css', v=static_version('pages/costing.css')) }}">{% endblock %}
+{% block page_content %}
+<section class="data-section" id="costing-results" data-table-results>
+  <div class="workspace-command">
+    <form class="search-form" method="get" action="{{ url_for(costing_endpoint ~ '.index') }}">
+      {% for key, values in filter_query.items() %}{% for value in values %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}{% endfor %}
+      <label><span>型号 / 名称 / 车型</span><input name="q" value="{{ filters.q or '' }}" placeholder="输入型号或关键词" aria-label="型号、名称或车型"></label>
+      <label><span>类型</span><select name="kind"><option value="">全部类型</option><option value="arm" {% if filters.kind == 'arm' %}selected{% endif %}>摆臂</option><option value="ball" {% if filters.kind == 'ball' %}selected{% endif %}>球头</option></select></label>
+      <label><span>状态</span><select name="status"><option value="">全部状态</option><option value="ready" {% if filters.status == 'ready' %}selected{% endif %}>资料完整</option><option value="draft" {% if filters.status == 'draft' %}selected{% endif %}>待补充 / 核对</option></select></label>
+      <label><span>排序</span><select name="sort">
+        <option value="code" {% if filters.sort|default('code') == 'code' %}selected{% endif %}>产品编码（升序）</option>
+        <option value="code_desc" {% if filters.sort == 'code_desc' %}selected{% endif %}>产品编码（降序）</option>
+        <option value="updated" {% if filters.sort == 'updated' %}selected{% endif %}>最近修改</option>
+      </select></label>
+      <button class="linear-button primary" type="submit">查询</button>
+    </form>
+    <div class="command-actions"><button class="linear-button subtle" type="button" data-reset-list-for="costing-list" title="清除列头筛选并恢复默认列宽">重置列表</button><a class="linear-button subtle" href="{{ url_for(costing_endpoint ~ '.index') }}">清除筛选</a>{% if can('manage_costs') %}<a class="linear-button subtle" href="{{ url_for('costing_import.import_page') }}">导入核对</a><a class="linear-button primary" href="{{ url_for(costing_endpoint ~ '.new') }}">新建成本</a>{% endif %}</div>
+  </div>
+  <div class="data-grid" data-resizable-grid data-grid-key="costing-list">
+    <div class="data-table-scroll" data-grid-scroll>
+      <table id="costing-table" class="data-table data-grid-table costing-list-table" data-column-storage-scope="{{ g.user.id if g.user else 'trial' }}">
+        <colgroup>{% for key, label in columns %}<col data-col="{{ key }}">{% endfor %}<col data-col="actions"></colgroup>
+        <thead><tr>{% for key, label in columns %}<th scope="col" data-col="{{ key }}" data-column-label="{{ label }}">{{ choice_heading('costing', key, label, 'cf_' ~ key, filter_options.get(key, []), selected_filters.get(key, [])) }}</th>{% endfor %}<th scope="col" data-col="actions" data-column-label="操作"><span class="data-grid-static-column-label">操作</span></th></tr></thead>
+        <tbody>{% for cost in result.records %}
+          <tr>
+            <td data-col="code"><a href="{{ url_for(costing_endpoint ~ '.edit', record_id=cost.id) }}"><strong>{{ cost.code }}</strong></a></td>
+            <td data-col="name"><span>{{ cost.name or '—' }}</span><small class="costing-secondary">{{ cost.models or cost.brand or '' }}</small></td>
+            <td data-col="kind">{{ '球头' if cost.kind == 'ball' else '摆臂' }}</td>
+            <td data-col="calculated" class="costing-number">{{ cost.calculated_cost|cost_money if cost.calculated_cost is not none else '待补充' }}</td>
+            <td data-col="approved" class="costing-number">{{ cost.approved_cost|cost_money if cost.approved_cost is not none else '—' }}</td>
+            <td data-col="scrap" class="costing-number">{{ cost.scrap_credit|cost_money if cost.scrap_credit is not none else '—' }}</td>
+            <td data-col="net" class="costing-number">{{ cost.net_cost|cost_money if cost.net_cost is not none else '待补充' }}</td>
+            <td data-col="minimum_price" class="costing-number">{{ cost.minimum_tax_price|cost_money if cost.minimum_tax_price is not none else '待补充' }}</td>
+            <td data-col="suggested_price" class="costing-number">{{ cost.suggested_tax_price|cost_money if cost.suggested_tax_price is not none else '待补充' }}</td>
+            <td data-col="status">{{ '资料完整' if cost.status == 'ready' else '待补充 / 核对' }}</td>
+            <td data-col="actions"><div class="costing-row-actions"><a href="{{ url_for(costing_endpoint ~ '.edit', record_id=cost.id) }}">{{ '查看 / 修改' if can('manage_costs') else '查看' }}</a>{% if can('manage_costs') %}<a href="{{ url_for(costing_endpoint ~ '.new', copy=cost.id) }}">复制新建</a>{% endif %}</div></td>
+          </tr>
+        {% else %}<tr><td colspan="11"><div class="empty-state">没有找到成本记录。{% if can('manage_costs') %}可以新建型号，或导入现有成本表。{% endif %}</div></td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+    {% set ns = namespace(links=[]) %}
+    {% for number in range([1, result.page - 2]|max, [result.pages, result.page + 2]|min + 1) %}{% set _ = ns.links.append({'page': number, 'current': number == result.page, 'url': url_for(costing_endpoint ~ '.index', q=filters.q, kind=filters.kind, status=filters.status, sort=filters.sort, page=number, **filter_query)}) %}{% endfor %}
+    {% set pagination = {'total_pages': result.pages, 'page': result.page, 'has_prev': result.page > 1, 'has_next': result.page < result.pages, 'prev_url': url_for(costing_endpoint ~ '.index', q=filters.q, kind=filters.kind, status=filters.status, sort=filters.sort, page=result.page-1, **filter_query), 'next_url': url_for(costing_endpoint ~ '.index', q=filters.q, kind=filters.kind, status=filters.status, sort=filters.sort, page=result.page+1, **filter_query), 'links': ns.links, 'jump_url': url_for(costing_endpoint ~ '.index'), 'start': (result.page-1)*result.page_size+1, 'end': [result.page*result.page_size, result.total]|min} %}
+    {% set data_grid_label = '型号成本' %}{% set data_grid_total = result.total %}{% set data_grid_footer_context = '单位：元 / 件 · 最低含税售价 = 抵减后成本 ÷ 0.8 × 1.1' %}{% include '_data_grid_footer.html' %}
+  </div>
+</section>
+{% endblock %}
+{% block page_scripts %}<script type="module" src="{{ url_for('static', filename='pages/costing_list.js', v=static_version('pages/costing_list.js')) }}"></script>{% endblock %}

@@ -6,6 +6,8 @@ def register_routes(app) -> None:
     from app.modules.admin import register as register_admin
     from app.modules.business_sync import register as register_business_sync
     from app.modules.contracts import register as register_contracts
+    from app.modules.costing import register as register_costing
+    from app.modules.costing.transfer_web import register_transfer_routes as register_costing_transfer
     from app.modules.customers import register as register_customers
     from app.modules.development.web import register as register_development
     from app.modules.development.web_structure import register as register_development_structure
@@ -34,6 +36,8 @@ def register_routes(app) -> None:
     register_development_lookup(app)
     register_development_grid(app)
     register_contracts(app)
+    register_costing(app)
+    register_costing_transfer(app)
     register_customers(app)
     register_quotes(app)
     register_admin(app)

@@ -32,9 +32,12 @@ data/drawings/
 data/material_drawings/
 data/customer_files/
 data/product_images/
+data/product_image_migration_report.json
+data/.product-image-migration-running
 data/deploy-backups/
 data/locks/
 data/local-backups/
+data/costing-trial/
 data/shipping_notice_templates/
 static/product_images/
 

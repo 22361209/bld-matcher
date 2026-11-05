@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block page_title %}进入成本核算 · BLD{% endblock %}
+{% block page_id %}costing.login{% endblock %}
+{% block page_type %}workbench{% endblock %}
+{% block page_class %}shell app-surface costing-page{% endblock %}
+{% block navigation %}{% include '_costing_nav.html' %}{% endblock %}
+{% block page_head %}<link rel="stylesheet" href="{{ url_for('static', filename='pages/costing.css', v=static_version('pages/costing.css')) }}">{% endblock %}
+{% block page_content %}<section class="data-section costing-login">{% if error %}<p class="message error" role="alert">{{ error }}</p>{% endif %}<form method="post" action="{{ url_for('costing_trial.login') }}">{{ csrf_field() }}<label>试用访问密码 <input type="password" name="password" required autofocus autocomplete="current-password"></label><div class="form-actions"><button class="linear-button primary" type="submit">进入成本核算</button></div></form></section>{% endblock %}

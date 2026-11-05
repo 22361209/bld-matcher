@@ -1,0 +1,17 @@
+{
+  "date": "2026-11-03",
+  "version": "unreleased",
+  "title": "本机支持 Docker Desktop 界面启停",
+  "entries": [
+    "Mac mini 通过独立的本机 Docker 配置运行，首次部署后可在 Docker Desktop 中启动、停止和重启 BLD 服务，继续使用本机 5055 地址。",
+    "代码更新入口包含完整检查、构建、停机一致性备份、严格迁移和健康探针；日常启动复用现有容器，无需重建镜像。",
+    "本机运行目录原位挂载，NAS 配置和 Git 发布流程保持独立；备份保存到项目外的本机专用目录。",
+    "镜像构建排除本机原始产品目录、询价和单价 Excel 目录及开发缓存，原文件继续保留在本机。",
+    "经用户确认清理未被容器引用的 bld-matcher:codex-commit-check 和 eclipse-temurin:21-jre 两个旧镜像；保留运行镜像、ERP 构建基础镜像、构建缓存和数据卷，清理后五个服务容器健康状态正常。"
+  ],
+  "impact": {
+    "data": "复用本机运行数据；更新前以 SQLite Backup API 和配套文件备份保护数据，沿用既有迁移，不自动同步或覆盖 NAS",
+    "api": "compatible；不新增或修改业务接口",
+    "operations": "local-docker；本机使用 compose.local.yml 和受管脚本，NAS docker-compose.yml 保持原样"
+  }
+}

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% set active_page = 'costs' %}
+{% block page_title %}历史成本明细编码和物料属性核对 · 成本核算{% endblock %}
+{% block page_id %}costing.line_codes{% endblock %}
+{% block page_type %}import-preview{% endblock %}
+{% block page_class %}shell wide app-surface costing-page{% endblock %}
+{% block page_head %}<link rel="stylesheet" href="{{ url_for('static', filename='pages/costing.css', v=static_version('pages/costing.css')) }}">{% endblock %}
+{% block page_content %}
+<section class="data-section">
+  <div class="workspace-command">
+    <strong>待更新 {{ preview.records }} 个型号，共 {{ preview['items'] }} 行</strong>
+    <a class="linear-button subtle" href="{{ url_for('costing_transfer.page') }}">返回资料接入</a>
+  </div>
+  <p class="costing-note">纸箱整理 {{ preview.cartons }} 行，产品编码补全 {{ preview.codes }} 行，{{ preview.reviews|length }} 行编码需人工核对。</p>
+  <p class="costing-note">预计补全的物料属性包括外购 {{ preview.attributes['外购'] }} 行，自制 {{ preview.attributes['自制'] }} 行，委外加工 {{ preview.attributes['委外加工'] }} 行。</p>
+  {% if preview['items'] %}
+  <form class="form-actions costing-import-form" method="post" action="{{ url_for('costing_transfer.apply_line_codes') }}">
+    {{ csrf_field() }}<input type="hidden" name="digest" value="{{ preview.digest }}">
+    <button class="linear-button primary" type="submit" data-confirm="确认按预览整理编码和物料属性？涉及 {{ preview.records }} 个型号、{{ preview['items'] }} 行成本明细。每个更新的型号都会留下修改记录。">应用本次整理</button>
+  </form>
+  {% endif %}
+</section>
+{% if preview.samples %}
+<section class="data-section">
+  <div class="workspace-command"><strong>变更示例（{{ preview.samples|length }} 行）</strong></div>
+  <div class="data-table-scroll"><table class="data-table">
+    <thead><tr><th scope="col">型号</th><th scope="col">行号</th><th scope="col">原类别</th><th scope="col">原项目名称</th><th scope="col">原产品编码</th><th scope="col">原物料属性</th><th scope="col">新类别</th><th scope="col">新项目名称</th><th scope="col">新产品编码</th><th scope="col">新物料属性</th></tr></thead>
+    <tbody>{% for item in preview.samples %}<tr>
+      <td>{{ item.code }}</td><td>{{ item.index }}</td>
+      {% for values in (item.before, item.after) %}<td>{{ values.category or '—' }}</td><td>{{ values.name or '—' }}</td><td>{{ values.product_code or '—' }}</td><td>{{ values.material_attribute or '—' }}</td>{% endfor %}
+    </tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% endif %}
+{% if preview.reviews %}
+<section class="data-section">
+  <div class="workspace-command"><strong>编码需人工核对（{{ preview.reviews|length }} 行）</strong></div>
+  <div class="data-table-scroll"><table class="data-table">
+    <thead><tr><th scope="col">型号</th><th scope="col">行号</th><th scope="col">类别</th><th scope="col">项目名称</th><th scope="col">当前产品编码</th><th scope="col">核对原因</th></tr></thead>
+    <tbody>{% for item in preview.reviews %}<tr><td><a href="{{ url_for('costing.edit', record_id=item.record_id) }}">{{ item.code }}</a></td><td>{{ item.index }}</td><td>{{ item.category or '—' }}</td><td>{{ item.name or '—' }}</td><td>{{ item.product_code or '—' }}</td><td>{{ item.reason }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% endif %}
+{% endblock %}

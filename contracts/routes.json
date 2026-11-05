@@ -232,6 +232,111 @@
       "rule": "/contracts/sales"
     },
     {
+      "endpoint": "costing.index",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/costs"
+    },
+    {
+      "endpoint": "costing.edit",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/costs/<record_id>"
+    },
+    {
+      "endpoint": "costing.update",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/costs/<record_id>"
+    },
+    {
+      "endpoint": "costing_import.import_page",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/costs/import"
+    },
+    {
+      "endpoint": "costing_import.apply_import",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/costs/import/apply"
+    },
+    {
+      "endpoint": "costing_import.preview_import",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/costs/import/preview"
+    },
+    {
+      "endpoint": "costing.new",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/costs/new"
+    },
+    {
+      "endpoint": "costing.create",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/costs/new"
+    },
+    {
+      "endpoint": "costing.preview",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/costs/preview"
+    },
+    {
+      "endpoint": "costing_transfer.page",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/costs/transfer"
+    },
+    {
+      "endpoint": "costing_transfer.apply",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/costs/transfer/apply"
+    },
+    {
+      "endpoint": "costing_transfer.export",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/costs/transfer/export"
+    },
+    {
+      "endpoint": "costing_transfer.line_codes",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/costs/transfer/line-codes"
+    },
+    {
+      "endpoint": "costing_transfer.apply_line_codes",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/costs/transfer/line-codes"
+    },
+    {
+      "endpoint": "costing_transfer.preview",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/costs/transfer/preview"
+    },
+    {
       "endpoint": "quote_web.old_customer_prices_redirect",
       "methods": [
         "GET"

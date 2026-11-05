@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% set active_page = 'costs' %}
+{% block page_title %}导入核对 · 成本核算{% endblock %}
+{% block page_id %}costing.import{% endblock %}
+{% block page_type %}import-preview{% endblock %}
+{% block page_class %}shell wide app-surface costing-page{% endblock %}
+{% block navigation %}{% if costing_trial_mode %}{% include '_costing_nav.html' %}{% else %}{{ super() }}{% endif %}{% endblock %}
+{% block page_head %}<link rel="stylesheet" href="{{ url_for('static', filename='pages/costing.css', v=static_version('pages/costing.css')) }}">{% endblock %}
+{% block page_content %}
+<section class="data-section">
+  <form class="search-form costing-import-form" action="{{ url_for('costing_import.preview_import') }}" method="post" enctype="multipart/form-data">
+    {{ csrf_field() }}<label><span>成本核算工作簿</span><input type="file" name="file" accept=".xlsx" required></label><button class="linear-button primary" type="submit">读取并预览</button><a class="linear-button subtle" href="{{ url_for(costing_endpoint ~ '.index') }}">返回列表</a>
+  </form>
+  <p class="costing-note">支持现有的摆臂成本、球头成本及配套参考表。先核对预览，再确认导入；相同型号不会覆盖已有成本。</p>
+</section>
+{% if preview %}
+<section class="data-section">
+  <div class="workspace-command"><strong>本次预览：{{ preview.records|length }} 个型号</strong><div class="command-actions"><form action="{{ url_for('costing_import.apply_import') }}" method="post">{{ csrf_field() }}<input type="hidden" name="preview_token" value="{{ preview_token }}"><button class="linear-button primary" type="submit" {% if not preview.records or preview.blocked %}disabled{% endif %}>确认导入</button></form></div></div>
+  {% if preview.warnings %}<details class="costing-issues" open><summary>导入核对提示（{{ preview.warnings|length }}）</summary><ul>{% for warning in preview.warnings %}<li>{{ warning }}</li>{% endfor %}</ul></details>{% endif %}
+  <div class="data-grid" data-resizable-grid data-grid-key="costing-import"><div class="data-table-scroll" data-grid-scroll>
+    <table class="data-table data-grid-table costing-import-table">
+      <thead><tr>{% for key, label in [('code','型号'),('kind','类型'),('models','车型'),('count','明细数'),('calculated','计算成本'),('original','原表明细汇总'),('approved','核定成本'),('scrap','废料抵减'),('review','待核对明细'),('status','状态')] %}<th data-col="{{ key }}"><span class="data-grid-column-heading"><span class="data-grid-column-label">{{ label }}</span></span></th>{% endfor %}</tr></thead>
+      <tbody>{% for cost in preview.records %}
+        {% set original_total = cost.get('source_info', {}).get('pivot', {}).get('cached', {}).get('B') %}
+        <tr>
+          <td data-col="code"><strong>{{ cost.code }}</strong></td>
+          <td data-col="kind">{{ '球头' if cost.kind == 'ball' else '摆臂' }}</td>
+          <td data-col="models">{{ cost.models or '—' }}</td>
+          <td data-col="count">{{ cost['items']|length }}</td>
+          <td data-col="calculated" class="costing-number">{% if cost.calculated_cost is not none %}{{ cost.calculated_cost|cost_money }}{% else %}<span>待补充</span><small class="costing-secondary">已知小计 {{ cost.known_subtotal|cost_money }}</small>{% endif %}</td>
+          <td data-col="original" class="costing-number">{{ original_total|cost_money if original_total is not none else '—' }}</td>
+          <td data-col="approved" class="costing-number">{{ cost.approved_cost|cost_money if cost.approved_cost is not none else '—' }}</td>
+          <td data-col="scrap" class="costing-number">{{ cost.scrap_credit|cost_money if cost.scrap_credit is not none else '—' }}</td>
+          <td data-col="review">{% set ns = namespace(count=0) %}{% for item in cost['items'] %}{% if item.review_note %}{% set ns.count = ns.count + 1 %}{% endif %}{% endfor %}{{ ns.count }}</td>
+          <td data-col="status">{{ '资料完整' if cost.status == 'ready' else '待补充 / 核对' }}</td>
+        </tr>
+      {% endfor %}</tbody>
+    </table>
+  </div></div>
+</section>
+{% endif %}
+{% endblock %}

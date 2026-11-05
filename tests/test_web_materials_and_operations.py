@@ -589,6 +589,7 @@ class TestWebMaterialsAndOperations(WebAppTestBase):
                 "041_user_mobile_default_page",
                 "042_bilingual_catalog",
                 "043_product_development_register",
+                "044_costing",
             ],
         )
 

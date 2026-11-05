@@ -8,6 +8,10 @@
 .env*
 __pycache__/
 *.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.playwright-cli/
 .venv/
 venv/
 logs/
@@ -15,3 +19,6 @@ uploads/
 outputs/
 data/
 static/product_images/
+产品目录/
+询价/
+单价/

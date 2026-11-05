@@ -14,12 +14,17 @@
 
 ## 本机启动
 
-推荐使用锁定的 Python 3.12 环境：
+Mac mini 日常通过 Docker Desktop 管理。在 Containers 中展开 `bld-local` 项目，点击 `bld-matcher-local` 容器的启动、停止或重启按钮即可。保持项目目录及其运行数据目录原位。
 
 ```bash
-uv sync --frozen
-uv run python app.py
+bash tools/docker_local.sh start
+bash tools/docker_local.sh status
+bash tools/docker_local.sh logs
 ```
+
+首次部署或代码更新使用 `bash tools/docker_local.sh update`；它会先完成项目检查和构建，再停止本机服务、备份、迁移并启动。完整步骤、备份和回退说明见 [本机 Docker Desktop 运维](docs/operations/local-docker.md)。该操作可能超过 5 分钟，AI 执行前遵循 `AGENTS.md` 的长操作规则。
+
+本机专用 `compose.local.yml` 通过显式参数调用，NAS 的 `docker-compose.yml` 和发布流程保持独立。镜像内安装 Linux 版 Python 依赖；开发和项目检查继续使用锁定的本机 Python 3.12 环境（`uv sync --frozen`）。
 
 `requirements.txt` 由 `uv.lock` 生成，供 Docker 和兼容安装流程使用，不要手工维护依赖版本。
 
@@ -31,7 +36,7 @@ http://127.0.0.1:5055/
 
 ### macOS 本机启动器
 
-本机 5055 统一通过 `bash tools/restart_local_5055.sh` 或安装到“应用程序”文件夹的 `BLD` 启动器启动；两者复用同一套逻辑。它只负责通过 Terminal 启动当前工作区里的 5055 服务并打开浏览器，不用于 NAS。再次启动会先停止同一工作区的旧 5055 服务，并只在对应 Terminal 已空闲时精确关闭该窗口；若 5 秒内仍有前台任务，启动器会保留窗口而不会强行关闭或弹出终止进程提示。其他目录占用 5055 时会提示且不会停止它。启动日志写入 `logs/bld-local-5055.log`。
+原生模式作为明确选择的回退方式保留。先停止 Docker 的 `bld-matcher-local` 容器，再通过 `bash tools/restart_local_5055.sh` 或安装到“应用程序”文件夹的 `BLD` 启动器启动；两者复用同一套逻辑。它只负责通过 Terminal 启动当前工作区里的 5055 服务并打开浏览器，不用于 NAS。再次启动会先停止同一工作区的旧 5055 服务，并只在对应 Terminal 已空闲时精确关闭该窗口；若 5 秒内仍有前台任务，启动器会保留窗口而不会强行关闭或弹出终止进程提示。其他目录或 Docker 占用 5055 时不会停止它。启动日志写入 `logs/bld-local-5055.log`。
 
 ```bash
 bash tools/install_bld_launcher.sh

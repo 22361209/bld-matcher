@@ -1294,6 +1294,12 @@ def _add_product_development_register(conn: sqlite3.Connection) -> None:
     create_schema(conn)
 
 
+def _add_costing(conn: sqlite3.Connection) -> None:
+    from .modules.costing.schema import install_schema
+
+    install_schema(conn)
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -1338,6 +1344,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("041_user_mobile_default_page", _add_user_mobile_default_page),
     ("042_bilingual_catalog", _add_bilingual_catalog),
     ("043_product_development_register", _add_product_development_register),
+    ("044_costing", _add_costing),
 )
 
 

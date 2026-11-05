@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% set active_page = 'costs' %}
+{% block page_title %}试用资料接入 · 成本核算{% endblock %}
+{% block page_id %}costing.transfer{% endblock %}
+{% block page_type %}import-preview{% endblock %}
+{% block page_class %}shell wide app-surface costing-page{% endblock %}
+{% block page_head %}<link rel="stylesheet" href="{{ url_for('static', filename='pages/costing.css', v=static_version('pages/costing.css')) }}">{% endblock %}
+{% block page_content %}
+<section class="data-section">
+  <form class="search-form costing-import-form" action="{{ url_for('costing_transfer.preview') }}" method="post" enctype="multipart/form-data">
+    {{ csrf_field() }}<label><span>成本试用资料接入包</span><input type="file" name="file" accept=".json" required></label><button class="linear-button primary" type="submit">读取并核对</button><a class="linear-button subtle" href="{{ url_for('costing.index') }}">返回成本核算</a>
+  </form>
+  <p class="costing-note">一次性接入已验收的试用资料，保留型号、明细、人工建议价和全部修改记录。正式成本为空时才可接入；重复接入相同资料不会重复新建。</p>
+  <p class="costing-note"><a href="{{ url_for('costing_transfer.line_codes') }}">核对历史成本明细编码和物料属性</a></p>
+</section>
+{% if preview %}
+<section class="data-section">
+  <div class="workspace-command"><strong>本次核对：{{ preview.records }} 个型号 · {{ preview['items'] }} 项明细 · {{ preview.revisions }} 条修改记录</strong></div>
+  <p class="costing-note">{% if preview.already_imported %}正式成本中已有完全相同的资料，可确认完成核对。{% else %}确认后写入正式成本，原试用资料保留。{% endif %}</p>
+  <form class="form-actions" action="{{ url_for('costing_transfer.apply') }}" method="post">
+    {{ csrf_field() }}<input type="hidden" name="preview_token" value="{{ preview_token }}"><button class="linear-button primary" type="submit">确认接入成本资料</button><a class="linear-button subtle" href="{{ url_for('costing.index') }}">取消</a>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

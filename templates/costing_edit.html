@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% set active_page = 'costs' %}
+{% block page_title %}{{ '新建成本' if is_new else record.code ~ ' · 成本' }} · BLD{% endblock %}
+{% block page_id %}costing.edit{% endblock %}
+{% block page_type %}edit{% endblock %}
+{% block page_class %}shell wide app-surface costing-page{% endblock %}
+{% block navigation %}{% if costing_trial_mode %}{% include '_costing_nav.html' %}{% else %}{{ super() }}{% endif %}{% endblock %}
+{% block page_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='pages/costing.css', v=static_version('pages/costing.css')) }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='pages/costing_editor_header.css', v=static_version('pages/costing_editor_header.css')) }}">
+{% endblock %}
+{% block page_scripts %}
+<script type="module" src="{{ url_for('static', filename='pages/costing_edit.js', v=static_version('pages/costing_edit.js')) }}"></script>
+<script type="module" src="{{ url_for('static', filename='pages/costing_identity.js', v=static_version('pages/costing_identity.js')) }}"></script>
+{% endblock %}
+{% block page_content %}
+<form id="costing-editor" data-costing-form data-list-url="{{ url_for(costing_endpoint ~ '.index') }}" data-preview-url="{{ url_for(costing_endpoint ~ '.preview') }}" data-record="{{ record|tojson|forceescape }}" data-references="{{ (references or {})|tojson|forceescape }}" data-new="{{ 'true' if is_new else 'false' }}" data-editable="{{ 'true' if can_edit else 'false' }}" action="{{ url_for(costing_endpoint ~ '.new') if is_new else url_for(costing_endpoint ~ '.edit', record_id=record.id) }}" method="post">
+  {{ csrf_field() }}
+  {% set new_title = '复制新建成本' if copy_from else '新建型号成本' %}
+  {% set kind_name = '球头' if record.kind == 'ball' else '摆臂' %}
+  <section class="data-section costing-identity">
+    <div class="workspace-command costing-editor-bar">
+      <div class="costing-identity-line">
+        <a class="link-button costing-back" data-costing-back href="{{ url_for(costing_endpoint ~ '.index') }}">← 成本列表</a>
+        <strong data-costing-code data-empty-title="{{ new_title if is_new else '待填写型号' }}">{{ record.code or new_title }}</strong>
+        <span class="muted-text" data-costing-description>{{ (record.name or kind_name) ~ (' · ' ~ record.brand if record.brand else '') ~ (' ' ~ record.models if record.models else '') }}</span>
+        {% if not can_edit %}<span class="muted-text">只读</span>{% endif %}
+      </div>
+      <div class="command-actions">
+        <span class="muted-text" data-costing-status role="status"></span>
+        <button class="linear-button subtle" type="button" data-costing-identity-toggle aria-expanded="{{ 'true' if is_new else 'false' }}" aria-controls="costing-identity-fields">{{ '收起资料' if is_new else ('编辑资料' if can_edit else '查看资料') }}</button>
+        {% if can_edit and not is_new %}<a class="linear-button subtle" href="{{ url_for(costing_endpoint ~ '.new', copy=record.id) }}">复制新建</a>{% endif %}
+        {% if can_edit %}<button class="linear-button primary" type="submit" data-costing-save>保存成本</button>{% endif %}
+      </div>
+    </div>
+    <div class="message error" data-costing-error role="alert" tabindex="-1" hidden></div>
+    {% if copy_from %}<p class="costing-note">已复制 {{ copy_from }} 的成本明细，请填写新型号并修改差异项。保存后两份成本独立维护。</p>{% endif %}
+    <fieldset class="costing-fields" id="costing-identity-fields" {% if not is_new %}hidden{% endif %} {% if not can_edit %}disabled{% endif %}>
+      <legend class="data-grid-visually-hidden">型号资料</legend>
+      <label>型号 <input name="code" value="{{ record.code or '' }}" required maxlength="80" autocomplete="off" placeholder="例如 K8461LA"></label>
+      <label>产品类型 <select name="kind"><option value="arm" {% if record.kind != 'ball' %}selected{% endif %}>摆臂</option><option value="ball" {% if record.kind == 'ball' %}selected{% endif %}>球头</option></select></label>
+      <label>产品名称 <input name="name" value="{{ record.name or '' }}" maxlength="200" placeholder="可选"></label>
+      <label>车系 <input name="brand" value="{{ record.brand or '' }}" maxlength="120" placeholder="可选"></label>
+      <label class="costing-wide-field">适用车型 <input name="models" value="{{ record.models or '' }}" maxlength="240" placeholder="可选"></label>
+      <label class="costing-wide-field">备注 <input name="remark" value="{{ record.remark or '' }}" maxlength="2000" placeholder="可选"></label>
+    </fieldset>
+  </section>
+  <section class="data-section">
+    <div class="workspace-command costing-editor-bar">
+      <div class="costing-metrics">
+        <strong>成本明细 <span class="muted-text" data-costing-row-count>{{ record['items']|length }} 行</span></strong>
+        <span>抵减后成本 <strong data-costing-total="net_cost">{{ record.net_cost|default(none)|cost_money }}</strong> 元/件</span>
+        <span>建议含税单价 <strong data-costing-total="suggested_tax_price">{{ record.suggested_tax_price|default(none)|cost_money }}</strong> 元/件 <small data-costing-compact-price-mode>{{ '手动' if record.suggested_tax_price_override is defined and record.suggested_tax_price_override is not none else '自动' }}</small></span>
+        <button class="linear-button subtle" type="button" data-costing-issue-trigger {% if not record.issues %}hidden{% endif %}>待核对 {{ record.issues|length }} 项</button>
+      </div>
+      {% if can_edit %}
+      <div class="command-actions">
+        {% if is_new %}<button class="linear-button subtle" type="button" data-costing-template>加入常用项目</button>{% endif %}
+        <button class="linear-button subtle" type="button" data-costing-undo hidden>撤销删除</button>
+      </div>
+      {% endif %}
+    </div>
+    {% set columns = [('row', '序号'), ('category', '类别'), ('name', '项目名称'), ('product_code', '产品编码'), ('material_attribute', '物料属性'), ('mode', '计价方式'), ('price', '金额 / 单价'), ('usage', '用量 / 重量'), ('total', '本项成本'), ('details', '资料')] %}
+    <div class="data-grid" data-resizable-grid data-grid-key="costing-edit">
+      <div class="data-table-scroll" data-grid-scroll>
+        <table class="data-table data-grid-table costing-edit-table" data-grid-table data-column-storage-scope="{{ g.user.id if g.user else 'trial' }}">
+          <colgroup>{% for key, label in columns %}<col data-col="{{ key }}">{% endfor %}</colgroup>
+          <thead><tr>{% for key, label in columns %}<th scope="col" data-col="{{ key }}"><span class="data-grid-static-column-label">{{ label }}</span></th>{% endfor %}</tr></thead>
+          <tbody data-costing-items data-material-attributes="{{ costing_material_attributes|tojson|forceescape }}"></tbody>
+        </table>
+      </div>
+      <span class="data-grid-visually-hidden" data-column-resize-status aria-live="polite"></span>
+    </div>
+    <noscript><p class="message error">成本明细编辑需要启用浏览器 JavaScript。</p></noscript>
+  </section>
+  <section class="data-section costing-summary-section">
+    <div class="costing-summary-grid">
+      <div><span>明细计算成本</span><strong data-costing-total="calculated_cost">—</strong><small data-costing-known></small></div>
+      <label>人工核定成本 <input name="approved_cost" inputmode="decimal" type="number" min="0" step="any" value="{{ record.approved_cost if record.approved_cost is not none else '' }}" placeholder="留空采用计算成本" {% if not can_edit %}readonly{% endif %}></label>
+      <label>废料抵减额 <input name="scrap_credit" inputmode="decimal" type="number" min="0" step="any" value="{{ record.scrap_credit if record.scrap_credit is not none else '' }}" placeholder="留空按 0" {% if not can_edit %}readonly{% endif %}></label>
+      <div><span>抵减后成本</span><strong data-costing-total="net_cost">—</strong><small data-costing-completeness></small></div>
+    </div>
+    <div class="workspace-command"><strong>含税售价</strong><span class="muted-text">元 / 件</span></div>
+    <div class="costing-summary-grid">
+      <div><span>最低含税售价</span><strong data-costing-total="minimum_tax_price">{{ record.minimum_tax_price|default(none)|cost_money }}</strong><small>抵减后成本 ÷ 0.8 × 1.1，最终向上取到分。</small></div>
+      <label>建议含税单价（手动调整）<input name="suggested_tax_price_override" inputmode="decimal" type="number" min="0" step="any" value="{{ record.suggested_tax_price_override if record.suggested_tax_price_override is defined and record.suggested_tax_price_override is not none else '' }}" placeholder="留空自动采用最低售价" {% if not can_edit %}readonly{% endif %}><small>清空后恢复自动跟随最低售价。</small></label>
+      <div><span>当前建议含税单价</span><strong data-costing-total="suggested_tax_price">{{ record.suggested_tax_price|default(none)|cost_money }}</strong><small data-costing-price-mode></small></div>
+      <div><span>售价计算口径</span><small>先按成本 80%、管理成本 10%、净利润 10% 计算，再乘 1.1 得到含税价。</small></div>
+    </div>
+    <details class="costing-issues"><summary>废料参考资料</summary><label class="costing-reference-field">理论废料参考额（元）<input name="theoretical_scrap" type="number" inputmode="decimal" step="any" value="{{ record.theoretical_scrap if record.theoretical_scrap is not none else '' }}" {% if not can_edit %}readonly{% endif %}></label><p class="costing-note">原表参考值，可核对后修正。原始来源保留，实际抵减以上方填写金额为准。</p></details>
+    <details class="costing-issues" data-costing-issues hidden><summary data-costing-issue-title>待补充 / 核对</summary><ul data-costing-issue-list></ul></details>
+    <div class="form-actions">{% if can_edit %}<button class="linear-button primary" type="submit" data-costing-save>保存成本</button>{% endif %}<a class="linear-button subtle" data-costing-back href="{{ url_for(costing_endpoint ~ '.index') }}">返回列表</a><span class="muted-text">缺项可先保存，记录会标为待补充。</span></div>
+  </section>
+</form>
+{% if revisions or (not is_new and record.updated_at) %}
+<section class="data-section costing-history costing-history-footer" aria-label="修改记录">
+  {% if not is_new and record.updated_at %}<span class="costing-updated">最近更新：{{ record.updated_at|cost_time }}（北京时间）{% if record.updated_by %} · {{ record.updated_by }}{% endif %}</span>{% endif %}
+  {% if revisions %}<details><summary>修改记录（{{ revisions|length }}）</summary><div class="data-table-scroll"><table class="data-table"><thead><tr><th>版本</th><th>时间（北京时间）</th><th>操作人</th><th>操作</th></tr></thead><tbody>{% for revision in revisions %}<tr><td>{{ revision.version or '—' }}</td><td>{{ (revision.created_at or revision.at)|cost_time }}</td><td>{{ revision.actor or '—' }}</td><td>{{ revision.action or '修改' }}</td></tr>{% endfor %}</tbody></table></div></details>{% endif %}
+</section>
+{% endif %}
+{% endblock %}
+{% block page_modals %}
+{% if can_edit %}
+<dialog class="dialog-panel confirm-dialog" data-costing-leave-dialog aria-labelledby="costing-leave-title" aria-describedby="costing-leave-message">
+  <div class="dialog-header confirm-dialog-header"><h2 id="costing-leave-title">返回成本列表前保存？</h2></div>
+  <p class="confirm-dialog-message" id="costing-leave-message">当前成本单有未保存的修改。选择“放弃并返回”会丢弃这些修改。</p>
+  <div class="confirm-dialog-actions">
+    <button class="linear-button subtle" type="button" data-costing-leave-continue autofocus>继续编辑</button>
+    <button class="linear-button danger" type="button" data-costing-leave-discard>放弃并返回</button>
+    <button class="linear-button primary" type="submit" form="costing-editor" data-costing-leave-save>保存并返回</button>
+  </div>
+</dialog>
+{% endif %}
+{% endblock %}

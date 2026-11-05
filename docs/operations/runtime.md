@@ -12,14 +12,16 @@ Web     -> Flask/Gunicorn，接收页面和 API 请求
 
 ## Local Start
 
-先初始化迁移，再启动 Web：
+Mac mini 使用独立的 Docker Desktop 配置，详见 [本机 Docker 运维](local-docker.md)：
 
 ```bash
-uv run python -m scripts.init_database
-uv run python app.py
+bash tools/docker_local.sh start
+bash tools/docker_local.sh status
 ```
 
-## Container Start
+代码更新使用 `bash tools/docker_local.sh update`，完整检查和构建成功后才停止本机服务、备份并迁移。Docker Desktop 中也可直接启停 `bld-local` 项目的 `bld-matcher-local` 容器。原生回退必须先停止 Docker，再使用受管的 `tools/restart_local_5055.sh` / BLD.app。
+
+## NAS Container Start
 
 ```bash
 docker compose up -d --build bld-matcher

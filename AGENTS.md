@@ -48,10 +48,21 @@ Before starting any operation expected to take more than 5 minutes, ask the user
 
 ## Local 5055 Restart
 
-For the local 5055 service, use `bash tools/restart_local_5055.sh` or
-`/Applications/BLD.app`. Do not use an ad-hoc `Terminal do script` command to
-launch `app.py`: it bypasses the managed-window cleanup and accumulates
-Terminal windows.
+The Mac mini local service is managed by Docker Desktop using the explicit
+`compose.local.yml` configuration. Use the `bld-local` project / `bld-matcher-local`
+container in Docker Desktop, or `bash tools/docker_local.sh start|stop|status|logs`.
+For code updates, use `bash tools/docker_local.sh update`; it runs the required
+verification, builds the image, stops the local service, backs up local runtime
+data, applies migrations, and waits for readiness. Follow the long-operation
+rule above. See `docs/operations/local-docker.md`.
+
+Keep `docker-compose.yml` as the NAS configuration. Local Docker commands must
+use the `desktop-linux` context and `compose.local.yml`; never point them at NAS.
+
+For an explicitly requested native fallback, first stop the local Docker
+container, then use `bash tools/restart_local_5055.sh` or `/Applications/BLD.app`.
+Do not run both on port 5055. Do not use an ad-hoc `Terminal do script` command
+to launch `app.py`: it bypasses managed-window cleanup.
 
 ## Data Safety
 
