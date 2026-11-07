@@ -38,20 +38,22 @@ class BilingualCatalogTest(WebAppTestBase):
             )}
 
     def test_language_visibility_and_management_preserve_all_four_combinations(self):
-        for language, expected in (("en", {0, 1}), ("zh", {0, 2})):
+        for language in ("en", "zh"):
             for endpoint in ("/products", "/products/fragment"):
                 response = self.client.get(endpoint, query_string={"bld": "CATLANG-", "lang": language})
                 self.assertEqual(response.status_code, 200)
                 html = response.get_data(as_text=True)
                 for number in range(4):
-                    self.assertEqual(f"CATLANG-{number}" in html, number in expected)
+                    self.assertIn(f"CATLANG-{number}", html)
                 self.assertIn(f"lang={language}", html)
+                self.assertIn("visibility=all", html)
                 self.assertIn("data-products-mobile-cards", html)
-        all_rows = self.client.get("/products", query_string={"bld": "CATLANG-", "visibility": "all"}).text
-        self.assertTrue(all(f"CATLANG-{number}" in all_rows for number in range(4)))
-        hidden = self.client.get("/products", query_string={"bld": "CATLANG-", "visibility": "neither"}).text
-        self.assertIn("CATLANG-3", hidden)
-        self.assertNotIn("CATLANG-0", hidden)
+        for scope in ("all", "visible", "neither"):
+            for endpoint in ("/products", "/products/fragment"):
+                html = self.client.get(endpoint, query_string={"bld": "CATLANG-", "visibility": scope}).text
+                self.assertTrue(all(f"CATLANG-{number}" in html for number in range(4)))
+                self.assertIn("visibility=all", html)
+                self.assertNotIn('name="visibility" data-catalog-visibility', html)
 
     def test_chinese_visible_cells_never_copy_english_models(self):
         response = self.client.get("/products/fragment", query_string={"bld": "CATLANG-", "lang": "zh"})

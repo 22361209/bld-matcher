@@ -124,7 +124,9 @@ class TestWebProductImportAndSync(WebAppTestBase):
         self.assertEqual(payload["brands"].count("OPTIONBRAND"), 1)
         self.assertIn("OPTIONSECOND", payload["brands"])
         self.assertEqual(payload["items"].count("Option Arm"), 1)
-        self.assertEqual(payload["statuses"].count("1球头 2衬套"), 1)
+        from app.product_status import canonical_product_status
+
+        self.assertEqual([canonical_product_status(value) for value in payload["statuses"]].count("1球头2衬套"), 1)
         for candidates in payload.values():
             self.assertTrue(all(isinstance(value, str) and value for value in candidates))
             lowered = [value.lower() for value in candidates]
@@ -191,7 +193,7 @@ class TestWebProductImportAndSync(WebAppTestBase):
             ).fetchone()[0]
             self.assertEqual(duplicates, 1)
             status_row = conn.execute(
-                "SELECT * FROM product_option_values WHERE kind = 'product_status' AND value = '1球头2衬套'"
+                "SELECT * FROM product_option_values WHERE kind = 'product_status' AND value = '1 个球头 2 个衬套'"
             ).fetchone()
             self.assertIsNotNone(status_row)
 
@@ -213,7 +215,7 @@ class TestWebProductImportAndSync(WebAppTestBase):
         payload = self.client.get("/products/options").get_json()
         self.assertIn("ADMINOPT RENAMED", payload["brands"])
         self.assertIn("Adminopt Item", payload["items"])
-        self.assertIn("1球头 2衬套", payload["statuses"])
+        self.assertIn("1 个球头 2 个衬套", payload["statuses"])
 
         deleted = self.client.post("/product-options/delete", data={"id": str(option_id)})
         self.assertEqual(deleted.status_code, 302)

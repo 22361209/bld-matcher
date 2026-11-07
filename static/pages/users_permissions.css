@@ -14,7 +14,7 @@
 }
 .permission-category-nav {
   position: sticky;
-  top: 10px;
+  top: calc(var(--revealed-nav-height, 0px) + 10px);
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--linear-line);

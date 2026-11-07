@@ -13,7 +13,7 @@ export const productCatalogState = (href) => {
     oe: url.searchParams.get("oe") || "",
     status: url.searchParams.get("status") || "active",
     language: url.searchParams.get("lang") || "en",
-    visibility: url.searchParams.get("visibility") || "visible",
+    visibility: "all",
     page: Math.max(1, Number.parseInt(url.searchParams.get("page") || "1", 10) || 1),
     filters: {
       brand: url.searchParams.getAll("brand"),

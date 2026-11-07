@@ -12,7 +12,7 @@
     <form method="get" class="search-form" action="{{ url_for('development_list') }}">
       {% if legacy %}<input type="hidden" name="type" value="legacy">{% endif %}
       {% for state in selected_statuses %}<input type="hidden" name="status" value="{{ state }}">{% endfor %}
-      <label><span>{{ '旧开发单' if legacy else '核心编码' }}</span><input name="q" value="{{ filters.q }}" enterkeyhint="search" placeholder="{{ '系列、名称或负责人' if legacy else '输入核心编码，按回车搜索' }}"></label>
+      <label><span>{{ '旧开发单' if legacy else '核心编码' }}</span><input name="q" value="{{ filters.q }}" enterkeyhint="search" placeholder="{{ '系列、名称或负责人' if legacy else '输入核心编码，按回车搜索' }}" data-search-shortcut aria-keyshortcuts="Shift+f"></label>
       {% if legacy %}
       <label><span>开发状态</span><select name="status"><option value="">全部</option>{% for state in ('not_started', 'in_progress', 'partial_completed', 'completed') %}<option value="{{ state }}"{% if state == filters.status %} selected{% endif %}>{{ labels[state] }}</option>{% endfor %}</select></label>
       <label class="development-check"><input type="checkbox" name="archived" value="1"{% if filters.archived %} checked{% endif %}>包含已归档</label>

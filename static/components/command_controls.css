@@ -1,0 +1,45 @@
+/* Shared toolbar controls; direct children keep table and dialog actions separate. */
+
+.app-surface :is(.workspace-command, .command-actions, .data-section-actions, .search-form, .command-form, .search-command-row, .command-controls):not(:where(table *, dialog *, [role="dialog"] *, .toolbar-popover-form *)) > .linear-button,
+.app-surface :is(.workspace-command, .command-actions, .data-section-actions, .search-form, .command-form, .command-controls):not(:where(table *, dialog *, [role="dialog"] *, .toolbar-popover-form *)) > .toolbar-popover > summary,
+.app-surface :is(.command-actions, .data-section-actions, .command-controls):not(:where(table *, dialog *, [role="dialog"] *, .toolbar-popover-form *)) > form > .linear-button,
+.app-surface :is(.search-form, .command-form, .command-actions, .command-controls):not(:where(table *, dialog *, [role="dialog"] *, .toolbar-popover-form *)) > select,
+.app-surface :is(.search-form, .command-form, .command-actions, .command-controls):not(:where(table *, dialog *, [role="dialog"] *, .toolbar-popover-form *)) > label > select,
+.app-surface :is(.search-form, .workspace-command):not(:where(table *, dialog *, [role="dialog"] *, .toolbar-popover-form *)) > fieldset > label > select {
+  box-sizing: border-box;
+  height: 34px;
+  min-height: 34px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+/* A composite adds its two border pixels around the same 34px action. */
+.app-surface :is(.search-form > label, .search-command-row > label, .search-command-row > .file-picker-field > .file-picker):not(:where(table *, dialog *, [role="dialog"] *, .toolbar-popover-form *)) > :is(.file-picker-control, .embedded-input-control) {
+  box-sizing: border-box;
+  height: 36px;
+  min-height: 36px;
+}
+
+.app-surface :is(.search-form > label, .search-command-row > label, .search-command-row > .file-picker-field > .file-picker):not(:where(table *, dialog *, [role="dialog"] *, .toolbar-popover-form *)) > :is(.file-picker-control, .embedded-input-control) > .embedded-submit {
+  box-sizing: border-box;
+  height: 34px;
+  min-height: 34px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.app-surface :is(.search-form > label, .search-command-row > label, .search-command-row > .file-picker-field > .file-picker):not(:where(table *, dialog *, [role="dialog"] *, .toolbar-popover-form *)) > .file-picker-control > .file-picker-button {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.app-surface :is(.search-form > label, .search-command-row > label, .search-command-row > .file-picker-field > .file-picker):not(:where(table *, dialog *, [role="dialog"] *, .toolbar-popover-form *)) > .embedded-input-control > input,
+.app-surface :is(.search-form > label, .search-command-row > label, .search-command-row > .file-picker-field > .file-picker):not(:where(table *, dialog *, [role="dialog"] *, .toolbar-popover-form *)) > .file-picker-control > .file-picker-text {
+  height: 100%;
+  min-height: 0;
+}

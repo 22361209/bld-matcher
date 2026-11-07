@@ -118,55 +118,25 @@ if (nav instanceof HTMLElement && nav.dataset.navReady !== "true") {
   }
 
   const root = document.documentElement;
-  let lastScrollY = window.scrollY;
-  let upwardDistance = 0;
-  let revealed = false;
   let lastOffset = -1;
 
   const setNavOffset = () => {
-    const height = revealed ? Math.ceil(nav.getBoundingClientRect().height) : 0;
+    const height = Math.ceil(nav.getBoundingClientRect().height);
     if (height === lastOffset) return;
     lastOffset = height;
     root.style.setProperty("--revealed-nav-height", `${height}px`);
     window.dispatchEvent(new CustomEvent("app-nav-offset-change"));
   };
 
-  const setRevealed = (nextRevealed) => {
-    if (revealed === nextRevealed) return;
-    revealed = nextRevealed;
-    nav.classList.toggle("nav-revealed", revealed);
-    setNavOffset();
-  };
-
-  const updateNavReveal = () => {
-    const currentY = window.scrollY;
-    const delta = currentY - lastScrollY;
-    const threshold = Math.max(420, window.innerHeight || 0);
-
-    if (currentY <= 4) {
-      upwardDistance = 0;
-      setRevealed(false);
-      lastScrollY = currentY;
-      return;
-    }
-
-    if (delta < 0) {
-      upwardDistance += Math.abs(delta);
-      if (upwardDistance >= threshold) setRevealed(true);
-    } else if (delta > 0) {
-      upwardDistance = 0;
-      setRevealed(false);
-    }
-
-    lastScrollY = currentY;
-  };
-
-  window.addEventListener("scroll", updateNavReveal, { passive: true });
-  window.addEventListener("resize", () => {
+  const syncNavigationGeometry = () => {
     setNavOffset();
     positionMobileMenuPanels();
-  });
+  };
+
+  new ResizeObserver(syncNavigationGeometry).observe(nav);
+  window.addEventListener("scroll", positionMobileMenuPanels, { passive: true });
+  window.addEventListener("resize", syncNavigationGeometry);
   nav.querySelector(".nav-primary")?.addEventListener("scroll", positionMobileMenuPanels, { passive: true });
-  window.addEventListener("pageshow", setNavOffset);
-  setNavOffset();
+  window.addEventListener("pageshow", syncNavigationGeometry);
+  syncNavigationGeometry();
 }

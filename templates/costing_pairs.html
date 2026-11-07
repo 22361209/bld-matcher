@@ -12,7 +12,7 @@
   <div class="workspace-command">
     <div class="command-actions"><a class="link-button" href="{{ url_for(costing_endpoint ~ '.index') }}">← 成本列表</a><strong>左右件配对</strong></div>
     <form class="search-form" method="get">
-      <label>型号<input name="q" value="{{ query }}" placeholder="输入左件或右件型号"></label>
+      <label>型号<input name="q" value="{{ query }}" placeholder="输入左件或右件型号" data-search-shortcut aria-keyshortcuts="Shift+f"></label>
       {% if can_manage %}<label>配对状态<select name="status">
         {% for key, label in [('', '全部状态'), ('pending', '待配对'), ('paired', '已配对')] %}<option value="{{ key }}" {% if status == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
       </select></label>{% endif %}

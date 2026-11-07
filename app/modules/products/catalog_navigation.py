@@ -26,7 +26,9 @@ def _product_filters(values: Any, *, default_status: str) -> ProductFilters:
 
 
 def _product_query_args() -> ProductFilters:
-    return _product_filters(request.args, default_status="active")
+    values = request.args.copy()
+    values["visibility"] = "all"
+    return _product_filters(values, default_status="active")
 
 
 def _request_page() -> int:

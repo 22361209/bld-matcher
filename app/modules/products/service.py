@@ -304,10 +304,11 @@ class ProductService:
         label = PRODUCT_OPTION_KIND_LABELS.get(kind)
         if kind not in PRODUCT_OPTION_KINDS or label is None:
             raise ValueError("未知的候选值类型。")
-        normalized = normalized_option_values(kind, value)
+        normalized = normalized_option_values(kind, value, preserve_status_text=True)
         if not normalized:
             raise ValueError(f"{label}候选值不能为空。")
         with self.unit_of_work_factory() as unit_of_work:
+            unit_of_work.repository.begin_option_value_write()
             if option_id is None:
                 created = False
                 for candidate in normalized:
@@ -322,7 +323,7 @@ class ProductService:
                     raise ValueError("候选值不存在，请刷新后重试。")
                 new_value = normalized[0]
                 if new_value != current.value:
-                    if unit_of_work.repository.option_value_exists(kind, new_value):
+                    if unit_of_work.repository.option_value_exists(kind, new_value, exclude_id=option_id):
                         raise ValueError(f"{label}“{new_value}”已存在。")
                     unit_of_work.repository.rename_option_value(option_id, new_value, actor=actor)
             unit_of_work.commit()

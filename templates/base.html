@@ -22,6 +22,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='components/combobox.css', v=static_version('components/combobox.css')) }}">
     {% block page_head %}{% endblock %}
     <link rel="stylesheet" href="{{ url_for('static', filename='components/precision.css', v=static_version('components/precision.css')) }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='components/command_controls.css', v=static_version('components/command_controls.css')) }}">
   </head>
   <body class="{% block body_class %}{% endblock %}" data-page="{% block page_id %}shared.page{% endblock %}" data-page-type="{% block page_type %}workbench{% endblock %}">
     <main class="{% block page_class %}shell wide{% endblock %}">
@@ -61,6 +62,7 @@
     <script type="module" src="{{ url_for('static', filename='components/data_grid.js', v=static_version('components/data_grid.js')) }}"></script>
     <script type="module" src="{{ url_for('static', filename='components/import-preview.js', v=static_version('components/import-preview.js')) }}"></script>
     <script type="module" src="{{ url_for('static', filename='components/search_clear.js', v=static_version('components/search_clear.js')) }}"></script>
+    <script type="module" src="{{ url_for('static', filename='components/search_shortcut.js', v=static_version('components/search_shortcut.js')) }}"></script>
     <script type="module" src="{{ url_for('static', filename='app.js', v=static_version('app.js')) }}"></script>
     {% if g.user %}<script type="module" src="{{ url_for('static', filename='nav.js', v=static_version('nav.js')) }}"></script>{% endif %}
     {% block page_scripts %}{% endblock %}

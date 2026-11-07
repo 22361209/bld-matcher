@@ -4,7 +4,6 @@
   gap: 8px 14px;
 }
 .costing-list-command .costing-list-search {
-  --search-field-width: 180px;
   flex: 1 1 auto;
   min-width: 0;
   align-items: center;

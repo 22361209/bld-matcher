@@ -17,17 +17,16 @@
 {% endblock %}
 
 {% block page_content %}
-      {% set status_label = "包含停用" if status == "all" else ("只看停用" if status == "inactive" else "只看启用") %}
       <section class="data-section products-list-section">
       <section class="workspace-command products-command">
         <form class="search-form" method="get" action="{{ url_for('products') }}#products-results" data-products-search-form>
           <label>
             <span>按 BLD / 品牌 / 车型搜索</span>
-            <input id="bld-search" name="bld" value="{{ bld_query }}" placeholder="例如 K6015 / HYUNDAI / Sportage">
+            <input id="bld-search" name="bld" value="{{ bld_query }}" placeholder="例如 K6015 / HYUNDAI / Sportage" enterkeyhint="search" title="输入后按回车搜索" data-search-shortcut aria-keyshortcuts="Shift+f">
           </label>
           <label>
             <span>按 OE 号搜索</span>
-            <input id="oe-search" name="oe" value="{{ oe_query }}" placeholder="例如 55100-2S150">
+            <input id="oe-search" name="oe" value="{{ oe_query }}" placeholder="例如 55100-2S150" enterkeyhint="search" title="输入后按回车搜索" data-search-shortcut aria-keyshortcuts="Shift+f">
           </label>
           <input type="hidden" id="status-input" name="status" value="{{ status }}">
           {% for value in selected_brand_filters %}<input type="hidden" name="brand" value="{{ value }}" data-products-filter-param>{% endfor %}
@@ -40,23 +39,7 @@
               <option value="zh" {% if catalog_language == 'zh' %}selected{% endif %}>中文</option>
             </select>
           </label>
-          <label>
-            可见范围
-            <select name="visibility" data-catalog-visibility>
-              <option value="visible" {% if catalog_visibility == 'visible' %}selected{% endif %}>当前目录可见</option>
-              <option value="all" {% if catalog_visibility == 'all' %}selected{% endif %}>全部产品（管理）</option>
-              <option value="neither" {% if catalog_visibility == 'neither' %}selected{% endif %}>两种目录均不可见</option>
-            </select>
-          </label>
-          <button class="linear-button primary" type="submit">搜索</button>
-          <details class="toolbar-popover linear-popover status-popover">
-            <summary data-products-status-label>{{ status_label }}</summary>
-            <div class="status-menu" role="group" aria-label="启用状态筛选">
-              <button class="status-menu-option {% if status == 'active' %}selected{% endif %}" type="submit" data-status="active">只看启用</button>
-              <button class="status-menu-option {% if status == 'all' %}selected{% endif %}" type="submit" data-status="all">包含停用</button>
-              <button class="status-menu-option {% if status == 'inactive' %}selected{% endif %}" type="submit" data-status="inactive">只看停用</button>
-            </div>
-          </details>
+          <input type="hidden" name="visibility" value="all">
         </form>
         <div class="secondary-actions command-actions">
           <button class="linear-button subtle" type="button" data-reset-list-for="products">重置列表</button>
@@ -67,21 +50,8 @@
           {% endif %}
           {% if can("edit_products") %}
             <button class="linear-button primary" type="button" data-open-product-modal>新增产品</button>
-            <a class="linear-button subtle" href="{{ url_for('batch_drawings') }}">批量上传图纸</a>
           {% endif %}
           {% if can("import_catalog") %}
-            <details class="toolbar-popover linear-popover catalog-import-menu">
-              <summary>导入目录</summary>
-              <form action="{{ url_for('upload_catalog') }}" method="post" enctype="multipart/form-data" class="toolbar-popover-form catalog-import-actions">
-                {{ csrf_field() }}
-                <input type="hidden" name="next" value="products">
-                <a class="linear-button subtle" href="{{ url_for('download_catalog_template') }}">下载模板</a>
-                <label class="linear-button primary catalog-import-upload-label">
-                  <input class="visually-hidden-input" type="file" name="catalog" accept=".xlsx" required data-catalog-upload-input>
-                  上传文件
-                </label>
-              </form>
-            </details>
             {% if brand_normalization_preview and brand_normalization_preview.changed_count %}
               <details class="toolbar-popover linear-popover">
                 <summary>规范品牌 {{ brand_normalization_preview.changed_count }}</summary>
@@ -138,7 +108,6 @@
             </details>
           {% endif %}
         </div>
-      <p class="note">目录可见勾选会自动保存，当前行保留供继续设置；重新筛选后按可见范围显示。两项均关闭的产品可在“全部产品（管理）”中找回。</p>
       </section>
 
       <div

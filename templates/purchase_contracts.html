@@ -34,7 +34,7 @@
         <form class="search-form contract-history-search" method="get" action="{{ history_action }}#contract-history">
           <label>
             <span>搜索合同</span>
-            <input name="contract_q" value="{{ contract_filters.contract_q }}" placeholder="合同编号、客户/供应商、文件名或操作用户">
+            <input name="contract_q" value="{{ contract_filters.contract_q }}" placeholder="合同编号、客户/供应商、文件名或操作用户" data-search-shortcut aria-keyshortcuts="Shift+f">
           </label>
           <label class="compact-select">
             <span>类型</span>
@@ -93,7 +93,7 @@
             <input type="hidden" name="source_quote_no" value="{{ contract_draft.source_quote_no }}">
             <input type="hidden" name="source_quote_token" value="{{ contract_draft.source_token }}">
           {% endif %}
-          <div class="purchase-contract-action-bar">
+          <div class="purchase-contract-action-bar command-controls">
             <div>
               <h1>{{ contract_label }}</h1>
               {% if is_sales and contract_draft.source_quote_no %}

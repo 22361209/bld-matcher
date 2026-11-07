@@ -37,7 +37,7 @@
         </span>
       </summary>
       <div class="import-preview-dataset-tools">
-        <input type="search" class="import-preview-search" data-dataset="products" placeholder="搜索产品目录...">
+        <input data-search-shortcut aria-keyshortcuts="Shift+f" type="search" class="import-preview-search" data-dataset="products" placeholder="搜索产品目录...">
         {% if preview.conflicts %}
           <button type="button" class="linear-button subtle" data-bulk-action="keep-current" data-dataset="products">全部保留当前端</button>
           <button type="button" class="linear-button subtle" data-bulk-action="use-package" data-dataset="products">全部使用 Excel 更新</button>

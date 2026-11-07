@@ -88,7 +88,7 @@ class CatalogBrandVisibilityTest(WebAppTestBase):
         self.assertEqual((self.record()["catalog_visible_en"], self.record()["catalog_visible_zh"]), (0, 0))
         for language in ("en", "zh"):
             html = self.client.get("/products/fragment", query_string={"bld": "BRANDVIS-0", "lang": language}).text
-            self.assertNotIn('data-product-id="' + str(initial["id"]) + '"', html)
+            self.assertIn('data-product-id="' + str(initial["id"]) + '"', html)
             export = self.client.post("/products/export", data={"bld": "BRANDVIS-0", "export_language": language})
             self.assertEqual(export.status_code, 302)
         for scope in ("all", "neither"):

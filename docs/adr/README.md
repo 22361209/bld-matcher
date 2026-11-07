@@ -49,3 +49,5 @@ ADR 用于记录难以撤销或会影响多个领域的决定。新增框架、�
 - [ADR 0043: 开发表材质自由填写与业务包兼容](0043-development-material-text.md)
 - [ADR 0044: 冲压材料牌号由零件编码确定](0044-derive-material-grade-from-code.md)
 - [ADR 0045: 新品开发表的完成状态](0045-completed-development-worksheets.md)
+- [ADR 0046: 页面搜索快捷键](0046-page-search-shortcut.md)
+- [ADR 0047: 顶部导航始终吸顶](0047-sticky-navigation.md)

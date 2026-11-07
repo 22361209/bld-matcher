@@ -46,15 +46,34 @@ def get_option_value(connection: sqlite3.Connection, option_id: int) -> ProductO
     return _option_value(row) if row is not None else None
 
 
-def option_value_exists(connection: sqlite3.Connection, kind: str, value: str) -> bool:
+def option_value_exists(
+    connection: sqlite3.Connection, kind: str, value: str, *, exclude_id: int | None = None
+) -> bool:
+    if kind == "product_status":
+        key = canonical_product_status(value)
+        rows = connection.execute(
+            "SELECT id, value FROM product_option_values WHERE kind = ?", (kind,)
+        ).fetchall()
+        return any(option_id != exclude_id and canonical_product_status(label) == key for option_id, label in rows)
     row = connection.execute(
-        "SELECT 1 FROM product_option_values WHERE kind = ? AND value = ?",
-        (kind, value),
+        "SELECT 1 FROM product_option_values WHERE kind = ? AND value = ? AND (? IS NULL OR id != ?)",
+        (kind, value, exclude_id, exclude_id),
     ).fetchone()
     return row is not None
 
 
+def begin_option_value_write(connection: sqlite3.Connection) -> None:
+    """Serialize vocabulary checks and writes without locking read-only repositories."""
+
+    if not connection.in_transaction:
+        connection.execute("BEGIN IMMEDIATE")
+
+
 def add_option_value(connection: sqlite3.Connection, kind: str, value: str) -> bool:
+    if kind == "product_status":
+        begin_option_value_write(connection)
+        if option_value_exists(connection, kind, value):
+            return False
     cursor = connection.execute(
         "INSERT OR IGNORE INTO product_option_values (kind, value) VALUES (?, ?)",
         (kind, value),
@@ -86,8 +105,8 @@ def write_option_sort_orders(connection: sqlite3.Connection, kind: str, ordered_
         )
 
 
-def normalized_option_values(kind: str, value: object) -> list[str]:
-    """Return the canonical stored form(s) for a managed option value."""
+def normalized_option_values(kind: str, value: object, *, preserve_status_text: bool = False) -> list[str]:
+    """Normalize option input, retaining status wording for explicit vocabulary edits."""
 
     if kind == "brand":
         return [brand for brand in canonicalize_brands(value).split("\n") if brand]
@@ -95,6 +114,9 @@ def normalized_option_values(kind: str, value: object) -> list[str]:
         compacted = " ".join(str(value or "").split())
         return [compacted] if compacted else []
     if kind == "product_status":
+        if preserve_status_text:
+            label = " ".join(str(value or "").split())
+            return [label] if label else []
         canonical = canonical_product_status(value)
         return [canonical] if canonical else []
     return []

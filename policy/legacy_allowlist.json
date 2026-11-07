@@ -17,7 +17,7 @@
     "app/routes/inquiry.py": 11,
     "app/routes/products.py": 11,
     "static/app.js": 203,
-    "static/styles.css": 1238
+    "static/styles.css": 1224
   },
   "public_write_endpoints": [
     "app/modules/admin/auth_web.py:do_login"

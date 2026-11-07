@@ -81,20 +81,6 @@ body.modal-open {
   border-bottom: 1px solid #dfe5ec;
 }
 
-.app-nav.nav-revealed {
-  position: fixed;
-  top: 0;
-  left: 50%;
-  z-index: 80;
-  width: min(1440px, calc(100% - 32px));
-  margin-bottom: 0;
-  padding: 10px 0;
-  background: rgba(245, 247, 250, 0.97);
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
-  transform: translateX(-50%);
-  backdrop-filter: blur(10px);
-}
-
 .nav-links {
   display: flex;
   align-items: center;

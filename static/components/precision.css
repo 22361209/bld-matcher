@@ -19,6 +19,7 @@
   color: var(--precision-ink);
   background: var(--precision-canvas);
   font-family: var(--app-font-sans);
+  scroll-padding-top: calc(var(--revealed-nav-height) + 12px);
 }
 
 body {
@@ -52,7 +53,8 @@ body {
 }
 
 .app-nav {
-  position: relative;
+  position: sticky;
+  top: 0;
   z-index: 70;
   display: flex;
   width: calc(100% + 56px);
@@ -66,18 +68,6 @@ body {
   border-bottom: 3px solid var(--precision-signal);
   background: var(--precision-ink);
   color: #f7f9f8;
-}
-
-.app-nav.nav-revealed {
-  left: 0;
-  width: 100%;
-  min-height: 64px;
-  padding: 0;
-  margin: 0;
-  background: rgba(32, 39, 44, 0.98);
-  box-shadow: 0 14px 34px rgba(15, 22, 26, 0.2);
-  transform: none;
-  backdrop-filter: blur(12px);
 }
 
 .nav-brand {

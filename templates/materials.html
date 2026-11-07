@@ -61,7 +61,7 @@
             <form class="search-form material-table-search" method="get" action="{{ url_for('material_items') }}#materials-results">
               <label>
                 <span>搜索材料明细</span>
-                <input name="q" value="{{ query }}" placeholder="母件编码、零件编码或规格，例如 8234 / 2.5 357 / 357*1260">
+                <input name="q" value="{{ query }}" placeholder="母件编码、零件编码或规格，例如 8234 / 2.5 357 / 357*1260" data-search-shortcut aria-keyshortcuts="Shift+f">
               </label>
               <input type="hidden" id="material-status-input" name="status" value="{{ status }}">
               <button class="linear-button" type="submit">搜索</button>
@@ -197,7 +197,7 @@
             <label class="embedded-search-field">
               <span>搜索最近料单</span>
               <span class="embedded-input-control">
-                <input name="material_history_q" value="{{ material_history_query }}" placeholder="文件名、日期、关键词或操作用户">
+                <input name="material_history_q" value="{{ material_history_query }}" placeholder="文件名、日期、关键词或操作用户" data-search-shortcut aria-keyshortcuts="Shift+f">
                 <button class="embedded-submit" type="submit">搜索</button>
               </span>
             </label>

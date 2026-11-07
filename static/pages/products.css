@@ -108,23 +108,6 @@
   border-bottom: 0;
 }
 
-.app-surface .toolbar-popover-form.catalog-import-actions {
-  display: flex;
-  align-items: center;
-  width: auto;
-  padding: 8px;
-}
-
-.catalog-import-upload-label {
-  cursor: pointer;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .app-surface .catalog-import-menu:not([open]):hover > .catalog-import-actions {
-    display: flex;
-  }
-}
-
 .product-mobile-cards {
   display: none;
 }
@@ -205,16 +188,6 @@
     width: 100%;
     min-height: 48px;
     font-size: 16px;
-  }
-
-  .products-command .search-form > .linear-button {
-    grid-column: 1 / -1;
-    width: 100%;
-    min-height: 48px;
-  }
-
-  .products-command .status-popover {
-    display: none;
   }
 
   .products-command .secondary-actions {

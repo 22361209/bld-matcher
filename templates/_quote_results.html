@@ -17,11 +17,11 @@
     <form class="search-form quote-search" method="get" action="{{ url_for('quote_web.quotes') }}" data-quote-search-form>
       <label>
         <span>客户</span>
-        <input name="customer_name" value="{{ filters.customer_name }}" placeholder="例如 博世">
+        <input name="customer_name" value="{{ filters.customer_name }}" placeholder="例如 博世" data-search-shortcut aria-keyshortcuts="Shift+f">
       </label>
       <label>
         <span>BLD号</span>
-        <input name="bld_no" value="{{ filters.bld_no }}" placeholder="例如 K48620">
+        <input name="bld_no" value="{{ filters.bld_no }}" placeholder="例如 K48620" data-search-shortcut aria-keyshortcuts="Shift+f">
       </label>
       <button class="linear-button primary" type="submit">搜索</button>
     </form>

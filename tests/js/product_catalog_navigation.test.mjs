@@ -41,7 +41,7 @@ test("catalog state preserves blank and repeated filters", () => {
       oe: "",
       status: "all",
       language: "en",
-      visibility: "visible",
+      visibility: "all",
       page: 3,
       filters: { brand: ["", "HONDA"], item: ["Arm"], product_status: [] },
     }
@@ -56,13 +56,15 @@ test("history URLs keep query state and normalize the results hash", () => {
 });
 
 test("creating a product keeps the chosen catalog language and management scope", () => {
-  assert.equal(
-    productCatalogMutationUrl(
-      "/products?bld=NEW-PRODUCT",
-      "http://127.0.0.1:5055/products?lang=zh&visibility=all&bld=OLD-PRODUCT"
-    ),
-    "http://127.0.0.1:5055/products?bld=NEW-PRODUCT&lang=zh&visibility=all"
-  );
+  for (const visibility of ["all", "visible", "neither"]) {
+    assert.equal(
+      productCatalogMutationUrl(
+        "/products?bld=NEW-PRODUCT",
+        `http://127.0.0.1:5055/products?lang=zh&visibility=${visibility}&bld=OLD-PRODUCT`
+      ),
+      "http://127.0.0.1:5055/products?bld=NEW-PRODUCT&lang=zh&visibility=all"
+    );
+  }
 });
 
 test("brand preview state uses full navigation while ordinary catalog state stays inline", () => {

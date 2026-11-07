@@ -35,6 +35,12 @@ Desktop and mobile controls share state. Each product permits one request at a t
 
 Tests cover both languages/layouts, multiline and unknown brands, zero-count selected filter labels, single-field writes, audit rollback, permissions, CSRF, stale requests, management/export consistency and client network/permission failures plus rapid clicks.
 
+## Follow-up: Show All Products in the List (2026-11-07)
+
+The product list no longer offers a visibility scope selector. Both `/products` and `/products/fragment` use `visibility=all`, including requests with the former `visible` or `neither` values; canonical links, search, pagination and language changes retain this scope. This supersedes the list URL scope choice in decision 3 and the post-refresh filtering described above. The active-product default and other search/column filters still apply.
+
+Both catalog visibility flags remain editable, and products with both flags disabled remain in the list after refresh. Display exports still require the selected language's visibility flag, as in decision 5. Domain filtering, export request parsing, API v1 and stored product data are unchanged.
+
 ## Verification
 
 Cover historical/default migration, all four visibility combinations, independent Chinese descriptions, blank values, form edits, canonical filters, both export formats, Chinese export import rejection, source workbook recovery, optional/legacy template imports and v4/v1 business package compatibility. Run the complete project verification and desktop/mobile browser checks with isolated data.

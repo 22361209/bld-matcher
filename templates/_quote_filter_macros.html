@@ -22,7 +22,7 @@
     hidden
   >
     <div class="data-grid-filter-header"><strong>筛选{{ label }}</strong><button type="button" data-column-filter-close aria-label="关闭{{ label }}筛选">×</button></div>
-    <label class="data-grid-filter-search"><span>搜索候选项</span><input type="search" autocomplete="off" placeholder="输入关键词" data-column-filter-search></label>
+    <label class="data-grid-filter-search"><span>搜索候选项</span><input data-search-shortcut aria-keyshortcuts="Shift+f" type="search" autocomplete="off" placeholder="输入关键词" data-column-filter-search></label>
     <div class="data-grid-filter-bulk"><button class="linear-button subtle" type="button" data-column-filter-select-all>全选</button><button class="linear-button subtle" type="button" data-column-filter-select-none>全不选</button><span data-column-filter-selection aria-live="polite"></span></div>
     <div class="data-grid-filter-options" role="group" aria-label="{{ label }}候选项" data-quote-filter-options></div>
     <p class="data-grid-filter-empty" data-quote-filter-empty hidden>暂无可筛选项。</p>

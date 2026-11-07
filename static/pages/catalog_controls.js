@@ -1,8 +1,6 @@
 export const syncCatalogControls = (searchForm, exportForm, state) => {
   const language = searchForm?.querySelector("[data-catalog-language]");
-  const visibility = searchForm?.querySelector("[data-catalog-visibility]");
   if (language) language.value = state.language;
-  if (visibility) visibility.value = state.visibility;
   if (!exportForm) return;
   const pageLanguage = exportForm.querySelector("input[name='lang']");
   const exportLanguage = exportForm.querySelector("select[name='export_language']");
@@ -13,7 +11,7 @@ export const syncCatalogControls = (searchForm, exportForm, state) => {
 };
 
 export const setupCatalogControlChanges = (form) => {
-  form?.querySelectorAll("[data-catalog-language], [data-catalog-visibility]").forEach((select) => {
+  form?.querySelectorAll("[data-catalog-language]").forEach((select) => {
     select.addEventListener("change", () => form.requestSubmit());
   });
 };

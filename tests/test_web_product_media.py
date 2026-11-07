@@ -70,7 +70,7 @@ class TestWebProductMedia(WebAppTestBase):
             products_css,
         )
         self.assertNotIn("PDF图纸", html)
-        self.assertIn("批量上传图纸", html)
+        self.assertNotIn("批量上传图纸", html)
         self.assertNotIn(f'href="/products/{product["id"]}/drawing"', html)
 
         edit = self.client.get(f"/products/{product['id']}/edit")

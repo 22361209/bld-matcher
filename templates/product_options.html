@@ -13,7 +13,7 @@
       {% set view_meta = {
         "brand": ("品牌", brands, "保存产品时自动登记；多个品牌可用“/”分隔一次新增。"),
         "item": ("产品名称", items, "保存产品时自动登记；默认按使用次数排序。"),
-        "product_status": ("产品状态", statuses, "保存产品时自动登记，按规范形式存储。"),
+        "product_status": ("产品状态", statuses, "保存产品时自动登记；手工改名保留中文写法，按规范形式检查重复。"),
       } %}
       {% set label, rows, hint = view_meta[active_view] %}
       {% set kind = active_view %}

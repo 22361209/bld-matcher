@@ -119,7 +119,7 @@
         <p class="note">包内含 {{ info.records }} 张成本单、{{ info["items"] }} 行明细、{{ info.revisions }} 条修改记录{% if info.has_references %}及参考资料（整套计为 1 项）{% endif %}。{% if info.pairs %}其中 {{ info.pairs }} 对左右件按对同步，一侧有冲突时两侧都保留当前端。{% endif %}已有成本单仅追加同一修订历史中的新版。</p>
       {% endif %}
       <div class="import-preview-dataset-tools">
-        <input type="search" class="import-preview-search" data-dataset="{{ key }}" placeholder="搜索 {{ info.label }}...">
+        <input data-search-shortcut aria-keyshortcuts="Shift+f" type="search" class="import-preview-search" data-dataset="{{ key }}" placeholder="搜索 {{ info.label }}...">
         {% if can_import and info.conflicts and key != 'costing' %}
           <button type="button" class="linear-button subtle" data-bulk-action="keep-current" data-dataset="{{ key }}">全部保留当前端</button>
           <button type="button" class="linear-button subtle" data-bulk-action="use-package" data-dataset="{{ key }}">全部使用数据包</button>

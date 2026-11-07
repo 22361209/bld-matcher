@@ -3,6 +3,7 @@ from __future__ import annotations
 from .domain import ProductOptionValue
 from .option_values import (
     add_option_value,
+    begin_option_value_write,
     delete_option_value,
     get_option_value,
     list_option_values,
@@ -14,14 +15,17 @@ from .repository_context import ProductRepositoryContext
 
 
 class ProductOptionRepositoryMixin(ProductRepositoryContext):
+    def begin_option_value_write(self) -> None:
+        begin_option_value_write(self.connection)
+
     def option_values(self) -> list[ProductOptionValue]:
         return list_option_values(self.connection)
 
     def get_option_value(self, option_id: int) -> ProductOptionValue | None:
         return get_option_value(self.connection, option_id)
 
-    def option_value_exists(self, kind: str, value: str) -> bool:
-        return option_value_exists(self.connection, kind, value)
+    def option_value_exists(self, kind: str, value: str, *, exclude_id: int | None = None) -> bool:
+        return option_value_exists(self.connection, kind, value, exclude_id=exclude_id)
 
     def add_option_value(self, kind: str, value: str, *, actor: str) -> bool:
         created = add_option_value(self.connection, kind, value)

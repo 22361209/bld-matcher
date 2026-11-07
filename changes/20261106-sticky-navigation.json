@@ -1,0 +1,11 @@
+{
+  "date": "2026-11-06",
+  "version": "unreleased",
+  "title": "顶部导航始终吸顶",
+  "entries": [
+    "顶部导航在页面和表格滚动时保持可见，无需向上滚动一屏才能重新显示。",
+    "分页与锚点定位按导航实际高度留出空间，桌面与手机菜单继续跟随触发按钮定位。",
+    "合同操作栏与权限分类栏吸顶时避让顶部导航，保持完整可见。"
+  ],
+  "impact": {"data": "none", "api": "compatible", "operations": "full-update-required"}
+}

@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-06",
+  "version": "unreleased",
+  "title": "收紧产品目录工具栏",
+  "entries": ["移除目录可见勾选的常驻说明，收回工具栏底部占用的高度。"],
+  "impact": {"data": "none", "api": "compatible", "operations": "quick-update"}
+}

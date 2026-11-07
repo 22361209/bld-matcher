@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-07",
+  "version": "unreleased",
+  "title": "精简客户列表顶部区域",
+  "entries": [
+    "删除客户列表顶部重复标题、说明和客户数量栏，列表直接从搜索工具栏开始；保留搜索框与状态下拉框上方的客户、状态标签。"
+  ],
+  "impact": {"data": "none", "api": "compatible", "operations": "quick-update"}
+}

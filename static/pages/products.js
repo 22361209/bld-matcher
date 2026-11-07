@@ -1,4 +1,4 @@
-import { syncCatalogControls, setupCatalogControlChanges } from "./catalog_controls.js?v=20261002-1";
+import { syncCatalogControls, setupCatalogControlChanges } from "./catalog_controls.js?v=20261107-1";
 import { setupCatalogVisibility } from "./catalog_visibility.js?v=20261002-1";
 import {
   createProductCatalogRequestGate,
@@ -7,7 +7,7 @@ import {
   productCatalogMutationUrl,
   productCatalogRequiresFullNavigation,
   productCatalogState,
-} from "./product_catalog_navigation.js?v=20261002-1";
+} from "./product_catalog_navigation.js?v=20261107-1";
 import { scrollDataGridToTop } from "./inline_results_navigation.js?v=20260729-3";
 import {
   invalidateProductOptionCache,
@@ -21,7 +21,6 @@ if (document.body.dataset.page === "products.list") {
   const bldSearch = searchForm?.querySelector("#bld-search");
   const oeSearch = searchForm?.querySelector("#oe-search");
   const statusInput = searchForm?.querySelector("#status-input");
-  const statusLabel = searchForm?.querySelector("[data-products-status-label]");
   const resultsHost = document.querySelector("[data-products-results-host]");
   const inlineStatus = document.querySelector("[data-products-inline-status]");
   const exportForm = document.querySelector(".toolbar-export-form");
@@ -63,15 +62,6 @@ if (document.body.dataset.page === "products.list") {
     if (bldSearch instanceof HTMLInputElement) bldSearch.value = state.bld;
     if (oeSearch instanceof HTMLInputElement) oeSearch.value = state.oe;
     if (statusInput instanceof HTMLInputElement) statusInput.value = state.status;
-    if (statusLabel instanceof HTMLElement) {
-      statusLabel.textContent = state.status === "all"
-        ? "包含停用"
-        : (state.status === "inactive" ? "只看停用" : "只看启用");
-    }
-    searchForm?.querySelectorAll(".status-menu-option").forEach((button) => {
-      const selected = button.dataset.status === state.status;
-      button.classList.toggle("selected", selected);
-    });
     if (searchForm instanceof HTMLFormElement) {
       appendFilterInputs(searchForm, state.filters, "data-products-filter-param");
     }
@@ -212,9 +202,11 @@ if (document.body.dataset.page === "products.list") {
   oeSearch?.addEventListener("input", () => {
     if (oeSearch.value.trim() && bldSearch instanceof HTMLInputElement) bldSearch.value = "";
   });
-  searchForm?.querySelectorAll(".status-menu-option").forEach((button) => {
-    button.addEventListener("click", () => {
-      if (statusInput instanceof HTMLInputElement) statusInput.value = button.dataset.status;
+  [bldSearch, oeSearch].forEach((input) => {
+    input?.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" || event.isComposing || event.keyCode === 229) return;
+      event.preventDefault();
+      searchForm.requestSubmit();
     });
   });
   searchForm?.addEventListener("submit", (event) => {
@@ -234,10 +226,6 @@ if (document.body.dataset.page === "products.list") {
   document.addEventListener("click", (event) => {
     if (event.target.closest("details.toolbar-popover")) return;
     toolbarPopovers.forEach((popover) => { popover.open = false; });
-  });
-  const catalogUploadInput = document.querySelector("[data-catalog-upload-input]");
-  catalogUploadInput?.addEventListener("change", () => {
-    if (catalogUploadInput.files?.length) catalogUploadInput.form?.requestSubmit();
   });
   brandPreviewLink?.addEventListener("click", (event) => {
     const target = new URL(window.location.href);
