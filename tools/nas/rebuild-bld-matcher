@@ -23,6 +23,10 @@ backup_runtime() {
     label='{{index .Config.Labels "com.docker.compose.project.working_dir"}}|{{index .Config.Labels "com.docker.compose.service"}}'
     [ "$(docker_local inspect --type container --format "$label" "$container")" = "$CHECKOUT|bld-matcher" ] || die 'Container does not belong to BLD.'
     image=$(docker_local inspect --type container --format '{{.Image}}' "$container")
+    # Check the helper's imports and CLI before causing downtime.
+    docker_local run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+        --mount "type=bind,src=$HELPER,dst=/opt/bld-backup/backup_local_runtime.py,readonly" \
+        --entrypoint python "$image" /opt/bld-backup/backup_local_runtime.py --help > /dev/null
     docker_local stop "$container"
     # Run the installed helper using the current image's Python, without
     # executing checkout code or granting write access to runtime files.
