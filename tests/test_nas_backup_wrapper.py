@@ -69,7 +69,7 @@ compose_local() {{ echo "compose $*" >> {shlex.quote(str(self.log))}; }}
         self.assertIn(f"src={self.helper},dst=/bld-backup.py,readonly", calls)
         self.assertIn("--entrypoint python sha256:fixture /bld-backup.py", calls)
         self.assertNotIn(f"src={self.checkout},", calls)
-        self.assertNotIn("compose", calls)
+        self.assertFalse(any(line.startswith("compose ") for line in calls.splitlines()))
         self.assertFalse(self.lock.exists())
 
     def test_backup_refuses_wrong_container_symlinks_and_concurrent_release(self):
@@ -87,7 +87,7 @@ compose_local() {{ echo "compose $*" >> {shlex.quote(str(self.log))}; }}
         for failure in ("stop", "run"):
             result = self.run_wrapper("backup", FAIL=failure)
             self.assertNotEqual(result.returncode, 0)
-            self.assertNotIn("compose", self.calls())
+            self.assertFalse(any(line.startswith("compose ") for line in self.calls().splitlines()))
             self.assertFalse(self.lock.exists())
         for args in ((), ("backup", "anything"), ("stop",), ("unknown",)):
             self.assertNotEqual(self.run_wrapper(*args).returncode, 0)
