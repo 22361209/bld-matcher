@@ -46,7 +46,7 @@ docker_local() {{
                 *) echo "$CHECKOUT|${{SERVICE:-bld-matcher}}" ;;
             esac ;;
         stop) [ "${{FAIL:-}}" != stop ] ;;
-        run) [ "${{FAIL:-}}" != run ] ;;
+        run) [ "${{FAIL:-}}" != run ] && {{ [ "${{FAIL:-}}" != backup ] || [ "$4" != host ]; }} ;;
     esac
 }}
 compose_local() {{ echo "compose $*" >> {shlex.quote(str(self.log))}; }}
@@ -63,11 +63,13 @@ compose_local() {{ echo "compose $*" >> {shlex.quote(str(self.log))}; }}
         result = self.run_wrapper("backup")
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = self.calls()
-        self.assertLess(calls.index("stop container-id"), calls.index("run --rm"))
+        self.assertLess(calls.index("run --rm --network none"), calls.index("stop container-id"))
+        self.assertLess(calls.index("stop container-id"), calls.index("run --rm --network host"))
         for name in ("data", "uploads", "outputs", ".env"):
             self.assertIn(f"src={self.checkout}/{name},dst=/runtime/{name},readonly", calls)
-        self.assertIn(f"src={self.helper},dst=/bld-backup.py,readonly", calls)
-        self.assertIn("--entrypoint python sha256:fixture /bld-backup.py", calls)
+        self.assertIn(f"src={self.helper},dst=/opt/bld-backup/backup_local_runtime.py,readonly", calls)
+        self.assertIn("--entrypoint python sha256:fixture /opt/bld-backup/backup_local_runtime.py", calls)
+        self.assertIn("--cap-drop ALL --cap-add DAC_READ_SEARCH", calls)
         self.assertNotIn(f"src={self.checkout},", calls)
         self.assertFalse(any(line.startswith("compose ") for line in calls.splitlines()))
         self.assertFalse(self.lock.exists())
@@ -84,7 +86,9 @@ compose_local() {{ echo "compose $*" >> {shlex.quote(str(self.log))}; }}
         self.assertNotIn("stop ", self.calls())
 
     def test_failures_do_not_rebuild_or_leave_lock_and_extra_arguments_are_rejected(self):
-        for failure in ("stop", "run"):
+        self.assertNotEqual(self.run_wrapper("backup", FAIL="run").returncode, 0)
+        self.assertNotIn("stop container-id", self.calls())
+        for failure in ("stop", "backup"):
             result = self.run_wrapper("backup", FAIL=failure)
             self.assertNotEqual(result.returncode, 0)
             self.assertFalse(any(line.startswith("compose ") for line in self.calls().splitlines()))

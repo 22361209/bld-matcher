@@ -23,17 +23,21 @@ backup_runtime() {
     label='{{index .Config.Labels "com.docker.compose.project.working_dir"}}|{{index .Config.Labels "com.docker.compose.service"}}'
     [ "$(docker_local inspect --type container --format "$label" "$container")" = "$CHECKOUT|bld-matcher" ] || die 'Container does not belong to BLD.'
     image=$(docker_local inspect --type container --format '{{.Image}}' "$container")
+    # Check the helper's imports and CLI before causing downtime.
+    docker_local run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+        --mount "type=bind,src=$HELPER,dst=/opt/bld-backup/backup_local_runtime.py,readonly" \
+        --entrypoint python "$image" /opt/bld-backup/backup_local_runtime.py --help > /dev/null
     docker_local stop "$container"
     # Run the installed helper using the current image's Python, without
     # executing checkout code or granting write access to runtime files.
-    docker_local run --rm --network host --read-only --cap-drop ALL --security-opt no-new-privileges \
-        --mount "type=bind,src=$HELPER,dst=/bld-backup.py,readonly" \
+    docker_local run --rm --network host --read-only --cap-drop ALL --cap-add DAC_READ_SEARCH --security-opt no-new-privileges \
+        --mount "type=bind,src=$HELPER,dst=/opt/bld-backup/backup_local_runtime.py,readonly" \
         --mount "type=bind,src=$CHECKOUT/data,dst=/runtime/data,readonly" \
         --mount "type=bind,src=$CHECKOUT/uploads,dst=/runtime/uploads,readonly" \
         --mount "type=bind,src=$CHECKOUT/outputs,dst=/runtime/outputs,readonly" \
         --mount "type=bind,src=$CHECKOUT/.env,dst=/runtime/.env,readonly" \
         --mount "type=bind,src=$BACKUPS,dst=/backups" \
-        --entrypoint python "$image" /bld-backup.py --project-dir /runtime --backup-root /backups
+        --entrypoint python "$image" /opt/bld-backup/backup_local_runtime.py --project-dir /runtime --backup-root /backups
     # The JSON result uses container paths; this is their fixed NAS location.
     echo "NAS backup root: $BACKUPS"
 }
