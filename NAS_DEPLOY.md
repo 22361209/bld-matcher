@@ -160,13 +160,16 @@ cd /volume1/docker/bld-matcher
 sudo install -d -o root -g root -m 0755 /usr/local/libexec/bld-matcher
 sudo install -o root -g root -m 0644 tools/backup_local_runtime.py /usr/local/libexec/bld-matcher/backup_local_runtime.py
 sudo install -o root -g root -m 0755 tools/nas/rebuild-bld-matcher /usr/local/sbin/rebuild-bld-matcher
-sudo visudo -cf tools/nas/bld-matcher-rebuild.sudoers
+if command -v visudo >/dev/null 2>&1; then sudo visudo -cf tools/nas/bld-matcher-rebuild.sudoers; fi
 sudo install -o root -g root -m 0440 tools/nas/bld-matcher-rebuild.sudoers /etc/sudoers.d/bld-matcher-rebuild
-sudo visudo -c
+if command -v visudo >/dev/null 2>&1; then sudo visudo -c; fi
+sudo -n /usr/local/sbin/rebuild-bld-matcher status
 ```
 
 首次安装需要管理员密码，以后 `backup`、`rebuild`、`status` 均可用 `sudo -n`。
-管理员需检查现有 sudoers，移除该入口过往的宽泛授权，保留上面的三个精确参数授权。
+部分 DSM 没有 `visudo`。此时管理员应在已提权的可见 root 终端中保留旧 sudoers 副本，
+安装后以 deploy 身份执行上面的 `sudo -n ... status`；若解析或权限检查失败，直接在仍打开的 root 终端恢复旧文件。
+新增 sudoers 只授权三个精确参数；入口本身也拒绝其他命令和多余参数。
 脚本和备份程序更新时重新审阅并安装 root 副本，不能从可写工作树直接执行备份 Python。
 
 `backup` 固定检查 `bld-matcher` 容器属于本项目，使用当前容器的镜像 ID 提供 Python。
