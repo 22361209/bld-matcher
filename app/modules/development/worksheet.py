@@ -13,6 +13,7 @@ from .domain import fail
 LEGACY_MATERIALS = ("冲压", "铸铁", "锻打", "铸铝", "锻铝")
 WORKSHEET_STATUSES = {"not_started": "未开始", "in_progress": "已开始", "completed": "已完成"}
 MAX_WORKSHEET_ROWS = 500
+MAX_WORKSHEET_ROW_NOTE_LENGTH = 160
 DEFAULT_PARTS = (
     ("主体", ""), ("小衬套", "NR"), ("大衬套", "NR"), ("球头", ""),
     ("球壳", "45号钢"), ("球销", "40Cr"), ("球座", ""), ("防尘罩", "CR"),
@@ -44,7 +45,8 @@ def _text(value, field, *, limit=160):
 def _clean_row(raw, number, *, legacy_codes=None):
     prefix = f"第 {number} 行"
     defaults = {**ROW_DEFAULTS, "side": "shared"} if legacy_codes is not None else ROW_DEFAULTS
-    if not isinstance(raw, dict) or set(raw) - defaults.keys():
+    allowed_fields = defaults.keys() if legacy_codes is not None else defaults.keys() | {"note"}
+    if not isinstance(raw, dict) or set(raw) - allowed_fields:
         fail(f"{prefix}零件资料格式无效。", field="rows")
     row = {key: _text(raw.get(key, default), f"rows.{number - 1}.{key}",
                       limit=164 if key == "name" and legacy_codes is None else 160)
@@ -78,6 +80,10 @@ def _clean_row(raw, number, *, legacy_codes=None):
                 error(key, "日期格式应为 YYYY-MM-DD。")
     if row["start_date"] and row["due_date"] and row["due_date"] < row["start_date"]:
         error("due_date", "预计完成日期不能早于开始日期。")
+    if "note" in raw:
+        note = _text(raw["note"], f"rows.{number - 1}.note", limit=MAX_WORKSHEET_ROW_NOTE_LENGTH)
+        if note:
+            row["note"] = note
     return row
 
 

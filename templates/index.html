@@ -103,12 +103,14 @@
                   </thead>
                   <tbody data-history-rows>
                     {% for file in history_files %}
+                      {% set file_url = url_for('download', name=download_name(file.path)) %}
+                      {% set is_excel = file.kind in ('XLS', 'XLSX') %}
                       <tr>
-                        <td><a href="{{ url_for('download', name=download_name(file.path)) }}">{{ file.name }}</a></td>
+                        <td><a href="{{ file_url }}"{% if is_excel %} data-save-quote-excel="{{ file.name }}"{% endif %}>{{ file.name }}</a></td>
                         <td>{{ file.kind }}</td>
                         <td>{{ file.operator }}</td>
                         <td>{{ file.updated_at }}</td>
-                        <td><a href="{{ url_for('download', name=download_name(file.path)) }}">下载</a></td>
+                        <td><a href="{{ file_url }}"{% if is_excel %} data-save-quote-excel="{{ file.name }}"{% endif %}>下载</a></td>
                       </tr>
                     {% endfor %}
                   </tbody>

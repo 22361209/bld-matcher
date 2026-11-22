@@ -13,11 +13,11 @@ from app.modules.inquiry.excel.export import (
     generate_xls_with_bld,
     generate_xlsx_with_bld,
 )
+from app.modules.inquiry.excel.preview import preview_inquiry_columns
 from app.modules.inquiry.excel.pricing import PRICE_EXPORT_MODES
 from app.modules.inquiry.excel.reader import (
     INQUIRY_HEADERS,
     MANUAL_HEADER_ALIASES,
-    preview_inquiry_columns,
 )
 
 __all__ = [

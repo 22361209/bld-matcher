@@ -137,7 +137,8 @@ export function setupDataGrid(grid) {
   const cleanupViewportFill = bindViewportFill({ grid, windowTarget: window });
 
   headings.forEach((heading, index) => {
-    initialWidths[columnKeys[index]] = clampColumnWidth(heading.getBoundingClientRect().width);
+    const width = columns[index].dataset.defaultWidth || heading.getBoundingClientRect().width;
+    initialWidths[columnKeys[index]] = clampColumnWidth(width);
   });
   const storedWidths = readStoredWidths(storageKey, columnKeys);
   columnKeys.forEach((key) => {
@@ -149,7 +150,7 @@ export function setupDataGrid(grid) {
     columns.forEach((column, index) => {
       const width = clampColumnWidth(currentWidths[columnKeys[index]]);
       column.style.width = `${width}px`;
-      total += width;
+      if (!column.hidden) total += width;
     });
     table.style.width = `${total}px`;
   };
@@ -158,6 +159,7 @@ export function setupDataGrid(grid) {
     if (status instanceof HTMLElement) status.textContent = message;
   };
   syncTableWidth();
+  grid.addEventListener("bld:column-visibility", syncTableWidth);
 
   headings.forEach((heading, index) => {
     const key = columnKeys[index];
@@ -254,6 +256,7 @@ export function setupDataGrid(grid) {
 
   const cleanup = () => {
     cleanupViewportFill();
+    grid.removeEventListener("bld:column-visibility", syncTableWidth);
     resetButtons.forEach((button) => button.removeEventListener("click", resetWidths));
     gridCleanups.delete(grid);
   };

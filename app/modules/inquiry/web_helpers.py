@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 from uuid import uuid4
 
 from flask import request
@@ -69,6 +70,33 @@ def selected_match_columns() -> list[int] | None:
 
 def optional_match_columns() -> list[int]:
     return match_columns_from_request(required=False) or []
+
+
+def header_rows_from_request(upload_path: Path) -> dict[int, int]:
+    maximum_row = 65536 if upload_path.suffix.lower() == ".xls" else 1048576
+    headers = {}
+    for key in request.form:
+        if not key.startswith("header_row_"):
+            continue
+        sheet = key.removeprefix("header_row_")
+        if not re.fullmatch(r"[1-9][0-9]{0,9}", sheet) or int(sheet) > 4294967295:
+            raise ValueError("表头设置中的工作表编号无效。")
+        values = request.form.getlist(key)
+        if len(values) != 1:
+            raise ValueError(f"第 {sheet} 张工作表只能选择一种表头设置。")
+        mode = values[0].strip()
+        if not mode:
+            continue
+        if mode == "0":
+            headers[int(sheet)] = 0
+            continue
+        if mode == "manual":
+            numbers = request.form.getlist(f"header_number_{sheet}")
+            mode = numbers[0].strip() if len(numbers) == 1 else ""
+        if not re.fullmatch(r"[0-9]{1,7}", mode) or not 1 <= int(mode) <= maximum_row:
+            raise ValueError(f"第 {sheet} 张工作表的表头行号无效，请填写 1 至 {maximum_row} 的整数，或选择无表头。")
+        headers[int(sheet)] = int(mode)
+    return headers
 
 
 def customer_code_column_from_request() -> int | None:

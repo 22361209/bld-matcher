@@ -80,7 +80,7 @@ class TestWebInquiryExport(WebAppTestBase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("选择匹配列", html)
-        self.assertIn("没有识别到明确的 OE 号码表头", html)
+        self.assertIn("勾选要匹配的号码列", html)
         self.assertNotIn("KPRICE01", html)
         self.assertNotIn('id="download-excel-modal"', html)
 
@@ -491,6 +491,10 @@ class TestWebInquiryExport(WebAppTestBase):
         self.assertEqual(len(batch), 3)
         self.assertTrue(all(row["quote_no"] == quote_no for row in batch))
         self.assertTrue(all(row["attachment_path"] for row in batch))
+        self.assertEqual(len({row["attachment_path"] for row in batch}), 1)
+        with self.client.get(payload["download_url"]) as attachment:
+            self.assertEqual(attachment.status_code, 200)
+            self.assertEqual(attachment.get_data(), (self.root / "outputs" / batch[0]["attachment_path"]).read_bytes())
 
         adjusted_write = self.client.post(
             "/match/write-quotes",
@@ -692,10 +696,13 @@ class TestWebInquiryExport(WebAppTestBase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("选择匹配列", html)
-        self.assertIn("没有识别到明确的 OE 号码表头", html)
+        self.assertIn("勾选要匹配的号码列", html)
         self.assertIn("match-preview-table", html)
         self.assertIn("match-preview-cell", html)
-        self.assertIn("<th>源行</th>", html)
+        self.assertIn('<th scope="col">源行</th>', html)
+        self.assertIn('data-resizable-grid data-grid-key="inquiry-preview"', html)
+        self.assertIn('data-col="row" data-default-width="64"', html)
+        self.assertIn('data-col="source-1" data-default-width="160"', html)
 
         upload_match = re.search(r'name="upload_path" value="([^"]+)"', html)
         output_match = re.search(r'name="output_name" value="([^"]+)"', html)
@@ -729,6 +736,8 @@ class TestWebInquiryExport(WebAppTestBase):
         sheet.append(["رقم", "كمية"])
         sheet.append([446633220, 300])
         sheet.append(["58101F2A00", 300])
+        sheet["AA2"] = "OE号"
+        sheet["AA4"] = "FAR-258741"
         inquiry_path = self.root / "uploads" / "arabic-no-dimension.xlsx"
         inquiry_path.parent.mkdir(parents=True, exist_ok=True)
         workbook.save(inquiry_path)
@@ -750,7 +759,21 @@ class TestWebInquiryExport(WebAppTestBase):
         self.assertIn("رقم", html)
         self.assertIn('name="match_columns" value="0"', html)
         self.assertIn('name="match_columns" value="1"', html)
+        self.assertIn('name="match_columns" value="26"', html)
+        self.assertIn('<details class="match-customer-code">', html)
         self.assertNotIn("生成失败", html)
+
+        upload_path = re.search(r'name="upload_path" value="([^"]+)"', html).group(1)
+        form = {"upload_path": upload_path, "match_columns": "26", "customer_code_column": "1"}
+        result = self.client.post("/match/column", data=form)
+        self.assertEqual(result.status_code, 200)
+        self.assertIn("FAR-258741", result.get_data(as_text=True))
+        back = self.client.post("/match/column/back", data=form)
+        back_html = back.get_data(as_text=True)
+        self.assertEqual(back.status_code, 200)
+        self.assertIn('<details class="match-customer-code" open>', back_html)
+        self.assertRegex(back_html, r'name="match_columns" value="26"[^>]*checked')
+        self.assertRegex(back_html, r'(?s)<select[^>]*name="customer_code_column"[^>]*>.*?<option value="1" selected>')
 
     def test_segmented_merged_headers_do_not_count_as_inquiry_rows(self):
         from app.modules.products.persistence import upsert_product

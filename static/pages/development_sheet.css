@@ -11,9 +11,10 @@
 .development-sheet-parts .data-table-scroll { max-width: 100%; overflow: auto; }
 .development-sheet-parts .data-grid-viewport-fill { height: auto; }
 .development-sheet-parts .data-grid-viewport-fill [data-grid-scroll] { max-height: var(--data-grid-viewport-height); flex: none; }
-.data-grid .development-sheet-table { min-width: 0; width: max(1090px, 100%); table-layout: fixed; }
+.data-grid .development-sheet-table { min-width: 0; width: max(1250px, 100%); table-layout: fixed; }
 .development-sheet-table col[data-col="number"] { width: 80px; }
 .development-sheet-table col[data-col="material"], .development-sheet-table col[data-col="mode"] { width: 85px; }
+.development-sheet-table col[data-col="note"] { width: 160px; }
 .development-sheet-table col[data-col="start_date"], .development-sheet-table col[data-col="due_date"] { width: 148px; }
 .development-sheet-table td { padding: 4px; vertical-align: middle; }
 .development-sheet-table :is(input, select) { min-width: 0; width: 100%; font: inherit; height: 32px; box-sizing: border-box; padding: 3px 6px; }

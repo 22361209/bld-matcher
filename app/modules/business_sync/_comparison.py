@@ -15,6 +15,7 @@ from app.modules.products.catalog_language import catalog_values
 from app.platform.sync_identity import material_match_key, quote_match_key
 
 from ._schema import COMPARISON_EXCLUDED_COLUMNS, DATASETS, FIELD_LABELS, LOCAL_MEDIA_COLUMNS, MEDIA_DIRECTORIES
+from ._tube_weights import normalize_synced_tube
 
 
 def columns(connection: sqlite3.Connection, table: str) -> list[str]:
@@ -154,6 +155,8 @@ def incoming_status(
     local_row = local.get(str(incoming[identity]))
     if key == "products":
         incoming.update(catalog_values(incoming, dict(local_row) if local_row else {}))
+    if key == "tubes":
+        normalize_synced_tube(incoming, dict(local_row) if local_row is not None else None)
     candidate = None
     if local_row is None and key == "quotes":
         match = quote_match_key(incoming)

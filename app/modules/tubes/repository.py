@@ -12,6 +12,7 @@ from app.platform.audit_store import log_event
 from app.platform.clock import now_text
 
 from .domain import TUBE_TYPES, TubeImportRow, clean_text, normalize_spec_search, number_or_none
+from .weights import WEIGHT_INPUTS, normalize_weight_values
 
 
 class TubeRepository:
@@ -22,7 +23,7 @@ class TubeRepository:
         """A borrowed code uses the same active source row that the tube list displays."""
         rows = self.connection.execute(
             """SELECT item.code, COALESCE(source.code, item.code) AS source_code,
-                      CASE WHEN source.id IS NULL THEN item.weight_kg ELSE source.weight_kg END AS weight_kg,
+                      CASE WHEN item.borrowed_from != '' THEN source.weight_kg ELSE item.weight_kg END AS weight_kg,
                       COALESCE(source.spec_text, item.spec_text) AS spec_text,
                       COALESCE(source.tube_type, item.tube_type) AS tube_type
                FROM tube_items AS item
@@ -40,8 +41,9 @@ class TubeRepository:
             dict(row)
             for row in self.connection.execute(
                 f"""
-                SELECT id, code, tube_type, spec_text, weight_kg, tolerance_mm,
-                       consumption_mm, outer_diameter_mm, inner_diameter_mm, blank_length_text,
+                SELECT id, code, tube_type, spec_text,
+                       CASE WHEN item.borrowed_from = '' THEN item.weight_kg END AS weight_kg, tolerance_mm,
+                       consumption_mm, outer_diameter_mm, inner_diameter_mm, blank_length_text, weight_mode, weight_length_mm,
                        inner_diameter_tolerance, purchase_base, borrowed_from, note, active,
                        COALESCE((
                          SELECT GROUP_CONCAT(alias.code, '、')
@@ -92,7 +94,10 @@ class TubeRepository:
         for column, key, operator in (("weight_kg", "weight_eq", "="), ("weight_kg", "weight_min", ">="), ("weight_kg", "weight_max", "<="), ("outer_diameter_mm", "outer_diameter", "="), ("inner_diameter_mm", "inner_diameter", "=")):
             value = filters.get(key)
             if value is not None:
-                clauses.append(f"{prefix}{column} {operator} ?")
+                field = f"{prefix}{column}"
+                if column == "weight_kg":
+                    field = f"(CASE WHEN {prefix}borrowed_from = '' THEN {field} END)"
+                clauses.append(f"{field} {operator} ?")
                 parameters.append(value)
         return clauses, parameters
 
@@ -148,18 +153,27 @@ class TubeRepository:
             raise ValueError("管件类型无效。")
         item_id = clean_text(data.get("id"))
         existing = (
-            self.connection.execute("SELECT code, borrowed_from FROM tube_items WHERE id = ?", (int(item_id),)).fetchone()
+            self.connection.execute("SELECT * FROM tube_items WHERE id = ?", (int(item_id),)).fetchone()
             if item_id
             else None
         )
         borrowed_from = self._borrow_root(clean_text(data.get("borrowed_from")))
         if borrowed_from and borrowed_from.upper() == code.upper():
             raise ValueError("管件不能借用自身编号。")
+        # Borrowed forms can omit read-only inputs. Preserve them without inferring new dimensions.
+        if borrowed_from and existing is not None:
+            # The displayed source weight never edits the alias's own manual snapshot.
+            data = {**dict(existing), **data, "weight_kg": existing["weight_kg"]}
+        elif existing is not None:
+            data = {**{key: existing[key] for key in WEIGHT_INPUTS}, **data}
+        weight_values = normalize_weight_values({**data, "borrowed_from": borrowed_from}, dict(existing) if existing else None)
         values = (
             code,
             tube_type,
             spec_text,
-            number_or_none(data.get("weight_kg")),
+            weight_values["weight_kg"],
+            weight_values["weight_mode"],
+            weight_values["weight_length_mm"],
             number_or_none(data.get("tolerance_mm")),
             number_or_none(data.get("consumption_mm")),
             number_or_none(data.get("outer_diameter_mm")),
@@ -176,7 +190,7 @@ class TubeRepository:
             cursor = self.connection.execute(
                 """
                 UPDATE tube_items
-                SET code = ?, tube_type = ?, spec_text = ?, weight_kg = ?, tolerance_mm = ?,
+                SET code = ?, tube_type = ?, spec_text = ?, weight_kg = ?, weight_mode = ?, weight_length_mm = ?, tolerance_mm = ?,
                     consumption_mm = ?, outer_diameter_mm = ?, inner_diameter_mm = ?, blank_length_text = ?, inner_diameter_tolerance = ?, purchase_base = ?, borrowed_from = ?, note = ?, active = ?, updated_at = ?
                 WHERE id = ?
                 """,
@@ -191,10 +205,10 @@ class TubeRepository:
             cursor = self.connection.execute(
                 """
                 INSERT INTO tube_items (
-                  code, tube_type, spec_text, weight_kg, tolerance_mm, consumption_mm,
+                  code, tube_type, spec_text, weight_kg, weight_mode, weight_length_mm, tolerance_mm, consumption_mm,
                   outer_diameter_mm, inner_diameter_mm, blank_length_text, inner_diameter_tolerance, purchase_base,
                   borrowed_from, note, active, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (*values[:-1], now, values[-1]),
             )
@@ -267,7 +281,7 @@ class TubeRepository:
         for removed_code in removed_codes:
             detached_codes = {removed_code, *self._descendant_codes(removed_code)}
             self.connection.execute(
-                f"UPDATE tube_items SET borrowed_from = '', updated_at = ? WHERE code IN ({', '.join('?' for _ in detached_codes)})",
+                f"UPDATE tube_items SET borrowed_from = '', weight_mode = 'manual', updated_at = ? WHERE code IN ({', '.join('?' for _ in detached_codes)})",
                 (now_text(), *sorted(detached_codes)),
             )
         for borrowed_code in sorted(desired_codes):
@@ -294,17 +308,21 @@ class TubeRepository:
     def import_rows(self, rows: list[TubeImportRow], *, actor: str) -> int:
         now = now_text()
         for row in rows:
+            existing = self.connection.execute("SELECT weight_mode FROM tube_items WHERE code = ?", (row.code,)).fetchone()
+            if existing is not None and existing["weight_mode"] == "auto":
+                raise ValueError(f"管件 {row.code} 已启用自动计重，请在管件编辑页核对参数后更新，不能用旧式导入覆盖。")
             self.connection.execute(
                 """
                 INSERT INTO tube_items (
-                  code, tube_type, spec_text, weight_kg, tolerance_mm, consumption_mm,
+                  code, tube_type, spec_text, weight_kg, weight_length_mm, tolerance_mm, consumption_mm,
                   outer_diameter_mm, inner_diameter_mm, blank_length_text, inner_diameter_tolerance, purchase_base,
                   borrowed_from, note, source_sheet, source_row, active, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
                 ON CONFLICT(code) DO UPDATE SET
                   tube_type = excluded.tube_type,
                   spec_text = excluded.spec_text,
                   weight_kg = excluded.weight_kg,
+                  weight_length_mm = excluded.weight_length_mm,
                   tolerance_mm = excluded.tolerance_mm,
                   consumption_mm = excluded.consumption_mm,
                   outer_diameter_mm = excluded.outer_diameter_mm,
@@ -324,6 +342,7 @@ class TubeRepository:
                     row.tube_type,
                     row.spec_text,
                     row.weight_kg,
+                    row.weight_length_mm,
                     row.tolerance_mm,
                     row.consumption_mm,
                     row.outer_diameter_mm,

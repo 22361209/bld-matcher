@@ -1,5 +1,69 @@
 /* Inquiry result row editing and product preview. */
 
+.inquiry-source-dialog {
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 18px;
+}
+
+.inquiry-source-dialog h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.inquiry-source-options {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  max-height: min(58dvh, 440px);
+  overflow: auto;
+  margin: 12px 0;
+}
+
+.inquiry-source-options fieldset {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+.inquiry-source-options legend {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.inquiry-source-option {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: start;
+  min-width: 0;
+  gap: 8px;
+  padding: 6px 4px;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.inquiry-source-option input {
+  width: 16px;
+  height: 16px;
+  margin: 0.2em 0 0;
+  padding: 0;
+  accent-color: var(--linear-accent);
+}
+
+.inquiry-source-cell {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.inquiry-row-sheet {
+  display: block;
+  color: var(--linear-muted);
+  overflow-wrap: anywhere;
+}
+
+.data-grid-table th[data-col^="source-"] .data-grid-column-label {
+  max-width: 100%;
+}
+
 .match-note {
   margin-top: 6px;
   color: #53647a;

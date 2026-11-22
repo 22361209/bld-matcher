@@ -10,7 +10,7 @@ from app.security import actor_name
 
 from .domain import DevelopmentValidationError, fail
 from .factory import get_development_service
-from .worksheet import LEGACY_MATERIALS, MAX_WORKSHEET_ROWS, WORKSHEET_STATUSES, worksheet_status
+from .worksheet import LEGACY_MATERIALS, MAX_WORKSHEET_ROW_NOTE_LENGTH, MAX_WORKSHEET_ROWS, WORKSHEET_STATUSES, worksheet_status
 
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ def render_sheet(sheet, *, project_id=None, expected_version=None, editable=True
                            worksheet_status=worksheet_status(sheet), status_choices=WORKSHEET_STATUSES,
                            body_material_options=LEGACY_MATERIALS, notes=notes or "", errors=errors,
                            expected_version=expected_version, max_rows=MAX_WORKSHEET_ROWS,
-                           max_rows_chars=MAX_ROWS_JSON_CHARS), status
+                           max_rows_chars=MAX_ROWS_JSON_CHARS, max_row_note_length=MAX_WORKSHEET_ROW_NOTE_LENGTH), status
 
 
 def save_sheet(project_id=None):

@@ -611,6 +611,7 @@ class TestWebMaterialsAndOperations(WebAppTestBase):
                 "047_development_worksheets",
                 "048_stamping_material_grade",
                 "049_derive_stamping_material_grades",
+                "050_tube_weight_calculation",
             ],
         )
 

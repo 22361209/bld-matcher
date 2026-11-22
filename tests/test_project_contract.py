@@ -264,7 +264,7 @@ def dynamic_route():
             "purchase_contracts.html": ("pages/contracts.css", "pages/contracts.js"),
             "quotes.html": ("pages/quotes.css",),
             "result.html": ("pages/inquiry.css", "pages/inquiry_result.js"),
-            "select_match_column.html": ("pages/inquiry.css",),
+            "select_match_column.html": ("pages/inquiry_preview.css", "pages/inquiry_preview.js"),
             "system_updates.html": ("pages/system_updates.css",),
         }
         for template_name, assets in asset_owners.items():

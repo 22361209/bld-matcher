@@ -1,28 +1,130 @@
-export const inquiryAttachmentFilename = (response) => {
-  if (!response?.ok || response.redirected || typeof response.headers?.get !== "function") return null;
-  const disposition = response.headers.get("Content-Disposition") || "";
-  if (!/\battachment\b/i.test(disposition)) return null;
-  const encoded = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(disposition);
-  if (encoded) {
-    try {
-      const filename = decodeURIComponent(encoded[1].trim().replace(/^"|"$/g, ""));
-      return /\.xlsx?$/i.test(filename) ? filename : null;
-    } catch {
-      return null;
-    }
-  }
-  const plain = /filename="?([^";]+)"?/i.exec(disposition);
-  const filename = plain ? plain[1].trim() : "";
-  return /\.xlsx?$/i.test(filename) ? filename : null;
-};
+import { chooseExcelDestination, saveExcelResponse } from "../components/excel_save.js?v=20261122-1";
+
+export { inquiryAttachmentFilename } from "../components/excel_save.js?v=20261122-1";
 
 export const clearQuoteCustomerValidity = (input) => {
   if (input && typeof input.setCustomValidity === "function") input.setCustomValidity("");
 };
 
+export function setupInquiryDownloadForm(form, { validate, close }) {
+  const doc = form.ownerDocument;
+  const win = doc.defaultView;
+  const downloadButton = form.querySelector("[data-download-only-submit]");
+  const writeButton = form.querySelector("[data-write-quotes-submit]");
+  const customer = form.querySelector("input[name='customer_name']");
+  const status = form.querySelector("[data-submit-wait-message]");
+  const recovery = form.querySelector("[data-quote-recovery]");
+  let busy = false;
+  let writeLocked = false;
+
+  const showStatus = (text, state) => {
+    status.textContent = text;
+    status.classList.remove("active", "error", "done");
+    if (state) status.classList.add(state);
+  };
+  const showRecovery = (receipt) => {
+    recovery.replaceChildren();
+    if (receipt?.download_url && receipt.download_filename) {
+      const attachment = doc.createElement("a");
+      attachment.href = receipt.download_url;
+      attachment.dataset.saveQuoteExcel = receipt.download_filename;
+      attachment.download = receipt.download_filename;
+      attachment.textContent = "重新保存本次报价附件";
+      recovery.append(attachment, "　");
+    }
+    const quotes = doc.createElement("a");
+    quotes.href = receipt?.quotes_url || form.dataset.quotesUrl;
+    quotes.textContent = "前往报价记录";
+    recovery.append(quotes);
+    recovery.hidden = false;
+  };
+  const fetchAttachment = async (url, options) => {
+    try {
+      return await win.fetch(url, { credentials: "same-origin", ...options });
+    } catch {
+      throw new Error("获取 Excel 附件失败，请检查网络连接。");
+    }
+  };
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const writeQuotes = Boolean(writeButton && event.submitter === writeButton);
+    if (busy || (writeQuotes && writeLocked) || !validate()) return;
+    clearQuoteCustomerValidity(customer);
+    if (writeQuotes && !customer.value.trim()) {
+      const prompt = "写入报价前请填写客户名称。";
+      showStatus(prompt, "error");
+      customer.setCustomValidity(prompt);
+      customer.reportValidity();
+      clearQuoteCustomerValidity(customer);
+      customer.focus();
+      return;
+    }
+    if (!form.reportValidity()) return;
+
+    busy = true;
+    downloadButton.disabled = true;
+    if (writeButton) writeButton.disabled = true;
+    let awaitingWriteResponse = false;
+    let receipt = null;
+    try {
+      const body = new win.FormData(form);
+      showStatus("", "");
+      const destination = await chooseExcelDestination(win, form.dataset.excelFilename, { writeQuotes });
+      if (!destination) return;
+
+      if (!writeQuotes) {
+        showStatus("正在生成 Excel…", "active");
+        const response = await fetchAttachment(form.action, { method: "POST", body });
+        await saveExcelResponse(destination, response);
+        showStatus(destination.kind === "manual" ? "Excel 附件已生成。" : "Excel 已保存。", "done");
+        close();
+        return;
+      }
+
+      showStatus("正在生成 Excel 并写入报价记录…", "active");
+      awaitingWriteResponse = true;
+      const response = await win.fetch(writeButton.formAction, {
+        method: "POST", body, credentials: "same-origin",
+        headers: { Accept: "application/json", "X-Requested-With": "fetch" },
+      });
+      const payload = await response.json();
+      if (payload?.ok === false) {
+        awaitingWriteResponse = false;
+        throw new Error(payload.error || "写入报价失败，请核对后重试。");
+      }
+      if (!response.ok || payload?.ok !== true) throw new Error("未收到报价写入确认。");
+      receipt = payload;
+      writeLocked = true;
+      awaitingWriteResponse = false;
+      if (!receipt.download_url) throw new Error("未取得本次报价的附件链接。");
+      showStatus("报价已写入，正在保存本次附件…", "active");
+      const attachment = await fetchAttachment(receipt.download_url);
+      await saveExcelResponse(destination, attachment);
+      showStatus(destination.kind === "manual" ? "本次报价附件已生成。" : "本次报价附件已保存。", "done");
+      win.location.assign(receipt.quotes_url || form.dataset.quotesUrl);
+    } catch (error) {
+      const message = error instanceof TypeError ? "附件读取失败，请检查网络连接。" : error.message;
+      if (receipt) {
+        showStatus(`报价已写入，附件未保存。${message}`, "error");
+        showRecovery(receipt);
+      } else if (awaitingWriteResponse) {
+        writeLocked = true;
+        showStatus("未能确认报价是否已写入，请先到报价记录核对。", "error");
+        showRecovery(null);
+      } else {
+        showStatus(message || "保存失败，请重试。", "error");
+      }
+    } finally {
+      busy = false;
+      downloadButton.disabled = false;
+      if (writeButton) writeButton.disabled = writeLocked;
+    }
+  });
+}
+
 export const setupInquiryDownloads = (root, { validateAdjustments }) => {
   const doc = root.nodeType === 9 ? root : root.ownerDocument;
-  const win = doc.defaultView;
   const modal = root.querySelector("#download-excel-modal");
 
   const close = () => {
@@ -64,112 +166,10 @@ export const setupInquiryDownloads = (root, { validateAdjustments }) => {
     element.addEventListener("click", close);
   });
 
-  const triggerBlobDownload = (blob, filename) => {
-    const url = URL.createObjectURL(blob);
-    const anchor = doc.createElement("a");
-    anchor.href = url;
-    anchor.download = filename;
-    doc.body.append(anchor);
-    anchor.click();
-    anchor.remove();
-    win.setTimeout(() => URL.revokeObjectURL(url), 10000);
-  };
-
-  root.querySelector("[data-inquiry-download-form]")?.addEventListener("submit", (event) => {
-    if (validate()) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-  }, { capture: true });
-
-  root.querySelectorAll("[data-download-only-submit]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const customerInput = button.closest("form")?.querySelector("input[name='customer_name']");
-      clearQuoteCustomerValidity(customerInput);
-    });
-  });
-
-  root.querySelectorAll("[data-write-quotes-submit]").forEach((button) => {
-    button.addEventListener("click", async (event) => {
-      event.preventDefault();
-      const form = button.closest("form");
-      if (!(form instanceof HTMLFormElement) || !(button instanceof HTMLButtonElement)) return;
-      if (!validate()) return;
-      const customerInput = form.querySelector("input[name='customer_name']");
-      if (!(customerInput instanceof HTMLInputElement)) return;
-      clearQuoteCustomerValidity(customerInput);
-      if (!customerInput.value.trim()) {
-        customerInput.setCustomValidity("写入报价前请填写客户名称。");
-        customerInput.reportValidity();
-        customerInput.focus();
-        customerInput.addEventListener("input", () => customerInput.setCustomValidity(""), { once: true });
-        return;
-      }
-      if (!form.reportValidity()) return;
-
-      const message = form.querySelector("[data-submit-wait-message]");
-      const showError = (text, { allowRetry = true, quotesUrl = "" } = {}) => {
-        if (message instanceof HTMLElement) {
-          message.replaceChildren(doc.createTextNode(text));
-          if (quotesUrl) {
-            const link = doc.createElement("a");
-            link.href = quotesUrl;
-            link.textContent = "前往报价记录";
-            message.append(" ", link);
-          }
-          message.classList.add("active", "error");
-          message.classList.remove("done");
-        }
-        button.disabled = !allowRetry;
-      };
-      const showWait = (text) => {
-        if (message instanceof HTMLElement) {
-          message.textContent = text;
-          message.classList.add("active");
-          message.classList.remove("done", "error");
-        }
-      };
-
-      button.disabled = true;
-      const body = new FormData(form);
-      showWait("正在生成 Excel 并写入报价记录...");
-      try {
-        const response = await fetch(button.formAction, {
-          method: "POST",
-          body,
-          headers: { Accept: "application/json", "X-Requested-With": "fetch" },
-        });
-        const payload = await response.json().catch(() => null);
-        if (!response.ok || !payload || payload.ok !== true) {
-          showError(payload?.error || "写入报价失败，未生成下载文件；请稍后重试。");
-          return;
-        }
-
-        showWait("报价已写入，正在下载本次唯一附件...");
-        try {
-          const downloadResponse = await fetch(payload.download_url, {
-            credentials: "same-origin",
-            headers: { "X-Requested-With": "fetch" },
-          });
-          const filename = inquiryAttachmentFilename(downloadResponse);
-          if (!filename) throw new Error("attachment-download-failed");
-          triggerBlobDownload(await downloadResponse.blob(), filename);
-        } catch (_error) {
-          showError("报价已写入，但附件下载失败；请前往报价记录重新下载。", {
-            allowRetry: false,
-            quotesUrl: payload.quotes_url,
-          });
-          return;
-        }
-        win.location.assign(payload.quotes_url);
-      } catch (_error) {
-        showError("网络错误，无法确认报价是否已写入；请先到报价记录核对后再重试。", {
-          allowRetry: false,
-        });
-      }
-    });
-  });
+  const form = root.querySelector("[data-inquiry-download-form]");
+  if (form) setupInquiryDownloadForm(form, { validate, close });
 
   doc.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && modal?.classList.contains("open")) close();
+    if (event.key === "Escape" && modal?.classList.contains("open") && !doc.querySelector("dialog[open]")) close();
   });
 };

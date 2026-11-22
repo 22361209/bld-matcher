@@ -324,6 +324,40 @@ class TestDevelopmentWebAcceptance(WebAppTestBase):
         self.assertEqual([(row["name"], row["material"]) for row in retained],
                          [(row["name"], row["material"]) for row in old_parts])
 
+    def test_part_notes_are_rendered_next_to_borrowed_code_and_save_with_the_sheet(self):
+        self.login()
+        parts = [{"name": "球销", "mode": "borrowed", "borrowed_code": "QD8070"}, {"name": "球座"}]
+        form = {"core_code": "8461", "notes": "整单试装记录", "rows": json.dumps(parts)}
+        created = self.client.post("/development/worksheets", data=form)
+        self.assertEqual(created.status_code, 302)
+        detail_url = created.location
+        html = self.client.get(detail_url).get_data(as_text=True)
+        columns = re.findall(r'<th scope="col" data-col="([^"]+)">', html)
+        self.assertEqual(columns[columns.index("borrowed_code") + 1], "note")
+        self.assertIn('data-field="note" aria-label="备注" value=""', html)
+
+        def save(version):
+            return self.client.post(detail_url + "/worksheet", data={**form, "expected_version": version,
+                                                                     "rows": json.dumps(parts)})
+
+        parts[0]["note"] = '  借用样件 "A"  '
+        parts[1]["note"] = "待确认规格"
+        self.assertEqual(save(1).status_code, 302)
+        html = self.client.get(detail_url).get_data(as_text=True)
+        self.assertIn('data-field="note" aria-label="备注" value="借用样件 &#34;A&#34;"', html)
+        self.assertIn('data-field="note" aria-label="备注" value="待确认规格"', html)
+        self.assertIn("整单试装记录</textarea>", html)
+
+        parts[0]["note"] = "校" * 161
+        self.assertEqual(save(2).status_code, 400)
+        parts[0]["note"] = ""
+        self.assertEqual(save(2).status_code, 302)
+        self.viewer()
+        html = self.client.get(detail_url).get_data(as_text=True)
+        self.assertIn('class="development-sheet-parts" disabled', html)
+        self.assertIn('data-field="note" aria-label="备注" value=""', html)
+        self.assertIn('data-field="note" aria-label="备注" value="待确认规格"', html)
+
     def test_stale_web_write_rejects_second_tab_and_preserves_first_write(self):
         self.login()
         project_id = self.create_project()["project"]["id"]

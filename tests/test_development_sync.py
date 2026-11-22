@@ -249,6 +249,29 @@ class DevelopmentSyncTest(unittest.TestCase):
         self.assertEqual(record["project"]["notes"], "初次打样\n另寄样品")
         self.assertEqual(record["worksheet"], sheet)
 
+    def test_v15_worksheet_row_note_roundtrips_and_appears_in_conflict_preview(self):
+        identifier, sheet = self.create_worksheet()
+        self.apply(self.package())
+        sheet["rows"][0]["note"] = "用旧样复核尺寸"
+        service = DevelopmentService(lambda: SQLiteDevelopmentUnitOfWork(self.source))
+        service.update_worksheet(identifier, sheet, actor="test", expected_version=1)
+
+        package = self.package()
+        preview = self.dst.preview(package)
+        self.assertEqual(preview["manifest"]["version"], 15)
+        downgraded = self.rewrite(package, lambda data: None, version=10)
+        with self.assertRaisesRegex(ValueError, "零件备注与业务包版本不一致"):
+            self.dst.preview(downgraded)
+        conflict, = preview["summary"]["development"]["conflicts"]
+        self.assertEqual(conflict["key"], identifier)
+        self.assertIn({"label": "开发表第 1 行 · 备注", "before": "—", "after": "用旧样复核尺寸", "changed": True},
+                      conflict["fields"])
+        self.dst.apply(package, backup_path=self.root / "row-note-backup.sqlite3", actor="qa",
+                       expected_token=preview["token"], selected_conflicts={"development": {identifier}})
+        target = DevelopmentService(lambda: SQLiteDevelopmentUnitOfWork(self.target))
+        self.assertEqual(target.detail(identifier)["worksheet"], sheet)
+        self.assertEqual(self.apply(package)["development"]["unchanged"], 2)
+
     def test_v9_handed_sheet_survives_import_and_mixed_v10_reexport(self):
         identifier, _ = self.create_worksheet()
         package = self.package()

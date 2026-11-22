@@ -5,7 +5,19 @@ import {
   applyColumnOrder,
   buildColumnFilterSearchState,
   isImeCompositionEvent,
+  moveVisibleColumn,
 } from "../../static/components/data_grid_controls.js";
+
+test("keyboard and pointer destinations use visible positions while hidden columns keep their slots", () => {
+  const order = ["hidden1", "name", "hidden2", "code", "status", "hidden3"];
+  const visible = ["name", "code", "status"];
+  assert.deepEqual(moveVisibleColumn(order, visible, "name", 2),
+    ["hidden1", "code", "hidden2", "status", "name", "hidden3"]);
+  assert.deepEqual(moveVisibleColumn(order, visible, "code", 0),
+    ["hidden1", "code", "hidden2", "name", "status", "hidden3"]);
+  assert.equal(moveVisibleColumn(order, visible, "name", -1), order);
+  assert.equal(moveVisibleColumn(order, visible, "hidden1", 1), order);
+});
 
 test("moving the actions column reorders all table sections only for grids that enable it", () => {
   const columns = ["code", "name", "actions"];

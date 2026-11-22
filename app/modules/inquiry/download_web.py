@@ -21,6 +21,7 @@ from app.modules.inquiry.factory import get_inquiry_service
 from app.modules.inquiry.web_helpers import (
     customer_code_column_from_request,
     adjustments_from_request,
+    header_rows_from_request,
     match_column_payload,
     match_columns_display,
     normalized_workbook_output_path,
@@ -110,6 +111,7 @@ def register(app) -> None:
                 upload_path,
                 output_path,
                 match_column=match_column_payload(match_columns),
+                header_rows=header_rows_from_request(upload_path),
                 write_output=True,
                 options=parse_price_options(price_options, default="none"),
                 adjustments=adjustments,
@@ -186,6 +188,7 @@ def register(app) -> None:
                 upload_path,
                 temporary_path,
                 match_column=match_column_payload(match_columns),
+                header_rows=header_rows_from_request(upload_path),
                 write_output=True,
                 options=parse_price_options(price_options, default="none"),
                 customer_code_column=customer_code_column,
@@ -289,6 +292,7 @@ def register(app) -> None:
                 upload_path,
                 user_output_dir() / "__drawing-match-preview.xlsx",
                 match_column=match_column_payload(match_columns),
+                header_rows=header_rows_from_request(upload_path),
                 write_output=False,
             )
             detail_prefix = f"手动选择 {match_columns_display(match_columns)} 列；" if match_columns else ""

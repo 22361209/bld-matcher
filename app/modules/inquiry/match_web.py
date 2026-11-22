@@ -14,8 +14,10 @@ from app.helpers import (
     user_upload_path,
 )
 from app.modules.inquiry.factory import get_inquiry_service
+from app.modules.inquiry.domain import InquiryValidationError
 from app.modules.inquiry.web_helpers import (
     customer_code_column_from_request,
+    header_rows_from_request,
     match_column_payload,
     optional_match_columns,
     selected_match_columns,
@@ -80,6 +82,24 @@ def _clean_inquiry_workbook_for_matching(upload_path: Path, original_filename: s
     return cleanup.path, cleanup.message
 
 
+def _restore_column_selection(upload_path: Path, columns: list[int], header_rows: dict[int, int]):
+    preview = get_inquiry_service().preview_columns(upload_path, header_rows=header_rows, match_columns=columns)
+    preview_sheet = request.form.get("preview_sheet", 1, type=int)
+    return render_template(
+        "select_match_column.html",
+        upload_path=upload_path,
+        original_filename=request.form.get("original_filename") or upload_path.name,
+        output_name=request.form.get("output_name")
+        or result_output_path(upload_path.name, fallback_suffix=upload_path.suffix).name,
+        preview=preview,
+        preview_sheet=preview_sheet if 1 <= preview_sheet <= len(preview.get("sheets", [])) else 1,
+        selected_columns=columns,
+        selected_customer_code_column=customer_code_column_from_request(),
+        header_rows=header_rows,
+        cleanup_message=request.form.get("cleanup_message", ""),
+    )
+
+
 def _render_pasted_inquiry_result(query: str):
     service = get_inquiry_service()
     codes = service.pasted_codes(query)
@@ -109,6 +129,25 @@ def _render_pasted_inquiry_result(query: str):
         match_column="",
         pagination=_single_page_pagination(summary["total"]),
     )
+
+
+def _preview_rows_response(upload_path: Path | None):
+    if not upload_path or not upload_path.is_file():
+        return {"error": "询价源文件不存在，请重新上传。"}, 404
+    sheet_number = request.form.get("sheet_number", type=int)
+    start = request.form.get("start_row", type=int)
+    end = request.form.get("end_row", type=int)
+    if sheet_number is None or start is None or ("end_row" in request.form and end is None):
+        return {"error": "请使用整数指定工作表和源表行号。"}, 400
+    try:
+        return get_inquiry_service().preview_rows(upload_path, sheet_number, start, end)
+    except InquiryValidationError as exc:
+        return {"error": exc.message}, 400
+    except FileNotFoundError:
+        return {"error": "询价源文件不存在，请重新上传。"}, 404
+    except Exception:
+        logger.exception("Inquiry preview row read failed")
+        return {"error": "无法读取询价源文件，请重新上传。"}, 422
 
 
 def register(app) -> None:
@@ -148,6 +187,8 @@ def register(app) -> None:
             original_filename=clean_original_filename(file.filename, fallback_suffix=suffix),
             output_name=output_name,
             preview=preview,
+            preview_sheet=1,
+            header_rows={},
             cleanup_message=cleanup_message,
         )
 
@@ -165,10 +206,6 @@ def register(app) -> None:
             return redirect(url_for("index"))
 
         match_columns = selected_match_columns()
-        if match_columns is None:
-            flash("请选择有效的匹配列。", "error")
-            return redirect(url_for("index"))
-
         customer_code_column = customer_code_column_from_request()
         original_filename = request.form.get("original_filename") or upload_path.name
         output_name = request.form.get("output_name")
@@ -177,17 +214,23 @@ def register(app) -> None:
             if output_name
             else result_output_path(original_filename, fallback_suffix=upload_path.suffix)
         )
+        header_rows = {}
         try:
+            header_rows = header_rows_from_request(upload_path)
+            if match_columns is None:
+                raise ValueError("请选择有效的匹配列。")
             summary = service.analyze_workbook(
                 upload_path,
                 output_path,
                 match_column=match_column_payload(match_columns),
                 write_output=False,
                 customer_code_column=customer_code_column,
+                include_source_columns=True,
+                header_rows=header_rows,
             )
         except ValueError as exc:
             flash(f"生成失败：{exc}", "error")
-            return redirect(url_for("index"))
+            return _restore_column_selection(upload_path, match_columns or [], header_rows)
         except Exception:
             logger.exception("Inquiry preview generation failed")
             flash("生成失败，请稍后重试。", "error")
@@ -203,6 +246,8 @@ def register(app) -> None:
             output_name=output_path.name,
             match_columns=match_columns,
             customer_code_column=customer_code_column,
+            header_rows=header_rows,
+            preview_sheet=request.form.get("preview_sheet", 1, type=int),
             cleanup_message=request.form.get("cleanup_message", ""),
             pagination=_single_page_pagination(summary["total"]),
         )
@@ -211,20 +256,18 @@ def register(app) -> None:
     @permission_required("generate_match")
     def back_to_match_column():
         upload_path = validated_user_upload_path()
+        if request.form.get("preview_action") == "rows":
+            return _preview_rows_response(upload_path)
         if not upload_path:
             flash("询价源文件不存在，请重新上传。", "error")
             return redirect(url_for("index"))
 
-        selected_columns = optional_match_columns() or [0]
-        preview = get_inquiry_service().preview_columns(upload_path)
-        return render_template(
-            "select_match_column.html",
-            upload_path=upload_path,
-            original_filename=request.form.get("original_filename") or upload_path.name,
-            output_name=request.form.get("output_name")
-            or result_output_path(upload_path.name, fallback_suffix=upload_path.suffix).name,
-            preview=preview,
-            selected_columns=selected_columns,
-            selected_customer_code_column=customer_code_column_from_request(),
-            cleanup_message=request.form.get("cleanup_message", ""),
-        )
+        selected_columns = optional_match_columns()
+        if not selected_columns and "preview_sheet" not in request.form:
+            selected_columns = [0]
+        try:
+            header_rows = header_rows_from_request(upload_path)
+        except ValueError as exc:
+            flash(str(exc), "error")
+            header_rows = {}
+        return _restore_column_selection(upload_path, selected_columns, header_rows)

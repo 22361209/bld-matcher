@@ -4,7 +4,9 @@
       <section class="quote-number-resource-group" aria-label="报价文件">
         <h3>报价文件</h3>
         <div class="quote-number-resource-actions">
-          {% for attachment in attachments %}<a class="linear-button subtle compact" href="{{ attachment.url }}">下载 {{ attachment.name }}</a>{% endfor %}
+          {% for attachment in attachments %}
+            <a class="linear-button subtle compact" href="{{ attachment.url }}"{% if attachment.name.lower().endswith(('.xls', '.xlsx')) %} data-save-quote-excel="{{ attachment.name }}"{% endif %}>下载 {{ attachment.name }}</a>
+          {% endfor %}
         </div>
       </section>
     {% endif %}

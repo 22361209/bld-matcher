@@ -21,6 +21,7 @@
     {{ options([('pending','待定'),('borrowed','借用'),('new','开发')], part.get('mode','pending')) }}
   </select></td>
   <td><input data-field="borrowed_code" aria-label="借用编码" value="{{ part.get('borrowed_code','') }}" autocomplete="off"{% if part.get('mode') == 'borrowed' %} required{% else %} disabled{% endif %}></td>
+  <td><input data-field="note" aria-label="备注" value="{{ part.get('note','') }}" maxlength="{{ max_row_note_length }}" autocomplete="off"></td>
   <td><input data-field="developer" aria-label="由谁开发" value="{{ part.get('developer','') }}"{% if part.get('mode') != 'new' %} disabled{% endif %}></td>
   <td><input data-field="start_date" aria-label="开始日期" type="date" value="{{ part.get('start_date','') }}"{% if part.get('mode') != 'new' %} disabled{% endif %}></td>
   <td><input data-field="due_date" aria-label="预计完成日期" type="date" value="{{ part.get('due_date','') }}"{% if part.get('mode') != 'new' %} disabled{% endif %}></td>
@@ -56,7 +57,7 @@
     {% if can_edit %}<noscript><p class="message error">请启用 JavaScript 后编辑零件并保存。</p></noscript>{% endif %}
     <fieldset class="development-sheet-parts"{% if not can_edit %} disabled{% endif %}>
       <legend class="data-grid-visually-hidden">零件开发明细</legend>
-      {% set columns = [('number','序号'),('name','零件名称'),('code','产品编码'),('material','材质'),('mode','借用 / 开发'),('borrowed_code','借用编码'),('developer','由谁开发'),('start_date','开始日期'),('due_date','预计完成日期')] %}
+      {% set columns = [('number','序号'),('name','零件名称'),('code','产品编码'),('material','材质'),('mode','借用 / 开发'),('borrowed_code','借用编码'),('note','备注'),('developer','由谁开发'),('start_date','开始日期'),('due_date','预计完成日期')] %}
       <div class="data-grid" data-resizable-grid data-grid-key="development-sheet">
         <div class="data-table-scroll" data-grid-scroll tabindex="0" aria-label="零件开发明细，可横向滚动">
           <table class="data-table data-grid-table development-sheet-table" aria-label="零件开发明细" data-grid-table data-column-storage-scope="{{ g.user.id }}">

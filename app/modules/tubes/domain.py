@@ -129,6 +129,7 @@ class TubeImportRow:
     note: str
     source_sheet: str
     source_row: int
+    weight_length_mm: float | None = None
 
 
 def row_from_2026(values: Sequence[Any], row_number: int) -> TubeImportRow | None:
@@ -142,6 +143,7 @@ def row_from_2026(values: Sequence[Any], row_number: int) -> TubeImportRow | Non
     note = clean_text(values[11])
     tolerance_m = number_or_none(values[15])
     consumption_m = number_or_none(values[16])
+    length_m = number_or_none(values[14])
     weight = number_or_none(values[18])
     if weight is None:
         weight = calculate_weight(values[12], values[13], values[14], tolerance_m, consumption_m, values[17])
@@ -161,6 +163,7 @@ def row_from_2026(values: Sequence[Any], row_number: int) -> TubeImportRow | Non
         note=note,
         source_sheet="2026",
         source_row=row_number,
+        weight_length_mm=length_m * 1000 if length_m is not None else None,
     )
 
 

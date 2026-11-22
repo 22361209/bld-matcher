@@ -39,6 +39,19 @@ const normalizeOrder = (candidate, availableColumns = DEFAULT_COLUMNS) => {
   return valid;
 };
 
+// Keep hidden columns in their slots when the user reorders visible headings.
+export const moveVisibleColumn = (order, visible, column, targetIndex) => {
+  const sourceIndex = visible.indexOf(column);
+  if (sourceIndex < 0 || targetIndex === sourceIndex || targetIndex < 0 || targetIndex >= visible.length) {
+    return order;
+  }
+  const moved = [...visible];
+  moved.splice(sourceIndex, 1);
+  moved.splice(targetIndex, 0, column);
+  const replacements = new Map(visible.map((key, index) => [key, moved[index]]));
+  return order.map((key) => replacements.get(key) ?? key);
+};
+
 const safeStorageGet = (key) => {
   try {
     return window.localStorage.getItem(key);
@@ -134,17 +147,15 @@ export function setupDataGridControls(table, options = {}) {
       columns: currentOrder,
     }));
   };
+  const headings = elementsByColumn(table.tHead?.rows[0]?.cells || []);
+  const visibleOrder = () => currentOrder.filter((key) => headings.has(key) && !headings.get(key).hidden);
   const moveColumn = (column, targetIndex) => {
-    const sourceIndex = currentOrder.indexOf(column);
-    if (sourceIndex < 0) return false;
-    const boundedIndex = Math.max(0, Math.min(currentOrder.length - 1, targetIndex));
-    if (boundedIndex === sourceIndex) return false;
-    const nextOrder = currentOrder.filter((item) => item !== column);
-    nextOrder.splice(boundedIndex, 0, column);
+    const nextOrder = moveVisibleColumn(currentOrder, visibleOrder(), column, targetIndex);
+    if (nextOrder === currentOrder) return false;
     currentOrder = nextOrder;
     applyColumnOrder(table, currentOrder, availableColumns);
     persistOrder();
-    announceOrder(`${tableColumnLabel(table, column)}列已移动到第 ${currentOrder.indexOf(column) + 1} 列。`);
+    announceOrder(`${tableColumnLabel(table, column)}列已移动到第 ${targetIndex + 1} 列。`);
     return true;
   };
 
@@ -393,7 +404,7 @@ export function setupDataGridControls(table, options = {}) {
       event.preventDefault();
       closeColumnFilter();
       const column = handle.closest("th")?.dataset.col;
-      const sourceIndex = currentOrder.indexOf(column);
+      const sourceIndex = visibleOrder().indexOf(column);
       const direction = event.key === "ArrowLeft" ? -1 : 1;
       if (moveColumn(column, sourceIndex + direction)) requestAnimationFrame(() => handle.focus());
       return;
@@ -437,11 +448,10 @@ export function setupDataGridControls(table, options = {}) {
     });
   };
   const insertionAt = (sourceColumn, clientX) => {
-    const remaining = currentOrder.filter((column) => column !== sourceColumn);
+    const remaining = visibleOrder().filter((column) => column !== sourceColumn);
     let index = remaining.length;
     for (let candidateIndex = 0; candidateIndex < remaining.length; candidateIndex += 1) {
-      const heading = table.querySelector(`th[data-col="${remaining[candidateIndex]}"]`);
-      if (!heading) continue;
+      const heading = headings.get(remaining[candidateIndex]);
       const rect = heading.getBoundingClientRect();
       if (clientX < rect.left + rect.width / 2) {
         index = candidateIndex;
@@ -492,12 +502,7 @@ export function setupDataGridControls(table, options = {}) {
     const onUp = (upEvent) => {
       if (dragging) {
         upEvent.preventDefault();
-        const nextOrder = [...insertion.remaining];
-        nextOrder.splice(insertion.index, 0, sourceColumn);
-        currentOrder = normalizeOrder(nextOrder, availableColumns);
-        applyColumnOrder(table, currentOrder, availableColumns);
-        persistOrder();
-        announceOrder(`${tableColumnLabel(table, sourceColumn)}列已移动到第 ${currentOrder.indexOf(sourceColumn) + 1} 列。`);
+        moveColumn(sourceColumn, insertion.index);
       }
       cleanup();
     };

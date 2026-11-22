@@ -200,7 +200,7 @@ def _worksheet_fields(local: dict, incoming: dict) -> list[dict]:
     compare("原表右件成品编码", local.get("right_code"), incoming.get("right_code"))
     compare("开发表状态", WORKSHEET_STATUSES[worksheet_status(local)], WORKSHEET_STATUSES[worksheet_status(incoming)])
     labels = {"name": "零件名称", "side": "适用侧", "code": "产品编码", "material": "材质",
-              "mode": "借用 / 开发", "borrowed_code": "借用编码", "developer": "由谁开发",
+              "mode": "借用 / 开发", "borrowed_code": "借用编码", "note": "备注", "developer": "由谁开发",
               "start_date": "开始日期", "due_date": "预计完成日期"}
     choices = {"side": {"left": "L", "right": "R", "shared": "共用"},
                "mode": {"new": "开发", "borrowed": "借用", "pending": "待定"}}

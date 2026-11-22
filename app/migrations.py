@@ -1351,6 +1351,16 @@ def _add_development_worksheets(conn: sqlite3.Connection) -> None:
     install_worksheet_schema(conn)
 
 
+def _add_tube_weight_calculation(conn: sqlite3.Connection) -> None:
+    columns = _columns(conn, "tube_items")
+    if not columns:
+        _add_tube_items(conn)
+    if "weight_mode" not in columns:
+        conn.execute("ALTER TABLE tube_items ADD COLUMN weight_mode TEXT NOT NULL DEFAULT 'manual'")
+    if "weight_length_mm" not in columns:
+        conn.execute("ALTER TABLE tube_items ADD COLUMN weight_length_mm REAL")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -1401,6 +1411,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("047_development_worksheets", _add_development_worksheets),
     ("048_stamping_material_grade", _add_material_grade),
     ("049_derive_stamping_material_grades", _derive_stamping_material_grades),
+    ("050_tube_weight_calculation", _add_tube_weight_calculation),
 )
 
 

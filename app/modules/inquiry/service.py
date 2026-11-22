@@ -324,6 +324,8 @@ class InquiryService:
         options: PriceOptions | None = None,
         customer_code_column: int | None = None,
         adjustments: dict[str, InquiryAdjustment] | None = None,
+        include_source_columns: bool = False,
+        header_rows: dict[int, int] | None = None,
     ) -> dict:
         return self.engine.analyze_workbook(
             source_path,
@@ -334,10 +336,17 @@ class InquiryService:
             options=options or PriceOptions("none"),
             customer_code_column=customer_code_column,
             adjustments=adjustments,
+            include_source_columns=include_source_columns,
+            header_rows=header_rows,
         )
 
-    def preview_columns(self, source_path: Path) -> dict:
-        return self.engine.preview(source_path)
+    def preview_columns(
+        self, source_path: Path, *, header_rows: dict[int, int] | None = None, match_columns: list[int] | None = None,
+    ) -> dict:
+        return self.engine.preview(source_path, max_cols=None, header_rows=header_rows, match_columns=match_columns)
+
+    def preview_rows(self, source_path: Path, sheet_number: int, start: int, end: int | None) -> dict:
+        return self.engine.preview_rows(source_path, sheet_number, start, end)
 
     def record_cleanup(self, filename: str, message: str, *, actor: str) -> None:
         self._audit("自动清理询价文件", "inquiry", filename, message, actor=actor)

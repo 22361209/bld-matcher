@@ -148,7 +148,7 @@ function initSheet(form) {
     const rows = Array.from(body.rows, row => Object.fromEntries(
       Array.from(row.querySelectorAll("[data-field]"), control => [
         control.dataset.field, control.disabled ? "" : control.value.trim(),
-      ]),
+      ]).filter(([key, value]) => key !== "note" || value),
     ));
     const encoded = JSON.stringify(rows);
     if (rows.length > maxRows || [...encoded].length > Number(form.dataset.maxRowsChars)) {

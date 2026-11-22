@@ -39,6 +39,10 @@ class InquiryResultJavaScriptTest(unittest.TestCase):
     def test_inquiry_result_logic_with_node(self) -> None:
         run_node_test(self, NODE_TEST, project_root=PROJECT_ROOT)
 
+    @unittest.skipUnless(shutil.which("node"), "Node.js is unavailable")
+    def test_inquiry_save_location_with_node(self) -> None:
+        run_node_test(self, NODE_TEST.with_name("inquiry_save_location.test.mjs"), project_root=PROJECT_ROOT)
+
 
 if __name__ == "__main__":
     unittest.main()

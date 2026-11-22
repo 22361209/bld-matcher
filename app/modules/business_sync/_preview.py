@@ -26,6 +26,7 @@ from ._comparison import (
 from ._package_archive import Manifest, PackageReader, Payload
 from ._package_snapshot import prepared_package
 from ._schema import DATASETS
+from ._tube_weights import TUBE_WEIGHT_FIELDS
 from ._development import preview_aggregates
 
 
@@ -64,7 +65,8 @@ def _preview_package(
             table, identity, label = DATASETS[key]
             syncable_rows, ignored_inactive = syncable_incoming_rows(key, incoming_rows)
             record_columns = columns(connection, table)
-            optional_columns = {"products": CATALOG_FIELDS, "materials": ("net_weight", "material_grade")}.get(key, ())
+            optional_columns = {"products": CATALOG_FIELDS, "materials": ("net_weight", "material_grade"),
+                                "tubes": TUBE_WEIGHT_FIELDS}.get(key, ())
             if any(
                 identity not in row or any(column not in row for column in record_columns if column not in optional_columns)
                 for row in incoming_rows

@@ -5,6 +5,24 @@
 {% set has_manual_match_column = selected_match_columns|length > 0 %}
 {% set can_view_product_price = can_any("add_customer_prices", "edit_customer_prices", "delete_customer_prices") %}
 {% set show_price_column = can_view_product_price %}
+{% set source_sheets = summary.source_sheets|default([]) %}
+{% set source_columns = source_sheets|map(attribute='columns')|sum(start=[]) %}
+{% set show_customer_code = not source_sheets or (customer_code_column is defined and customer_code_column is not none) %}
+{% set number_heading = "匹配号码" if source_sheets else "OE号" %}
+{% macro workbook_selection_fields() -%}
+  {% if preview_sheet is defined %}
+    <input type="hidden" name="preview_sheet" value="{{ preview_sheet }}">
+  {% endif %}
+  {% for column in selected_match_columns %}
+    <input type="hidden" name="match_columns" value="{{ column }}">
+  {% endfor %}
+  {% for sheet, row in (header_rows|default({})).items() %}
+    <input type="hidden" name="header_row_{{ sheet }}" value="{{ row }}">
+  {% endfor %}
+{%- endmacro %}
+{% macro result_col(key, width) -%}
+  <col data-col="{{ key }}"{% if source_sheets %} data-default-width="{{ width }}"{% endif %}>
+{%- endmacro %}
 {% block page_title %}查询结果{% endblock %}
 {% block page_id %}inquiry.result{% endblock %}
 {% block page_type %}workbench{% endblock %}
@@ -30,15 +48,16 @@
           <div class="data-section-actions">
             <span>{{ summary.rows|length }} 条</span>
             <span class="data-grid-controls-visually-hidden" aria-live="polite" data-column-order-status></span>
+            {% if source_sheets %}
+              <button class="linear-button subtle" type="button" data-open-source-columns aria-haspopup="dialog" aria-controls="inquiry-source-columns">源文件列<span data-source-column-count></span></button>
+            {% endif %}
             {% if upload_path and selected_match_columns %}
               <form action="{{ url_for('match_inquiry_with_column') }}" method="post" class="inline-form" data-submit-wait data-submit-wait-text="正在重新查询...">
                 {{ csrf_field() }}
                 <input type="hidden" name="upload_path" value="{{ upload_path }}">
                 <input type="hidden" name="original_filename" value="{{ original_filename }}">
                 <input type="hidden" name="output_name" value="{{ output_name }}">
-                {% for column in selected_match_columns %}
-                  <input type="hidden" name="match_columns" value="{{ column }}">
-                {% endfor %}
+                {{ workbook_selection_fields() }}
                 {% if customer_code_column is defined and customer_code_column is not none %}
                   <input type="hidden" name="customer_code_column" value="{{ customer_code_column }}">
                 {% endif %}
@@ -52,9 +71,7 @@
                 {{ csrf_field() }}
                 <input type="hidden" name="upload_path" value="{{ upload_path }}">
                 <input type="hidden" name="original_filename" value="{{ original_filename }}">
-                {% for column in selected_match_columns %}
-                  <input type="hidden" name="match_columns" value="{{ column }}">
-                {% endfor %}
+                {{ workbook_selection_fields() }}
                 <button class="linear-button subtle" type="submit">下载图纸包</button>
               </form>
               {% if has_manual_match_column %}
@@ -63,9 +80,7 @@
                   <input type="hidden" name="upload_path" value="{{ upload_path }}">
                   <input type="hidden" name="original_filename" value="{{ original_filename }}">
                   <input type="hidden" name="output_name" value="{{ output_name }}">
-                  {% for column in selected_match_columns %}
-                    <input type="hidden" name="match_columns" value="{{ column }}">
-                  {% endfor %}
+                  {{ workbook_selection_fields() }}
                   {% if customer_code_column is defined and customer_code_column is not none %}
                     <input type="hidden" name="customer_code_column" value="{{ customer_code_column }}">
                   {% endif %}
@@ -77,16 +92,14 @@
               {% if can_regenerate_download %}
                 <button class="linear-button primary" type="button" data-open-download-modal>下载 Excel</button>
               {% else %}
-                <a class="linear-button primary" href="{{ url_for('download', name=download_name(output_path)) }}" download target="_blank" rel="noopener">下载 Excel</a>
+                <a class="linear-button primary" href="{{ url_for('download', name=download_name(output_path)) }}" data-save-quote-excel="{{ output_path.name }}" download="{{ output_path.name }}">下载 Excel</a>
               {% endif %}
               {% if upload_path %}
                 <form action="{{ url_for('download_match_drawings') }}" method="post" class="inline-form" data-submit-wait data-submit-wait-text="正在打包图纸..." data-submit-wait-button-text="打包中..." data-submit-wait-reset="6000">
                   {{ csrf_field() }}
                   <input type="hidden" name="upload_path" value="{{ upload_path }}">
                   <input type="hidden" name="original_filename" value="{{ original_filename }}">
-                  {% for column in selected_match_columns %}
-                    <input type="hidden" name="match_columns" value="{{ column }}">
-                  {% endfor %}
+                  {{ workbook_selection_fields() }}
                   <button class="linear-button subtle" type="submit">下载图纸包</button>
                 </form>
               {% endif %}
@@ -97,21 +110,28 @@
         <div class="data-table-scroll" data-grid-scroll>
         <table class="data-table data-grid-table" data-grid-heading-overflow data-column-storage-scope="{{ g.user['id'] if g.user else 'guest' }}">
           <colgroup>
-            <col data-col="row">
-            <col data-col="oe">
-            <col data-col="customer-code">
-            <col data-col="bld">
-            <col data-col="image">
-            {% if show_price_column %}<col data-col="price">{% endif %}
-            <col data-col="status">
-            <col data-col="score">
-            <col data-col="reason">
+            {{ result_col("row", 64) }}
+            {% for column in source_columns %}<col data-col="{{ column.key }}" data-default-width="160">{% endfor %}
+            {{ result_col("oe", 144) }}
+            {% if show_customer_code %}{{ result_col("customer-code", 128) }}{% endif %}
+            {{ result_col("bld", 132) }}
+            {{ result_col("image", 80) }}
+            {% if show_price_column %}{{ result_col("price", 104) }}{% endif %}
+            {{ result_col("status", 144) }}
+            {{ result_col("score", 56) }}
+            {{ result_col("reason", 208) }}
           </colgroup>
           <thead>
             <tr>
               <th data-col="row"><button class="data-grid-column-label" type="button" data-column-drag-handle data-column-label="行号" aria-label="移动行号列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">行号</button></th>
-              <th data-col="oe"><button class="data-grid-column-label" type="button" data-column-drag-handle data-column-label="OE号" aria-label="移动OE号列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">OE号</button></th>
-              <th data-col="customer-code"><button class="data-grid-column-label" type="button" data-column-drag-handle data-column-label="客户产品编码" aria-label="移动客户产品编码列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">客户产品编码</button></th>
+              {% for sheet in source_sheets %}
+                {% for column in sheet.columns %}
+                  {% set label = column.label ~ ("（" ~ sheet.name ~ "）" if source_sheets|length > 1 else "") %}
+                  <th data-col="{{ column.key }}" scope="col"><button class="data-grid-column-label" type="button" data-column-drag-handle data-column-label="{{ label }}" title="{{ label }}" aria-label="移动源文件列 {{ label }}，按 Alt 加左右方向键调整">{{ label }}</button></th>
+                {% endfor %}
+              {% endfor %}
+              <th data-col="oe"><button class="data-grid-column-label" type="button" data-column-drag-handle data-column-label="{{ number_heading }}" aria-label="移动{{ number_heading }}列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">{{ number_heading }}</button></th>
+              {% if show_customer_code %}<th data-col="customer-code"><button class="data-grid-column-label" type="button" data-column-drag-handle data-column-label="客户产品编码" aria-label="移动客户产品编码列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">客户产品编码</button></th>{% endif %}
               <th data-col="bld"><button class="data-grid-column-label" type="button" data-column-drag-handle data-column-label="BLD NO." aria-label="移动BLD NO.列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">BLD NO.</button></th>
               <th data-col="image"><button class="data-grid-column-label" type="button" data-column-drag-handle data-column-label="产品图片" aria-label="移动产品图片列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">产品图片</button></th>
               {% if show_price_column %}<th data-col="price"><button class="data-grid-column-label" type="button" data-column-drag-handle data-column-label="含税单价" aria-label="移动含税单价列；按住鼠标左键可拖动，或按 Alt 加左右方向键调整">含税单价</button></th>{% endif %}
@@ -128,7 +148,8 @@
               {% set row_status = format_product_status(row.product_status, "zh") %}
               {% set row_image_gallery = product_image_urls(row) %}
               <tr data-inquiry-result-row{% if row_conflict_options or row_adjustment_allowed %} data-adjustment-key="{{ row.adjustment_key }}"{% endif %}{% if row_adjustment_allowed %} data-adjustment-allowed="1"{% endif %}{% if row_conflict_options %} data-conflict-candidates='{{ row_conflict_options|tojson }}'{% endif %}{% if row_variant_options %} data-variant-options='{{ row_variant_options|tojson }}'{% endif %} data-default-bld="{{ row.bld_no }}" data-default-price="{{ row.price_cny if can_view_product_price and row.price_cny is not none else '' }}" data-default-status="{{ row_status }}">
-                <td data-col="row">{{ row.row }}</td>
+                <td data-col="row">{{ row.row }}{% if source_sheets|length > 1 %}<small class="inquiry-row-sheet">{{ row.source_sheet }}</small>{% endif %}</td>
+                {% for column in source_columns %}<td data-col="{{ column.key }}" class="inquiry-source-cell">{{ row.source_values.get(column.key, "") }}</td>{% endfor %}
                 <td data-col="oe">
                   {% if not row.bld_no and can("manage_aliases") %}
                     {% if row.unmatched_oe_codes %}
@@ -142,7 +163,7 @@
                     {{ row.oe }}
                   {% endif %}
                 </td>
-                <td data-col="customer-code">{{ row.customer_product_code }}</td>
+                {% if show_customer_code %}<td data-col="customer-code">{{ row.customer_product_code }}</td>{% endif %}
                 <td data-col="bld">
                   {% if row_conflict_options and can("edit_customer_prices") %}
                     <div class="inquiry-bld-control">
@@ -228,6 +249,22 @@
 {% endblock %}
 
 {% block page_modals %}
+    {% if source_sheets %}
+      <dialog class="dialog-panel inquiry-source-dialog" id="inquiry-source-columns" aria-labelledby="inquiry-source-title" data-source-file="{{ upload_path.name }}">
+        <div class="dialog-header"><h2 id="inquiry-source-title">显示源文件列</h2></div>
+        <div class="inquiry-source-options">
+          {% for sheet in source_sheets %}
+            <fieldset class="match-column-picker">
+              <legend>{{ sheet.name }}</legend>
+              {% for column in sheet.columns %}
+                <label class="inquiry-source-option"><input type="checkbox" data-source-column value="{{ column.key }}" checked> <span>{{ column.label }}</span></label>
+              {% endfor %}
+            </fieldset>
+          {% endfor %}
+        </div>
+        <form method="dialog" class="form-actions"><button class="linear-button primary" type="submit">完成</button></form>
+      </dialog>
+    {% endif %}
 {% if can_regenerate_download %}
       <div class="download-modal" id="download-excel-modal" aria-hidden="true">
         <div class="download-modal-backdrop" data-close-download-modal></div>
@@ -237,15 +274,13 @@
             <h2 id="download-excel-title">下载 Excel</h2>
             <p>选择这次导出的单价方式。</p>
           </div>
-          <form id="inquiry-download-options-form" action="{{ url_for('download_match_result') }}" method="post" class="download-options-form" data-inquiry-download-form data-submit-wait data-submit-wait-text="正在生成 Excel，浏览器会开始下载..." data-submit-wait-button-text="生成中..." data-submit-wait-reset="6000">
+          <form id="inquiry-download-options-form" action="{{ url_for('download_match_result') }}" method="post" class="download-options-form" data-inquiry-download-form data-excel-filename="{{ output_path.name }}"{% if can("add_customer_prices") %} data-quotes-url="{{ url_for('quote_web.quotes') }}"{% endif %}>
             {{ csrf_field() }}
             <input type="hidden" name="upload_path" value="{{ upload_path }}">
             <input type="hidden" name="original_filename" value="{{ original_filename }}">
             <input type="hidden" name="output_name" value="{{ output_name }}">
             <input type="hidden" name="inquiry_adjustments" value="{}" data-inquiry-adjustments-field>
-            {% for column in selected_match_columns %}
-              <input type="hidden" name="match_columns" value="{{ column }}">
-            {% endfor %}
+            {{ workbook_selection_fields() }}
             {% if customer_code_column is defined and customer_code_column is not none %}
               <input type="hidden" name="customer_code_column" value="{{ customer_code_column }}">
             {% endif %}
@@ -254,10 +289,11 @@
               <select name="price_mode" data-price-mode>
                 {% if not can_view_product_price %}
                   <option value="none" selected>不带单价</option>
-                {% endif %}
+                {% else %}
                 <option value="tax">带含税单价</option>
                 <option value="net">带不含税单价</option>
                 <option value="usd">美金价</option>
+                {% endif %}
               </select>
             </label>
             <label class="exchange-rate-field" data-exchange-rate-field>
@@ -275,16 +311,17 @@
                 <span>备注（可选）</span>
                 <input name="remark" placeholder="写入本次所有报价记录">
               </label>
-              <p class="note">点「下载并写入报价」会一次生成 Excel 并按上方单价方式写入报价记录，随后下载这次写入对应的同一附件并跳转到报价记录页；重复提交会重复写入。</p>
+              <p class="note">选择「下载并写入报价」后，系统按所选单价方式写入报价记录，并保存本次报价附件。</p>
             {% endif %}
             <p class="submit-wait-message" data-submit-wait-message aria-live="polite"></p>
+            {% if can("add_customer_prices") %}<p data-quote-recovery hidden></p>{% endif %}
             <div class="download-modal-actions{% if can("add_customer_prices") %} inquiry-download-modal-actions{% endif %}">
               <button class="download-cancel-button" type="button" data-close-download-modal>取消</button>
               {% if can("add_customer_prices") %}
                 <button class="download-cancel-button" type="submit" data-download-only-submit>仅下载 Excel</button>
                 <button class="download-confirm-button" type="submit" formaction="{{ url_for('write_match_quotes') }}" data-write-quotes-submit>下载并写入报价</button>
               {% else %}
-                <button class="download-confirm-button" type="submit">确认</button>
+                <button class="download-confirm-button" type="submit" data-download-only-submit>确认</button>
               {% endif %}
             </div>
           </form>

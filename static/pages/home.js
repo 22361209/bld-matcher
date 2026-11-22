@@ -187,11 +187,12 @@ document.querySelectorAll("[data-history-loader]").forEach((drawer) => {
     if (tableCount instanceof HTMLElement) tableCount.textContent = text;
   };
 
-  const appendCell = (row, text, href = "") => {
+  const appendCell = (row, text, file = null) => {
     const cell = document.createElement("td");
-    if (href) {
+    if (file?.download_url) {
       const link = document.createElement("a");
-      link.href = href;
+      link.href = file.download_url;
+      if (/\.xlsx?$/i.test(file.name)) link.dataset.saveQuoteExcel = file.name;
       link.textContent = text;
       cell.appendChild(link);
     } else {
@@ -205,11 +206,11 @@ document.querySelectorAll("[data-history-loader]").forEach((drawer) => {
     rows.replaceChildren();
     items.forEach((item) => {
       const row = document.createElement("tr");
-      appendCell(row, item.name || "", item.download_url || "");
+      appendCell(row, item.name || "", item);
       appendCell(row, item.kind || "");
       appendCell(row, item.operator || "");
       appendCell(row, item.updated_at || "");
-      appendCell(row, "下载", item.download_url || "");
+      appendCell(row, "下载", item);
       rows.appendChild(row);
     });
     if (tableWrap instanceof HTMLElement) tableWrap.hidden = items.length === 0;

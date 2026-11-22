@@ -1,16 +1,17 @@
-import { setupDataGridControls } from "../components/data_grid_controls.js?v=20260729-2";
+import { setupDataGridControls } from "../components/data_grid_controls.js?v=20261122-1";
 import { setupQuoteFieldComboboxes } from "../components/quote_comboboxes.js?v=20260728-1";
 import { setupInquiryAdjustments } from "./inquiry_result_adjustments.js?v=20260808-1";
-import { setupInquiryDownloads } from "./inquiry_result_downloads.js?v=20260808-1";
+import { setupInquiryDownloads } from "./inquiry_result_downloads.js?v=20261122-1";
 import { setupInquiryManualMapping } from "./inquiry_result_manual_mapping.js?v=20260808-1";
 import { setupInquiryResultOptions } from "./inquiry_result_options.js?v=20260829-1";
+import { setupInquirySourceColumns } from "./inquiry_result_source_columns.js?v=20261122-1";
 import { setupInquiryProductPicker } from "./inquiry_result_product_picker.js?v=20260829-1";
 import { createInquiryInitializationGate } from "./inquiry_result_rules.js?v=20260808-1";
 
 export {
   clearQuoteCustomerValidity,
   inquiryAttachmentFilename,
-} from "./inquiry_result_downloads.js?v=20260808-1";
+} from "./inquiry_result_downloads.js?v=20261122-1";
 export { inquiryImageGallery } from "./inquiry_result_images.js?v=20260808-1";
 export {
   findInquiryOption,
@@ -33,10 +34,14 @@ export function setupInquiryResultPage(root = document) {
   if (!initializationGate.claim(root)) return false;
 
   setupQuoteFieldComboboxes(root);
-  setupDataGridControls(root.querySelector(".data-grid[data-grid-key='inquiry-result'] table.data-table"), {
-    columns: ["row", "oe", "customer-code", "bld", "image", "price", "status", "score", "reason"],
-    storagePrefix: "bld.inquiry-result",
+  const table = root.querySelector(".data-grid[data-grid-key='inquiry-result'] table.data-table");
+  if (!table) return false;
+  const sourceFile = root.querySelector("[data-source-file]")?.dataset.sourceFile;
+  setupDataGridControls(table, {
+    columns: Array.from(table.querySelectorAll("thead th[data-col]"), heading => heading.dataset.col),
+    storagePrefix: sourceFile ? `bld.inquiry-result.${sourceFile}` : "bld.inquiry-result",
   });
+  setupInquirySourceColumns(root, table);
 
   const adjustments = setupInquiryAdjustments(root);
   setupInquiryProductPicker(root, adjustments);

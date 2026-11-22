@@ -20,6 +20,7 @@ from app.product_image_processing import PRODUCT_IMAGE_LARGE_MAX_BYTES, validate
 from ._development import export_aggregates, validate_aggregate
 from ._development_files import MEMBER_PREFIX, add_archive_files, validate_archive_files
 from ._comparison import columns
+from ._tube_weights import TUBE_WEIGHT_FIELDS, has_tube_weight_fields, normalize_synced_tube, prepare_tube_export
 from ._media_transaction import media_relative_path, normalized_media_target
 from ._product_image_transfer import (
     PRODUCT_IMAGE_MEMBER_PREFIX,
@@ -45,8 +46,10 @@ from ._schema import (
     PAIRED_COSTING_PACKAGE_VERSION,
     PRICE_CONDITIONS_VERSION,
     SUPPORTED_PACKAGE_VERSIONS,
+    TUBE_WEIGHT_PACKAGE_VERSION,
     WEIGHT_PACKAGE_VERSION,
     WORKSHEET_PACKAGE_VERSION,
+    WORKSHEET_ROW_NOTE_PACKAGE_VERSION,
 )
 
 
@@ -105,8 +108,10 @@ def _manifest_datasets(manifest: object) -> tuple[str, ...]:
         raise ValueError("重量资料业务包缺少材料或成本数据集。")
     if version == PRICE_CONDITIONS_VERSION and not {"materials", "costing"}.intersection(selected):
         raise ValueError("新版调价资料包缺少材料或成本数据集。")
+    if version == TUBE_WEIGHT_PACKAGE_VERSION and "tubes" not in selected:
+        raise ValueError("管件计重业务包缺少管件资料数据集。")
     worksheet_versions = (HANDED_WORKSHEET_PACKAGE_VERSION, WORKSHEET_PACKAGE_VERSION,
-                          CUSTOM_WORKSHEET_MATERIAL_VERSION, COMPLETED_WORKSHEET_VERSION)
+                          CUSTOM_WORKSHEET_MATERIAL_VERSION, COMPLETED_WORKSHEET_VERSION, WORKSHEET_ROW_NOTE_PACKAGE_VERSION)
     if version in worksheet_versions and "development" not in selected:
         raise ValueError("开发表业务包缺少开发资料数据集。")
     return tuple(selected)
@@ -190,7 +195,8 @@ def read_package(package_path: Path) -> tuple[Manifest, Payload]:
                 supported_costs = {COSTING_PACKAGE_VERSION: (1,), PAIRED_COSTING_PACKAGE_VERSION: (2,),
                                    WEIGHT_PACKAGE_VERSION: (1, 2, 3), HANDED_WORKSHEET_PACKAGE_VERSION: (1, 2, 3),
                                    WORKSHEET_PACKAGE_VERSION: (1, 2, 3), PRICE_CONDITIONS_VERSION: (1, 2, 3, 4),
-                                   CUSTOM_WORKSHEET_MATERIAL_VERSION: (1, 2, 3, 4), COMPLETED_WORKSHEET_VERSION: (1, 2, 3, 4)}
+                                   CUSTOM_WORKSHEET_MATERIAL_VERSION: (1, 2, 3, 4), COMPLETED_WORKSHEET_VERSION: (1, 2, 3, 4),
+                                   TUBE_WEIGHT_PACKAGE_VERSION: (1, 2, 3, 4), WORKSHEET_ROW_NOTE_PACKAGE_VERSION: (1, 2, 3, 4)}
                 if not isinstance(snapshot, dict) or snapshot.get("format_version") not in supported_costs[version]:
                     raise ValueError("成本快照版本与业务包版本不一致，请重新导出。")
                 payload["costing"] = [validate_costing(snapshot)]
@@ -272,13 +278,26 @@ def read_package(package_path: Path) -> tuple[Manifest, Payload]:
         if duplicates:
             raise ValueError(f"{DATASETS[key][2]}包含重复编号：{'、'.join(duplicates[:10])}")
         typed_payload[key] = rows
+    tube_rows = typed_payload.get("tubes", [])
+    has_tube_weights = has_tube_weight_fields(tube_rows)
+    if has_tube_weights and version < TUBE_WEIGHT_PACKAGE_VERSION:
+        raise ValueError("含管件计重字段的业务包需使用新版格式。")
+    if has_tube_weights or version == TUBE_WEIGHT_PACKAGE_VERSION:
+        if not tube_rows or any(any(field not in row for field in TUBE_WEIGHT_FIELDS) for row in tube_rows):
+            raise ValueError("管件计重业务包缺少完整计重字段，请重新导出。")
+        for row in tube_rows:
+            normalize_synced_tube(row, None)
     development = typed_payload.get("development", [])
     for aggregate in development:
         validate_aggregate(aggregate)
     expected_version = _worksheet_package_version(development)
     if has_grades or has_quote_roles:
         expected_version = max(expected_version, PRICE_CONDITIONS_VERSION)
+    if has_tube_weights:
+        expected_version = max(expected_version, TUBE_WEIGHT_PACKAGE_VERSION)
     if (expected_version or version >= HANDED_WORKSHEET_PACKAGE_VERSION) and version != expected_version:
+        if WORKSHEET_ROW_NOTE_PACKAGE_VERSION in (expected_version, version):
+            raise ValueError("开发表零件备注与业务包版本不一致，请重新导出。")
         if COMPLETED_WORKSHEET_VERSION in (expected_version, version):
             raise ValueError("已完成开发表与业务包版本不一致，请重新导出。")
         if expected_version == CUSTOM_WORKSHEET_MATERIAL_VERSION or version == CUSTOM_WORKSHEET_MATERIAL_VERSION:
@@ -293,6 +312,8 @@ def read_package(package_path: Path) -> tuple[Manifest, Payload]:
 
 def _worksheet_package_version(development) -> int:
     sheets = [row["worksheet"] for row in development if "worksheet" in row]
+    if any(row.get("note") for sheet in sheets for row in sheet["rows"]):
+        return WORKSHEET_ROW_NOTE_PACKAGE_VERSION
     if any(sheet.get("completed") for sheet in sheets):
         return COMPLETED_WORKSHEET_VERSION
     if any(row["material"] and row["material"] not in LEGACY_MATERIALS for sheet in sheets for row in sheet["rows"]):
@@ -319,6 +340,7 @@ def export_package(
     payload: Payload = {}
     product_rows: list[dict[str, object]] = []
     costing = None
+    has_tube_weights = False
     with connect(database_path) as connection:
         if {"development", "costing"}.intersection(selected):
             connection.execute("BEGIN")
@@ -343,6 +365,8 @@ def export_package(
             for row in rows:
                 for column in LOCAL_MEDIA_COLUMNS.get(key, set()):
                     row[column] = ""
+            if key == "tubes":
+                has_tube_weights = prepare_tube_export(rows)
             payload[key] = rows
     includes = {
         "drawings": bool("products" in selected and include_drawings),
@@ -361,6 +385,8 @@ def export_package(
     if any("material_grade" in row for row in payload.get("materials", [])):
         version = PRICE_CONDITIONS_VERSION
     version = max(version, _worksheet_package_version(payload.get("development", [])))
+    if has_tube_weights:
+        version = max(version, TUBE_WEIGHT_PACKAGE_VERSION)
     manifest: Manifest = {
         "package_type": PACKAGE_TYPE,
         "version": version,

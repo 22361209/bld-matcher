@@ -76,6 +76,15 @@ class TestWebInquiryInteractions(WebAppTestBase):
         upload_match = re.search(r'name="upload_path" value="([^"]+)"', html)
         self.assertIsNotNone(upload_match)
 
+        result = self.client.post("/match/column", data={
+            "upload_path": upload_match.group(1), "original_filename": "price-gate.xlsx", "match_columns": "0",
+        })
+        self.assertEqual(result.status_code, 200)
+        result_html = result.get_data(as_text=True)
+        self.assertRegex(result_html, r'<button\b[^>]*data-download-only-submit[^>]*>确认</button>')
+        self.assertNotIn("data-write-quotes-submit", result_html)
+        self.assertNotIn('name="customer_name"', result_html)
+
         download = self.client.post(
             "/match/download",
             data={

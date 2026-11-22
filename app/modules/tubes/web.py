@@ -10,6 +10,7 @@ from app.security import actor_name, permission_required
 
 from .domain import TUBE_TYPES, spec_display_lines, tolerance_only
 from .factory import get_tube_service
+from .weights import MANUAL_WEIGHT_CODES
 
 
 TUBE_PAGE_SIZE = 100
@@ -146,7 +147,8 @@ def register(app) -> None:
     @app.get("/tubes/new")
     @permission_required("manage_tube_items")
     def new_tube_item():
-        return render_template("tube_form.html", item=None, tube_types=TUBE_TYPES)
+        return render_template("tube_form.html", item=None, editing=False, tube_types=TUBE_TYPES,
+                               manual_weight_codes=MANUAL_WEIGHT_CODES)
 
     @app.get("/tubes/<int:item_id>/edit")
     @permission_required("manage_tube_items")
@@ -155,7 +157,8 @@ def register(app) -> None:
         if item is None:
             flash("管件不存在。", "error")
             return redirect(url_for("tube_items"))
-        return render_template("tube_form.html", item=item, tube_types=TUBE_TYPES)
+        return render_template("tube_form.html", item=item, editing=True, tube_types=TUBE_TYPES,
+                               manual_weight_codes=MANUAL_WEIGHT_CODES)
 
     @app.post("/tubes/save")
     @permission_required("manage_tube_items")
@@ -175,14 +178,22 @@ def register(app) -> None:
             "purchase_base": request.form.get("purchase_base", "1"),
             "borrowed_from": request.form.get("borrowed_from", ""),
             "note": request.form.get("note", ""),
-            "active": request.form.get("active", "1"),
+            "active": request.form.get("active", "0"),
         }
+        for field in ("weight_mode", "weight_length_mm"):
+            if field in request.form:
+                data[field] = request.form[field]
         if "borrowed_codes" in request.form:
             data["borrowed_codes"] = request.form.get("borrowed_codes", "")
         try:
             get_tube_service().save(data, actor=actor_name())
         except ValueError as exc:
-            flash(str(exc), "error")
-            return redirect(url_for("new_tube_item"))
+            item_id = str(data["id"])
+            existing = get_tube_service().get_item(int(item_id)) if item_id.isdecimal() else None
+            if (existing and data.get("borrowed_from")
+                    and existing.get("weight_mode") == "manual"):
+                data["weight_kg"] = existing["weight_kg"]
+            return render_template("tube_form.html", item=data, editing=bool(existing), tube_types=TUBE_TYPES,
+                                   manual_weight_codes=MANUAL_WEIGHT_CODES, form_error=str(exc)), 400
         flash("管件已保存。", "success")
         return redirect(url_for("tube_items", q=data["code"]))

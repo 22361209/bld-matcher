@@ -24,8 +24,17 @@
 .tube-form .checkbox-field { display: flex; align-items: center; gap: 8px; }
 .tube-form .checkbox-field input { width: auto; }
 .tube-form .form-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.tube-weight-fields { min-width: 0; margin: 0; padding: 12px; border: 1px solid var(--linear-line); border-radius: 6px; }
+.tube-weight-fields legend { padding: 0 5px; color: var(--linear-text); font-size: 13px; font-weight: 700; }
+.tube-weight-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+.tube-form .tube-field-help { margin: 0; color: var(--linear-muted); font-size: 12px; font-weight: 400; line-height: 1.5; overflow-wrap: anywhere; }
+.tube-weight-status { margin: 0; color: var(--linear-muted); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.tube-weight-status[data-state="invalid"] { color: var(--precision-danger); }
+.tube-weight-grid input[readonly] { background: var(--linear-subtle); }
+.tube-form .message { margin: 0; }
 
 @media (max-width: 680px) {
   .tube-form { grid-template-columns: 1fr; }
+  .tube-weight-grid { grid-template-columns: 1fr; }
   .tube-form .form-span-2 { grid-column: auto; }
 }

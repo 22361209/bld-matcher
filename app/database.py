@@ -137,6 +137,8 @@ CREATE TABLE IF NOT EXISTS tube_items (
   tube_type TEXT NOT NULL DEFAULT '普通管',
   spec_text TEXT NOT NULL DEFAULT '',
   weight_kg REAL,
+  weight_mode TEXT NOT NULL DEFAULT 'manual',
+  weight_length_mm REAL,
   tolerance_mm REAL,
   consumption_mm REAL,
   outer_diameter_mm REAL,

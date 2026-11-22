@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-23",
+  "version": "unreleased",
+  "title": "新品开发表增加零件备注",
+  "entries": [
+    "在零件明细的「借用编码」右侧增加「备注」，可逐行填写、清空并随开发表保存。",
+    "业务数据同步预览显示零件备注差异。含零件备注的数据包使用 v15，接收端需升级后导入。"
+  ],
+  "impact": {"data": "none", "api": "compatible", "operations": "quick-update"}
+}

@@ -25,6 +25,7 @@ from .domain import (
     looks_like_bld_shorthand,
 )
 from .adjustments import InquiryAdjustment
+from .excel.preview import PREVIEW_WINDOW_ROWS, preview_inquiry_rows
 
 
 ALLOWED_WORKBOOK_SUFFIXES = frozenset({".xls", ".xlsx"})
@@ -179,6 +180,8 @@ class WorkbookInquiryEngine:
         options: PriceOptions,
         customer_code_column: int | None = None,
         adjustments: dict[str, InquiryAdjustment] | None = None,
+        include_source_columns: bool = False,
+        header_rows: dict[int, int] | None = None,
     ) -> dict:
         return generate_excel_with_bld(
             source_path,
@@ -188,6 +191,8 @@ class WorkbookInquiryEngine:
             write_output=write_output,
             customer_code_column=customer_code_column,
             adjustments=adjustments,
+            include_source_columns=include_source_columns,
+            header_rows=header_rows,
             **options.as_kwargs(),
         )
 
@@ -197,5 +202,15 @@ class WorkbookInquiryEngine:
             self.internal_upload_path(source_path.name, prefix="source-cleaned"),
         )
 
-    def preview(self, path: Path, *, max_rows: int = 8, max_cols: int = 20) -> dict:
-        return preview_inquiry_columns(path, max_rows=max_rows, max_cols=max_cols)
+    def preview(
+        self, path: Path, *, max_rows: int | None = None, max_cols: int | None = 20, header_rows: dict[int, int] | None = None,
+        match_columns: list[int] | None = None,
+    ) -> dict:
+        if max_rows is None:
+            max_rows = PREVIEW_WINDOW_ROWS if max_cols is None else 8
+        return preview_inquiry_columns(
+            path, max_rows=max_rows, max_cols=max_cols, header_rows=header_rows, match_columns=match_columns,
+        )
+
+    def preview_rows(self, path: Path, sheet_number: int, start: int, end: int | None) -> dict:
+        return preview_inquiry_rows(path, sheet_number, start, end)

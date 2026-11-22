@@ -13,12 +13,13 @@ from ..adjustments import (
     workbook_row_adjustment_key,
 )
 from .pricing import numeric_price
+from .header_rows import read_only_xlsx_header, validate_header_rows
+from .source_columns import SourceSheetColumns
 from .reader import (
     _cell_from_values,
     _combined_match_text,
     _customer_code_text,
     _find_xlsx_inquiry_columns_from_rows,
-    _find_xlsx_selected_header_row_from_rows,
     _manual_match_columns,
     _row_match_values,
     _selected_match_row_is_header,
@@ -150,31 +151,48 @@ def analyze_xlsx_with_bld(
     exchange_rate: float | None = None,
     customer_code_column: int | None = None,
     adjustments: dict[str, InquiryAdjustment] | None = None,
+    include_source_columns: bool = False,
+    header_rows: dict[int, int] | None = None,
 ) -> dict:
     workbook = load_workbook(inquiry_path, read_only=True, data_only=True)
     try:
         summary = {"total": 0, "matched": 0, "unmatched": 0, "rows": []}
+        if include_source_columns:
+            summary["source_sheets"] = []
         consumed_adjustment_keys: set[str] = set()
+        manual_match_columns = _manual_match_columns(match_column)
+        validate_header_rows(header_rows, len(workbook.worksheets), manual_match_columns)
 
         for sheet_number, sheet in enumerate(workbook.worksheets, start=1):
-            first_rows = list(sheet.iter_rows(min_row=1, max_row=20, values_only=True))
-            if not first_rows:
-                continue
-
-            manual_match_columns = _manual_match_columns(match_column)
+            if manual_match_columns:
+                sheet.reset_dimensions()
+            override = (header_rows or {}).get(sheet_number)
             if not manual_match_columns:
+                first_rows = list(sheet.iter_rows(min_row=1, max_row=20, values_only=True))
+                if not first_rows:
+                    continue
                 header_row, columns = _find_xlsx_inquiry_columns_from_rows(first_rows)
+                headers = first_rows[header_row - 1]
                 selected_match_columns = [columns["oe"]]
             else:
                 selected_match_columns = [column + 1 for column in manual_match_columns]
-                header_row = _find_xlsx_selected_header_row_from_rows(
-                    first_rows,
-                    selected_match_columns,
+                header_row, headers = read_only_xlsx_header(
+                    sheet, manual_match_columns, override, include_headers=include_source_columns,
                 )
+                if header_row is None:
+                    continue
                 columns = {}
 
-            rows = sheet.iter_rows(min_row=header_row + 1, values_only=True)
-            for row_index, values in enumerate(rows, start=header_row + 1):
+            source = None
+            if include_source_columns:
+                unnamed_match = not header_row and len(manual_match_columns) == 1
+                source = SourceSheetColumns(
+                    sheet_number, sheet.title, headers,
+                    unnamed_match_column=manual_match_columns[0] if unnamed_match else None,
+                )
+            first_data_row = header_row + 1
+            rows = sheet.iter_rows(min_row=first_data_row, values_only=True)
+            for row_index, values in enumerate(rows, start=first_data_row):
                 inquiry_name = _cell_from_values(values, columns["name"]) if "name" in columns else ""
                 customer_product_code = (
                     _customer_code_text(_cell_from_values(values, customer_code_column + 1))
@@ -182,7 +200,7 @@ def analyze_xlsx_with_bld(
                     else ""
                 )
                 match_values = _row_match_values(values, selected_match_columns)
-                if _selected_match_row_is_header(match_values):
+                if override != 0 and _selected_match_row_is_header(match_values):
                     continue
                 inquiry_oe = _combined_match_text(match_values)
                 inquiry_desc = _cell_from_values(values, columns["description"]) if "description" in columns else ""
@@ -223,12 +241,15 @@ def analyze_xlsx_with_bld(
                             if row_summary.get("match_note")
                             else adjustment_note
                         )
-                    summary["rows"].append(row_summary)
                 else:
                     summary["unmatched"] += 1
                     row_summary = summary_row(row_index, inquiry_oe, inquiry_name, None, customer_product_code)
                     row_summary["adjustment_key"] = adjustment_key
-                    summary["rows"].append(row_summary)
+                if source is not None:
+                    source.attach_row(row_summary, values)
+                summary["rows"].append(row_summary)
+            if source is not None:
+                source.append_to(summary["source_sheets"])
 
         ensure_adjustments_consumed(adjustments, consumed_adjustment_keys)
         return summary
