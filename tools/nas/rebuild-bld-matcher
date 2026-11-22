@@ -1,0 +1,59 @@
+#!/bin/sh
+# Install with the reviewed backup helper outside the checkout (NAS_DEPLOY.md).
+set -eu
+PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+export PATH
+CHECKOUT=/volume1/docker/bld-matcher
+BACKUPS=/volume1/docker/bld-matcher-backups
+HELPER=/usr/local/libexec/bld-matcher/backup_local_runtime.py
+
+die() { echo "$*" >&2; exit 1; }
+docker_local() {
+    env -i PATH="$PATH" HOME=/root /usr/local/bin/docker --host unix:///var/run/docker.sock "$@"
+}
+compose_local() {
+    env -i PATH="$PATH" HOME=/root /usr/local/bin/docker-compose --project-directory "$CHECKOUT" -f "$CHECKOUT/docker-compose.yml" "$@"
+}
+backup_runtime() {
+    [ -f "$HELPER" ] && [ ! -L "$HELPER" ] || die 'Missing installed backup helper.'
+    for path in "$CHECKOUT" "$BACKUPS" "$CHECKOUT/data" "$CHECKOUT/uploads" "$CHECKOUT/outputs" "$CHECKOUT/.env"; do
+        [ "$(readlink -f "$path")" = "$path" ] || die 'Runtime and backup paths must not be symlinks.'
+    done
+    container=$(docker_local inspect --type container --format '{{.Id}}' bld-matcher)
+    label='{{index .Config.Labels "com.docker.compose.project.working_dir"}}|{{index .Config.Labels "com.docker.compose.service"}}'
+    [ "$(docker_local inspect --type container --format "$label" "$container")" = "$CHECKOUT|bld-matcher" ] || die 'Container does not belong to BLD.'
+    image=$(docker_local inspect --type container --format '{{.Image}}' "$container")
+    docker_local stop "$container"
+    # Run the installed helper using the current image's Python, without
+    # executing checkout code or granting write access to runtime files.
+    docker_local run --rm --network host --read-only --cap-drop ALL --security-opt no-new-privileges \
+        --mount "type=bind,src=$HELPER,dst=/bld-backup.py,readonly" \
+        --mount "type=bind,src=$CHECKOUT/data,dst=/runtime/data,readonly" \
+        --mount "type=bind,src=$CHECKOUT/uploads,dst=/runtime/uploads,readonly" \
+        --mount "type=bind,src=$CHECKOUT/outputs,dst=/runtime/outputs,readonly" \
+        --mount "type=bind,src=$CHECKOUT/.env,dst=/runtime/.env,readonly" \
+        --mount "type=bind,src=$BACKUPS,dst=/backups" \
+        --entrypoint python "$image" /bld-backup.py --project-dir /runtime --backup-root /backups
+    # The JSON result uses container paths; this is their fixed NAS location.
+    echo "NAS backup root: $BACKUPS"
+}
+
+[ "$(id -u)" = 0 ] || die 'Run through the installed sudo entry.'
+[ "$#" -eq 1 ] || die 'Usage: rebuild-bld-matcher {backup|rebuild|status}'
+case "$1" in
+    backup|rebuild)
+        umask 077
+        lock=/var/run/quick-bld-matcher.lock
+        mkdir "$lock" || die 'Another BLD release is in progress or left a lock.'
+        trap 'rmdir "$lock"' EXIT
+        trap 'exit 1' HUP INT TERM
+        cd "$CHECKOUT"
+        if [ "$1" = backup ]; then
+            backup_runtime
+        else
+            compose_local up -d --build
+        fi
+        ;;
+    status) compose_local ps ;;
+    *) die 'Usage: rebuild-bld-matcher {backup|rebuild|status}' ;;
+esac

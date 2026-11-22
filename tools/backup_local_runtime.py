@@ -183,11 +183,12 @@ def _snapshot_database(source_path: Path, target_path: Path) -> None:
     shm_path = source_path.with_name(source_path.name + "-shm")
     if source_path.with_name(source_path.name + "-journal").exists():
         raise BackupError("unsafe-journal-state")
-    if wal_path.exists() and not shm_path.is_file():
+    has_wal_data = wal_path.exists() and wal_path.stat().st_size > 0
+    if has_wal_data and not shm_path.is_file():
         raise BackupError("unsafe-wal-state")
-    # An immutable read avoids creating SQLite sidecars when there is no WAL.
-    # Existing WALs must be read normally so committed WAL data is included.
-    uri = source_path.as_uri() + "?mode=ro" + ("" if wal_path.exists() else "&immutable=1")
+    # The service is stopped. Empty WALs contain no commits and can be read
+    # immutably too, avoiding sidecar recovery on a read-only backup mount.
+    uri = source_path.as_uri() + "?mode=ro" + ("" if has_wal_data else "&immutable=1")
     started = time.monotonic()
 
     def progress(_status: int, _remaining: int, _total: int) -> None:

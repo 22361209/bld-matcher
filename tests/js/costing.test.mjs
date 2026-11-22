@@ -3,6 +3,7 @@ import test from "node:test";
 import {applyCostReference, blankCostItem, calculationIssues, costAmountLabel, costingListReturnUrl, createCostPreviewGate, createCostTemplate, editableCostPayload, isCostCalculationField} from "../../static/pages/costing_edit.js";
 
 import {mirrorCostCode, mirrorPartCode, rowPairKind} from "../../static/pages/costing_pair_edit.js";
+import {costQuantityLabel, setCostInput} from "../../static/pages/costing_numbers.js";
 
 test("finished model and component codes use separate handed suffix rules", () => {
   for (const [code, other] of [["K8299LA01-618", "K8299RA01-618"], ["K8057RB", "K8057LB"]]) {
@@ -149,14 +150,31 @@ test("material attribute is optional and explicitly cleared selections are submi
 });
 
 test("display distinguishes unknown values, actual zero and negative adjustments", () => {
-  assert.equal(costAmountLabel("-0.0049"), "0.00");
-  assert.equal(costAmountLabel("-5.005"), "-5.01");
-  assert.equal(costAmountLabel("999999999999.9949999999999999"), "999,999,999,999.99");
+  assert.equal(costAmountLabel("-0.000049"), "0.0000");
+  assert.equal(costAmountLabel("-0.0049"), "-0.0049");
+  assert.equal(costAmountLabel("-5.00505"), "-5.0051");
+  assert.equal(costAmountLabel("999999999999.9949499999999999"), "999,999,999,999.9949");
   assert.equal(costAmountLabel(null), "待补充");
   assert.equal(costAmountLabel(""), "待补充");
-  assert.equal(costAmountLabel("0"), "0.00");
-  assert.equal(costAmountLabel("-0.4"), "-0.40");
-  assert.equal(costAmountLabel("19.783652"), "19.78");
+  assert.equal(costAmountLabel("0"), "0.0000");
+  assert.equal(costAmountLabel("-0.4"), "-0.4000");
+  assert.equal(costAmountLabel("19.783652"), "19.7837");
+});
+
+test("financial and weight inputs show four places and retain the exact saved value", () => {
+  for (const key of ["weight", "amount", "unit_price", "processing_fee", "strap_rate", "approved_cost"]) {
+    const input = {type: "number", dataset: {itemField: key}};
+    setCostInput(input, "0.123456789");
+    assert.equal(input.value, "0.1235", key);
+    assert.equal(input.dataset.exactDecimal, "0.123456789", key);
+  }
+  for (const key of ["quantity", "length", "width", "height"]) {
+    const input = {type: "number", dataset: {itemField: key}};
+    setCostInput(input, "1.23456789");
+    assert.equal(input.value, "1.23", key);
+    assert.equal(input.dataset.exactDecimal, "1.23456789", key);
+  }
+  assert.equal(costQuantityLabel("12"), "12.00");
 });
 
 test("choosing a carton keeps its number and specification in separate editable fields", () => {

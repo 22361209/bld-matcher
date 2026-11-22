@@ -151,6 +151,35 @@ uv run python tools/nas_quick_update.py
 
 ### 完整发布
 
+#### 一次安装停机备份免密入口
+
+管理员在可见终端审阅并安装同一已验证提交中的入口、备份程序和 sudoers：
+
+```sh
+cd /volume1/docker/bld-matcher
+sudo install -d -o root -g root -m 0755 /usr/local/libexec/bld-matcher
+sudo install -o root -g root -m 0644 tools/backup_local_runtime.py /usr/local/libexec/bld-matcher/backup_local_runtime.py
+sudo install -o root -g root -m 0755 tools/nas/rebuild-bld-matcher /usr/local/sbin/rebuild-bld-matcher
+if command -v visudo >/dev/null 2>&1; then sudo visudo -cf tools/nas/bld-matcher-rebuild.sudoers; fi
+sudo install -o root -g root -m 0440 tools/nas/bld-matcher-rebuild.sudoers /etc/sudoers.d/bld-matcher-rebuild
+if command -v visudo >/dev/null 2>&1; then sudo visudo -c; fi
+sudo -n /usr/local/sbin/rebuild-bld-matcher status
+```
+
+首次安装需要管理员密码，以后 `backup`、`rebuild`、`status` 均可用 `sudo -n`。
+部分 DSM 没有 `visudo`。此时管理员应在已提权的可见 root 终端中保留旧 sudoers 副本，
+安装后以 deploy 身份执行上面的 `sudo -n ... status`；若解析或权限检查失败，直接在仍打开的 root 终端恢复旧文件。
+新增 sudoers 只授权三个精确参数；入口本身也拒绝其他命令和多余参数。
+脚本和备份程序更新时重新审阅并安装 root 副本，不能从可写工作树直接执行备份 Python。
+
+`backup` 固定检查 `bld-matcher` 容器属于本项目，使用当前容器的镜像 ID 提供 Python。
+它先停止 BLD，再以只读方式挂载 `data/`、`uploads/`、`outputs/` 和 `.env`，用 SQLite Backup API
+备份到 `/volume1/docker/bld-matcher-backups/` 并核对文件哈希和数据库完整性。空 WAL 不触发恢复；
+非空 WAL 必须连同现有共享内存被正常读取，不能按裸文件复制。
+输出 JSON 中 `/backups/<目录>` 对应 NAS 的 `/volume1/docker/bld-matcher-backups/<目录>`。
+备份失败会保留 `INCOMPLETE.json`，服务保持停止。成功后才执行 `rebuild`，并照常核对健康与业务探针。
+备份、重建与快速更新共用发布锁；异常中断遗留锁时先核实没有发布进程，再由管理员处理。
+
 本机：
 
 ```bash
@@ -171,11 +200,12 @@ cd /volume1/docker/bld-matcher
 git fetch origin main
 git reset --hard origin/main
 git status -sb
+sudo -n /usr/local/sbin/rebuild-bld-matcher backup
 sudo -n /usr/local/sbin/rebuild-bld-matcher rebuild
 sudo -n /usr/local/sbin/rebuild-bld-matcher status
 ```
 
-NAS `deploy` 用户已配置受限免密 sudo wrapper：`/usr/local/sbin/rebuild-bld-matcher`。常规部署时，Codex 应在隐藏 shell 中使用 `sudo -n /usr/local/sbin/rebuild-bld-matcher rebuild` 和 `status`；`sudo -n` 会在权限缺失时立刻失败，不会卡住等待密码。不要把它替换成 unrestricted `sudo /usr/local/bin/docker-compose ...`。
+NAS `deploy` 用户使用受限免密 sudo wrapper：`/usr/local/sbin/rebuild-bld-matcher`。安装上面的备份版本后，常规完整部署在隐藏 shell 中依次使用 `backup`、`rebuild` 和 `status`；`sudo -n` 会在权限缺失时立刻失败，不会卡住等待密码。不要把它替换成 unrestricted `sudo /usr/local/bin/docker-compose ...`。
 
 只有 wrapper 缺失、权限不足，或需要执行 wrapper 未覆盖的额外 sudo 命令时，才打开可见 Terminal 窗口让用户输入 NAS sudo 密码。
 

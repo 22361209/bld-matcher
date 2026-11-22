@@ -1,8 +1,7 @@
 {% extends "base.html" %}
 {% set active_page = 'costs' %}
 {% macro rate(value) -%}
-  {%- set parts = (value|string).split('.') -%}
-  {{- value if value is not none and parts|length == 2 and parts[1]|length > 2 else value|cost_money -}}
+  {{- value|cost_money -}}
 {%- endmacro %}
 {% block page_title %}冲压材料调价 · 成本核算{% endblock %}
 {% block page_id %}costing.material_prices{% endblock %}
