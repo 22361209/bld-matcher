@@ -66,8 +66,8 @@ compose_local() {{ echo "compose $*" >> {shlex.quote(str(self.log))}; }}
         self.assertLess(calls.index("stop container-id"), calls.index("run --rm"))
         for name in ("data", "uploads", "outputs", ".env"):
             self.assertIn(f"src={self.checkout}/{name},dst=/runtime/{name},readonly", calls)
-        self.assertIn(f"src={self.helper},dst=/bld-backup.py,readonly", calls)
-        self.assertIn("--entrypoint python sha256:fixture /bld-backup.py", calls)
+        self.assertIn(f"src={self.helper},dst=/opt/bld-backup/backup_local_runtime.py,readonly", calls)
+        self.assertIn("--entrypoint python sha256:fixture /opt/bld-backup/backup_local_runtime.py", calls)
         self.assertNotIn(f"src={self.checkout},", calls)
         self.assertFalse(any(line.startswith("compose ") for line in calls.splitlines()))
         self.assertFalse(self.lock.exists())
