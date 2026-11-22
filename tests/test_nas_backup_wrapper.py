@@ -69,6 +69,7 @@ compose_local() {{ echo "compose $*" >> {shlex.quote(str(self.log))}; }}
             self.assertIn(f"src={self.checkout}/{name},dst=/runtime/{name},readonly", calls)
         self.assertIn(f"src={self.helper},dst=/opt/bld-backup/backup_local_runtime.py,readonly", calls)
         self.assertIn("--entrypoint python sha256:fixture /opt/bld-backup/backup_local_runtime.py", calls)
+        self.assertIn("--cap-drop ALL --cap-add DAC_READ_SEARCH", calls)
         self.assertNotIn(f"src={self.checkout},", calls)
         self.assertFalse(any(line.startswith("compose ") for line in calls.splitlines()))
         self.assertFalse(self.lock.exists())

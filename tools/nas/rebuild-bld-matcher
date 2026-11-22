@@ -30,7 +30,7 @@ backup_runtime() {
     docker_local stop "$container"
     # Run the installed helper using the current image's Python, without
     # executing checkout code or granting write access to runtime files.
-    docker_local run --rm --network host --read-only --cap-drop ALL --security-opt no-new-privileges \
+    docker_local run --rm --network host --read-only --cap-drop ALL --cap-add DAC_READ_SEARCH --security-opt no-new-privileges \
         --mount "type=bind,src=$HELPER,dst=/opt/bld-backup/backup_local_runtime.py,readonly" \
         --mount "type=bind,src=$CHECKOUT/data,dst=/runtime/data,readonly" \
         --mount "type=bind,src=$CHECKOUT/uploads,dst=/runtime/uploads,readonly" \
