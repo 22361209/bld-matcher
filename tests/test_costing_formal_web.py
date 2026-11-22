@@ -119,6 +119,22 @@ class CostingFormalWebTest(WebAppTestBase):
         self.assertEqual(visible_codes(descending), list(reversed(codes))[:50])
         self.assertEqual(parse_qs(urlsplit(control(descending, "descending")).query)["sort"], ["code"])
 
+    def test_four_place_display_preserves_saved_precision_and_cent_price_rule(self):
+        record = self.service.create(self.payload(
+            approved_cost="1.23456789", items=[{"name": "精密重量", "mode": "weight", "unit_price": "3.4567", "weight": "0.12345678"}],
+        ), actor="fixture")
+        detail = self.client.get(f'/costs/{record["id"]}').get_data(as_text=True)
+        self.assertIn('value="1.2346" data-exact-decimal="1.23456789"', detail)
+        listing = self.client.get("/costs", query_string={"q": self.code}).get_data(as_text=True)
+        self.assertIn('data-col="net" class="costing-number">1.2346</td>', listing)
+        self.assertIn('data-col="minimum_price" class="costing-number">1.7000</td>', listing)
+        renamed = self.post(f'/costs/{record["id"]}', {**record, "name": "仅改名称"})
+        self.assertEqual(renamed.status_code, 200)
+        saved = self.service.get(record["id"])
+        self.assertEqual(saved["approved_cost"], "1.23456789")
+        self.assertEqual(saved["items"][0]["weight"], "0.12345678")
+        self.assertEqual(saved["minimum_tax_price"], "1.7")
+
     def test_default_quote_matches_explicit_full_scope_and_unchecking_reprices_on_list(self):
         raw = self.payload(items=[
             {"name": name, "amount": amount}

@@ -21,6 +21,11 @@ sudo -n /usr/local/sbin/rebuild-bld-matcher rebuild
 sudo -n /usr/local/sbin/rebuild-bld-matcher status
 ```
 
+After the administrator installs the backup-capable wrapper and helper from
+`tools/nas/`, `sudo -n /usr/local/sbin/rebuild-bld-matcher backup` stops only the
+BLD container and creates a verified NAS runtime backup. Run it successfully
+before a full rebuild. Failure leaves BLD stopped; do not rebuild until resolved.
+
 For quick updates the client invokes `sudo -n /usr/local/sbin/quick-bld-matcher`
 with no arguments and supplies the full Git commit SHA on stdin. See
 [`NAS_DEPLOY.md`](NAS_DEPLOY.md) for installation and permissions. Hidden shell
@@ -115,6 +120,7 @@ cd /volume1/docker/bld-matcher
 git fetch origin main
 git reset --hard origin/main
 git status -sb
+sudo -n /usr/local/sbin/rebuild-bld-matcher backup
 sudo -n /usr/local/sbin/rebuild-bld-matcher rebuild
 sudo -n /usr/local/sbin/rebuild-bld-matcher status
 ```

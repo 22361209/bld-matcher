@@ -26,7 +26,7 @@ def format_cost_money(value: object) -> str:
             amount = Decimal(str(value))
             if not amount.is_finite():
                 return "—"
-            amount = amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-            return format(amount if amount else Decimal(0), ",.2f")
+            amount = amount.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+            return format(amount if amount else Decimal(0), ",.4f")
     except (InvalidOperation, ValueError):
         return "—"

@@ -1,3 +1,5 @@
+import {costQuantityLabel} from "./costing_numbers.js";
+
 export function createScrapSummary(form, format, editable) {
   const mode = form.elements.namedItem("scrap_mode");
   const auto = () => mode.value === "auto";
@@ -39,8 +41,9 @@ export function createScrapSummary(form, format, editable) {
       const row = body.insertRow();
       const src = item.weight_source;
       row.insertCell().textContent = [item.name, item.product_code].filter(Boolean).join(" · ");
-      for (const value of [src?.gross_weight, src?.net_weight, item.scrap_weight, item.quantity ?? "1", item.scrap_total_weight]) {
-        row.insertCell().textContent = format(value, "待补");
+      for (const key of ["gross_weight", "net_weight", "scrap_weight", "quantity", "scrap_total_weight"]) {
+        const value = key === "quantity" ? item.quantity ?? "1" : key in (src || {}) ? src[key] : item[key];
+        row.insertCell().textContent = (key === "quantity" ? costQuantityLabel : format)(value, "待补");
       }
     }
     const scroll = document.createElement("div"); scroll.className = "data-table-scroll"; scroll.append(table); container.append(scroll);

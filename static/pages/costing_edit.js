@@ -394,7 +394,7 @@ export const initializeCostEditor = (form) => {
       input.step = "any"; input.inputMode = "decimal";
       if (!(key === "amount" && item.mode === "adjustment")) input.min = "0";
     } else input.maxLength = key === "remark" ? 2000 : 240;
-    setCostInput(input, item[key]); input.dataset.itemField = key; input.dataset.itemIndex = index;
+    input.dataset.itemField = key; input.dataset.itemIndex = index; setCostInput(input, item[key]);
     input.setAttribute("aria-label", `第 ${index + 1} 项 ${label}`);
     input.disabled = !editable;
     if (options.placeholder) input.placeholder = options.placeholder;

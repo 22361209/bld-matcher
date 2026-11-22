@@ -1,0 +1,1 @@
+deploy ALL=(root) NOPASSWD: /usr/local/sbin/rebuild-bld-matcher backup, /usr/local/sbin/rebuild-bld-matcher rebuild, /usr/local/sbin/rebuild-bld-matcher status

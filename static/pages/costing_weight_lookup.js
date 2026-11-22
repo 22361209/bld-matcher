@@ -1,4 +1,4 @@
-import {costAmountLabel} from "./costing_numbers.js";
+import {costAmountLabel, costQuantityLabel} from "./costing_numbers.js";
 
 const codeOf = (item) => String(item.product_code || "").trim();
 const isTubeLine = (item) => String(item.name || "").includes("焊接管");
@@ -133,7 +133,7 @@ export function weightLookupControls(item, index, controller, editable) {
     select.setAttribute("aria-label", `第 ${index + 1} 项选择重量来源`);
     select.add(new Option("选择重量来源…", ""));
     entry.candidates.forEach((option, n) => {
-      const label = [option.kind === "tube" ? "管件" : "冲压件", option.name, option.model, option.spec, option.pieces ? `每条出 ${costAmountLabel(option.pieces)} 件` : "", option.net_weight != null ? `净重 ${costAmountLabel(option.net_weight)} kg` : "", option.gross_weight == null ? "重量待补" : `毛重 ${costAmountLabel(option.gross_weight)} kg`, option.source_id?.slice(-8)].filter(Boolean).join(" · ");
+      const label = [option.kind === "tube" ? "管件" : "冲压件", option.name, option.model, option.spec, option.pieces ? `每条出 ${costQuantityLabel(option.pieces)} 件` : "", option.net_weight != null ? `净重 ${costAmountLabel(option.net_weight)} kg` : "", option.gross_weight == null ? "重量待补" : `毛重 ${costAmountLabel(option.gross_weight)} kg`, option.source_id?.slice(-8)].filter(Boolean).join(" · ");
       const choice = new Option(label, String(n));
       choice.disabled = option.gross_weight == null;
       select.add(choice);

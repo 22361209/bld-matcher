@@ -101,7 +101,7 @@
     <div class="costing-summary-grid">
       <div><span>废料重量（kg/件）</span><strong data-scrap-weight>—</strong><small data-scrap-complete></small></div>
       <div><label data-scrap-auto {% if not auto_scrap %}hidden{% endif %}>废料单价（元/kg）
-        <input name="scrap_unit_price" type="number" inputmode="decimal" min="0" step="any" {{ decimal_input(record.scrap_unit_price if record.scrap_unit_price is defined and record.scrap_unit_price is not none else '2') }} placeholder="默认 2.00" {% if not can_edit %}readonly{% endif %}></label>
+        <input name="scrap_unit_price" type="number" inputmode="decimal" min="0" step="any" {{ decimal_input(record.scrap_unit_price if record.scrap_unit_price is defined and record.scrap_unit_price is not none else '2') }} placeholder="默认 2.0000" {% if not can_edit %}readonly{% endif %}></label>
         <span data-scrap-legacy {% if auto_scrap %}hidden{% endif %}>废料单价（元/kg）</span><strong data-scrap-legacy {% if auto_scrap %}hidden{% endif %}>见原表</strong></div>
       <div><span>理论废料金额（元/件）</span><strong data-costing-total="theoretical_scrap">—</strong></div>
       <div>
@@ -109,7 +109,7 @@
           <input name="scrap_credit_override" type="number" inputmode="decimal" min="0" step="any" {{ decimal_input(record.scrap_credit_override|default(none)) }} placeholder="跟随自动" {% if not can_edit %}readonly{% endif %}></label>
         <small data-scrap-auto data-scrap-applied {% if not auto_scrap %}hidden{% endif %}></small>
         <label data-scrap-legacy {% if auto_scrap %}hidden{% endif %}>废料抵减额（元/件）
-          <input name="scrap_credit" inputmode="decimal" type="number" min="0" step="any" {{ decimal_input(record.scrap_credit|default(none)) }} placeholder="留空按 0.00" {% if not can_edit %}readonly{% endif %}></label>
+          <input name="scrap_credit" inputmode="decimal" type="number" min="0" step="any" {{ decimal_input(record.scrap_credit|default(none)) }} placeholder="留空按 0.0000" {% if not can_edit %}readonly{% endif %}></label>
       </div>
     </div>
     {% include '_costing_scrap_detail.html' %}

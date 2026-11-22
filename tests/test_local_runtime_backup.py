@@ -89,6 +89,19 @@ class LocalRuntimeBackupTest(unittest.TestCase):
         self.assertFalse((destination / "data/products.sqlite3-wal").exists())
         self.assertFalse((destination / "data/products.sqlite3-shm").exists())
 
+    def test_empty_wal_uses_immutable_snapshot_and_preserves_sidecars(self) -> None:
+        wal = Path(str(self.database) + "-wal")
+        wal.write_bytes(b"")
+        before = backup._inventory(self.project)
+        connect = sqlite3.connect
+        with patch.object(backup.sqlite3, "connect", wraps=connect) as opened:
+            destination = self._create()
+        self.assertTrue(opened.call_args_list[0].args[0].endswith("?mode=ro&immutable=1"))
+        self.assertEqual(backup._inventory(self.project), before)
+        self.assertFalse(Path(str(self.database) + "-shm").exists())
+        with connect(destination / "data/products.sqlite3") as snapshot:
+            self.assertEqual(snapshot.execute("SELECT value FROM fixture").fetchall(), [("baseline",)])
+
     def test_optional_trial_cost_database_uses_backup_api_and_includes_committed_wal(self) -> None:
         trial = self._trial_database()
         (trial.parent / "access.json").write_text('{"fixture":true}', encoding="utf-8")
