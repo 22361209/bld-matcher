@@ -50,8 +50,7 @@ docker_local() {{
     esac
 }}
 compose_local() {{ echo "compose $*" >> {shlex.quote(str(self.log))}; }}
-[ "$(id -u)" = 0 ]
-""" + main.replace("lock=/var/run/quick-bld-matcher.lock", f"lock={shlex.quote(str(self.lock))}")
+[ "$(id -u)" = 0 ]""" + main.replace("lock=/var/run/quick-bld-matcher.lock", f"lock={shlex.quote(str(self.lock))}")
 
     def run_wrapper(self, *args, **env):
         return subprocess.run(["sh", "-s", "--", *args], input=self.script, text=True,
