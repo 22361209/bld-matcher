@@ -4,7 +4,7 @@ from collections import Counter, defaultdict
 from math import ceil
 from .specification import _parse_material_spec_query
 
-from .bom_store import ASSEMBLY, PLATE, STAMP, exact_spec, pending_rows
+from .bom_store import ASSEMBLY, KINDS, PLATE, STAMP, exact_spec, pending_rows
 from .weights import costing_material
 
 
@@ -36,6 +36,9 @@ class MaterialBOM:
             link = dict(row)
             self.children[link["parent"]].append(link)
             self.parents[link["child"]].append(link)
+        self.removed = []
+        for row in conn.execute("SELECT * FROM bom_removed_links ORDER BY parent,child"):
+            self.removed.append(dict(row, removed=True))
         for p in self.parts.values():
             if p["kind"] == PLATE:
                 p["spec"] = exact_spec(p)
@@ -44,50 +47,94 @@ class MaterialBOM:
             if plate:
                 p["spec"] = plate["spec"]
                 p["grade"] = plate["grade"]
+        referenced = set(self.children)
+        referenced.update(link["child"] for links in self.children.values() for link in links)
+        referenced.update(link[k] for link in self.removed for k in ("parent", "child"))
+        referenced.update(p["plate"] for p in self.parts.values() if p["plate"])
+        incoming = {link["child"] for links in self.children.values() for link in links}
+        incoming.update(link["child"] for link in self.removed)
+        incoming.update(p["plate"] for p in self.parts.values() if p["plate"])
+        historical = {r[0] for r in conn.execute("SELECT code FROM material_items WHERE code IS NOT NULL UNION SELECT model FROM material_items WHERE model IS NOT NULL")}
+        historical_child = {r[0] for r in conn.execute("SELECT code FROM material_items WHERE code IS NOT NULL UNION SELECT code FROM tube_items")}
+        historical.update(r[0] for r in conn.execute("SELECT code FROM tube_items"))
+        for p in self.parts.values():
+            p["reference_count"] = len(self.parents[p["code"]]) + sum(other["plate"] == p["code"] for other in self.parts.values())
+            protected = incoming if p["kind"] == ASSEMBLY else referenced
+            sources = historical_child if p["kind"] == ASSEMBLY else historical
+            p["deletable"] = p["kind"] != PLATE and p["code"] not in protected and p["code"] not in sources
 
-    def page(self, query, status, page, view, selected):
+    def page(self, query, status, page, view, selected, column_filters=None):
         groups = []
         needle = query.strip().casefold().replace("*", "×")
         dims = _parse_material_spec_query(query)
+        column_filters = column_filters or {}
+
         def matches(p):
             spec = p.get("spec")
             if dims and spec:
                 numbers = list(map(float, spec.split("×")))
                 if any(numbers[i:i+len(dims)] == dims for i in range(3)):
                     return True
-            return any(needle in str(p.get(k) or "").casefold() for k in ("code", "name", "kind", "spec", "grade"))
+            return any(needle in str(p.get(k) or "").casefold() for k in ("code", "name", "model", "kind", "spec", "grade"))
 
-        def tree(code, trail):
+        def library_values(p):
+            return {
+                "code": p["code"],
+                "name": p["name"],
+                "model": str(p.get("model") or "—"),
+                "kind": p["kind"],
+                "spec": f'{p["grade"]} · {p["spec"]}' if p.get("spec") else "—",
+                "net_weight": str(p["net_weight"] or "—"),
+                "reference_count": str(p["reference_count"]),
+                "actions": "详情、删除" if p["deletable"] else "详情",
+            }
+
+        def tree(code, trail, lineage=()):
             p = self.parts[code]
             nested = []
             if code in trail:
                 raise ValueError("BOM 存在循环，请核对装配关系。")
+            path = (*lineage, code)
             for link in self.children[code]:
                 if status == "active" and not link["active"]:
                     continue
                 if status == "inactive" and link["active"] and self.parts[link["child"]]["kind"] != ASSEMBLY:
                     continue
-                node = tree(link["child"], trail | {code})
+                node = tree(link["child"], trail | {code}, path)
                 if status == "inactive" and link["active"] and not node["nodes"]:
                     continue
                 nested.append(dict(node, link=link))
             hits = sum(1 for n in nested if n["hit"])
-            return dict(p, nodes=nested, hit=matches(p) or hits > 0, matched=hits, own_hit=matches(p))
+            return dict(p, path=path, nodes=nested, hit=matches(p) or hits > 0, matched=hits, own_hit=matches(p))
 
-        for code, p in self.parts.items():
-            if view == "library":
-                if matches(p):
-                    groups.append(p)
-            elif view == "list":
-                for link in self.children.get(code, ()):
-                    if (status == "active" and not link["active"]) or (status == "inactive" and link["active"]):
-                        continue
-                    if matches(p) or matches(self.parts[link["child"]]):
-                        groups.append(link)
-            elif p["kind"] == ASSEMBLY:
-                node = tree(code, set())
-                if node["hit"] and (status != "inactive" or node["nodes"]):
-                    groups.append(node)
+        filter_options = {}
+        if view == "library":
+            candidates = [p for p in self.parts.values() if p["kind"] != ASSEMBLY and matches(p)]
+            for key in ("code", "name", "model", "kind", "spec", "net_weight", "reference_count", "actions"):
+                counts = Counter(library_values(p)[key] for p in candidates)
+                filter_options[key] = [dict(value=value, label=value, count=counts[value]) for value in sorted(counts, key=str.casefold)]
+            groups.extend(
+                p for p in candidates
+                if all(not selected or library_values(p)[key.removeprefix("cf_")] in selected
+                       for key, selected in column_filters.items())
+            )
+            kind_order = {kind: index for index, kind in enumerate((*KINDS, PLATE))}
+            groups.sort(key=lambda p: (kind_order.get(p["kind"], len(kind_order)), p["code"].casefold()))
+        elif status == "removed":
+            removed_by_parent = defaultdict(list)
+            for link in self.removed:
+                if matches(self.parts[link["parent"]]) or matches(self.parts[link["child"]]):
+                    removed_by_parent[link["parent"]].append(link)
+            for parent, links in removed_by_parent.items():
+                nodes = [dict(self.parts[link["child"]], path=(parent, link["child"]), nodes=[], link=link)
+                         for link in links]
+                groups.append(dict(self.parts[parent], path=(parent,), nodes=nodes))
+        else:
+            for code, p in self.parts.items():
+                if p["kind"] == ASSEMBLY:
+                    node = tree(code, set())
+                    if node["hit"] and (status != "inactive" or node["nodes"]):
+                        groups.append(node)
         detail = self.parts.get(selected)
         weights = None
         if detail and detail["kind"] == STAMP:
@@ -97,7 +144,8 @@ class MaterialBOM:
         return dict(groups=groups[(page-1)*30:page*30], total=len(groups), pages=pages, page=page,
                     parts=self.parts, children=self.children, parents=self.parents,
                     used_by_plate=[p for p in self.parts.values() if detail and p["plate"] == detail["code"]],
-                    detail=detail, weights=weights, legacy=self.legacy, q=query, status=status, view=view)
+                    detail=detail, weights=weights, legacy=self.legacy, q=query, status=status, view=view,
+                    column_filter_options=filter_options, column_filters=column_filters)
 
     def stamp_row(self, p, link=None):
         plate = self.parts[p["plate"]]

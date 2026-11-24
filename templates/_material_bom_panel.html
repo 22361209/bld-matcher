@@ -1,53 +1,63 @@
 <section class="bom-panel">
-<header class="bom-subheader"><h2>{{ {'attach':'添加已有子件','create':'新建物料','copy':'复制为新子件','detail':'物料详情','edit':'编辑共享资料','usage':'修改装配关系'}.get(mode,'物料详情') }}</h2>
-<a href="{{ url_for('material_items',view=view,q=q,status=status,page=page) }}">返回列表</a></header>
+<header class="bom-subheader"><h2>{{ {'assembly':'编辑母件及子件' if detail else '新增母件','attach':'关联已有子件','create':'新建并关联子件' if parent else '新建物料','copy':'复制物料','detail':'母件详情' if detail and detail.kind=='焊接件' else '物料详情','edit':'编辑共享资料','usage':'调整装配用量'}.get(mode,'物料详情') }}</h2>
+<a href="{{ url_for('material_items',view=view,q=q,status=status,page=page,**filter_query) }}">返回</a></header>
 {% if parent %}<p class="bom-context">当前母件 <b>{{ parent }}</b>　{{ parts[parent].name if parent in parts else '' }}</p>{% endif %}
 {% if mode=='detail' and detail %}
 <h3>{{ detail.code }}　{{ detail.name }}</h3>
+{% if detail.kind=='焊接件' %}<div class="bom-toolbar bom-detail-workflow">{{ go('编辑母件及子件','assembly',detail.code,'','linear-button primary') }}</div>{% endif %}
 <dl class="bom-facts"><dt>物料类型</dt><dd>{{ detail.kind }}</dd>
+{% if detail.kind=='焊接件' %}<dt>母件型号</dt><dd>{{ detail.model or '—' }}</dd><dt>母件净重</dt><dd>{{ (detail.net_weight ~ ' kg') if detail.net_weight else '—' }}</dd>{% endif %}
 {% if detail.plate or detail.kind=='板料' %}<dt>板料规格</dt><dd>{{ detail.grade }} · {{ detail.spec }} mm</dd>{% endif %}
 {% if detail.plate %}<dt>下料只数</dt><dd>{{ '%g'|format(detail.pieces) }} 只/条</dd><dt>单件净重</dt><dd>{{ detail.net_weight or '待填写' }} {% if detail.net_weight %}kg{% endif %}</dd>{% endif %}
 {% if weights %}<dt>单件下料重量</dt><dd>{{ '%.4f'|format(weights.gross_weight|float) }} kg</dd>
 {% if weights.scrap_weight is not none %}<dt>单件废料</dt><dd>{{ '%.4f'|format(weights.scrap_weight|float) }} kg · {{ '%.2f'|format(weights.scrap_percent|float) }}%</dd>{% endif %}{% endif %}
-{% if tube %}<dt>管件资料</dt><dd>{{ tube.source_code }} · {{ tube.spec_text }} · {{ tube.weight_kg if tube.weight_kg is not none else '待填写' }} kg</dd>{% endif %}
+{% if tube %}<dt>管件资料编码</dt><dd>{{ tube.source_code }}</dd><dt>管件主档</dt><dd>{{ tube.spec_text }} · {{ tube.weight_kg if tube.weight_kg is not none else '待填写' }} kg</dd>{% endif %}
 <dt>使用位置</dt><dd>{% for l in parents[detail.code] %}{{ go(l.parent,'detail',l.parent) }}（{{ '%g'|format(l.qty) }} 件{% if not l.active %} · 停用{% endif %}） {% endfor %}{% for p in used_by_plate %}{{ go(p.code,'detail',p.code) }} {% endfor %}{% if not parents[detail.code] and not used_by_plate %}暂无引用{% endif %}</dd></dl>
-{% if children[detail.code] %}<h3>下级 BOM</h3>{% for l in children[detail.code] %}<p>{{ go(l.child,'detail',l.child,detail.code) }} · {{ '%g'|format(l.qty) }} 件</p>{% endfor %}{% endif %}
-{% if detail.kind!='板料' %}<div class="bom-toolbar">{{ go('编辑共享资料','edit',detail.code,parent,'linear-button') }} {{ go('复制为新子件','copy',detail.code,parent,'linear-button') }}</div>{% endif %}
+{% if children[detail.code] %}<h3>已关联子件</h3><table class="bom-child-table"><thead><tr><th>编码</th><th>名称</th><th>类型</th><th class="bom-number">用量</th><th>状态</th><th>操作</th></tr></thead><tbody>{% for l in children[detail.code] %}{% set child=parts[l.child] %}<tr><td>{{ go(l.child,'detail',l.child,detail.code,'bom-code') }}</td><td>{{ child.name }}</td><td>{{ child.kind }}</td><td class="bom-number">{{ '%g'|format(l.qty) }}</td><td>{{ '启用' if l.active else '停用' }}</td><td>{{ go('调整用量','usage',l.child,detail.code) }}</td></tr>{% endfor %}</tbody></table>{% endif %}
+{% if detail.kind!='板料' %}<div class="bom-toolbar bom-master-actions">{% if detail.kind!='焊接件' %}{{ go('编辑共享资料','edit',detail.code,parent,'linear-button subtle') }}{% endif %} {{ go('复制','copy',detail.code,parent,'linear-button subtle') }}
+{% if detail.deletable %}<form method="post" action="{{ url_for('save_material_bom') }}">{{ csrf_field() }}<input type="hidden" name="action" value="delete"><input type="hidden" name="code" value="{{ detail.code }}"><input type="hidden" name="revision" value="{{ detail.updated_at }}"><button class="linear-button danger" type="submit" data-confirm="{% if detail.kind=='焊接件' %}永久删除母件 {{ detail.code }}（{{ detail.name }}）？其装配关系和对应历史明细将一并删除，子件档案保留。此操作不能恢复。{% else %}永久删除未引用物料 {{ detail.code }}（{{ detail.name }}）？此操作不能恢复。{% endif %}">{{ '删除母件' if detail.kind=='焊接件' else '删除物料' }}</button></form>{% endif %}</div>{% endif %}
+{% elif mode=='assembly' %}{% include "_material_bom_assembly.html" %}
 {% elif mode in ('attach','usage','create','copy','edit') %}
+{% set links = children[parent]|selectattr('child','equalto',detail.code)|list if detail else [] %}
 <form method="post" action="{{ url_for('save_material_bom') }}" class="bom-form">
-{{ csrf_field() }}{% if mode=='edit' and detail %}<input type="hidden" name="revision" value="{{ detail.updated_at }}">{% endif %}<input type="hidden" name="action" value="{{ mode }}">
+{{ csrf_field() }}<input type="hidden" name="source_view" value="{{ view }}"><input type="hidden" name="mode" value="{{ mode }}">
+{% if mode=='edit' and detail %}<input type="hidden" name="revision" value="{{ detail.updated_at }}">{% endif %}<input type="hidden" name="action" value="{{ 'create' if mode=='assembly' else mode }}">
+{% if mode=='assembly' %}<input type="hidden" name="kind" value="焊接件">{% endif %}
 {% if mode=='copy' and detail %}<input type="hidden" name="source" value="{{ detail.code }}"><p class="bom-context">复制来源 <b>{{ detail.code }}</b>　{{ detail.name }}</p>{% endif %}
-{% if mode in ('attach','usage','edit') %}<input type="hidden" name="parent" value="{{ parent }}">
-{% else %}<label>挂入母件（独立建档可留空）<input name="parent" value="{{ parent }}" list="bom-assemblies"></label>
+{% if mode in ('attach','usage','edit') or (parent and mode in ('create','copy')) %}<input type="hidden" name="parent" value="{{ parent }}">
+{% elif mode in ('create','copy') %}<label>挂入母件（独立建档可留空）<input name="parent" value="{{ parent }}" list="bom-assemblies"></label>
 <datalist id="bom-assemblies">{% for p in parts.values() if p.kind=='焊接件' %}<option value="{{ p.code }}">{{ p.name }}</option>{% endfor %}</datalist>{% endif %}
 {% if mode=='attach' %}
-<label>筛选类型<select data-bom-filter-kind><option value="">全部类型</option><option>管件资料</option>{% for k in kinds %}<option>{{ k }}</option>{% endfor %}</select></label>
+<label>筛选类型<select data-bom-filter-kind><option value="">全部类型</option><option>管件资料</option>{% for k in kinds if k not in tube_kinds %}<option>{{ k }}</option>{% endfor %}</select></label>
 <label>搜索编码或名称<input data-bom-find placeholder="输入编码或名称"></label>
-<label class="bom-full">已有子件<select name="code" required size="6" data-bom-options>
-{% for p in parts.values() if p.kind!='板料' and p.code!=parent %}<option data-kind="{{ p.kind }}" value="{{ p.code }}">{{ p.code }}　{{ p.name }}　·　{{ p.kind }}</option>{% endfor %}
-{% for t in tubes if t.code not in parts %}<option data-kind="管件资料" value="{{ t.code }}">{{ t.code }}　{{ t.tube_type }}　{{ t.spec_text }}　· 管件资料</option>{% endfor %}</select></label>
+<label class="bom-full">已有子件 / 管件资料<select name="code" required size="6" data-bom-options>
+{% for p in parts.values() if p.kind!='板料' and p.kind not in tube_kinds and p.code!=parent %}<option data-kind="{{ p.kind }}" value="{{ p.code }}">{{ p.code }}　{{ p.name }}　·　{{ p.kind }}</option>{% endfor %}
+{% for t in tubes %}<option data-kind="管件资料" data-tube-kind="{{ parts[t.code].kind if t.code in parts else '焊接管' }}" value="{{ t.code }}">{{ t.code }}　{{ t.tube_type }}　{{ t.spec_text }}　· 管件资料</option>{% endfor %}</select></label>
 <label data-bom-tube-role hidden>管件在 BOM 中的类型<select name="tube_kind">{% for k in tube_kinds %}<option>{{ k }}</option>{% endfor %}</select></label>
 {% elif mode=='usage' and detail %}
 <p class="bom-context bom-full">{{ detail.code }}　{{ detail.name }}</p><input type="hidden" name="code" value="{{ detail.code }}">
 {% else %}
-<label>物料类型<select name="kind" data-bom-kind {% if mode in ('copy','edit') %}disabled{% endif %}>
-{% for k in kinds %}<option {% if (detail and detail.kind==k) or (not detail and parent and k=='冲压件') %}selected{% endif %}>{{ k }}</option>{% endfor %}</select></label>
+{% if mode!='assembly' %}<label>物料类型<select name="kind" data-bom-kind {% if mode in ('copy','edit') %}disabled{% endif %}>
+{% for k in kinds %}<option {% if (detail and detail.kind==k) or (not detail and parent and k=='冲压件') %}selected{% endif %}>{{ k }}</option>{% endfor %}</select></label>{% endif %}
 {% if mode in ('copy','edit') and detail %}<input type="hidden" name="kind" value="{{ detail.kind }}">{% endif %}
-<label>{{ '新子件编码' if mode=='copy' else '物料编码' }}<input name="code" required value="{{ detail.code if mode=='edit' and detail else '' }}" {% if mode=='edit' %}readonly{% endif %}></label>
+<label><span data-bom-code-label>{{ '新子件编码' if mode=='copy' else '物料编码' }}</span><input name="code" data-bom-code required value="{{ detail.code if mode=='edit' and detail else '' }}" {% if mode=='edit' %}readonly{% endif %}></label>
+<small class="bom-tube-reference" data-bom-tube-reference hidden>必须选择管件资料中已登记的启用编码。</small>
+<datalist id="bom-tube-codes">{% for t in tubes %}<option value="{{ t.code }}">{{ t.tube_type }} · {{ t.spec_text }}</option>{% endfor %}</datalist>
 <label>物料名称<input name="name" required value="{{ detail.name if detail else '' }}"></label>
 <label data-bom-stamp>板料规格（厚 × 宽 × 长，mm）<input name="spec" list="bom-plates" value="{{ detail.spec if detail and detail.plate else '' }}" placeholder="3.5×416×126"></label>
 <datalist id="bom-plates">{% for p in parts.values() if p.kind=='板料' %}<option value="{{ p.spec }}">{{ p.grade }}</option>{% endfor %}</datalist>
-<label data-bom-stamp>本子件下料只数（只/条）<input type="number" step="any" name="pieces" value="{{ detail.pieces if detail and detail.pieces else '' }}"></label>
+<label data-bom-stamp>本子件下料只数（只/条）<input type="number" step="any" name="pieces" value="{{ detail.pieces if detail and detail.plate else '' }}"></label>
 <label data-bom-stamp>单件净重（kg）<input type="number" step="any" name="net_weight" value="{{ detail.net_weight or '' if detail else '' }}"></label>
 {% if mode=='copy' and detail and children[detail.code] %}<label class="bom-full"><span><input type="checkbox" name="copy_children" value="1" checked> 沿用下级 BOM</span><small>{% for l in children[detail.code] %}{{ l.child }} × {{ '%g'|format(l.qty) }}　{% endfor %}</small></label>{% endif %}
 {% if mode=='edit' and detail %}<p class="bom-context bom-full">共用此档案的母件：{{ parents[detail.code]|map(attribute='parent')|join('、') or '暂无' }}</p>{% endif %}
 {% endif %}
-{% if mode!='edit' %}{% set links = children[parent]|selectattr('child','equalto',detail.code)|list if detail else [] %}
+{% if mode not in ('edit','assembly') %}
 {% if mode=='usage' and links %}<input type="hidden" name="revision" value="{{ links[0].updated_at }}">{% endif %}
 <label>装配用量（件/件）<input name="qty" type="number" step="any" required value="{{ links[0].qty if links else 1 }}"></label>
 {% if mode=='usage' %}<label>当前关系状态<select name="active"><option value="1">启用</option><option value="0" {% if links and not links[0].active %}selected{% endif %}>停用</option></select></label>{% endif %}
 {% endif %}
-<div class="bom-toolbar bom-full"><button class="linear-button primary" type="submit" {% if mode=='usage' %}data-confirm="确认修改 {{ parent }} 使用 {{ detail.code if detail else '子件' }} 的数量或启用状态？"{% elif mode=='edit' and detail and parents[detail.code] %}data-confirm="保存 {{ detail.code }} 的共享资料并用于所有引用母件？"{% endif %}>{{ '添加到母件' if mode=='attach' else '保存' }}</button>
-{% if mode=='attach' %}{{ go('新建子件并添加','create','',parent) }}{% endif %}</div></form>
-{% else %}<p>没有找到物料档案，请在迁移核对中检查原始明细。</p>{% endif %}
+<div class="bom-toolbar bom-full"><button class="linear-button primary" type="submit" {% if mode=='usage' %}data-confirm="确认修改 {{ parent }} 使用 {{ detail.code if detail else '子件' }} 的数量或启用状态？"{% elif mode=='edit' and detail and parents[detail.code] %}data-confirm="保存 {{ detail.code }} 的共享资料并用于所有引用母件？"{% endif %}>{{ '创建母件' if mode=='assembly' else '关联到母件' if mode=='attach' else '新建并关联' if mode=='create' and parent else '保存' }}</button>
+{% if mode=='attach' %}{{ go('新建并关联子件','create','',parent) }}{% endif %}</div></form>
+{% if mode=='usage' and links %}<form method="post" action="{{ url_for('save_material_bom') }}" class="bom-remove-form">{{ csrf_field() }}<input type="hidden" name="action" value="remove"><input type="hidden" name="parent" value="{{ parent }}"><input type="hidden" name="code" value="{{ detail.code }}"><input type="hidden" name="revision" value="{{ links[0].updated_at }}"><button class="linear-button danger" type="submit" data-confirm="将 {{ detail.code }} 从 {{ parent }} 移除？共享档案保留，可在“已移除”中恢复。">移除此装配关系</button></form>{% endif %}
+{% else %}<p>没有找到材料明细，请在迁移核对中检查原始明细。</p>{% endif %}
 </section>

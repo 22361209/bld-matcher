@@ -1367,6 +1367,17 @@ def _install_material_bom(conn: sqlite3.Connection) -> None:
     install(conn)
 
 
+def _install_material_bom_removals(conn: sqlite3.Connection) -> None:
+    from .modules.materials.bom_removal import install_removals
+
+    install_removals(conn)
+
+
+def _add_material_bom_parent_model(conn: sqlite3.Connection) -> None:
+    if _columns(conn, "bom_parts") and "model" not in _columns(conn, "bom_parts"):
+        conn.execute("ALTER TABLE bom_parts ADD COLUMN model TEXT")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -1419,6 +1430,8 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("049_derive_stamping_material_grades", _derive_stamping_material_grades),
     ("050_tube_weight_calculation", _add_tube_weight_calculation),
     ("051_shared_material_bom", _install_material_bom),
+    ("052_material_bom_removals", _install_material_bom_removals),
+    ("053_material_bom_parent_model", _add_material_bom_parent_model),
 )
 
 

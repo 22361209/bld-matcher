@@ -4,6 +4,7 @@ from collections.abc import Callable, Mapping
 from datetime import datetime
 from pathlib import Path
 
+from .bom_common import TUBE_KINDS
 from .domain import MaterialImportResult, MaterialPage, normalize_column_filters, normalize_status
 from .infrastructure import MaterialFileAdapter
 
@@ -26,10 +27,23 @@ class MaterialService:
 
     def change_bom(self, data, actor):
         self.bootstrap()
-        if data.get("action") == "attach" and data.get("tube_kind"):
+        action = data.get("action")
+        if (action == "attach" and data.get("tube_kind")) or (action in ("create", "copy") and data.get("kind") in TUBE_KINDS):
             from app.modules.tubes.factory import get_tube_service
             tube = get_tube_service().bom_detail(data.get("code", ""))
             data = dict(data, tube_code=tube["code"] if tube else "")
+        elif action == "assembly_save" and hasattr(data, "getlist"):
+            from app.modules.tubes.factory import get_tube_service
+            tubes = get_tube_service()
+            codes = data.getlist("child_code")
+            kinds = data.getlist("new_kind")
+            resolved = []
+            for index, code in enumerate(codes):
+                kind = kinds[index] if index < len(kinds) else ""
+                tube = tubes.bom_detail(code) if kind in TUBE_KINDS else None
+                resolved.append(tube["code"] if tube else "")
+            data = data.copy()
+            data.setlist("new_tube_code", resolved)
         with self.unit_of_work_factory() as work:
             work.repository.change_bom(data, actor)
             work.commit()

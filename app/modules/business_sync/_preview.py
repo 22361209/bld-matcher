@@ -59,7 +59,7 @@ def _preview_package(
         material_sources = current_stamping_source_ids(connection) if "materials" in payload else set()
         if "materials" in payload:
             material_sources.update(r[0] for r in connection.execute(
-                "SELECT origin FROM bom_links WHERE origin IS NOT NULL UNION SELECT origin FROM bom_source_aliases"))
+                "SELECT origin FROM bom_links WHERE origin IS NOT NULL UNION SELECT origin FROM bom_source_aliases UNION SELECT origin FROM bom_removed_sources"))
         for key, incoming_rows in payload.items():
             if key == "costing":
                 summary[key] = preview_costing(connection, incoming_rows[0])

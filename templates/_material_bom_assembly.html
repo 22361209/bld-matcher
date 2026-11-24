@@ -1,0 +1,53 @@
+{% macro assembly_child_row(link=none) %}
+{% set child = parts[link.child] if link else none %}
+<tr data-bom-child-row>
+  <td class="bom-sequence-cell"><span class="bom-row-number" data-bom-row-number></span><span class="bom-row-controls"><button type="button" data-bom-add-row aria-label="在此行下增加一行">＋</button><button type="button" data-bom-remove-row aria-label="删除此行">−</button></span></td>
+  <td><div class="bom-child-code-input"><input name="child_code" value="{{ link.child if link else '' }}" list="bom-child-codes" autocomplete="off" data-bom-child-code aria-label="子件编码"><button class="link-button" type="button" data-bom-new-child{% if link %} hidden{% endif %}>新建</button></div></td>
+  <td><input name="child_name" value="{{ child.name if child else '' }}" readonly tabindex="-1" data-bom-child-name aria-label="子件名称"></td>
+  <td><input name="child_kind" value="{{ child.kind if child else '' }}" readonly tabindex="-1" data-bom-child-kind aria-label="子件类型"></td>
+  <td><input name="child_qty" type="number" step="any" min="0.000001" value="{{ '%g'|format(link.qty) if link else '1' }}" data-bom-child-qty aria-label="装配用量"></td>
+  <td class="bom-child-hidden-fields">
+    <input type="hidden" name="new_name" data-bom-new-name><input type="hidden" name="new_kind" data-bom-new-kind>
+    <input type="hidden" name="new_spec" data-bom-new-spec><input type="hidden" name="new_pieces" data-bom-new-pieces>
+    <input type="hidden" name="new_net_weight" data-bom-new-net-weight>
+  </td>
+</tr>
+{% endmacro %}
+{% set assembly_links = children[detail.code] if detail else [] %}
+{% set structure_revision = ([detail.updated_at] + assembly_links|map(attribute='updated_at')|list)|max if detail else '' %}
+<form method="post" action="{{ url_for('save_material_bom') }}" data-bom-assembly-form data-enter-navigation data-submit-wait data-submit-wait-text="正在保存母件及子件…">
+  {{ csrf_field() }}<input type="hidden" name="action" value="assembly_save"><input type="hidden" name="mode" value="assembly"><input type="hidden" name="source_view" value="tree">
+  {% if detail %}<input type="hidden" name="revision" value="{{ detail.updated_at }}"><input type="hidden" name="structure_revision" value="{{ structure_revision }}">{% endif %}
+  <div class="bom-form bom-assembly-master">
+    <label>母件编码<input name="code" required maxlength="120" value="{{ detail.code if detail else '' }}" {% if detail %}readonly{% endif %}></label>
+    <label>母件名称<input name="name" required value="{{ detail.name if detail else '' }}"></label>
+    <label>母件型号<input name="model" maxlength="120" value="{{ detail.model if detail else '' }}"></label>
+    <label>母件净重（kg）<input name="net_weight" type="number" step="any" min="0.000001" value="{{ detail.net_weight or '' if detail else '' }}"></label>
+  </div>
+  <div class="bom-assembly-grid"><table class="data-table bom-assembly-table">
+    <thead><tr><th>序号</th><th>子件编码</th><th>名称</th><th>类型</th><th class="bom-number">用量</th></tr></thead>
+    <tbody data-bom-child-rows>
+      {% for link in assembly_links %}{{ assembly_child_row(link) }}{% endfor %}
+      {% for unused in range([8 - assembly_links|length, 0]|max) %}{{ assembly_child_row() }}{% endfor %}
+    </tbody>
+  </table></div>
+  <div class="bom-toolbar bom-assembly-actions"><button class="linear-button primary" type="submit" {% if detail %}data-confirm="保存 {{ detail.code }} 的母件资料和子件清单？已从清单删除的现有关系将转为可恢复的已移除记录。"{% endif %}>保存母件及子件</button></div>
+</form>
+<datalist id="bom-child-codes">
+  {% for p in parts.values() if p.kind!='板料' and (not detail or p.code!=detail.code) %}<option value="{{ p.code }}" data-name="{{ p.name }}" data-kind="{{ p.kind }}">{{ p.name }} · {{ p.kind }}</option>{% endfor %}
+  {% for t in tubes if t.code not in parts %}<option value="{{ t.code }}" data-name="{{ t.tube_type }}" data-kind="焊接管" data-reference="1">{{ t.tube_type }} · {{ t.spec_text }}</option>{% endfor %}
+</datalist>
+<template data-bom-child-template>{{ assembly_child_row() }}</template>
+<dialog class="dialog-panel bom-new-child-dialog" data-bom-child-dialog aria-labelledby="bom-new-child-title">
+  <div class="dialog-header"><h2 id="bom-new-child-title">新建子件并加入清单</h2><button class="dialog-close" type="button" data-bom-close-child aria-label="关闭">×</button></div>
+  <div class="bom-form">
+    <label>子件编码<input data-bom-new-field="code" readonly></label>
+    <label>物料类型<select data-bom-new-field="kind">{% for kind in kinds %}<option value="{{ kind }}">{{ kind }}</option>{% endfor %}</select></label>
+    <label>物料名称<input data-bom-new-field="name" required></label>
+    <label data-bom-new-stamp>板料规格（厚 × 宽 × 长，mm）<input data-bom-new-field="spec" placeholder="3.5×416×126"></label>
+    <label data-bom-new-stamp>下料只数（只/条）<input data-bom-new-field="pieces" type="number" step="any" min="0.000001"></label>
+    <label data-bom-new-stamp>单件净重（kg）<input data-bom-new-field="net_weight" type="number" step="any" min="0.000001"></label>
+  </div>
+  <p class="bom-dialog-error" data-bom-child-error role="alert"></p>
+  <div class="form-actions"><button class="linear-button subtle" type="button" data-bom-close-child>取消</button><button class="linear-button primary" type="button" data-bom-confirm-child>加入清单</button></div>
+</dialog>

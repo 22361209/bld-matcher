@@ -1,5 +1,8 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import io
+import json
+import tarfile
 import unittest
 
 from openpyxl import Workbook, load_workbook
@@ -22,7 +25,12 @@ class SharedMaterialBOMTests(unittest.TestCase):
         self.addCleanup(self.conn.close)
 
     def create(self, code, name, kind, **fields):
-        update_bom(self.conn, dict(action="create", code=code, name=name, kind=kind, qty=1, **fields))
+        values = dict(action="create", code=code, name=name, kind=kind, qty=1, **fields)
+        if kind in ("焊接管", "焊接座管", "轴类"):
+            self.conn.execute("""INSERT OR IGNORE INTO tube_items(code,tube_type,spec_text,weight_kg,created_at,updated_at)
+                VALUES (?,?,'Ø35×30',0.15,'2026-01-01','2026-01-01')""", (code, kind))
+            values["tube_code"] = code
+        update_bom(self.conn, values)
 
     def legacy(self, model, code, **fields):
         row = dict(model=model, code=code, part="主板", pieces=4, spec_text="3.5×416×126")
@@ -90,7 +98,7 @@ class SharedMaterialBOMTests(unittest.TestCase):
         self.assertEqual(calculate(plan, MaterialBOM(self.conn).production())[0], [])
         validate_graph(self.conn)
 
-    def test_list_shows_each_direct_usage_and_filters_shared_stock(self):
+    def test_tree_shows_each_direct_usage_and_filters_shared_stock(self):
         for code in ("A", "B"):
             self.create(code, code, "焊接件")
         self.create("K", "主板", "冲压件", parent="A", spec="3.5*416*126", pieces=4)
@@ -100,12 +108,33 @@ class SharedMaterialBOMTests(unittest.TestCase):
         graph = MaterialBOM(self.conn)
 
         def rows(query, status):
-            links = graph.page(query, status, 1, "list", "")["groups"]
-            return [(r["parent"], r["child"], r["qty"]) for r in links]
+            groups = graph.page(query, status, 1, "tree", "")["groups"]
+            return [(parent["code"], child["code"], child["link"]["qty"]) for parent in groups for child in parent["nodes"]]
 
         self.assertEqual(rows("", "all"), [("A", "K", 1), ("B", "A", 1), ("B", "K", 2)])
-        self.assertEqual(rows("3.5*416*126", "active"), [("A", "K", 1)])
+        self.assertEqual(rows("3.5*416*126", "active"), [("A", "K", 1), ("B", "A", 1)])
         self.assertEqual(rows("主板", "inactive"), [("B", "K", 2)])
+
+    def test_library_groups_by_kind_and_filters_every_display_value(self):
+        self.create("Z-ASSEMBLY", "总成", "焊接件")
+        self.create("Z-STAMP", "主板", "冲压件", spec="3.5*416*126", pieces=4)
+        self.create("A-TUBE", "焊接管", "焊接管")
+        page = MaterialBOM(self.conn).page("", "active", 1, "library", "")
+        self.assertEqual([p["code"] for p in page["groups"]],
+                         ["Z-STAMP", "A-TUBE", "板料/SPHC/3.5×416×126"])
+        self.assertEqual(set(page["column_filter_options"]),
+                         {"code", "name", "model", "kind", "spec", "net_weight", "reference_count", "actions"})
+        self.assertNotIn("焊接件", [option["value"] for option in page["column_filter_options"]["kind"]])
+        filtered = MaterialBOM(self.conn).page("", "active", 1, "library", "", {"cf_kind": ["冲压件"]})
+        self.assertEqual([p["code"] for p in filtered["groups"]], ["Z-STAMP"])
+        named = MaterialBOM(self.conn).page("", "active", 1, "library", "", {"cf_name": ["焊接管"]})
+        self.assertEqual([p["code"] for p in named["groups"]], ["A-TUBE"])
+
+    def test_new_tube_part_requires_registered_tube_code(self):
+        self.create("W", "焊接件", "焊接件")
+        with self.assertRaisesRegex(ValueError, "管件资料"):
+            update_bom(self.conn, dict(action="create", parent="W", code="MISSING", kind="焊接管", name="管件", qty=1))
+        self.assertNotIn("MISSING", MaterialBOM(self.conn).parts)
 
     def test_copy_of_assembly_reuses_only_chosen_children(self):
         self.create("W", "焊接件", "焊接件")
@@ -144,7 +173,7 @@ class SharedMaterialBOMTests(unittest.TestCase):
 
     def test_sync_roundtrip_preserves_shared_part_and_assembly_use(self):
         from app.modules.business_sync.infrastructure import BusinessSyncRepository
-        self.create("W1", "焊接总成", "焊接件")
+        self.create("W1", "焊接总成", "焊接件", model="MODEL-1")
         self.create("W2", "焊接总成", "焊接件")
         self.create("KA8234", "主板", "冲压件", parent="W1", spec="3.5*416*126", pieces=4)
         update_bom(self.conn, dict(action="attach", parent="W2", code="KA8234", qty=2))
@@ -152,7 +181,7 @@ class SharedMaterialBOMTests(unittest.TestCase):
         source = BusinessSyncRepository(self.root / "test.sqlite3")
         target = BusinessSyncRepository(self.root / "target.sqlite3")
         package = source.export(output_path=self.root / "bom.tar.gz", selected=("materials",), actor="test")
-        self.assertEqual(source.read(package)[0]["version"], 16)
+        self.assertEqual(source.read(package)[0]["version"], 18)
         preview = target.preview(package)
         target.apply(package, backup_path=self.root/"backup.sqlite3", actor="test",
                      expected_token=preview["token"], selected_conflicts={})
@@ -161,6 +190,122 @@ class SharedMaterialBOMTests(unittest.TestCase):
             self.assertEqual(len(graph.parts), 4)
             self.assertEqual(graph.production()["W2"][0]["assembly_qty"], 2)
             self.assertEqual(graph.parts["KA8234"]["pieces"], 4)
+            self.assertEqual(graph.parts["W1"]["model"], "MODEL-1")
+        update_bom(self.conn, dict(action="remove", parent="W2", code="KA8234"), actor="tester")
+        self.conn.commit()
+        removed_package = source.export(output_path=self.root / "bom-removed.tar.gz", selected=("materials",), actor="test")
+        preview = target.preview(removed_package)
+        target.apply(removed_package, backup_path=self.root/"backup-removed.sqlite3", actor="test",
+                     expected_token=preview["token"], selected_conflicts={})
+        with connect(self.root / "target.sqlite3") as conn:
+            self.assertFalse(MaterialBOM(conn).production().get("W2"))
+            self.assertEqual(conn.execute("SELECT count(*) FROM bom_removed_sources").fetchone()[0], 0)
+        update_bom(self.conn, dict(action="restore", parent="W2", code="KA8234"))
+        self.conn.commit()
+        restored_package = source.export(output_path=self.root / "bom-restored.tar.gz", selected=("materials",), actor="test")
+        preview = target.preview(restored_package)
+        target.apply(restored_package, backup_path=self.root/"backup-restored.sqlite3", actor="test",
+                     expected_token=preview["token"], selected_conflicts={})
+        with connect(self.root / "target.sqlite3") as conn:
+            self.assertEqual(MaterialBOM(conn).production()["W2"][0]["assembly_qty"], 2)
+            self.assertEqual(conn.execute("SELECT count(*) FROM bom_removed_links").fetchone()[0], 0)
+
+    def test_v16_packages_remain_compatible_without_overriding_a_removal(self):
+        from app.modules.business_sync.infrastructure import BusinessSyncRepository
+        self.create("W", "焊接总成", "焊接件")
+        self.create("KA8234", "主板", "冲压件", parent="W", spec="3.5*416*126", pieces=4)
+        self.conn.commit()
+        source = BusinessSyncRepository(self.root / "test.sqlite3")
+        target = BusinessSyncRepository(self.root / "target.sqlite3")
+        current = source.export(output_path=self.root / "current.tar.gz", selected=("materials",), actor="test")
+        manifest, payload = source.read(current)
+        manifest["version"] = 16
+        manifest["datasets"] = [key for key in manifest["datasets"] if not key.startswith("bom_removed_")]
+        for key in ("bom_removed_links", "bom_removed_sources"):
+            payload.pop(key)
+        for row in payload["bom_parts"]:
+            row.pop("model")
+        legacy = self.root / "v16.tar.gz"
+        with tarfile.open(legacy, "w:gz") as archive:
+            for name, value in (("manifest.json", manifest), ("data.json", payload)):
+                encoded = json.dumps(value, ensure_ascii=False).encode()
+                member = tarfile.TarInfo(name)
+                member.size = len(encoded)
+                archive.addfile(member, io.BytesIO(encoded))
+        preview = target.preview(legacy)
+        target.apply(legacy, backup_path=self.root/"backup-v16.sqlite3", actor="test",
+                     expected_token=preview["token"], selected_conflicts={})
+        with connect(self.root / "target.sqlite3") as conn:
+            self.assertEqual(MaterialBOM(conn).production()["W"][0]["assembly_qty"], 1)
+        with connect(self.root / "target.sqlite3") as conn:
+            update_bom(conn, dict(action="remove", parent="W", code="KA8234"), actor="tester")
+            conn.commit()
+        preview = target.preview(legacy)
+        with self.assertRaisesRegex(ValueError, "已移除"):
+            target.apply(legacy, backup_path=self.root/"backup-v16-removed.sqlite3", actor="test",
+                         expected_token=preview["token"], selected_conflicts={})
+
+    def test_removed_legacy_relation_stays_out_of_production_until_restored(self):
+        self.legacy("W", "KA")
+        migrate_rows(self.conn)
+        update_bom(self.conn, dict(action="remove", parent="W", code="KA"), actor="tester")
+        migrate_rows(self.conn)
+        graph = MaterialBOM(self.conn)
+        self.assertFalse(graph.production().get("W"))
+        self.assertFalse(graph.legacy)
+        self.assertEqual(self.conn.execute("SELECT count(*) FROM bom_removed_sources").fetchone()[0], 1)
+        self.assertEqual(graph.page("", "removed", 1, "tree", "")["total"], 1)
+        validate_graph(self.conn)
+        update_bom(self.conn, dict(action="restore", parent="W", code="KA"))
+        graph = MaterialBOM(self.conn)
+        self.assertEqual(graph.production()["W"][0]["assembly_qty"], 1)
+        self.assertEqual(self.conn.execute("SELECT count(*) FROM bom_removed_links").fetchone()[0], 0)
+
+    def test_restore_rechecks_cycles_introduced_after_removal(self):
+        self.create("A", "总成 A", "焊接件")
+        self.create("B", "总成 B", "焊接件")
+        update_bom(self.conn, dict(action="attach", parent="A", code="B", qty=1))
+        update_bom(self.conn, dict(action="remove", parent="A", code="B"))
+        update_bom(self.conn, dict(action="attach", parent="B", code="A", qty=1))
+        with self.assertRaisesRegex(ValueError, "循环"):
+            update_bom(self.conn, dict(action="restore", parent="A", code="B"))
+
+    def test_delete_requires_an_unreferenced_master_without_history(self):
+        self.create("FREE", "独立物料", "焊接件")
+        update_bom(self.conn, dict(action="delete", code="FREE"))
+        self.assertNotIn("FREE", MaterialBOM(self.conn).parts)
+        self.create("W", "焊接总成", "焊接件")
+        self.create("KA8234", "主板", "冲压件", parent="W", spec="3.5*416*126", pieces=4)
+        with self.assertRaisesRegex(ValueError, "引用"):
+            update_bom(self.conn, dict(action="delete", code="KA8234"))
+        update_bom(self.conn, dict(action="remove", parent="W", code="KA8234"))
+        with self.assertRaisesRegex(ValueError, "引用|历史"):
+            update_bom(self.conn, dict(action="delete", code="KA8234"))
+        self.assertIn("KA8234", MaterialBOM(self.conn).parts)
+
+    def test_delete_assembly_cascades_outgoing_structure_and_preserves_children(self):
+        self.legacy("W-DELETE", "KA-LEGACY")
+        migrate_rows(self.conn)
+        self.create("KA-NEW", "新主板", "冲压件", parent="W-DELETE", spec="3.5*416*126", pieces=4)
+        self.create("TOP", "上级总成", "焊接件")
+        update_bom(self.conn, dict(action="attach", parent="TOP", code="W-DELETE", qty=1))
+        with self.assertRaisesRegex(ValueError, "引用"):
+            update_bom(self.conn, dict(action="delete", code="W-DELETE"))
+        update_bom(self.conn, dict(action="remove", parent="TOP", code="W-DELETE"))
+        with self.assertRaisesRegex(ValueError, "引用"):
+            update_bom(self.conn, dict(action="delete", code="W-DELETE"))
+        update_bom(self.conn, dict(action="delete", code="TOP"))
+        update_bom(self.conn, dict(action="remove", parent="W-DELETE", code="KA-NEW"))
+        self.assertTrue(MaterialBOM(self.conn).parts["W-DELETE"]["deletable"])
+        update_bom(self.conn, dict(action="delete", code="W-DELETE"))
+        graph = MaterialBOM(self.conn)
+        self.assertNotIn("W-DELETE", graph.parts)
+        self.assertIn("KA-LEGACY", graph.parts)
+        self.assertIn("KA-NEW", graph.parts)
+        self.assertEqual(self.conn.execute("SELECT count(*) FROM material_items WHERE model='W-DELETE'").fetchone()[0], 0)
+        self.assertEqual(self.conn.execute("SELECT count(*) FROM bom_links WHERE parent='W-DELETE'").fetchone()[0], 0)
+        self.assertEqual(self.conn.execute("SELECT count(*) FROM bom_removed_links WHERE parent='W-DELETE'").fetchone()[0], 0)
+        validate_graph(self.conn)
 
     def test_reviewed_duplicate_retains_both_sources_and_explicit_usage(self):
         self.legacy("W", "KA")
@@ -197,9 +342,99 @@ class MaterialBOMWebTests(WebAppTestBase):
         save(action="copy", source="KA-WEB", code="KB-WEB", kind="冲压件", name="加强板",
              spec="3.5×416×126", pieces="6", qty="1", parent="W-BOM")
         duplicate = save(action="attach", code="KB-WEB", parent="W-BOM", qty="1")
-        self.assertIn("修改装配关系", duplicate.get_data(as_text=True))
+        self.assertIn("装配用量", duplicate.get_data(as_text=True))
+        tree = self.client.get("/materials/items", query_string=dict(q="W-BOM")).get_data(as_text=True)
+        self.assertIn("bom-tree-table", tree)
+        self.assertIn('data-bom-toggle="W-BOM"', tree)
+        self.assertNotIn('name="action" value="remove"', tree)
+        self.assertNotIn(">添加</a>", tree)
+        self.assertIn("新增母件", tree)
+        usage = self.client.get("/materials/items", query_string=dict(mode="usage", parent="W-BOM", selected="KB-WEB"))
+        self.assertIn('name="action" value="remove"', usage.get_data(as_text=True))
+        self.assertNotIn("bom-branch", tree)
         with self.web.connect(self.web.DB_PATH) as conn:
             g = MaterialBOM(conn)
             self.assertEqual(len(g.children["W-BOM"]), 3)
             self.assertEqual(g.parts["KA-WEB"]["plate"], g.parts["KB-WEB"]["plate"])
             self.assertEqual(g.parts["TG-BOM"]["kind"], "焊接座管")
+            revision = next(link["updated_at"] for link in g.children["W-BOM"] if link["child"] == "KB-WEB")
+        removed = save(action="remove", parent="W-BOM", code="KB-WEB", revision=revision)
+        self.assertIn("装配关系已移除", removed.get_data(as_text=True))
+        removed_page = self.client.get("/materials/items", query_string=dict(view="list", status="removed")).get_data(as_text=True)
+        self.assertIn("KB-WEB", removed_page)
+        self.assertIn('name="action" value="restore"', removed_page)
+        legacy_list = self.client.get("/materials/items", query_string=dict(view="list"))
+        self.assertEqual(legacy_list.status_code, 200)
+        self.assertNotIn("明细列表", legacy_list.get_data(as_text=True))
+
+    def test_assembly_workflow_and_library_column_controls(self):
+        self.login()
+        form = self.client.get("/materials/items", query_string=dict(mode="assembly")).get_data(as_text=True)
+        self.assertIn('name="action" value="assembly_save"', form)
+        self.assertIn('name="model"', form)
+        self.assertIn("data-bom-child-rows", form)
+        created = self.client.post("/materials/bom/save", data=dict(
+            action="assembly_save", mode="assembly", source_view="tree", code="W-FIRST", name="先建母件",
+            model="MODEL-1", child_code=["KA-FIRST"], child_qty=["2"], new_name=["主板"],
+            new_kind=["冲压件"], new_spec=["3.5×416×126"], new_pieces=["4"], new_net_weight=[""]
+        ), follow_redirects=True)
+        detail = created.get_data(as_text=True)
+        self.assertIn("母件及子件清单已保存", detail)
+        self.assertIn("编辑母件及子件", detail)
+        self.assertIn("MODEL-1", detail)
+        self.assertIn("KA-FIRST", detail)
+        invalid = self.client.post("/materials/bom/save", data=dict(
+            action="assembly_save", mode="assembly", code="W-TUBE", name="管件母件",
+            child_code=["NOT-REGISTERED"], child_qty=["1"], new_name=["管件"], new_kind=["焊接管"]
+        ), follow_redirects=True)
+        self.assertIn("请先建立管件资料", invalid.get_data(as_text=True))
+        library = self.client.get("/materials/items", query_string=dict(view="library")).get_data(as_text=True)
+        self.assertIn(">材料明细</a>", library)
+        self.assertNotIn(">物料档案</a>", library)
+        self.assertNotIn("W-FIRST", library)
+        self.assertIn("KA-FIRST", library)
+        self.assertEqual(library.count("data-column-filter-panel"), 8)
+        self.assertEqual(library.count("<col data-col="), 8)
+        filtered = self.client.get("/materials/items", query_string=dict(view="library", cf_kind="焊接件"))
+        page = filtered.get_data(as_text=True)
+        self.assertNotIn("W-FIRST", page)
+        self.assertIn('<td colspan="8">没有找到符合条件的物料。</td>', page)
+        self.assertIn('name="cf_kind" value="焊接件"', page)
+        self.assertIn("cf_kind=%E7%84%8A%E6%8E%A5%E4%BB%B6", page)
+
+    def test_library_deletes_only_an_unreferenced_detail(self):
+        self.login()
+        def save(**fields):
+            return self.client.post("/materials/bom/save", data=fields, follow_redirects=True)
+
+        save(action="assembly_save", mode="assembly", code="W-LIST", name="列表母件",
+             child_code=["KA-LIST"], child_qty=["1"], new_name=["引用件"], new_kind=["冲压件"],
+             new_spec=["3.5×416×126"], new_pieces=["4"])
+        save(action="create", mode="create", code="FREE-LIST", name="独立件", kind="冲压件",
+             spec="3.5×416×126", pieces="4")
+        with self.web.connect(self.web.DB_PATH) as conn:
+            revision = MaterialBOM(conn).parts["FREE-LIST"]["updated_at"]
+        library = self.client.get("/materials/items", query_string=dict(view="library")).get_data(as_text=True)
+        self.assertNotIn("W-LIST", library)
+        self.assertIn("KA-LIST", library)
+        self.assertIn("FREE-LIST", library)
+        self.assertEqual(library.count('name="action" value="delete"'), 1)
+        deleted = save(action="delete", code="FREE-LIST", revision=revision)
+        page = deleted.get_data(as_text=True)
+        self.assertIn("材料明细已删除", page)
+        self.assertNotIn("FREE-LIST", page)
+        self.assertIn("KA-LIST", page)
+        with self.web.connect(self.web.DB_PATH) as conn:
+            graph = MaterialBOM(conn)
+            self.assertNotIn("FREE-LIST", graph.parts)
+            revision = graph.parts["W-LIST"]["updated_at"]
+        detail = self.client.get("/materials/items", query_string=dict(mode="detail", selected="W-LIST")).get_data(as_text=True)
+        self.assertIn("删除母件", detail)
+        self.assertIn("子件档案保留", detail)
+        deleted = save(action="delete", code="W-LIST", revision=revision)
+        self.assertIn("材料明细已删除", deleted.get_data(as_text=True))
+        with self.web.connect(self.web.DB_PATH) as conn:
+            graph = MaterialBOM(conn)
+            self.assertNotIn("W-LIST", graph.parts)
+            self.assertIn("KA-LIST", graph.parts)
+            self.assertFalse(graph.children["W-LIST"])

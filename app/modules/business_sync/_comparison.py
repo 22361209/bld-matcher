@@ -76,7 +76,8 @@ def check_archived_material_changes(connection, payload):
     fields = ("model", "code", "part", "pieces", "thickness", "width", "length", "net_weight", "active")
     archived = {r["sync_id"]: r for r in connection.execute("""
         SELECT m.* FROM material_items m WHERE m.sync_id IN
-        (SELECT origin FROM bom_links WHERE origin IS NOT NULL UNION SELECT origin FROM bom_source_aliases)
+        (SELECT origin FROM bom_links WHERE origin IS NOT NULL UNION SELECT origin FROM bom_source_aliases
+         UNION SELECT origin FROM bom_removed_sources)
     """)}
     for incoming in payload["materials"]:
         source = archived.get(incoming["sync_id"])

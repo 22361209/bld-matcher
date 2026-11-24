@@ -32,6 +32,22 @@ def _gross_weight(row: Mapping[str, object]) -> Decimal | None:
         return result.quantize(_WEIGHT_STEP) if _WEIGHT_STEP <= result <= _MAX_WEIGHT else None
 
 
+def validated_part_weight(value: object) -> str | None:
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    message = "净重必须为有限正数，最多保留 18 位小数。"
+    if isinstance(value, bool) or len(str(value)) > 100:
+        raise ValueError(message)
+    try:
+        net = Decimal(str(value).strip())
+    except InvalidOperation as exc:
+        raise ValueError(message) from exc
+    exponent = net.as_tuple().exponent
+    if not net.is_finite() or not 0 < net <= _MAX_WEIGHT or not isinstance(exponent, int) or exponent < -18:
+        raise ValueError(message)
+    return _decimal_text(net)
+
+
 def validated_net_weight(row: Mapping[str, object], value: object) -> str | None:
     if value is None or (isinstance(value, str) and not value.strip()):
         return None

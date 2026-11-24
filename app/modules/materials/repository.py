@@ -75,7 +75,7 @@ class SQLiteMaterialRepository:
 
     def change_bom(self, data, actor):
         self.connection.execute("BEGIN IMMEDIATE")
-        update_bom(self.connection, data)
+        update_bom(self.connection, data, actor)
         self.audit("维护生产 BOM", "material_bom", data.get("code", ""),
                    f"{data.get('action')} · {data.get('parent', '')}", actor=actor)
 
@@ -122,7 +122,8 @@ class SQLiteMaterialRepository:
         if not self.connection.in_transaction:
             self.connection.execute("BEGIN IMMEDIATE")
         previous = self.get(int(str(data["id"]))) if data.get("id") else None
-        if previous and self.connection.execute("SELECT 1 FROM bom_links WHERE origin=?1 UNION SELECT 1 FROM bom_source_aliases WHERE origin=?1", (previous["sync_id"],)).fetchone():
+        if previous and self.connection.execute("""SELECT 1 FROM bom_links WHERE origin=?1 UNION SELECT 1 FROM bom_source_aliases WHERE origin=?1
+            UNION SELECT 1 FROM bom_removed_sources WHERE origin=?1""", (previous["sync_id"],)).fetchone():
             raise ValueError("此原始记录已归档，请从 BOM 中编辑共享资料或装配用量。")
         if not previous and self.connection.execute("SELECT 1 FROM bom_parts WHERE code=?", (data.get("code"),)).fetchone():
             raise ValueError("子件已建档，请在母件下添加已有子件。")

@@ -46,6 +46,25 @@ QuoteCustomerResolver = Callable[
 ]
 
 
+def _reconcile_bom_removals(connection: sqlite3.Connection, payload: Payload) -> None:
+    for incoming in payload.get("bom_links", []):
+        removed = connection.execute("SELECT removed_at FROM bom_removed_links WHERE sync_id=?", (incoming["sync_id"],)).fetchone()
+        if not removed:
+            continue
+        if str(incoming.get("updated_at") or "") <= removed["removed_at"]:
+            raise ValueError(f"本机已移除 {incoming['parent']} / {incoming['child']}，请使用包含最新移除或恢复记录的数据包。")
+        connection.execute("DELETE FROM bom_removed_sources WHERE relation=?", (incoming["sync_id"],))
+        connection.execute("DELETE FROM bom_removed_links WHERE sync_id=?", (incoming["sync_id"],))
+    for incoming in payload.get("bom_removed_links", []):
+        active = connection.execute("SELECT updated_at FROM bom_links WHERE sync_id=?", (incoming["sync_id"],)).fetchone()
+        if not active:
+            continue
+        if active["updated_at"] > incoming["removed_at"]:
+            raise ValueError(f"{incoming['parent']} / {incoming['child']} 在移除后又有修改，请重新核对。")
+        connection.execute("DELETE FROM bom_source_aliases WHERE relation=?", (incoming["sync_id"],))
+        connection.execute("DELETE FROM bom_links WHERE sync_id=?", (incoming["sync_id"],))
+
+
 def _customer_name_key(value: object) -> str:
     return " ".join(str(value or "").split()).casefold()
 
@@ -222,7 +241,7 @@ def _apply_package(
         material_sources = current_stamping_source_ids(connection) if "materials" in payload else set()
         if "materials" in payload:
             material_sources.update(r[0] for r in connection.execute(
-                "SELECT origin FROM bom_links WHERE origin IS NOT NULL UNION SELECT origin FROM bom_source_aliases"))
+                "SELECT origin FROM bom_links WHERE origin IS NOT NULL UNION SELECT origin FROM bom_source_aliases UNION SELECT origin FROM bom_removed_sources"))
         if state_token(connection, package_path, tuple(payload), material_sources=material_sources,
                        development_file_dir=development_file_dir, development_rows=payload.get("development", [])) != expected_token:
             raise ValueError("预览后数据包或本机数据已变化，请重新上传预览。")
@@ -335,6 +354,7 @@ def _apply_package(
             result[key] = counts
         if {"bom_parts", "bom_links", "materials"}.intersection(payload):
             from app.modules.materials.bom_store import validate_graph, migrate_rows
+            _reconcile_bom_removals(connection, payload)
             validate_graph(connection)
             material_counts = result.get("materials", {})
             if material_counts.get("new") or material_counts.get("updated"):

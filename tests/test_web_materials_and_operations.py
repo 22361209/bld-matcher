@@ -613,6 +613,8 @@ class TestWebMaterialsAndOperations(WebAppTestBase):
                 "049_derive_stamping_material_grades",
                 "050_tube_weight_calculation",
                 "051_shared_material_bom",
+                "052_material_bom_removals",
+                "053_material_bom_parent_model",
             ],
         )
 

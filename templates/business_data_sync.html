@@ -13,7 +13,7 @@
     <div class="sync-option-group">
       <h3>导出内容</h3>
       <div class="sync-option-grid sync-option-grid-unified">
-        {% for key, value in datasets.items() if key not in ('bom_parts','bom_links','bom_source_aliases') %}
+        {% for key, value in datasets.items() if key not in ('bom_parts','bom_links','bom_source_aliases','bom_removed_links','bom_removed_sources') %}
           <label class="sync-option"><input type="checkbox" name="dataset" value="{{ key }}" checked><span><strong>{{ value[2] }}</strong><small>{{ '明细金额、修改记录及参考资料' if key == 'costing' else ('物料档案、装配关系和历史来源' if key == 'materials' else value[0]) }}</small></span></label>
         {% endfor %}
         <label class="sync-option"><input type="checkbox" name="include_drawings" value="1"><span><strong>产品图纸</strong><small>随产品目录打包 data/drawings</small></span></label>

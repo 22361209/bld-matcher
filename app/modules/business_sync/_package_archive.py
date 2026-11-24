@@ -32,7 +32,7 @@ from ._product_image_transfer import (
 from ._schema import (
     DATASETS,
     COSTING_PACKAGE_VERSION,
-    BOM_PACKAGE_VERSION, BOM_DATASETS,
+    BOM_PACKAGE_VERSION, BOM_REMOVAL_PACKAGE_VERSION, BOM_PARENT_PACKAGE_VERSION, BOM_DATASETS,
     COMPLETED_WORKSHEET_VERSION,
     CUSTOM_WORKSHEET_MATERIAL_VERSION,
     HANDED_WORKSHEET_PACKAGE_VERSION,
@@ -99,8 +99,12 @@ def _manifest_datasets(manifest: object) -> tuple[str, ...]:
             or any(not isinstance(key, str) or key not in DATASETS for key in selected)
             or len(set(selected)) != len(selected)):
         raise ValueError("业务数据包缺少可导入的数据集。")
-    has_bom = bool(set(BOM_DATASETS).intersection(selected))
-    if has_bom != (version == BOM_PACKAGE_VERSION) or (has_bom and not {"materials", *BOM_DATASETS}.issubset(selected)):
+    core_bom = ("bom_parts", "bom_links", "bom_source_aliases")
+    has_bom = bool(set(core_bom).intersection(selected))
+    bom_versions = (BOM_PACKAGE_VERSION, BOM_REMOVAL_PACKAGE_VERSION, BOM_PARENT_PACKAGE_VERSION)
+    required_bom = core_bom if version == BOM_PACKAGE_VERSION else BOM_DATASETS
+    if (has_bom != (version in bom_versions)
+            or (has_bom and not {"materials", *required_bom}.issubset(selected))):
         raise ValueError("BOM 物料及装配关系必须使用完整的新版数据包。")
     if "development" in selected and version < 5:
         raise ValueError("旧版业务数据包不支持开发资料。")
@@ -200,7 +204,9 @@ def read_package(package_path: Path) -> tuple[Manifest, Payload]:
                                    WEIGHT_PACKAGE_VERSION: (1, 2, 3), HANDED_WORKSHEET_PACKAGE_VERSION: (1, 2, 3),
                                    WORKSHEET_PACKAGE_VERSION: (1, 2, 3), PRICE_CONDITIONS_VERSION: (1, 2, 3, 4),
                                    CUSTOM_WORKSHEET_MATERIAL_VERSION: (1, 2, 3, 4), COMPLETED_WORKSHEET_VERSION: (1, 2, 3, 4),
-                                   TUBE_WEIGHT_PACKAGE_VERSION: (1, 2, 3, 4), WORKSHEET_ROW_NOTE_PACKAGE_VERSION: (1, 2, 3, 4), BOM_PACKAGE_VERSION: (1, 2, 3, 4)}
+                                   TUBE_WEIGHT_PACKAGE_VERSION: (1, 2, 3, 4), WORKSHEET_ROW_NOTE_PACKAGE_VERSION: (1, 2, 3, 4),
+                                   BOM_PACKAGE_VERSION: (1, 2, 3, 4), BOM_REMOVAL_PACKAGE_VERSION: (1, 2, 3, 4),
+                                   BOM_PARENT_PACKAGE_VERSION: (1, 2, 3, 4)}
                 if not isinstance(snapshot, dict) or snapshot.get("format_version") not in supported_costs[version]:
                     raise ValueError("成本快照版本与业务包版本不一致，请重新导出。")
                 payload["costing"] = [validate_costing(snapshot)]
@@ -299,9 +305,17 @@ def read_package(package_path: Path) -> tuple[Manifest, Payload]:
         expected_version = max(expected_version, PRICE_CONDITIONS_VERSION)
     if has_tube_weights:
         expected_version = max(expected_version, TUBE_WEIGHT_PACKAGE_VERSION)
-    if set(BOM_DATASETS).issubset(selected):
-        expected_version = BOM_PACKAGE_VERSION
+    bom_parts = typed_payload.get("bom_parts", [])
+    if {"bom_parts", "bom_links", "bom_source_aliases"}.issubset(selected):
+        if any("model" in row for row in bom_parts):
+            expected_version = BOM_PARENT_PACKAGE_VERSION
+        else:
+            expected_version = BOM_REMOVAL_PACKAGE_VERSION if set(BOM_DATASETS).issubset(selected) else BOM_PACKAGE_VERSION
+    if version == BOM_PARENT_PACKAGE_VERSION and any("model" not in row for row in bom_parts):
+        raise ValueError("BOM 母件型号与业务包版本不一致，请重新导出。")
     if (expected_version or version >= HANDED_WORKSHEET_PACKAGE_VERSION) and version != expected_version:
+        if BOM_PARENT_PACKAGE_VERSION in (expected_version, version):
+            raise ValueError("BOM 母件型号与业务包版本不一致，请重新导出。")
         if WORKSHEET_ROW_NOTE_PACKAGE_VERSION in (expected_version, version):
             raise ValueError("开发表零件备注与业务包版本不一致，请重新导出。")
         if COMPLETED_WORKSHEET_VERSION in (expected_version, version):
@@ -309,6 +323,9 @@ def read_package(package_path: Path) -> tuple[Manifest, Payload]:
         if expected_version == CUSTOM_WORKSHEET_MATERIAL_VERSION or version == CUSTOM_WORKSHEET_MATERIAL_VERSION:
             raise ValueError("开发表自定义材质与业务包版本不一致，请重新导出。")
         raise ValueError("开发表与业务包版本不一致，请重新导出。")
+    if version < BOM_PARENT_PACKAGE_VERSION:
+        for row in bom_parts:
+            row.setdefault("model", None)
     if "development" in typed_payload:
         with tarfile.open(package_path, "r:gz") as archive:
             validate_archive_files(archive, typed_payload["development"])
@@ -396,7 +413,7 @@ def export_package(
     if has_tube_weights:
         version = max(version, TUBE_WEIGHT_PACKAGE_VERSION)
     if set(BOM_DATASETS).intersection(selected):
-        version = BOM_PACKAGE_VERSION
+        version = BOM_PARENT_PACKAGE_VERSION
     manifest: Manifest = {
         "package_type": PACKAGE_TYPE,
         "version": version,
