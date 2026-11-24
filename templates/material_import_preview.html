@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% set active_page = "material_items" %}
+{% block page_title %}材料导入预览{% endblock %}
+{% block page_id %}materials.import_preview{% endblock %}
+{% block page_type %}workbench{% endblock %}
+{% block page_content %}
+<section class="data-section"><h1>材料导入预览</h1><p>{{ original }}</p>
+<p>可新增 {{ preview.new|length }} 行 · 已有 {{ preview.unchanged }} 行 · 待核对 {{ preview.conflicts|length }} 行</p>
+{% for r in preview.new %}<p>{{ r.model }} / {{ r.code }}　{{ r.part }}　{{ r.spec_text }}　{{ r.pieces }} 只/条</p>{% endfor %}
+{% for msg in preview.conflicts %}<p>{{ msg }}</p>{% endfor %}
+{% if not preview.conflicts and preview.new %}<form method="post" action="{{ url_for('upload_material_data') }}">{{ csrf_field() }}<input type="hidden" name="confirm" value="1"><button>确认导入</button></form>{% endif %}
+<a href="{{ url_for('legacy_material_items') }}">返回材料明细</a></section>
+{% endblock %}

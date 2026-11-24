@@ -17,12 +17,12 @@ class MaterialGradeWebTests(WebAppTestBase):
             response = self.client.post("/materials/items/save", data={**base, "code": code, "material_grade": supplied})
             self.assertEqual(response.status_code, 302)
         common = {"q": base["model"]}
-        listing = self.client.get("/materials/items", query_string=common).get_data(as_text=True)
+        listing = self.client.get("/materials/items/history", query_string=common).get_data(as_text=True)
         self.assertEqual(re.findall(r'<td data-col="material-grade">(.*?)</td>', listing), ["SPHC", "SAPH440"])
         self.assertNotIn("待确认", listing)
         self.assertNotIn("全选本页", listing)
         self.assertNotIn('name="material_grade"', listing)
-        narrowed = self.client.get("/materials/items", query_string={**common, "mf_material_grade": "SAPH440"})
+        narrowed = self.client.get("/materials/items/history", query_string={**common, "mf_material_grade": "SAPH440"})
         self.assertEqual(re.findall(r'<td data-col="material-grade">(.*?)</td>', narrowed.get_data(as_text=True)), ["SAPH440"])
         first, second = service.list_items(query=base["model"], status="all", limit=50, offset=0).records
         for path in ("/materials/items/new", f"/materials/items/{first['id']}/edit"):

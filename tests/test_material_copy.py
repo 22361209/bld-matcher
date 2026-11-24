@@ -37,7 +37,7 @@ class TestMaterialCopy(WebAppTestBase):
         with self.web.connect(self.web.DB_PATH) as conn:
             conn.execute("UPDATE material_items SET spec_text='专用板（关联图号）' WHERE code='COPY-A'")
             original = dict(conn.execute("SELECT * FROM material_items WHERE code='COPY-A'").fetchone())
-        page = self.client.get("/materials/items?q=COPY-A").get_data(as_text=True)
+        page = self.client.get("/materials/items/history?q=COPY-A").get_data(as_text=True)
         payload, = re.findall(r"data-copy-material='([^']+)'", page)
         draft = json.loads(unescape(payload))
         self.assertEqual(draft, {k: original[k] for k in ("model", "part", "pieces", "spec_text", "category", "car")}

@@ -19,6 +19,10 @@ class TubeRepository:
     def __init__(self, connection: sqlite3.Connection) -> None:
         self.connection = connection
 
+    def bom_catalog(self):
+        return [dict(r) for r in self.connection.execute(
+            "SELECT code,tube_type,spec_text FROM tube_items WHERE active=1 ORDER BY code")]
+
     def costing_matches(self, code: str) -> list[dict]:
         """A borrowed code uses the same active source row that the tube list displays."""
         rows = self.connection.execute(

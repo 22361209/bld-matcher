@@ -41,7 +41,7 @@
       <a class="{% if active_page in ['materials', 'material_items'] %}active{% endif %}" href="{{ url_for('materials') }}">生产料单</a>
       {% if can("manage_material_items") %}
       <div class="nav-menu-panel">
-        <a class="{% if active_page == 'material_items' %}active{% endif %}" href="{{ url_for('material_items') }}">材料明细</a>
+        <a class="{% if active_page == 'material_items' %}active{% endif %}" href="{{ url_for('material_items') }}">生产 BOM</a>
       </div>
       {% endif %}
     </div>

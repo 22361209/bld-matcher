@@ -7,7 +7,13 @@ MATERIAL_GRADES = ("SPHC", "SAPH440")
 
 
 def read_costing_grade_rows(connection: sqlite3.Connection) -> list[dict]:
-    return [dict(row) for row in connection.execute(
-        "SELECT sync_id, model, code, part, spec_text, material_grade FROM material_items "
-        "WHERE active=1 ORDER BY sync_id"
-    )]
+    from .bom_query import MaterialBOM
+
+    fields = ("sync_id", "model", "code", "part", "spec_text", "material_grade")
+    rows = []
+    for row in MaterialBOM(connection).active_stamps():
+        projection = {k: row[k] for k in fields}
+        if row.get("master"):
+            projection.update(master=row["master"], aliases=row["aliases"])
+        rows.append(projection)
+    return rows

@@ -7,7 +7,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.modules.costing.business_sync import costing_state
+from app.modules.costing.business_sync import costing_state, current_stamping_source_ids
 from app.modules.materials.domain import material_grade_for_code
 from app.modules.materials.weights import validated_net_weight
 from app.modules.products.brand_normalization import canonicalize_brands
@@ -69,6 +69,21 @@ def unresolved_customers(
     return sorted(name for name in names if name.upper() not in local and name.upper() not in incoming)
 
 
+def check_archived_material_changes(connection, payload):
+    """A pre-BOM package cannot silently replace the source of a live shared master."""
+    if "materials" not in payload or "bom_parts" in payload:
+        return
+    fields = ("model", "code", "part", "pieces", "thickness", "width", "length", "net_weight", "active")
+    archived = {r["sync_id"]: r for r in connection.execute("""
+        SELECT m.* FROM material_items m WHERE m.sync_id IN
+        (SELECT origin FROM bom_links WHERE origin IS NOT NULL UNION SELECT origin FROM bom_source_aliases)
+    """)}
+    for incoming in payload["materials"]:
+        source = archived.get(incoming["sync_id"])
+        if source and any(k in incoming and incoming[k] != source[k] for k in fields):
+            raise ValueError(f"旧版数据包修改了已归档的 {source['model']} / {source['code']}，请使用含 BOM 的新版数据包。")
+
+
 def package_digest(package_path: Path) -> str:
     digest = hashlib.sha256()
     with package_path.open("rb") as package:
@@ -82,6 +97,7 @@ def state_token(connection: sqlite3.Connection, package_path: Path, datasets: tu
     state: dict[str, object] = {}
     if "materials" in datasets:
         state["stamping_source_ids"] = sorted(material_sources)
+        state["cost_weight_references"] = sorted(current_stamping_source_ids(connection))
     for key in datasets:
         if key == "costing":
             state[key] = costing_state(connection)
@@ -106,7 +122,7 @@ def state_token(connection: sqlite3.Connection, package_path: Path, datasets: tu
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-MATERIAL_IDENTITY_CONFLICT = "本机成本单正在使用这条材料取重，须保留本机材料的同步编号。"
+MATERIAL_IDENTITY_CONFLICT = "本机成本单正在使用这条材料取重，或 BOM 已关联该材料来源，须保留本机材料的同步编号。"
 
 
 @dataclass(frozen=True)

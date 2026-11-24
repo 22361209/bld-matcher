@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-24",
+  "version": "unreleased",
+  "title": "生产料单支持共用子件与多级 BOM",
+  "entries": ["新增独立的明细列表，逐行显示当前母子件关系、装配用量、板料规格和下料只数。", "母件按装配用量引用共享物料。冲压件维护下料只数、净重并共用板料规格。", "历史材料按原编码及用料资料迁移，待核对记录保留原始来源。Excel 导入增加预览。"],
+  "impact": {"data": "migration 051; shared material masters and assembly relations", "api": "compatible", "operations": "full-update-required"}
+}

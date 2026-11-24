@@ -14,6 +14,7 @@
       {% if not show_material_items %}
       <header class="material-landing">
           <h1>生产料单</h1>
+          {% if can("manage_material_items") %}<a class="linear-button" href="{{ url_for('material_items') }}">查看生产 BOM</a>{% endif %}
         <div class="compact-metrics material-stat-strip" aria-label="材料数据统计">
           <span>总明细 <strong>{{ material_stats["items"] }}</strong></span>
           <span>启用明细 <strong>{{ material_stats.active }}</strong></span>
@@ -58,7 +59,7 @@
       {% set status_label = "包含停用" if status == "all" else ("只看停用" if status == "inactive" else "只看启用") %}
       <section class="data-section" id="materials-results">
         <div class="workspace-command material-items-command">
-            <form class="search-form material-table-search" method="get" action="{{ url_for('material_items') }}#materials-results">
+            <form class="search-form material-table-search" method="get" action="{{ url_for('legacy_material_items') }}#materials-results">
               <label>
                 <span>搜索材料明细</span>
                 <input name="q" value="{{ query }}" placeholder="母件编码、零件编码或规格，例如 8234 / 2.5 357 / 357*1260" data-search-shortcut aria-keyshortcuts="Shift+f">
@@ -88,10 +89,10 @@
                     <span class="file-picker-control">
                       <span class="file-picker-button">选择文件</span>
                       <span class="file-picker-name">未选择任何文件</span>
-                      <button class="embedded-submit" type="submit">确认导入</button>
+                      <button class="embedded-submit" type="submit">预览导入</button>
                     </span>
                   </label>
-                  <span class="note">会备份旧文件，并用新文件重建材料明细库。</span>
+                  <span class="note">先核对新增和冲突。已维护的 BOM 关系会保留。</span>
                 </form>
               </details>
             {% endif %}
@@ -140,12 +141,7 @@
                 <tr class="{% if not item.active %}muted-row{% endif %}">
                   <td data-col="model"><strong>{{ item.model }}</strong></td>
                   <td data-col="code">
-                    {% if item.code and item.sync_id and can("manage_material_items") %}
-                      <button type="button" class="link-button" title="从 {{ item.code }} 复制新建材料明细"
-                              aria-haspopup="dialog" aria-controls="material-modal"
-                              data-copy-material='{{ dict(copy_from=item.sync_id, model=item.model, part=item.part,
-                                  pieces=item.pieces, spec_text=item.spec_text, category=item.category, car=item.car)|tojson }}'>{{ item.code }}</button>
-                    {% else %}{{ item.code }}{% endif %}
+                    <a href="{{ url_for('material_items', selected=item.code, mode='detail') }}">{{ item.code }}</a>
                   </td>
                   <td data-col="category">{{ item.category }}</td>
                   <td data-col="car">{{ item.car }}</td>
@@ -160,6 +156,12 @@
                   <td data-col="status">{% if item.active %}<span class="linear-status active">启用</span>{% else %}<span class="linear-status inactive">停用</span>{% endif %}</td>
                   <td class="row-actions" data-col="actions">
                     {% if can("manage_material_items") %}
+                    {% if item.code and item.sync_id and can("manage_material_items") %}
+                      <button type="button" class="link-button" title="从 {{ item.code }} 复制新建材料明细"
+                              aria-haspopup="dialog" aria-controls="material-modal"
+                              data-copy-material='{{ dict(copy_from=item.sync_id, model=item.model, part=item.part,
+                                  pieces=item.pieces, spec_text=item.spec_text, category=item.category, car=item.car)|tojson }}'>复制</button>
+                    {% endif %}
                       <a href="{{ url_for('edit_material_item', item_id=item.id) }}">编辑</a>
                       {% if item.active %}
                         <form action="{{ url_for('stop_material_item', item_id=item.id) }}" method="post" class="inline-delete-form">
@@ -262,6 +264,7 @@
           <form action="{{ url_for('save_material_item') }}" method="post" class="record-form modal-form material-modal-form" data-enter-navigation>
             {{ csrf_field() }}
             <input type="hidden" name="copy_from">
+            <input type="hidden" name="resolve_bom" value="1">
             <label>
               母件编码
               <input name="model" required>

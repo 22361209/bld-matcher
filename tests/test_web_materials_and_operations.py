@@ -76,7 +76,7 @@ class TestWebMaterialsAndOperations(WebAppTestBase):
                 "总管件 23",
             ),
             (
-                "/materials/items",
+                "/materials/items/history",
                 {"q": "__FOOTER_ZERO__"},
                 "材料明细",
                 "总明细 29 · 启用 21 · 停用 8",
@@ -274,7 +274,7 @@ class TestWebMaterialsAndOperations(WebAppTestBase):
             )
             self.assertEqual(response.status_code, 302)
 
-        response = self.client.get("/materials/items", query_string=[("mf_model", "QF-MATERIAL-A")])
+        response = self.client.get("/materials/items/history", query_string=[("mf_model", "QF-MATERIAL-A")])
         material_html = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
         self.assertIn('id="materials-table"', material_html)
@@ -302,7 +302,7 @@ class TestWebMaterialsAndOperations(WebAppTestBase):
         self.assertNotIn("材料文件：", html)
         self.assertNotIn("上传生产计划，按启用材料明细生成采购和下料所需料单。", html)
 
-        response = self.client.get("/materials/items")
+        response = self.client.get("/materials/items/history")
         html = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
         self.assertIn("data-open-material-modal", html)
@@ -310,11 +310,11 @@ class TestWebMaterialsAndOperations(WebAppTestBase):
         self.assertIn('action="/materials/items/save"', html)
         self.assertIn('id="materials-results"', html)
         self.assertIn('class="workspace-command material-items-command"', html)
-        self.assertIn('action="/materials/items#materials-results"', html)
+        self.assertIn('action="/materials/items/history#materials-results"', html)
         self.assertIn("data-enter-navigation", html)
         self.assertIn('name="spec_text"', html)
         self.assertIn('<button class="linear-button" type="submit">搜索</button>', html)
-        self.assertIn('class="embedded-submit" type="submit">确认导入', html)
+        self.assertIn('class="embedded-submit" type="submit">预览导入', html)
         self.assertIn("母件编码", html)
         self.assertIn("零件编码", html)
         self.assertRegex(html, r'<input name="code"[^>]*required')
@@ -401,16 +401,16 @@ class TestWebMaterialsAndOperations(WebAppTestBase):
             self.assertEqual(saved[model]["width"], 357)
             self.assertEqual(saved[model]["length"], 1260)
 
-        response = self.client.get("/materials/items?q=T-SPEC-WEB-SPACE")
+        response = self.client.get("/materials/items/history?q=T-SPEC-WEB-SPACE")
         html = response.get_data(as_text=True)
         self.assertIn("单件下料重kg", html)
         self.assertIn("4.41", html)
         for query in ["357", "2.5 357", "357/1260", "2.5-1260", "2.5*357*1260"]:
             with self.subTest(query=query):
-                response = self.client.get("/materials/items", query_string={"q": query})
+                response = self.client.get("/materials/items/history", query_string={"q": query})
                 html = response.get_data(as_text=True)
                 self.assertIn("T-SPEC-WEB-SPACE", html)
-        response = self.client.get("/materials/items", query_string={"q": "2.5 999"})
+        response = self.client.get("/materials/items/history", query_string={"q": "2.5 999"})
         html = response.get_data(as_text=True)
         self.assertNotIn("T-SPEC-WEB-SPACE", html)
 
@@ -422,11 +422,11 @@ class TestWebMaterialsAndOperations(WebAppTestBase):
         with self.web.connect(self.web.DB_PATH) as conn:
             item_id, = conn.execute("SELECT id FROM material_items WHERE model = 'M-SCRAP'").fetchone()
         self.assertIn('value="0.95"', self.client.get(f"/materials/items/{item_id}/edit").get_data(as_text=True))
-        html = self.client.get("/materials/items?q=M-SCRAP").get_data(as_text=True)
+        html = self.client.get("/materials/items/history?q=M-SCRAP").get_data(as_text=True)
         self.assertIn('data-col="scrap-weight">1.2569</td>', html)
         self.assertIn('data-col="scrap-percent">56.95</td>', html)
         self.client.post("/materials/items/save", data={**form, "id": item_id, "net_weight": ""})
-        html = self.client.get("/materials/items?q=M-SCRAP").get_data(as_text=True)
+        html = self.client.get("/materials/items/history?q=M-SCRAP").get_data(as_text=True)
         self.assertIn('data-col="net-weight">—</td>', html)
         self.assertIn('data-col="scrap-weight">—</td>', html)
 
@@ -612,6 +612,7 @@ class TestWebMaterialsAndOperations(WebAppTestBase):
                 "048_stamping_material_grade",
                 "049_derive_stamping_material_grades",
                 "050_tube_weight_calculation",
+                "051_shared_material_bom",
             ],
         )
 

@@ -1002,6 +1002,13 @@
       "rule": "/materials"
     },
     {
+      "endpoint": "save_material_bom",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/materials/bom/save"
+    },
+    {
       "endpoint": "upload_material_data",
       "methods": [
         "POST"
@@ -1035,6 +1042,13 @@
         "GET"
       ],
       "rule": "/materials/items/<int:item_id>/edit"
+    },
+    {
+      "endpoint": "legacy_material_items",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/materials/items/history"
     },
     {
       "endpoint": "new_material_item",

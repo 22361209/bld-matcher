@@ -1361,6 +1361,12 @@ def _add_tube_weight_calculation(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE tube_items ADD COLUMN weight_length_mm REAL")
 
 
+def _install_material_bom(conn: sqlite3.Connection) -> None:
+    from .modules.materials.bom_store import install
+
+    install(conn)
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -1412,6 +1418,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("048_stamping_material_grade", _add_material_grade),
     ("049_derive_stamping_material_grades", _derive_stamping_material_grades),
     ("050_tube_weight_calculation", _add_tube_weight_calculation),
+    ("051_shared_material_bom", _install_material_bom),
 )
 
 

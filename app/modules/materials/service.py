@@ -19,6 +19,21 @@ class MaterialService:
         self.bootstrap = bootstrap
         self.files = files
 
+    def bom_page(self, *args):
+        self.bootstrap()
+        with self.unit_of_work_factory() as work:
+            return work.repository.bom_page(*args)
+
+    def change_bom(self, data, actor):
+        self.bootstrap()
+        if data.get("action") == "attach" and data.get("tube_kind"):
+            from app.modules.tubes.factory import get_tube_service
+            tube = get_tube_service().bom_detail(data.get("code", ""))
+            data = dict(data, tube_code=tube["code"] if tube else "")
+        with self.unit_of_work_factory() as work:
+            work.repository.change_bom(data, actor)
+            work.commit()
+
     def stats(self) -> dict[str, int]:
         self.bootstrap()
         with self.unit_of_work_factory() as unit_of_work:
@@ -130,12 +145,17 @@ class MaterialService:
                 output_path.unlink(missing_ok=True)
             raise
 
-    def import_data(self, upload_path: Path, *, original_name: str, actor: str) -> MaterialImportResult:
+    def preview_import(self, path):
+        self.bootstrap()
+        with self.unit_of_work_factory() as work:
+            return work.repository.preview_import(path)
+
+    def import_data(self, upload_path: Path, *, original_name: str, actor: str, digest: str = "") -> MaterialImportResult:
         with self.files.import_guard(actor):
             receipt = self.files.install_source(upload_path)
             try:
                 with self.unit_of_work_factory() as unit_of_work:
-                    imported = unit_of_work.repository.import_data(receipt.target, actor=actor)
+                    imported = unit_of_work.repository.import_data(receipt.target, actor=actor, digest=digest)
                     unit_of_work.repository.audit(
                         "更新材料数据文件",
                         "material_data",
