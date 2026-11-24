@@ -13,6 +13,7 @@ from app.platform.sync_identity import stable_sync_id
 
 from ._comparison import (
     MATERIAL_IDENTITY_CONFLICT,
+    check_archived_material_changes,
     columns,
     package_digest,
     incoming_status,
@@ -217,7 +218,11 @@ def _apply_package(
     connection = connect(database_path)
     try:
         connection.execute("BEGIN IMMEDIATE")
+        check_archived_material_changes(connection, payload)
         material_sources = current_stamping_source_ids(connection) if "materials" in payload else set()
+        if "materials" in payload:
+            material_sources.update(r[0] for r in connection.execute(
+                "SELECT origin FROM bom_links WHERE origin IS NOT NULL UNION SELECT origin FROM bom_source_aliases"))
         if state_token(connection, package_path, tuple(payload), material_sources=material_sources,
                        development_file_dir=development_file_dir, development_rows=payload.get("development", [])) != expected_token:
             raise ValueError("预览后数据包或本机数据已变化，请重新上传预览。")
@@ -328,6 +333,12 @@ def _apply_package(
                         raise RuntimeError("Imported quote could not be reloaded.")
                     imported_quote_ids.add(int(imported["id"]))
             result[key] = counts
+        if {"bom_parts", "bom_links", "materials"}.intersection(payload):
+            from app.modules.materials.bom_store import validate_graph, migrate_rows
+            validate_graph(connection)
+            material_counts = result.get("materials", {})
+            if material_counts.get("new") or material_counts.get("updated"):
+                migrate_rows(connection)
         if structured_product_images:
             product_image_apply_fn(connection, package_path, manifest, media_backup_root, media_changes)
         if deactivate_local_only and "products" in payload:

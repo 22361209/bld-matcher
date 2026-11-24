@@ -50,14 +50,7 @@ def _retain_net_weights(connection: sqlite3.Connection, rows: list[dict]) -> Non
         row["net_weight"] = validated_net_weight(row, prior["net_weight"])
 
 
-def import_materials_from_excel(
-    connection: sqlite3.Connection,
-    material_path: Path,
-    replace: bool = True,
-    actor: str = "",
-    *,
-    commit: bool = True,
-) -> int:
+def read_material_rows(material_path: Path) -> list[dict]:
     workbook = load_workbook(material_path, read_only=True, data_only=True)
     try:
         if "材料数据" not in workbook.sheetnames:
@@ -116,17 +109,10 @@ def import_materials_from_excel(
         workbook.close()
     if not rows:
         raise ValueError("材料数据里没有可导入的明细。")
-    if replace:
-        started = not connection.in_transaction
-        if started:
-            connection.execute("BEGIN IMMEDIATE")
-        try:
-            _retain_net_weights(connection, rows)
-        except ValueError:
-            if started:
-                connection.rollback()
-            raise
-        connection.execute("DELETE FROM material_items")
+    return rows
+
+
+def insert_material_rows(connection, rows):
     connection.executemany(
         """
         INSERT INTO material_items
@@ -138,6 +124,29 @@ def import_materials_from_excel(
         """,
         rows,
     )
+
+
+def import_materials_from_excel(
+    connection: sqlite3.Connection,
+    material_path: Path,
+    replace: bool = True,
+    actor: str = "",
+    *,
+    commit: bool = True,
+) -> int:
+    rows = read_material_rows(material_path)
+    if replace:
+        started = not connection.in_transaction
+        if started:
+            connection.execute("BEGIN IMMEDIATE")
+        try:
+            _retain_net_weights(connection, rows)
+        except ValueError:
+            if started:
+                connection.rollback()
+            raise
+        connection.execute("DELETE FROM material_items")
+    insert_material_rows(connection, rows)
     log_event(
         connection,
         "导入材料数据",
@@ -158,7 +167,9 @@ def bootstrap_materials_from_excel(database_path: Path, material_path: Path) -> 
         if key in _BOOTSTRAPPED_SOURCES:
             return
         with connect(database_path) as connection:
-            row = connection.execute("SELECT COUNT(*) FROM material_items").fetchone()
+            if material_path.exists():
+                connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute("SELECT EXISTS(SELECT 1 FROM material_items) OR EXISTS(SELECT 1 FROM bom_parts)").fetchone()
             existing = int(row[0]) if row is not None else 0
             if existing == 0 and material_path.exists():
                 import_materials_from_excel(
@@ -166,5 +177,9 @@ def bootstrap_materials_from_excel(database_path: Path, material_path: Path) -> 
                     material_path,
                     replace=True,
                     actor="system",
+                    commit=False,
                 )
+                from .bom_store import migrate_rows
+                migrate_rows(connection)
+                connection.commit()
         _BOOTSTRAPPED_SOURCES.add(key)

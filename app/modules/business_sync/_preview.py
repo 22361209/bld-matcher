@@ -10,6 +10,7 @@ from app.modules.products.catalog_language import CATALOG_FIELDS
 
 from ._comparison import (
     MATERIAL_IDENTITY_CONFLICT,
+    check_archived_material_changes,
     all_comparison_fields,
     package_digest,
     columns,
@@ -54,7 +55,11 @@ def _preview_package(
     with connect(database_path) as connection:
         if {"development", "costing", "materials"}.intersection(payload):
             connection.execute("BEGIN")
+        check_archived_material_changes(connection, payload)
         material_sources = current_stamping_source_ids(connection) if "materials" in payload else set()
+        if "materials" in payload:
+            material_sources.update(r[0] for r in connection.execute(
+                "SELECT origin FROM bom_links WHERE origin IS NOT NULL UNION SELECT origin FROM bom_source_aliases"))
         for key, incoming_rows in payload.items():
             if key == "costing":
                 summary[key] = preview_costing(connection, incoming_rows[0])

@@ -13,10 +13,12 @@ CUSTOM_WORKSHEET_MATERIAL_VERSION = 12
 COMPLETED_WORKSHEET_VERSION = 13
 TUBE_WEIGHT_PACKAGE_VERSION = 14
 WORKSHEET_ROW_NOTE_PACKAGE_VERSION = 15
+BOM_PACKAGE_VERSION = 16
+BOM_DATASETS = ("bom_parts", "bom_links", "bom_source_aliases")
 SUPPORTED_PACKAGE_VERSIONS = frozenset({1, 2, 3, 4, 5, COSTING_PACKAGE_VERSION, PAIRED_COSTING_PACKAGE_VERSION,
                                         WEIGHT_PACKAGE_VERSION, HANDED_WORKSHEET_PACKAGE_VERSION, WORKSHEET_PACKAGE_VERSION,
                                         PRICE_CONDITIONS_VERSION, CUSTOM_WORKSHEET_MATERIAL_VERSION, COMPLETED_WORKSHEET_VERSION,
-                                        TUBE_WEIGHT_PACKAGE_VERSION, WORKSHEET_ROW_NOTE_PACKAGE_VERSION})
+                                        TUBE_WEIGHT_PACKAGE_VERSION, WORKSHEET_ROW_NOTE_PACKAGE_VERSION, BOM_PACKAGE_VERSION})
 
 MAX_MEDIA_FILE_SIZE = 512 * 1024 * 1024
 MAX_PACKAGE_METADATA_SIZE = 64 * 1024 * 1024
@@ -41,6 +43,9 @@ DATASETS = {
     "quotes": ("quote_records", "sync_id", "报价记录"),
     "tubes": ("tube_items", "code", "管件资料"),
     "materials": ("material_items", "sync_id", "材料明细"),
+    "bom_source_aliases": ("bom_source_aliases", "origin", "BOM 历史映射"),
+    "bom_parts": ("bom_parts", "code", "BOM 物料档案"),
+    "bom_links": ("bom_links", "sync_id", "BOM 装配关系"),
 }
 
 FIELD_LABELS = {

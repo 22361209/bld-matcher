@@ -62,6 +62,15 @@ class TubeService:
         with self.unit_of_work_factory() as unit_of_work:
             return unit_of_work.repository.get(item_id)
 
+    def bom_catalog(self):
+        with self.unit_of_work_factory() as work:
+            return work.repository.bom_catalog()
+
+    def bom_detail(self, code: str) -> dict | None:
+        with self.unit_of_work_factory() as work:
+            rows = work.repository.costing_matches(code)
+            return rows[0] if rows else None
+
     def costing_candidates(self, code: str) -> list[dict]:
         with self.unit_of_work_factory() as unit_of_work:
             rows = unit_of_work.repository.costing_matches(code)

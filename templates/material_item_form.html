@@ -9,6 +9,7 @@
       <section class="workbench-form-section">
         <form action="{{ url_for('save_material_item') }}" method="post" class="record-form" data-enter-navigation>
           {{ csrf_field() }}
+          {% if resolve_bom %}<input type="hidden" name="resolve_bom" value="1">{% endif %}
           {% if item %}
           <input type="hidden" name="id" value="{{ item.id }}">
           <input type="hidden" name="original_sync_id" value="{{ item.sync_id or '' }}">

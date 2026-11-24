@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% set active_page = "material_items" %}
+{% block page_title %}生产 BOM{% endblock %}
+{% block page_id %}materials.bom{% endblock %}
+{% block page_type %}workbench{% endblock %}
+{% block page_class %}shell wide app-surface{% endblock %}
+{% block page_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='pages/material_bom.css', v=static_version('pages/material_bom.css')) }}">
+{% endblock %}
+{% macro go(label, mode='', selected='', parent='', cls='') -%}
+<a class="{{ cls }}" href="{{ url_for('material_items', mode=mode, selected=selected, parent=parent, view=view, q=q, status=status, page=page) }}">{{ label }}</a>
+{%- endmacro %}
+{% macro branch(node, owner='') %}
+<details class="bom-branch" {% if q and node.hit %}open{% endif %}>
+  <summary><strong>{{ node.code }}</strong><span>{{ node.name }}</span><small>{% if q and not node.own_hit %}命中 {{ node.matched }} / {% endif %}{{ node.nodes|length }} 项子件</small>
+    {% if owner %}<small>{{ '%g'|format(node.link.qty) }} 件/件</small>{% endif %}
+  </summary>
+  <div class="bom-section-actions">{{ go('添加已有子件','attach','',node.code,'linear-button') }} {{ go('新建子件并添加','create','',node.code) }} {{ go('物料详情','detail',node.code,owner) }}
+    {% if owner %}{{ go('修改用量','usage',node.code,owner) }}{% endif %}
+  </div>
+  {% for child in node.nodes %}
+    {% if child.kind == '焊接件' %}{{ branch(child,node.code) }}
+    {% else %}
+    <div class="bom-child{% if q and not node.own_hit and child.hit %} bom-match{% endif %}">
+      <div><small>{{ child.kind }}</small> {{ go(child.code,'detail',child.code,node.code,'bom-code') }} <span>{{ child.name }}</span>
+        {% if not child.link.active %}<small>已停用</small>{% endif %}
+        {% if child.plate %}
+        <details class="bom-stock" {% if q and child.hit %}open{% endif %}><summary>板料 · {{ child.grade }} · {{ child.spec }} mm</summary>
+          <span>{{ go('板料档案','detail',child.plate) }}　{{ child.code }} 下料只数 <b>{{ '%g'|format(child.pieces) }} 只/条</b></span>
+        </details>{% endif %}
+      </div>
+      <div class="bom-qty">{{ '%g'|format(child.link.qty) }} 件/件</div>
+      <div class="bom-row-actions">{{ go('修改用量','usage',child.code,node.code) }} {{ go('复制为新子件','copy',child.code,node.code) }}</div>
+    </div>
+    {% endif %}
+  {% else %}<p class="note">此母件在当前筛选下没有子件。</p>{% endfor %}
+</details>
+{% endmacro %}
+{% block page_content %}
+<section class="bom-workspace">
+<header class="bom-header"><div><p>生产料单</p><h1>生产 BOM</h1></div>
+<div class="bom-toolbar"><details class="toolbar-popover linear-popover"><summary>导入材料</summary>
+<form method="post" enctype="multipart/form-data" action="{{ url_for('upload_material_data') }}" class="toolbar-popover-form">
+{{ csrf_field() }}<label>材料数据 Excel<input type="file" name="material_data" accept=".xlsx" required></label><button class="linear-button">预览导入</button></form></details>{{ go('新建物料','create','','','linear-button primary') }} <a class="linear-button" href="{{ url_for('materials') }}">生成料单</a></div></header>
+<nav class="bom-tabs" aria-label="生产资料视图">
+  {% for key,label in [('tree','母件结构'),('list','明细列表'),('library','物料档案'),('review','迁移核对')] %}
+  <a href="{{ url_for('material_items',view=key) }}" {% if key==view %}aria-current="page"{% endif %}>{{ label }}{% if key=='review' and legacy %} · {{ legacy|length }}{% endif %}</a>{% endfor %}
+</nav>
+{% if mode %}
+  {% include "_material_bom_panel.html" %}
+{% elif view=='review' %}
+<header class="bom-subheader"><h2>待核对原始明细 <small>{{ legacy|length }} 条</small></h2><a href="{{ url_for('legacy_material_items') }}">历史明细与 Excel 导入</a></header>
+{% for r in legacy %}
+<div class="bom-child"><div><b>{{ r.model }} / {{ r.code or '缺少编码' }}</b> · {{ r.part }}<br>{{ r.material_grade }} · {{ r.spec_text }} · {{ r.pieces }} 只/条 · 净重 {{ r.net_weight or '—' }}</div><span>源表行 {{ r.source_row }}</span><a href="{{ url_for('edit_material_item',item_id=r.id,resolve=1) }}">核对原始资料</a></div>
+{% if r.code and r.duplicate_count>1 and (loop.first or loop.previtem.model!=r.model or loop.previtem.code!=r.code) %}
+<form class="bom-section-actions" method="post" action="{{ url_for('save_material_bom') }}">{{ csrf_field() }}
+<input type="hidden" name="action" value="merge"><input type="hidden" name="parent" value="{{ r.model }}"><input type="hidden" name="code" value="{{ r.code }}">
+<label>确认装配用量 <input type="number" step="any" name="qty" required></label>
+<button class="linear-button" data-confirm="将 {{ r.model }} 下 {{ r.duplicate_count }} 条 {{ r.code }} 归入同一装配关系，并采用填写的用量？">合并重复行</button></form>{% endif %}
+{% else %}<p class="bom-empty">所有历史明细均已归入 BOM。</p>{% endfor %}
+{% else %}
+<form class="bom-search" method="get"><input type="hidden" name="view" value="{{ view }}">
+<input aria-label="搜索物料" name="q" value="{{ q }}" placeholder="搜索母件、子件编码、名称或板料规格">
+{% if view in ('tree','list') %}<select name="status" aria-label="关系状态">{% for k,l in [('active','只看启用'),('all','包含停用'),('inactive','只看停用')] %}<option value="{{ k }}" {% if status==k %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>{% endif %}
+<button class="linear-button">搜索</button></form>
+<header class="bom-subheader"><h2>{{ '母件' if view=='tree' else ('明细' if view=='list' else '物料') }} <small>{{ total }} {{ '条' if view=='list' else '项' }}</small></h2>
+{% if view=='tree' %}<span>装配用量 · 件/件</span>{% endif %}</header>
+{% if view=='list' %}
+<div class="data-grid"><div class="data-table-scroll" data-grid-scroll>
+<table class="data-table bom-list" aria-label="BOM 明细列表">
+  <thead><tr><th scope="col">母件编码</th><th scope="col">子件编码</th><th scope="col">零件名称</th><th scope="col">装配用量（件/件）</th><th scope="col">板料规格（mm）</th><th scope="col">下料只数（只/条）</th>{% if status!='active' %}<th scope="col">状态</th>{% endif %}</tr></thead>
+  <tbody>{% for link in groups %}{% set part=parts[link.child] %}
+    <tr><td>{{ go(link.parent,'detail',link.parent) }}</td><td>{{ go(part.code,'detail',part.code,link.parent) }}</td><td>{{ part.name }}</td>
+      <td>{{ '%g'|format(link.qty) }}</td>
+      <td>{% if part.plate %}{{ go(part.spec,'detail',part.plate) }} <small>{{ part.grade }}</small>{% else %}—{% endif %}</td>
+      <td>{{ '%g'|format(part.pieces) if part.plate else '—' }}</td>
+      {% if status!='active' %}<td>{{ '启用' if link.active else '停用' }}</td>{% endif %}</tr>
+  {% else %}<tr><td colspan="{{ 6 if status=='active' else 7 }}">没有找到符合条件的明细。</td></tr>{% endfor %}</tbody>
+</table></div></div>
+{% else %}
+{% for item in groups %}{% if view=='tree' %}{{ branch(item) }}{% else %}
+<div class="bom-child"><div>{{ go(item.code,'detail',item.code,'','bom-code') }}　{{ item.name }}</div><span>{{ item.kind }}</span><span>{{ item.spec or '' }}</span></div>
+{% endif %}{% else %}<p class="bom-empty">没有找到符合条件的物料。</p>{% endfor %}
+{% endif %}
+{% if pages>1 %}<nav class="bom-pager">{% if page>1 %}<a href="{{ url_for('material_items',view=view,status=status,q=q,page=page-1) }}">上一页</a>{% endif %} {{ page }} / {{ pages }} {% if page<pages %}<a href="{{ url_for('material_items',view=view,status=status,q=q,page=page+1) }}">下一页</a>{% endif %}</nav>{% endif %}
+{% endif %}
+</section>
+{% endblock %}
+{% block page_scripts %}<script type="module" src="{{ url_for('static', filename='pages/material_bom.js', v=static_version('pages/material_bom.js')) }}"></script>{% endblock %}

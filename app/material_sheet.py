@@ -16,7 +16,7 @@ PLAN_HEADERS = ["型号", "车型", "计划数/只", "L", "R", "冲压完成时�
 DETAIL_HEADERS = [
     "型号",
     "车型",
-    "计划数/只",
+    "子件需求/只",
     "L",
     "R",
     "编码",
@@ -28,6 +28,9 @@ DETAIL_HEADERS = [
     "需求重量kg",
     "图片备注",
     "源表行",
+    "母件计划数/只",
+    "装配用量",
+    "材料牌号",
 ]
 
 SUMMARY_HEADERS = [
@@ -284,6 +287,9 @@ def calculate(plans: list[dict[str, Any]], materials: dict[str, list[dict[str, A
             missing.append(model)
             continue
         for material in rows:
+            if material.get("kind"):
+                continue
+            qty = plan["qty"] * material.get("assembly_qty", 1)
             unit_weight = (
                 material["width"]
                 * material["length"]
@@ -292,13 +298,15 @@ def calculate(plans: list[dict[str, Any]], materials: dict[str, list[dict[str, A
                 / material["pieces"]
                 / 1_000_000
             )
-            total_weight = unit_weight * plan["qty"]
-            bar_qty = plan["qty"] / material["pieces"]
+            total_weight = unit_weight * qty
+            bar_qty = qty / material["pieces"]
             detail.append(
                 {
                     **material,
                     **plan,
-                    "calc_spec": format_spec(material["thickness"], material["width"], material["length"]),
+                    "qty": qty,
+                    "parent_plan_qty": plan["qty"],
+                    "calc_spec": material.get("blank_spec") or format_spec(material["thickness"], material["width"], material["length"]),
                     "unit_weight": unit_weight,
                     "total_weight": total_weight,
                     "bar_qty": bar_qty,
@@ -313,6 +321,8 @@ def build_summary(detail: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     )
     for item in detail:
         key = item["calc_spec"]
+        if item.get("material_grade"):
+            key += " " + item["material_grade"]
         summary[key]["plan_qty"] += item["qty"]
         summary[key]["weight"] += item["total_weight"]
         summary[key]["bar_qty"] += item["bar_qty"]
@@ -396,6 +406,7 @@ def write_output(
     plans: list[dict[str, Any]],
     detail: list[dict[str, Any]],
     missing: list[str],
+    components: list[dict] | None = None,
 ) -> dict[str, Any]:
     summary = build_summary(detail)
     total_qty = sum(item["qty"] for item in detail)
@@ -437,6 +448,9 @@ def write_output(
                 item["total_weight"],
                 item.get("remark"),
                 item["source_row"],
+                item.get("parent_plan_qty", item["qty"]),
+                item.get("assembly_qty", 1),
+                item.get("material_grade", ""),
             ]
         )
     ws_detail.append(["合计", "", format_int(total_qty), "", "", "", "", "", "", total_bars, "", total_weight, "", ""])
@@ -499,11 +513,17 @@ def write_output(
             cell.number_format = "0.0000"
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    if components:
+        ws_parts = wb.create_sheet("焊接子件需求")
+        ws_parts.append(["母件编码", "子件编码", "名称", "类型", "单件用量", "需求数量"])
+        for r in components:
+            ws_parts.append([r[k] for k in ("model", "code", "part", "kind", "assembly_qty", "qty")])
+        style_output_sheet(ws_parts, header_rows=(1,))
     wb.save(output_path)
     return {
         "title": title,
         "plan_count": len(plans),
-        "detail_count": len(detail),
+        "detail_count": len(detail) + sum(not r.get("component_kind") for r in components or []),
         "spec_count": len(summary),
         "missing": missing,
         "total_qty": format_int(total_qty),
@@ -552,8 +572,12 @@ def generate_material_sheet_from_rows(
     filename_prefix: str = "",
 ) -> tuple[Path, dict[str, Any]]:
     detail, missing = calculate(plans, materials)
-    if not detail:
+    components = [
+        dict(r, kind=r.get("kind") or r["component_kind"], model=plan["model"], qty=plan["qty"] * r["assembly_qty"])
+        for plan in plans for r in materials.get(plan["model"], []) if r.get("kind") or r.get("component_kind")
+    ]
+    if not detail and not components:
         raise ValueError("没有生成任何料单明细，请检查型号是否和材料数据 A 列一致。")
     output_path = unique_output_path(output_dir, title, filename_prefix=filename_prefix)
-    summary = write_output(output_path, title, plans, detail, missing)
+    summary = write_output(output_path, title, plans, detail, missing, components)
     return output_path, summary

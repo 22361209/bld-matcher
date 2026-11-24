@@ -32,6 +32,7 @@ from ._product_image_transfer import (
 from ._schema import (
     DATASETS,
     COSTING_PACKAGE_VERSION,
+    BOM_PACKAGE_VERSION, BOM_DATASETS,
     COMPLETED_WORKSHEET_VERSION,
     CUSTOM_WORKSHEET_MATERIAL_VERSION,
     HANDED_WORKSHEET_PACKAGE_VERSION,
@@ -98,6 +99,9 @@ def _manifest_datasets(manifest: object) -> tuple[str, ...]:
             or any(not isinstance(key, str) or key not in DATASETS for key in selected)
             or len(set(selected)) != len(selected)):
         raise ValueError("业务数据包缺少可导入的数据集。")
+    has_bom = bool(set(BOM_DATASETS).intersection(selected))
+    if has_bom != (version == BOM_PACKAGE_VERSION) or (has_bom and not {"materials", *BOM_DATASETS}.issubset(selected)):
+        raise ValueError("BOM 物料及装配关系必须使用完整的新版数据包。")
     if "development" in selected and version < 5:
         raise ValueError("旧版业务数据包不支持开发资料。")
     if "costing" in selected and version < COSTING_PACKAGE_VERSION:
@@ -196,7 +200,7 @@ def read_package(package_path: Path) -> tuple[Manifest, Payload]:
                                    WEIGHT_PACKAGE_VERSION: (1, 2, 3), HANDED_WORKSHEET_PACKAGE_VERSION: (1, 2, 3),
                                    WORKSHEET_PACKAGE_VERSION: (1, 2, 3), PRICE_CONDITIONS_VERSION: (1, 2, 3, 4),
                                    CUSTOM_WORKSHEET_MATERIAL_VERSION: (1, 2, 3, 4), COMPLETED_WORKSHEET_VERSION: (1, 2, 3, 4),
-                                   TUBE_WEIGHT_PACKAGE_VERSION: (1, 2, 3, 4), WORKSHEET_ROW_NOTE_PACKAGE_VERSION: (1, 2, 3, 4)}
+                                   TUBE_WEIGHT_PACKAGE_VERSION: (1, 2, 3, 4), WORKSHEET_ROW_NOTE_PACKAGE_VERSION: (1, 2, 3, 4), BOM_PACKAGE_VERSION: (1, 2, 3, 4)}
                 if not isinstance(snapshot, dict) or snapshot.get("format_version") not in supported_costs[version]:
                     raise ValueError("成本快照版本与业务包版本不一致，请重新导出。")
                 payload["costing"] = [validate_costing(snapshot)]
@@ -295,6 +299,8 @@ def read_package(package_path: Path) -> tuple[Manifest, Payload]:
         expected_version = max(expected_version, PRICE_CONDITIONS_VERSION)
     if has_tube_weights:
         expected_version = max(expected_version, TUBE_WEIGHT_PACKAGE_VERSION)
+    if set(BOM_DATASETS).issubset(selected):
+        expected_version = BOM_PACKAGE_VERSION
     if (expected_version or version >= HANDED_WORKSHEET_PACKAGE_VERSION) and version != expected_version:
         if WORKSHEET_ROW_NOTE_PACKAGE_VERSION in (expected_version, version):
             raise ValueError("开发表零件备注与业务包版本不一致，请重新导出。")
@@ -342,8 +348,10 @@ def export_package(
     costing = None
     has_tube_weights = False
     with connect(database_path) as connection:
-        if {"development", "costing"}.intersection(selected):
+        if {"development", "costing", "materials", *BOM_DATASETS}.intersection(selected):
             connection.execute("BEGIN")
+        if set(BOM_DATASETS).intersection(selected) or ("materials" in selected and connection.execute("SELECT 1 FROM bom_parts LIMIT 1").fetchone()):
+            selected = tuple(dict.fromkeys((*selected, "materials", *BOM_DATASETS)))
         for key in selected:
             if key == "costing":
                 costing = export_costing(connection)
@@ -387,6 +395,8 @@ def export_package(
     version = max(version, _worksheet_package_version(payload.get("development", [])))
     if has_tube_weights:
         version = max(version, TUBE_WEIGHT_PACKAGE_VERSION)
+    if set(BOM_DATASETS).intersection(selected):
+        version = BOM_PACKAGE_VERSION
     manifest: Manifest = {
         "package_type": PACKAGE_TYPE,
         "version": version,

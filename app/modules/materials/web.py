@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from uuid import uuid4
 from typing import Any, cast
 
-from flask import abort, flash, jsonify, redirect, render_template, request, send_file, url_for
+from flask import abort, flash, jsonify, redirect, render_template, request, send_file, session, url_for
 
 from app.helpers import (
     all_recent_outputs,
@@ -13,6 +14,7 @@ from app.helpers import (
     user_output_dir,
     user_recent_outputs,
     user_upload_path,
+    user_upload_dir,
 )
 from app.security import actor_name, can, permission_required, wants_json_response
 
@@ -53,9 +55,9 @@ def register(app) -> None:
             material_history_query=material_history_query,
         )
 
-    @app.get("/materials/items")
+    @app.get("/materials/items/history")
     @permission_required("manage_material_items")
-    def material_items():
+    def legacy_material_items():
         service = get_material_service()
         query = request.args.get("q", "")
         status = request.args.get("status", "active")
@@ -144,19 +146,28 @@ def register(app) -> None:
     @app.post("/materials/data")
     @permission_required("manage_material_items")
     def upload_material_data():
-        file = request.files.get("material_data")
-        if not file or not file.filename:
-            flash("请选择材料数据 Excel 文件。", "error")
-            return redirect(url_for("material_items"))
-        if Path(file.filename).suffix.lower() != ".xlsx":
-            flash("材料数据请使用 .xlsx 文件。", "error")
-            return redirect(url_for("material_items"))
-        upload_path = user_upload_path(file.filename, prefix="material-data")
-        file.save(upload_path)
         try:
+            if request.form.get("confirm") == "1":
+                receipt = session.pop("bom_import", None)
+                if not receipt:
+                    raise ValueError("预览已失效，请重新选择文件。")
+                basename, original_name, digest = receipt
+                upload_path = user_upload_dir() / Path(basename).name
+                if not upload_path.is_file():
+                    raise ValueError("预览文件已失效，请重新选择文件。")
+            else:
+                file = request.files.get("material_data")
+                if not file or not file.filename or Path(file.filename).suffix.lower() != ".xlsx":
+                    raise ValueError("请选择材料数据 Excel 文件。")
+                original_name = clean_original_filename(file.filename, fallback_suffix=".xlsx")
+                upload_path = user_upload_path(original_name, prefix=f"material-{uuid4().hex}")
+                file.save(upload_path)
+                preview = get_material_service().preview_import(upload_path)
+                session["bom_import"] = [upload_path.name, original_name, preview["digest"]]
+                return render_template("material_import_preview.html", preview=preview, original=original_name)
             get_material_service().import_data(
                 upload_path,
-                original_name=clean_original_filename(file.filename, fallback_suffix=".xlsx"),
+                original_name=original_name, digest=digest,
                 actor=actor_name(),
             )
         except MaterialImportBusyError as exc:
@@ -184,7 +195,7 @@ def register(app) -> None:
         if not item:
             flash("材料明细不存在。", "error")
             return redirect(url_for("material_items"))
-        return render_template("material_item_form.html", item=item)
+        return render_template("material_item_form.html", item=item, resolve_bom=request.args.get("resolve") == "1")
 
     @app.post("/materials/items/save")
     @permission_required("manage_material_items")
@@ -204,7 +215,7 @@ def register(app) -> None:
             "length": request.form.get("length", ""),
             "active": request.form.get("active", "0"),
         }
-        for field in ("original_sync_id", "net_weight"):
+        for field in ("original_sync_id", "net_weight", "resolve_bom"):
             if field in request.form:
                 data[field] = request.form[field]
         copy_json = bool(data["copy_from"]) and wants_json_response()
@@ -223,14 +234,18 @@ def register(app) -> None:
             return redirect(url_for("material_items"))
         flash("材料明细已保存。", "success")
         if data["copy_from"]:
-            target = url_for("material_items", q=data["code"], status="inactive" if data["active"] == "0" else "active")
+            target = url_for("legacy_material_items", q=data["code"], status="inactive" if data["active"] == "0" else "active")
             return jsonify(ok=True, url=target) if copy_json else redirect(target)
         return redirect(url_for("material_items", q=data["model"]))
 
     @app.post("/materials/items/<int:item_id>/deactivate")
     @permission_required("manage_material_items")
     def stop_material_item(item_id: int):
-        get_material_service().deactivate_item(item_id, actor=actor_name())
+        try:
+            get_material_service().deactivate_item(item_id, actor=actor_name())
+        except ValueError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("material_items"))
         flash("材料明细已停用。", "success")
         return redirect(url_for("material_items"))
 

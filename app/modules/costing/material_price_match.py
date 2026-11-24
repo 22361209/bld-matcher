@@ -40,6 +40,10 @@ class MaterialMatches:
         self.by_model_name = defaultdict(list)
         self.name_counts = Counter((row["record_id"], _label(row["name"])) for row in lines)
         for row in materials:
+            for identity in row.get("aliases", []):
+                self.by_id[identity] = row
+            if row.get("master"):
+                self.by_id["bom/" + row["master"]] = row
             self.by_code[_key(row["code"])].append(row)
             self.by_model_name[_key(row["model"]), _label(row["part"])].append(row)
 
@@ -63,7 +67,8 @@ class MaterialMatches:
         models, name = _model_keys(row["code"]), _label(row["name"])
         if codes:
             candidates = self.by_code[codes.pop()]
-            if len(candidates) == 1:
+            shared = {c.get("master") for c in candidates}
+            if len(candidates) == 1 or (len(shared) == 1 and None not in shared):
                 return candidates[0], "唯一材料编码"
             if not candidates:
                 return None, "材料明细中没有此编码"

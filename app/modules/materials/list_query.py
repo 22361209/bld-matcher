@@ -49,7 +49,7 @@ def page_url(
     if page > 1:
         params.append(("page", str(page)))
     query_string = urlencode(params)
-    return f"{url_for('material_items')}{'?' + query_string if query_string else ''}#materials-results"
+    return f"{url_for('legacy_material_items')}{'?' + query_string if query_string else ''}#materials-results"
 
 
 def pagination(
