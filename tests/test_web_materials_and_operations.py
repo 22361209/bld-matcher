@@ -615,6 +615,7 @@ class TestWebMaterialsAndOperations(WebAppTestBase):
                 "051_shared_material_bom",
                 "052_material_bom_removals",
                 "053_material_bom_parent_model",
+                "054_material_plate_codes",
             ],
         )
 

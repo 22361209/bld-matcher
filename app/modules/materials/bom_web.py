@@ -5,6 +5,7 @@ from flask import flash, redirect, render_template, request, url_for
 from app.security import actor_name, permission_required
 from app.modules.tubes.factory import get_tube_service
 
+from .bom_common import normalize_plate_code
 from .bom_store import ExistingBomLink, KINDS, TUBE_KINDS
 from .factory import get_material_service
 
@@ -35,7 +36,7 @@ def register(app):
         service = get_material_service()
         args = request.args
         parent = args.get("parent", "")
-        selected = args.get("selected", "")
+        selected = normalize_plate_code(args.get("selected", ""))
         mode = args.get("mode", "")
         view = args.get("view", "tree")
         status = args.get("status", "active")
@@ -46,7 +47,7 @@ def register(app):
         if mode not in ("", "assembly", "attach", "usage", "create", "copy", "detail", "edit"):
             mode = "detail"
         filter_query = {f"cf_{key}": args.getlist(f"cf_{key}") for key in
-                        ("code", "name", "model", "kind", "spec", "net_weight", "reference_count", "actions")}
+                        ("code", "name", "model", "kind", "grade", "spec", "pieces", "gross_weight", "net_weight", "reference_count", "actions")}
         filter_query = {key: values for key, values in filter_query.items() if values}
         context = service.bom_page(args.get("q", ""), status, args.get("page", 1, type=int) or 1, view, selected, filter_query)
         tube = None

@@ -69,29 +69,37 @@ def restore_link(conn, data):
 
 def delete_part(conn, data):
     current = part(conn, data.get("code", ""))
-    if not current or current["kind"] == PLATE:
+    if not current:
         raise ValueError("请选择可删除的物料档案。")
     if data.get("revision") and data["revision"] != current["updated_at"]:
         raise ValueError("物料资料已变更，请重新打开核对。")
     code = current["code"]
-    if current["kind"] == ASSEMBLY:
-        referenced = conn.execute("""SELECT 1 FROM bom_links WHERE child=?
-            UNION SELECT 1 FROM bom_removed_links WHERE child=?
-            UNION SELECT 1 FROM bom_parts WHERE plate=?""", (code, code, code)).fetchone()
-        historical = conn.execute("""SELECT 1 FROM material_items WHERE code=? COLLATE NOCASE
-            UNION SELECT 1 FROM tube_items WHERE code=? COLLATE NOCASE""", (code, code)).fetchone()
-    else:
-        referenced = conn.execute("""SELECT 1 FROM bom_links WHERE parent=? OR child=?
-            UNION SELECT 1 FROM bom_removed_links WHERE parent=? OR child=?
-            UNION SELECT 1 FROM bom_parts WHERE plate=?""", (code, code, code, code, code)).fetchone()
-        historical = conn.execute("""SELECT 1 FROM material_items WHERE code=? COLLATE NOCASE OR model=? COLLATE NOCASE
-            UNION SELECT 1 FROM tube_items WHERE code=? COLLATE NOCASE""", (code, code, code)).fetchone()
-    if referenced or historical:
-        raise ValueError("此物料仍被其他母件引用或具有历史来源，不能删除；可先移除关系或停用。")
-    if current["kind"] == ASSEMBLY:
-        conn.execute("DELETE FROM bom_source_aliases WHERE relation IN (SELECT sync_id FROM bom_links WHERE parent=?)", (code,))
-        conn.execute("DELETE FROM bom_removed_sources WHERE relation IN (SELECT sync_id FROM bom_removed_links WHERE parent=?)", (code,))
-        conn.execute("DELETE FROM bom_links WHERE parent=?", (code,))
-        conn.execute("DELETE FROM bom_removed_links WHERE parent=?", (code,))
-        conn.execute("DELETE FROM material_items WHERE model=? COLLATE NOCASE", (code,))
+    kind = current["kind"]
+    if kind in (PLATE, ASSEMBLY):
+        if kind == PLATE:
+            referenced = conn.execute("""SELECT 1 FROM bom_links WHERE parent=? OR child=?
+                UNION SELECT 1 FROM bom_removed_links WHERE parent=? OR child=?
+                UNION SELECT 1 FROM bom_parts WHERE plate=?""", (code, code, code, code, code)).fetchone()
+            historical = conn.execute("SELECT 1 FROM material_items WHERE code=? COLLATE NOCASE OR model=? COLLATE NOCASE",
+                                      (code, code)).fetchone()
+        else:
+            referenced = conn.execute("""SELECT 1 FROM bom_links WHERE child=?
+                UNION SELECT 1 FROM bom_removed_links WHERE child=?
+                UNION SELECT 1 FROM bom_parts WHERE plate=?""", (code, code, code)).fetchone()
+            historical = conn.execute("""SELECT 1 FROM material_items WHERE code=? COLLATE NOCASE
+                UNION SELECT 1 FROM tube_items WHERE code=? COLLATE NOCASE""", (code, code)).fetchone()
+        if referenced or historical:
+            label = "板料" if kind == PLATE else "母件"
+            raise ValueError(f"此{label}仍被引用或具有历史来源，不能删除。")
+    if kind != PLATE:
+        relation_where = "parent=?" if kind == ASSEMBLY else "parent=? OR child=?"
+        params = (code,) if kind == ASSEMBLY else (code, code)
+        conn.execute(f"DELETE FROM bom_source_aliases WHERE relation IN (SELECT sync_id FROM bom_links WHERE {relation_where})", params)
+        conn.execute(f"DELETE FROM bom_removed_sources WHERE relation IN (SELECT sync_id FROM bom_removed_links WHERE {relation_where})", params)
+        conn.execute(f"DELETE FROM bom_links WHERE {relation_where}", params)
+        conn.execute(f"DELETE FROM bom_removed_links WHERE {relation_where}", params)
+        if kind == ASSEMBLY:
+            conn.execute("DELETE FROM material_items WHERE model=? COLLATE NOCASE", (code,))
+        else:
+            conn.execute("DELETE FROM material_items WHERE code=? COLLATE NOCASE OR model=? COLLATE NOCASE", (code, code))
     conn.execute("DELETE FROM bom_parts WHERE code=?", (code,))

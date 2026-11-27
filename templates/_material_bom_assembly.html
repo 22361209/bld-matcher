@@ -25,6 +25,7 @@
     <label>母件净重（kg）<input name="net_weight" type="number" step="any" min="0.000001" value="{{ detail.net_weight or '' if detail else '' }}"></label>
   </div>
   <div class="bom-assembly-grid"><table class="data-table bom-assembly-table">
+    <colgroup><col class="bom-sequence-column"><col class="bom-child-code-column"><col><col class="bom-child-kind-column"><col class="bom-quantity-column"></colgroup>
     <thead><tr><th>序号</th><th>子件编码</th><th>名称</th><th>类型</th><th class="bom-number">用量</th></tr></thead>
     <tbody data-bom-child-rows>
       {% for link in assembly_links %}{{ assembly_child_row(link) }}{% endfor %}

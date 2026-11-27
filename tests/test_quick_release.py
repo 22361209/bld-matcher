@@ -98,6 +98,14 @@ class QuickReleaseTests(unittest.TestCase):
                 with self.assertRaisesRegex(ReleaseError, "未声明可快速发布"):
                     prepare(self.src, self.base, self.release, "1234567")
 
+    def test_nas_rebuild_wrapper_is_an_operational_guard(self):
+        self.write("tools/nas/rebuild-bld-matcher", "old")
+        baseline(self.src, self.base)
+        self.write("tools/nas/rebuild-bld-matcher", "modified")
+        self.fragment()
+        with self.assertRaisesRegex(ReleaseError, "需要完整更新.*tools/nas/rebuild-bld-matcher"):
+            prepare(self.src, self.base, self.release, "1234567")
+
     def test_pack_excludes_ignored_secrets_deterministically_and_rejects_tracked_secrets(self):
         self.write(".gitignore", ".env\ndata/\n")
         self.write(".env", "secret")

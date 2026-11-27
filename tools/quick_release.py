@@ -81,7 +81,7 @@ def category(path: PurePosixPath) -> str:
     if name in {".dockerignore", ".gitignore", "Dockerfile", "requirements.txt", "pyproject.toml", "uv.lock",
                 "docker-compose.yml", "compose.local.yml", "NOTICE"}:
         return "guard"
-    if str(path) == "tools/nas/quick-bld-matcher":
+    if name in {"tools/nas/quick-bld-matcher", "tools/nas/rebuild-bld-matcher"}:
         return "guard"
     if top in {"contracts", "policy"} and path.suffix == ".json":
         return "guard"

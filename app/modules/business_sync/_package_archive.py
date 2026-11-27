@@ -14,6 +14,7 @@ from app.database import connect
 from app.modules.costing.business_sync import export_costing, validate_costing
 from app.modules.costing.transfer_service import MAX_TRANSFER_BYTES
 from app.modules.development.worksheet import LEGACY_MATERIALS
+from app.modules.materials.plate_codes import normalize_package_plate_codes
 from app.platform.audit_store import log_event
 from app.product_image_processing import PRODUCT_IMAGE_LARGE_MAX_BYTES, validate_synced_product_image
 
@@ -32,7 +33,7 @@ from ._product_image_transfer import (
 from ._schema import (
     DATASETS,
     COSTING_PACKAGE_VERSION,
-    BOM_PACKAGE_VERSION, BOM_REMOVAL_PACKAGE_VERSION, BOM_PARENT_PACKAGE_VERSION, BOM_DATASETS,
+    BOM_PACKAGE_VERSION, BOM_REMOVAL_PACKAGE_VERSION, BOM_PARENT_PACKAGE_VERSION, BOM_PLATE_CODE_PACKAGE_VERSION, BOM_DATASETS,
     COMPLETED_WORKSHEET_VERSION,
     CUSTOM_WORKSHEET_MATERIAL_VERSION,
     HANDED_WORKSHEET_PACKAGE_VERSION,
@@ -101,7 +102,7 @@ def _manifest_datasets(manifest: object) -> tuple[str, ...]:
         raise ValueError("业务数据包缺少可导入的数据集。")
     core_bom = ("bom_parts", "bom_links", "bom_source_aliases")
     has_bom = bool(set(core_bom).intersection(selected))
-    bom_versions = (BOM_PACKAGE_VERSION, BOM_REMOVAL_PACKAGE_VERSION, BOM_PARENT_PACKAGE_VERSION)
+    bom_versions = (BOM_PACKAGE_VERSION, BOM_REMOVAL_PACKAGE_VERSION, BOM_PARENT_PACKAGE_VERSION, BOM_PLATE_CODE_PACKAGE_VERSION)
     required_bom = core_bom if version == BOM_PACKAGE_VERSION else BOM_DATASETS
     if (has_bom != (version in bom_versions)
             or (has_bom and not {"materials", *required_bom}.issubset(selected))):
@@ -206,7 +207,7 @@ def read_package(package_path: Path) -> tuple[Manifest, Payload]:
                                    CUSTOM_WORKSHEET_MATERIAL_VERSION: (1, 2, 3, 4), COMPLETED_WORKSHEET_VERSION: (1, 2, 3, 4),
                                    TUBE_WEIGHT_PACKAGE_VERSION: (1, 2, 3, 4), WORKSHEET_ROW_NOTE_PACKAGE_VERSION: (1, 2, 3, 4),
                                    BOM_PACKAGE_VERSION: (1, 2, 3, 4), BOM_REMOVAL_PACKAGE_VERSION: (1, 2, 3, 4),
-                                   BOM_PARENT_PACKAGE_VERSION: (1, 2, 3, 4)}
+                                   BOM_PARENT_PACKAGE_VERSION: (1, 2, 3, 4), BOM_PLATE_CODE_PACKAGE_VERSION: (1, 2, 3, 4)}
                 if not isinstance(snapshot, dict) or snapshot.get("format_version") not in supported_costs[version]:
                     raise ValueError("成本快照版本与业务包版本不一致，请重新导出。")
                 payload["costing"] = [validate_costing(snapshot)]
@@ -230,6 +231,7 @@ def read_package(package_path: Path) -> tuple[Manifest, Payload]:
         raise ValueError("业务数据包无法读取。") from exc
     if any(not isinstance(payload[key], list) for key in selected):
         raise ValueError("业务数据包缺少可导入的数据集。")
+    normalize_package_plate_codes(payload)
     media = manifest.get("media", {})
     if not isinstance(media, dict):
         raise ValueError("业务数据包媒体信息无效。")
@@ -308,13 +310,13 @@ def read_package(package_path: Path) -> tuple[Manifest, Payload]:
     bom_parts = typed_payload.get("bom_parts", [])
     if {"bom_parts", "bom_links", "bom_source_aliases"}.issubset(selected):
         if any("model" in row for row in bom_parts):
-            expected_version = BOM_PARENT_PACKAGE_VERSION
+            expected_version = BOM_PLATE_CODE_PACKAGE_VERSION if version >= BOM_PLATE_CODE_PACKAGE_VERSION else BOM_PARENT_PACKAGE_VERSION
         else:
             expected_version = BOM_REMOVAL_PACKAGE_VERSION if set(BOM_DATASETS).issubset(selected) else BOM_PACKAGE_VERSION
-    if version == BOM_PARENT_PACKAGE_VERSION and any("model" not in row for row in bom_parts):
+    if version in (BOM_PARENT_PACKAGE_VERSION, BOM_PLATE_CODE_PACKAGE_VERSION) and any("model" not in row for row in bom_parts):
         raise ValueError("BOM 母件型号与业务包版本不一致，请重新导出。")
     if (expected_version or version >= HANDED_WORKSHEET_PACKAGE_VERSION) and version != expected_version:
-        if BOM_PARENT_PACKAGE_VERSION in (expected_version, version):
+        if {BOM_PARENT_PACKAGE_VERSION, BOM_PLATE_CODE_PACKAGE_VERSION}.intersection((expected_version, version)):
             raise ValueError("BOM 母件型号与业务包版本不一致，请重新导出。")
         if WORKSHEET_ROW_NOTE_PACKAGE_VERSION in (expected_version, version):
             raise ValueError("开发表零件备注与业务包版本不一致，请重新导出。")
@@ -413,7 +415,7 @@ def export_package(
     if has_tube_weights:
         version = max(version, TUBE_WEIGHT_PACKAGE_VERSION)
     if set(BOM_DATASETS).intersection(selected):
-        version = BOM_PARENT_PACKAGE_VERSION
+        version = BOM_PLATE_CODE_PACKAGE_VERSION
     manifest: Manifest = {
         "package_type": PACKAGE_TYPE,
         "version": version,

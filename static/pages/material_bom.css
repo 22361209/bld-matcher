@@ -11,7 +11,7 @@
 .bom-search select {min-width:96px;height:34px}
 .bom-data-section .data-table-scroll {max-height:calc(100vh - 245px)}
 .bom-tree-table {min-width:1180px}
-.bom-library-table {min-width:900px}
+.bom-library-table {min-width:1200px}
 .bom-review-table {min-width:1050px}
 .bom-data-section .data-table td,.bom-review-table td {padding-top:5px;padding-bottom:5px;line-height:20px;vertical-align:middle}
 .bom-parent-row td {background:#f1f5f7;font-weight:600}
@@ -23,6 +23,7 @@
 .bom-toggle {padding:0;border:1px solid var(--linear-line);border-radius:3px;background:var(--linear-surface);color:var(--linear-accent);font:700 15px/1 monospace;cursor:pointer}
 .bom-toggle:hover,.bom-toggle:focus-visible {background:var(--linear-subtle)}
 .bom-code {font-weight:700;overflow-wrap:anywhere}
+.bom-library-table .bom-code {white-space:nowrap}
 .bom-number {text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .bom-actions {white-space:nowrap}
 .bom-actions>a,.bom-actions>.bom-inline-form {margin-right:9px}
@@ -34,8 +35,8 @@
 .bom-subheader {display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 10px}
 .bom-subheader h2 {margin:0;font-size:17px}
 .bom-form {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 18px}
-.bom-form label {display:grid;gap:5px;font-size:13px}
-.bom-form input,.bom-form select {width:100%;min-width:0;min-height:34px;padding:6px 8px}
+.bom-form label {display:grid;min-width:0;gap:5px;font-size:13px}
+.bom-form input,.bom-form select {box-sizing:border-box;width:100%;min-width:0;max-width:100%;min-height:34px;padding:6px 8px}
 .bom-form select[size] {height:150px}
 .bom-form [type=checkbox] {width:auto;min-height:0}
 .bom-context {margin:0 0 10px;padding:8px 10px;border-radius:4px;background:var(--linear-subtle);font-size:13px}
@@ -52,17 +53,23 @@
 .bom-child-table .bom-number {text-align:right}
 .bom-remove-form {margin-top:16px;padding-top:12px;border-top:1px solid var(--linear-line)}
 .bom-tube-reference {align-self:end;padding-bottom:9px;color:var(--linear-muted)}
-.bom-assembly-master {grid-template-columns:1.2fr 1.2fr 1fr .8fr;margin-bottom:14px}
+.bom-assembly-master {grid-template-columns:minmax(0,1.15fr) minmax(0,1.3fr) minmax(0,1fr) minmax(0,.75fr);margin-bottom:14px}
 .bom-assembly-grid {overflow-x:auto;border:1px solid var(--linear-line);border-radius:5px}
-.bom-assembly-table {min-width:720px}
+.bom-assembly-table {width:100%;min-width:600px;table-layout:fixed}
 .bom-assembly-table th,.bom-assembly-table td {padding:4px 6px;vertical-align:middle}
-.bom-assembly-table input {width:100%;min-width:0;height:30px;padding:4px 6px;font-size:13px}
+.bom-assembly-table input {box-sizing:border-box;width:100%;min-width:0;max-width:100%;height:30px;padding:4px 6px;font-size:13px}
 .bom-assembly-table input[readonly] {background:var(--linear-subtle);color:var(--linear-muted)}
-.bom-child-code-input {display:flex;align-items:center;gap:5px;min-width:170px}
+.bom-sequence-column {width:52px}
+.bom-child-code-column {width:30%}
+.bom-child-kind-column {width:110px}
+.bom-quantity-column {width:88px}
+.bom-child-code-input {display:flex;align-items:center;gap:5px;min-width:0}
+.bom-child-code-input input {flex:1 1 0;width:0}
+.bom-child-code-input .link-button {flex:0 0 auto;white-space:nowrap}
 .bom-child-hidden-fields {display:none}
-.bom-sequence-cell {width:58px;text-align:center;white-space:nowrap}
+.bom-sequence-cell {padding-right:4px;padding-left:4px;text-align:center;white-space:nowrap}
 .bom-row-controls {display:none;align-items:center;justify-content:center;gap:3px}
-.bom-row-controls button {width:22px;height:22px;padding:0;border:1px solid var(--linear-line);border-radius:3px;background:var(--linear-surface);color:var(--linear-accent);cursor:pointer}
+.bom-row-controls button {width:20px;height:22px;padding:0;border:1px solid var(--linear-line);border-radius:3px;background:var(--linear-surface);color:var(--linear-accent);cursor:pointer}
 .bom-sequence-cell:hover .bom-row-number,.bom-sequence-cell:focus-within .bom-row-number {display:none}
 .bom-sequence-cell:hover .bom-row-controls,.bom-sequence-cell:focus-within .bom-row-controls {display:inline-flex}
 .bom-assembly-actions {justify-content:flex-end;margin-top:12px}

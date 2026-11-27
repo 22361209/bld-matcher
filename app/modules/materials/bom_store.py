@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from hashlib import sha256
-import json
 
-from .bom_common import ASSEMBLY, KINDS, PART_FIELDS, PLATE, STAMP, TUBE_KINDS, exact_spec, part, positive, revision_time
+from .bom_common import (
+    ASSEMBLY, KINDS, PART_FIELDS, PLATE, STAMP, TUBE_KINDS, link_id, part, plate_code, positive, revision_time,
+)
 from .bom_removal import delete_part, install_removals, remove_link, restore_link
 from .domain import material_grade_for_code
 from .specification import _parse_material_spec_text
@@ -49,14 +49,10 @@ def save_part(conn, values):
 def stock(conn, grade, dimensions):
     dims = [positive(v, "板料尺寸") for v in dimensions]
     row = dict(zip(("thickness", "width", "length"), dims, strict=True))
-    code = f"板料/{grade}/{exact_spec(row)}"
+    code = plate_code(grade, row)
     if not part(conn, code):
         save_part(conn, {**row, "code": code, "name": grade, "grade": grade, "kind": PLATE})
     return code
-
-
-def link_id(parent, child):
-    return sha256(json.dumps([parent, child], ensure_ascii=False).encode()).hexdigest()
 
 
 def add_link(conn, parent, child, qty: float = 1, active=1, origin=None):
@@ -113,7 +109,7 @@ def migrate_rows(conn):
         except ValueError:
             continue
         grade = r["material_grade"] or material_grade_for_code(code)
-        expected_plate = f"板料/{grade}/{exact_spec(r)}"
+        expected_plate = plate_code(grade, r)
         if existing and (existing["code"] != code or existing["kind"] != STAMP or existing["name"] != r["part"]
                          or existing["plate"] != expected_plate or existing["pieces"] != r["pieces"]
                          or (net and existing["net_weight"] and net != existing["net_weight"])):
@@ -306,7 +302,7 @@ def validate_graph(conn):
         if r["kind"] == PLATE:
             for field in ("thickness", "width", "length"):
                 positive(r[field], "板料尺寸")
-            if code != f"板料/{r['grade']}/{exact_spec(r)}":
+            if code != plate_code(r["grade"], r):
                 raise ValueError("板料编码与规格不一致。")
         if r["kind"] == STAMP:
             p = rows.get(r["plate"])

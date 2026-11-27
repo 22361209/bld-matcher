@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime
+from hashlib import sha256
+import json
 from math import isfinite
 
 
@@ -28,6 +30,18 @@ def positive(value, label):
 
 def exact_spec(row):
     return "×".join(str(float(row[k])).removesuffix(".0") for k in ("thickness", "width", "length"))
+
+
+def plate_code(grade, row):
+    return f"{grade}/{exact_spec(row)}"
+
+
+def normalize_plate_code(value):
+    return str(value or "").removeprefix(f"{PLATE}/")
+
+
+def link_id(parent, child):
+    return sha256(json.dumps([parent, child], ensure_ascii=False).encode()).hexdigest()
 
 
 def part(conn, code):

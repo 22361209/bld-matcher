@@ -1378,6 +1378,12 @@ def _add_material_bom_parent_model(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE bom_parts ADD COLUMN model TEXT")
 
 
+def _rename_material_plate_codes(conn: sqlite3.Connection) -> None:
+    from .modules.materials.plate_codes import migrate_plate_codes
+
+    migrate_plate_codes(conn)
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     ("001_audit_log_actor", _add_audit_actor),
     ("002_product_price_and_image", _add_product_price_and_image),
@@ -1432,6 +1438,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     ("051_shared_material_bom", _install_material_bom),
     ("052_material_bom_removals", _install_material_bom_removals),
     ("053_material_bom_parent_model", _add_material_bom_parent_model),
+    ("054_material_plate_codes", _rename_material_plate_codes),
 )
 
 

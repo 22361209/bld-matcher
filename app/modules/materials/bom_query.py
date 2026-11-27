@@ -4,7 +4,8 @@ from collections import Counter, defaultdict
 from math import ceil
 from .specification import _parse_material_spec_query
 
-from .bom_store import ASSEMBLY, KINDS, PLATE, STAMP, exact_spec, pending_rows
+from .bom_common import exact_spec
+from .bom_store import ASSEMBLY, KINDS, PLATE, STAMP, pending_rows
 from .weights import costing_material
 
 
@@ -47,6 +48,11 @@ class MaterialBOM:
             if plate:
                 p["spec"] = plate["spec"]
                 p["grade"] = plate["grade"]
+            if p["kind"] == STAMP:
+                weights = costing_material(self.stamp_row(p))
+                p["gross_weight"] = weights["gross_weight"] if weights else None
+            gross_weight = p.get("gross_weight")
+            p["gross_weight_display"] = format(float(gross_weight), ".4f") if isinstance(gross_weight, str) and gross_weight else "—"
         referenced = set(self.children)
         referenced.update(link["child"] for links in self.children.values() for link in links)
         referenced.update(link[k] for link in self.removed for k in ("parent", "child"))
@@ -59,9 +65,12 @@ class MaterialBOM:
         historical.update(r[0] for r in conn.execute("SELECT code FROM tube_items"))
         for p in self.parts.values():
             p["reference_count"] = len(self.parents[p["code"]]) + sum(other["plate"] == p["code"] for other in self.parts.values())
-            protected = incoming if p["kind"] == ASSEMBLY else referenced
-            sources = historical_child if p["kind"] == ASSEMBLY else historical
-            p["deletable"] = p["kind"] != PLATE and p["code"] not in protected and p["code"] not in sources
+            if p["kind"] == ASSEMBLY:
+                p["deletable"] = p["code"] not in incoming and p["code"] not in historical_child
+            elif p["kind"] == PLATE:
+                p["deletable"] = p["code"] not in referenced and p["code"] not in historical
+            else:
+                p["deletable"] = True
 
     def page(self, query, status, page, view, selected, column_filters=None):
         groups = []
@@ -83,7 +92,10 @@ class MaterialBOM:
                 "name": p["name"],
                 "model": str(p.get("model") or "—"),
                 "kind": p["kind"],
-                "spec": f'{p["grade"]} · {p["spec"]}' if p.get("spec") else "—",
+                "grade": str(p.get("grade") or "—"),
+                "spec": str(p.get("spec") or "—"),
+                "pieces": format(p["pieces"], "g") if p["pieces"] is not None else "—",
+                "gross_weight": p["gross_weight_display"],
                 "net_weight": str(p["net_weight"] or "—"),
                 "reference_count": str(p["reference_count"]),
                 "actions": "详情、删除" if p["deletable"] else "详情",
@@ -110,12 +122,13 @@ class MaterialBOM:
         filter_options = {}
         if view == "library":
             candidates = [p for p in self.parts.values() if p["kind"] != ASSEMBLY and matches(p)]
-            for key in ("code", "name", "model", "kind", "spec", "net_weight", "reference_count", "actions"):
-                counts = Counter(library_values(p)[key] for p in candidates)
+            display_values = {p["code"]: library_values(p) for p in candidates}
+            for key in ("code", "name", "model", "kind", "grade", "spec", "pieces", "gross_weight", "net_weight", "reference_count", "actions"):
+                counts = Counter(display_values[p["code"]][key] for p in candidates)
                 filter_options[key] = [dict(value=value, label=value, count=counts[value]) for value in sorted(counts, key=str.casefold)]
             groups.extend(
                 p for p in candidates
-                if all(not selected or library_values(p)[key.removeprefix("cf_")] in selected
+                if all(not selected or display_values[p["code"]][key.removeprefix("cf_")] in selected
                        for key, selected in column_filters.items())
             )
             kind_order = {kind: index for index, kind in enumerate((*KINDS, PLATE))}
